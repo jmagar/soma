@@ -1,0 +1,101 @@
+# =============================================================================
+# .gitignore — Canonical gitignore for rmcp-template (from syslog-mcp)
+#
+# TEMPLATE: This is the shared gitignore for the Rust MCP server family.
+#           Copy it unchanged to any new server repo.
+#
+# Key rules:
+#   .env* are ignored (secrets) — only .env.example is committed
+#   target/ is ignored (Rust build artifacts)
+#   *.db, *.pem, *.key are ignored (runtime state)
+#   bin/ is NOT ignored — LFS-tracked binaries are committed
+#   AI tooling dirs (.omc/, .lavra/, etc.) are ignored
+# =============================================================================
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# Never commit real env files. .env.example is the only allowed exception.
+.env
+.env.*
+!.env.example
+
+# ── Runtime artifacts ─────────────────────────────────────────────────────────
+*.log
+*.pid
+*.bak
+*.bak-*
+storage/
+
+# ── Claude Code / AI tooling ──────────────────────────────────────────────────
+# These dirs are created by AI coding assistants and should never be committed.
+.claude/settings.local.json
+.claude/worktrees/
+.omc/
+.lavra/
+.beads/
+.dolt/
+*.db
+*.db-shm
+*.db-wal
+.beads-credential-key
+.serena/
+.worktrees/
+.worktree/
+.full-review/
+.full-review-archive-*
+.bivvy
+
+# ── IDE / editor ──────────────────────────────────────────────────────────────
+.vscode/
+.cursor/
+.windsurf/
+.1code/
+.idea/
+.zed/
+*.iml
+*.swp
+*.swo
+*~
+.emdash.json
+
+# ── OS generated ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Caches ────────────────────────────────────────────────────────────────────
+.cache/
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+dist/
+
+# ── Rust ──────────────────────────────────────────────────────────────────────
+# target/ is the Cargo build directory — never commit it.
+# bin/ is intentionally NOT listed here — it's LFS-tracked and must be committed.
+/target/
+**/*.rs.bk
+*.profraw
+*.profdata
+
+# ── Repo-specific ─────────────────────────────────────────────────────────────
+# Runtime config overrides and generated keys — use .env for secrets.
+config.local.toml
+config/docker-hosts.toml
+data/
+*.key
+*.pem
+*.cert
+
+.worktrees
+
+# Personal local cheatsheet (never commit)
+CLAUDE.md.local
+logs/
+backups/
+
+# Auto-generated reference docs (refresh-docs.sh output)
+docs/references/
+
+# ── Web UI (Next.js) ──────────────────────────────────────────────────────────
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/web/.env*.local

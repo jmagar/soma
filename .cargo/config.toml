@@ -1,0 +1,15 @@
+# =============================================================================
+# .cargo/config.toml — Cargo configuration for rmcp-template workspace
+#
+# TEMPLATE: Copy this file unchanged to any new server repo.
+#           The [alias] section wires `cargo xtask` so it runs the xtask crate.
+#
+# Without this alias, `cargo xtask <cmd>` fails with "no such command: xtask".
+# With it, cargo delegates to the xtask binary in the workspace.
+# =============================================================================
+
+[alias]
+# The `cargo xtask` convention: `cargo xtask <cmd>` delegates to the xtask crate.
+# See: https://github.com/matklad/cargo-xtask
+# TEMPLATE: No changes needed here — "xtask" is the conventional crate name.
+xtask = "run --package xtask --"

@@ -1,0 +1,138 @@
+# =============================================================================
+# .github/workflows/ci.yml — Continuous Integration
+#
+# TEMPLATE substitutions required:
+#   REPO_NAME   → your GitHub repo name (e.g. "myservice-mcp")
+#   BINARY_NAME → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
+#
+# This workflow runs on every push and PR to main.
+# Jobs: fmt, clippy, test (nextest), toml (taplo), audit, gitleaks
+#
+# All jobs must pass before merging. Adjust the matrix rust-version to match
+# your Cargo.toml `rust-version` field.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── fmt: cargo fmt --check ──────────────────────────────────────────────────
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable with rustfmt)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+  # ── clippy: zero warnings ────────────────────────────────────────────────────
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable with clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # Cache Cargo registry and build artifacts between runs.
+      # TEMPLATE: Change the cache key prefix from "rmcp-template" to your repo name.
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rmcp-template-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rmcp-template-clippy-
+
+      - name: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
+
+  # ── test: cargo nextest run --profile ci ─────────────────────────────────────
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      # TEMPLATE: Change cache key prefix from "rmcp-template" to your repo name.
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rmcp-template-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rmcp-template-test-
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      - name: cargo nextest run --profile ci
+        run: cargo nextest run --profile ci
+
+  # ── toml: taplo check ─────────────────────────────────────────────────────────
+  toml:
+    name: TOML Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install taplo
+        run: cargo install taplo-cli --locked
+
+      - name: taplo check
+        run: taplo check
+
+  # ── audit: cargo audit ────────────────────────────────────────────────────────
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    # Don't block CI on new advisories — this is informational.
+    # TEMPLATE: Remove `continue-on-error` once you've reviewed existing advisories.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: cargo audit
+        run: cargo audit
+
+  # ── gitleaks: secret scanning ─────────────────────────────────────────────────
+  gitleaks:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for gitleaks
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

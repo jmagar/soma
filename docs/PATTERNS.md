@@ -1,0 +1,2992 @@
+# rmcp-server Patterns
+
+Canonical reference for all patterns used across the Rust MCP server family:
+`unrust` (Unraid), `rustify` (Gotify), `rustifi` (UniFi), `rustscale` (Tailscale),
+`apprise-mcp`, and `rmcp-template` (this repo).
+
+Every server in the family MUST follow these patterns. Deviation requires an explicit
+architectural decision recorded in the repo.
+
+---
+
+## 1. Module Architecture — Strict Layering
+
+```
+src/
+  <service>.rs      ← HTTP/API transport ONLY (no logic)
+  app.rs            ← ALL business logic lives here, nowhere else
+  config.rs         ← Config structs + env overrides
+  mcp.rs            ← AppState, AuthPolicy, build_auth_layer
+  mcp/
+    tools.rs        ← thin shim: parse args → call service → return Value
+    schemas.rs      ← tool JSON schema + ACTIONS const
+    rmcp_server.rs  ← ServerHandler impl (tools, resources, prompts)
+    routes.rs       ← axum router: /mcp + /health + OAuth routes
+    prompts.rs      ← MCP prompts
+  cli.rs            ← thin shim: parse args → call service → format/print
+  lib.rs            ← pub modules + test helpers (testing::*)
+  main.rs           ← mode dispatch ONLY (serve_mcp / serve_stdio / run_cli)
+```
+
+**The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or
+`main.rs`, you are doing it wrong. Move it to `app.rs`.
+
+### What "thin shim" means
+
+`mcp/tools.rs` does exactly three things per action:
+1. Extract named arguments from the `Value` args object
+2. Call the corresponding `state.service.method()` 
+3. Return the `Value` result
+
+`cli.rs` does exactly three things per command:
+1. Parse CLI flags/positional args into typed values
+2. Call the corresponding `service.method()`
+3. Format and print the result (or pass `--json` through verbatim)
+
+**Zero validation, zero defaults, zero error message crafting** in shims. All of that
+lives in `app.rs`.
+
+---
+
+## 2. Service Layer (app.rs)
+
+```rust
+#[derive(Clone)]
+pub struct ExampleService {
+    client: ExampleClient,
+    // optional: destructive gate flag, cache, etc.
+    allow_destructive: bool,
+}
+
+impl ExampleService {
+    pub fn new(client: ExampleClient, allow_destructive: bool) -> Self { ... }
+
+    // Destructive gate — lives HERE, not in tools.rs or cli.rs
+    fn destructive_gate(&self, confirm: bool) -> Result<()> {
+        if self.allow_destructive || confirm { return Ok(()); }
+        bail!("destructive operation — pass confirm=true or set ALLOW_DESTRUCTIVE=true")
+    }
+
+    pub async fn read_action(&self) -> Result<Value> {
+        self.client.some_api_call().await
+    }
+
+    pub async fn destructive_action(&self, id: i64, confirm: bool) -> Result<Value> {
+        self.destructive_gate(confirm)?;
+        self.client.delete_thing(id).await
+    }
+}
+```
+
+The service is where you add:
+- Input validation and defaults
+- Business rules (e.g. "don't allow deletes without confirm")
+- Cross-cutting concerns (logging, metrics, caching)
+- Error enrichment ("couldn't connect to X: check EXAMPLE_URL")
+
+---
+
+## 3. API Client (<service>.rs)
+
+```rust
+#[derive(Clone)]
+pub struct ExampleClient {
+    client: reqwest::Client,
+    base_url: String,
+    api_key: String,
+}
+
+impl ExampleClient {
+    pub fn new(cfg: &ExampleConfig) -> Result<Self> {
+        if cfg.url.is_empty() { anyhow::bail!("EXAMPLE_URL is not set"); }
+        let client = reqwest::ClientBuilder::new()
+            .danger_accept_invalid_certs(cfg.skip_tls_verify)
+            .build()?;
+        Ok(Self { client, base_url: cfg.url.trim_end_matches('/').to_string(), api_key: cfg.api_key.clone() })
+    }
+
+    // One method per API endpoint — transport only, no logic
+    pub async fn list_things(&self) -> Result<Value> {
+        self.get("things").await
+    }
+
+    async fn get(&self, path: &str) -> Result<Value> {
+        let url = format!("{}/{}", self.base_url, path.trim_start_matches('/'));
+        let resp = self.client.get(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .send().await?;
+        // ... parse and return
+    }
+}
+```
+
+**Never put logic in the client.** It's a transport adapter. If the API returns a weird
+format, parse it here minimally but don't transform or interpret the data.
+
+---
+
+## 4. Config Split — Secrets vs Settings
+
+### Rule
+
+| Goes in `.env` | Goes in `config.toml` |
+|---|---|
+| API keys, tokens, passwords | bind host, port, server_name |
+| Service URLs | TLS skip, site, tailnet |
+| Google OAuth credentials | auth_mode, auth TTLs |
+| MCP bearer token | allowed_hosts, allowed_origins |
+| Docker runtime vars (PUID, PGID) | retention settings, batch sizes |
+| RUST_LOG | resource limits |
+
+### config.toml structure
+
+```toml
+# config.toml — non-secret settings only
+# Env vars override everything here.
+
+[<service>]
+skip_tls_verify = false
+site = "default"
+
+[mcp]
+host = "0.0.0.0"
+port = 3000
+server_name = "example-mcp"
+
+[mcp.auth]
+mode = "bearer"           # or "oauth"
+admin_email = ""
+sqlite_path = "/data/auth.db"
+key_path = "/data/auth-jwt.pem"
+access_token_ttl_secs = 3600
+refresh_token_ttl_secs = 2592000
+auth_code_ttl_secs = 300
+```
+
+### .env structure
+
+```bash
+# .env — secrets and URLs ONLY
+EXAMPLE_API_URL=https://example.internal/api
+EXAMPLE_API_KEY=your_api_key_here
+
+# MCP auth
+EXAMPLE_MCP_TOKEN=your_bearer_token_here
+
+# OAuth (only when auth_mode=oauth in config.toml)
+# EXAMPLE_MCP_GOOGLE_CLIENT_ID=...
+# EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=...
+
+# Docker runtime
+PUID=1000
+PGID=1000
+DOCKER_NETWORK=jakenet
+RUST_LOG=info
+```
+
+### Config loading pattern (config.rs)
+
+```rust
+impl Config {
+    pub fn load() -> anyhow::Result<Self> {
+        let mut config = Config::default();
+
+        // 1. Load config.toml (non-secret settings)
+        match std::fs::read_to_string("config.toml") {
+            Ok(contents) => { config = toml::from_str(&contents)?; }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(anyhow::anyhow!("config.toml: {e}")),
+        }
+
+        // 2. Env overrides (secrets + any setting the user wants to override)
+        env_str("EXAMPLE_MCP_HOST", &mut config.mcp.host);
+        env_parse("EXAMPLE_MCP_PORT", &mut config.mcp.port)?;
+        env_opt_str("EXAMPLE_MCP_TOKEN", &mut config.mcp.api_token);
+        env_str("EXAMPLE_API_URL", &mut config.example.url);
+        env_str("EXAMPLE_API_KEY", &mut config.example.api_key);
+        // ...
+        Ok(config)
+    }
+}
+```
+
+---
+
+## 5. Authentication — OAuth + Bearer Simultaneously
+
+Both auth modes are active simultaneously via the `AuthPolicy` enum:
+
+```rust
+pub enum AuthPolicy {
+    /// No auth — only legal when bound to loopback (127.x).
+    LoopbackDev,
+    /// Auth active. auth_state=Some → OAuth+JWKS; auth_state=None → bearer-only.
+    Mounted { auth_state: Option<Arc<lab_auth::state::AuthState>> },
+}
+```
+
+### build_auth_policy (main.rs)
+
+```rust
+async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
+    if config.mcp.no_auth || config.mcp.host.starts_with("127.") {
+        return Ok(AuthPolicy::LoopbackDev);
+    }
+    if config.mcp.auth.mode == AuthMode::OAuth {
+        let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
+            .env_prefix("EXAMPLE_MCP")
+            .session_cookie_name("example_mcp_session")
+            .scopes_supported(vec!["example:read".into(), "example:write".into()])
+            .default_scope("example:read")
+            .resource_path("/mcp")
+            .enable_dynamic_registration(true)
+            .build_from_sources(vec![])  // reads from env vars
+            .map_err(|e| anyhow::anyhow!("OAuth config error: {e}"))?;
+        let auth_state = lab_auth::state::AuthState::new(auth_cfg).await
+            .map_err(|e| anyhow::anyhow!("OAuth state init error: {e}"))?;
+        Ok(AuthPolicy::Mounted { auth_state: Some(Arc::new(auth_state)) })
+    } else {
+        Ok(AuthPolicy::Mounted { auth_state: None })  // bearer-only
+    }
+}
+```
+
+### AuthLayer wiring (mcp.rs)
+
+```rust
+pub fn build_auth_layer(
+    policy: &AuthPolicy,
+    static_token: Option<Arc<str>>,
+    resource_url: Option<Arc<str>>,
+) -> Option<AuthLayer> {
+    match policy {
+        AuthPolicy::LoopbackDev => None,
+        AuthPolicy::Mounted { auth_state } => Some(
+            AuthLayer::new()
+                .with_static_token(static_token)
+                .with_auth_state(auth_state.clone())
+                .with_static_token_scopes(vec!["example:read".into(), "example:write".into()])
+                .with_resource_url(resource_url)
+                .with_allow_session_cookie(false),
+        ),
+    }
+}
+```
+
+### OAuth routes (mcp/routes.rs)
+
+When `auth_state: Some(_)`, the OAuth router is automatically mounted:
+- `/.well-known/oauth-authorization-server`
+- `/.well-known/oauth-protected-resource`
+- `/mcp/.well-known/*`
+- `/authorize`, `/token`, `/register`, `/auth/google/callback`, `/jwks`
+
+---
+
+## 6. Transport — stdio AND Streamable HTTP
+
+Both transports build the same `AppState` and serve the same `ServerHandler`:
+
+```rust
+// HTTP mode (default: `example` or `example serve`)
+async fn serve_mcp() -> Result<()> {
+    let config = Config::load()?;
+    let state = build_state(config).await?;
+    let bind = state.config.bind_addr();
+    let app = mcp::router(state).layer(TraceLayer::new_for_http());
+    let listener = tokio::net::TcpListener::bind(&bind).await?;
+    axum::serve(listener, app.into_make_service())
+        .with_graceful_shutdown(shutdown_signal()).await?;
+}
+
+// stdio mode (`example mcp` — for Claude Code local use)
+async fn serve_stdio_mcp() -> Result<()> {
+    let config = Config::load()?;
+    let state = build_state(config).await?;
+    mcp::rmcp_server(state).serve(stdio()).await?.waiting().await?;
+}
+```
+
+### When to use each
+
+| Transport | Use case |
+|---|---|
+| stdio | Claude Code local development, `~/.claude/settings.json` stdio server |
+| Streamable HTTP | Remote/Docker deployment, Codex, multi-client, reverse proxy |
+
+---
+
+## 7. AppState
+
+```rust
+#[derive(Clone)]
+pub struct AppState {
+    pub config: McpConfig,        // MCP server config (host, port, auth settings)
+    pub auth_policy: AuthPolicy,  // LoopbackDev | Mounted
+    pub service: ExampleService,  // The service layer — everything routes through here
+}
+```
+
+AppState is cloned per-request by the RMCP framework. Keep it cheap to clone — the
+service wraps an `Arc`-backed `reqwest::Client` internally.
+
+---
+
+## 8. MCP Tool — Action + Sub-action Pattern
+
+All servers expose a **single MCP tool** with an `action` parameter that dispatches to
+sub-functions. This is the canonical pattern across all servers:
+
+```rust
+// mcp/tools.rs
+pub(super) async fn execute_tool(state: &AppState, name: &str, args: Value) -> anyhow::Result<Value> {
+    match name {
+        "example" => dispatch(state, args).await,
+        _ => Err(anyhow::anyhow!("unknown tool: {name}")),
+    }
+}
+
+async fn dispatch(state: &AppState, args: Value) -> anyhow::Result<Value> {
+    let action = string_arg(&args, "action")
+        .ok_or_else(|| anyhow::anyhow!("action is required"))?;
+    match action.as_str() {
+        "things"   => state.service.list_things().await,
+        "thing"    => {
+            let id = string_arg(&args, "id")
+                .ok_or_else(|| anyhow::anyhow!("`id` is required for thing"))?;
+            state.service.get_thing(&id).await
+        }
+        "delete_thing" => {
+            let id = string_arg(&args, "id")
+                .ok_or_else(|| anyhow::anyhow!("`id` is required"))?;
+            state.service.delete_thing(&id, bool_arg(&args, "confirm")).await
+        }
+        "help" => Ok(json!({ "help": HELP_TEXT })),
+        other => Err(anyhow::anyhow!("unknown action: {other}; use action=help")),
+    }
+}
+```
+
+### JSON schema (mcp/schemas.rs)
+
+```rust
+pub(super) const EXAMPLE_ACTIONS: &[&str] = &["things", "thing", "delete_thing", "help"];
+
+pub(super) fn tool_definitions() -> Vec<Value> {
+    vec![json!({
+        "name": "example",
+        "description": "Query and manage Example service. Use action=help for documentation.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": { "type": "string", "enum": EXAMPLE_ACTIONS },
+                "id":     { "type": "string", "description": "Item ID (thing, delete_thing)" },
+                "confirm":{ "type": "boolean", "description": "Required true for destructive ops" }
+            },
+            "required": ["action"]
+        }
+    })]
+}
+```
+
+### Scope enforcement (mcp/rmcp_server.rs)
+
+```rust
+const READ_SCOPE:  &str = "example:read";
+const WRITE_SCOPE: &str = "example:write";
+const DENY_SCOPE:  &str = "example:__deny__";  // sentinel — never granted
+
+const READ_ONLY_ACTIONS:  &[&str] = &["things", "thing"];
+const WRITE_ACTIONS:      &[&str] = &["delete_thing"];
+
+fn required_scope_for(action: &str) -> Option<&'static str> {
+    if action == "help" { None }  // auth required but no scope gate
+    else if READ_ONLY_ACTIONS.contains(&action) { Some(READ_SCOPE) }
+    else if WRITE_ACTIONS.contains(&action) { Some(WRITE_SCOPE) }
+    else { Some(DENY_SCOPE) }  // fail-closed: unknown → denied
+}
+```
+
+---
+
+## 9. MCP Resources
+
+Every server exposes its tool JSON schema as a readable resource:
+
+```rust
+const SCHEMA_RESOURCE_URI: &str = "example://schema/mcp-tool";
+
+async fn read_resource(&self, request: ReadResourceRequestParams, ...) -> Result<ReadResourceResult> {
+    if request.uri != SCHEMA_RESOURCE_URI {
+        return Err(ErrorData::invalid_params(format!("unknown resource: {}", request.uri), None));
+    }
+    let schema = tool_definitions();
+    let text = serde_json::to_string_pretty(&schema)?;
+    Ok(ReadResourceResult::new(vec![
+        ResourceContents::text(text, SCHEMA_RESOURCE_URI).with_mime_type("application/json")
+    ]))
+}
+```
+
+---
+
+## 10. MCP Prompts
+
+Each server has at least one prompt that guides common workflows:
+
+```rust
+// mcp/prompts.rs
+pub(super) fn list_prompts() -> ListPromptsResult {
+    ListPromptsResult {
+        prompts: vec![
+            Prompt::new("quick_start", Some("Get an overview of the service status"), None),
+        ],
+        ..Default::default()
+    }
+}
+
+pub(super) fn get_prompt(request: GetPromptRequestParams) -> anyhow::Result<GetPromptResult> {
+    match request.name.as_str() {
+        "quick_start" => Ok(GetPromptResult::new(vec![
+            PromptMessage::new_text(PromptMessageRole::User,
+                "Use the example tool with action=status, then action=things to get an overview.")
+        ]).with_description("Get an overview")),
+        other => Err(anyhow::anyhow!("unknown prompt: {other}")),
+    }
+}
+```
+
+---
+
+## 11. CLI — Thin Shim Pattern
+
+```rust
+// cli.rs (binary module, not lib — uses `servicename::` not `crate::`)
+use example_mcp::app::ExampleService;
+
+pub enum CliCommand {
+    Things,
+    Thing { id: String },
+    DeleteThing { id: String, confirm: bool },
+}
+
+impl CliCommand {
+    pub fn parse(args: &[String]) -> Result<(Self, bool)> {
+        let json = args.iter().any(|a| a == "--json");
+        let confirm = args.iter().any(|a| a == "--confirm");
+        let rest: Vec<&str> = args.iter()
+            .filter(|a| a.as_str() != "--json" && a.as_str() != "--confirm")
+            .map(String::as_str).collect();
+
+        let cmd = match rest.as_slice() {
+            ["things"]          => Self::Things,
+            ["thing", id, ..]   => Self::Thing { id: id.to_string() },
+            ["delete", id, ..]  => Self::DeleteThing { id: id.to_string(), confirm },
+            other => bail!("unknown command: {}\n\nRun `example --help`", other.join(" ")),
+        };
+        Ok((cmd, json))
+    }
+}
+
+pub async fn run(service: &ExampleService, cmd: CliCommand, json: bool) -> Result<()> {
+    let (label, data) = match cmd {
+        CliCommand::Things            => ("things",        service.list_things().await?),
+        CliCommand::Thing { ref id }  => ("thing",         service.get_thing(id).await?),
+        CliCommand::DeleteThing { ref id, confirm } => ("delete", service.delete_thing(id, confirm).await?),
+    };
+    if json { println!("{}", serde_json::to_string_pretty(&data)?); }
+    else    { print_human(label, &data); }
+    Ok(())
+}
+```
+
+---
+
+## 12. Test Sidecars
+
+All tests live in `_tests.rs` sidecar files, NOT inline in the source file. This allows
+testing private functions without making them `pub`.
+
+```rust
+// src/app.rs
+pub struct ExampleService { ... }
+impl ExampleService { ... }
+
+#[cfg(test)]
+#[path = "app_tests.rs"]
+mod tests;
+
+// src/app_tests.rs
+use super::*;  // access to private items
+
+#[test]
+fn destructive_gate_blocks_without_confirm() {
+    let svc = ExampleService::new(stub_client(), false);
+    let err = svc.destructive_gate(false).unwrap_err();
+    assert!(err.to_string().contains("confirm=true"));
+}
+
+#[test]
+fn destructive_gate_allows_with_confirm() {
+    let svc = ExampleService::new(stub_client(), false);
+    assert!(svc.destructive_gate(true).is_ok());
+}
+```
+
+Integration tests in `tests/` use the public API via `use example_mcp::testing::*`:
+
+```rust
+// tests/tool_dispatch.rs
+use example_mcp::testing::loopback_state;
+
+#[tokio::test]
+async fn help_returns_help_key() {
+    let state = loopback_state();
+    let result = execute_tool(&state, "example", json!({"action": "help"})).await.unwrap();
+    assert!(result.get("help").is_some());
+    assert!(!result["help"].as_str().unwrap().is_empty());
+}
+```
+
+### Test helpers (lib.rs)
+
+```rust
+#[cfg(any(test, feature = "test-support"))]
+pub mod testing {
+    pub fn loopback_state() -> AppState {
+        AppState {
+            config: McpConfig::default(),
+            auth_policy: AuthPolicy::LoopbackDev,
+            service: stub_service(),
+        }
+    }
+
+    fn stub_service() -> ExampleService {
+        let client = ExampleClient::new(&ExampleConfig {
+            url: "http://localhost:1".into(),  // unreachable — never called in unit tests
+            api_key: "test".into(),
+            ..Default::default()
+        }).expect("stub client should build");
+        ExampleService::new(client, false)
+    }
+}
+```
+
+---
+
+## 13. Claude Code Plugin Structure
+
+```
+plugins/
+  <service>/
+    .claude-plugin/
+      plugin.json         ← plugin manifest + userConfig
+    .mcp.json             ← MCP server connection (uses ${user_config.*})
+    hooks/
+      hooks.json          ← SessionStart + ConfigChange → plugin-setup.sh
+      plugin-setup.sh     ← deploys server (systemd or docker)
+    skills/
+      <service>/
+        SKILL.md          ← three-tier skill (MCP → CLI → curl)
+```
+
+### plugin.json — userConfig fields every server needs
+
+```json
+{
+  "name": "example",
+  "version": "0.1.0",
+  "userConfig": {
+    "server_url":    { "type": "string",  "title": "MCP server URL",    "default": "http://localhost:3000", "required": true },
+    "api_token":     { "type": "string",  "title": "API token",          "sensitive": true },
+    "no_auth":       { "type": "boolean", "title": "Disable auth",        "default": false },
+    "auth_mode":     { "type": "string",  "title": "Auth mode",           "default": "bearer" },
+    "use_docker":    { "type": "boolean", "title": "Deploy with Docker",   "default": false },
+    "public_url":    { "type": "string",  "title": "Public URL (OAuth)" },
+    "google_client_id":     { "type": "string", "title": "Google client ID",     "sensitive": true },
+    "google_client_secret": { "type": "string", "title": "Google client secret", "sensitive": true },
+    "auth_admin_email":     { "type": "string", "title": "OAuth admin email" },
+    "example_api_url": { "type": "string", "title": "Example API URL", "sensitive": true, "required": true },
+    "example_api_key": { "type": "string", "title": "Example API key", "sensitive": true, "required": true }
+  },
+  "mcpServers": "./plugins/<service>/.mcp.json",
+  "hooks": "./plugins/<service>/hooks/hooks.json",
+  "skills": "./plugins/<service>/skills"
+}
+```
+
+### .mcp.json
+
+```json
+{
+  "mcpServers": {
+    "example": {
+      "type": "http",
+      "url": "${user_config.server_url}/mcp",
+      "headers": { "Authorization": "Bearer ${user_config.api_token}" }
+    }
+  }
+}
+```
+
+### hooks.json
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/plugins/<service>/hooks/plugin-setup.sh", "timeout": 600 }] }],
+    "ConfigChange": [{ "matcher": "user_settings", "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/plugins/<service>/hooks/plugin-setup.sh", "timeout": 600 }] }]
+  }
+}
+```
+
+### plugin-setup.sh responsibilities
+
+1. Read `CLAUDE_PLUGIN_OPTION_*` env vars (set by plugin runtime from userConfig)
+2. Write `.env` to `$CLAUDE_PLUGIN_DATA/` with secrets/URLs only
+3. Copy `docker-compose.yml` from plugin root to data dir
+4. Deploy via systemd OR docker based on `use_docker` flag
+5. Handle cutover: if switching from systemd→docker or vice versa, cleanly stop the old deployment
+6. Link binary to `~/.local/bin/<service>` for CLI access
+
+---
+
+## 14. Dockerfile Pattern
+
+```dockerfile
+# syntax=docker/dockerfile:1.7
+FROM rust:1.90-slim-bookworm AS builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+
+# Cache dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
+    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked && rm -rf src
+
+# Build real binary
+COPY src/ src/
+RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
+    touch src/main.rs && cargo build --release --locked && \
+    cp target/release/example /usr/local/bin/example
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /usr/local/bin/example /usr/local/bin/example
+RUN groupadd --gid 1000 example && \
+    useradd --uid 1000 --gid example --no-create-home --shell /sbin/nologin example && \
+    mkdir -p /data && chown example:example /data
+
+USER 1000:1000
+EXPOSE 3000/tcp
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -sf http://localhost:3000/health || exit 1
+CMD ["example", "serve", "mcp"]
+```
+
+---
+
+## 15. docker-compose.yml Pattern
+
+```yaml
+services:
+  example-mcp:
+    image: ghcr.io/jmagar/example-mcp:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: config/Dockerfile
+    container_name: example-mcp
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${EXAMPLE_MCP_HOST_PORT:-3000}:3000/tcp"
+    volumes:
+      - ${EXAMPLE_DATA_VOLUME:-example-mcp-data}:/data
+    networks:
+      - jakenet
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+volumes:
+  example-mcp-data:
+
+networks:
+  jakenet:
+    name: ${DOCKER_NETWORK:-example-mcp}
+    external: true
+```
+
+**Key requirements:**
+- `container_name` must be unique across your stack
+- Always use the `jakenet` external network
+- `env_file.required: false` so the container starts even without .env (relies on config.toml defaults)
+- Resource limits to prevent runaway memory on homelab
+
+---
+
+## 16. Install Script Pattern
+
+```bash
+#!/usr/bin/env bash
+# One-line install: curl -fsSL https://raw.githubusercontent.com/jmagar/example-mcp/main/install.sh | bash
+set -euo pipefail
+
+REPO="jmagar/example-mcp"
+BINARY="example"
+INSTALL_DIR="${HOME}/.local/bin"
+
+# Detect platform
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "${ARCH}" in x86_64) ARCH="x86_64" ;; aarch64|arm64) ARCH="aarch64" ;; esac
+
+echo "Installing ${BINARY} from ${REPO}..."
+mkdir -p "${INSTALL_DIR}"
+
+# Download latest release binary
+LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')
+URL="https://github.com/${REPO}/releases/download/${LATEST}/${BINARY}-${LATEST}-${ARCH}-unknown-linux-musl.tar.gz"
+curl -fsSL "${URL}" | tar -xz -C "${INSTALL_DIR}" "${BINARY}"
+chmod +x "${INSTALL_DIR}/${BINARY}"
+
+# Write starter .env if not present
+if [[ ! -f .env ]]; then
+  cat > .env << 'ENV'
+# Required — set these before running
+EXAMPLE_API_URL=https://your-service.internal/api
+EXAMPLE_API_KEY=your_api_key_here
+EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)
+# Docker
+PUID=1000
+PGID=1000
+DOCKER_NETWORK=jakenet
+RUST_LOG=info
+ENV
+  echo "Starter .env written — edit it with your credentials"
+fi
+
+echo ""
+echo "✓ ${BINARY} installed to ${INSTALL_DIR}/${BINARY}"
+echo ""
+echo "Next steps:"
+echo "  1. Edit .env with your credentials"
+echo "  2. Run: ${BINARY} serve           (HTTP mode)"
+echo "  3. Or:  ${BINARY} mcp             (stdio mode for Claude Code)"
+```
+
+---
+
+## 17. mcporter Integration Test Pattern
+
+Every server has `tests/mcporter/test-tools.sh` and `config/mcporter.json`.
+
+### Philosophy
+
+A test that checks `is_error: false` is not a good test — it only verifies the MCP
+protocol layer responded. A semantic test checks that the actual service data is present
+and structurally correct:
+
+```bash
+# Bad test — only proves MCP responded
+run_test "server info" "example" '{"action":"server_info"}'
+
+# Good test — proves the API actually returned real data
+run_test "server info has hostname" "example" '{"action":"server_info"}' "hostname"
+run_test "server info hostname non-empty" "example" '{"action":"server_info"}' \
+  && assert_nonempty "$(last_output | jq -r '.hostname')" "hostname"
+```
+
+### config/mcporter.json
+
+```json
+{
+  "mcpServers": {
+    "example": {
+      "url": "http://localhost:3000/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
+### Semantic validation helpers in test-tools.sh
+
+```bash
+# Validate that a JSON path exists and is non-empty
+assert_key() {
+  local label="$1" output="$2" key_path="$3"
+  python3 -c "
+import sys, json
+d = json.loads('''${output}''')
+keys = '${key_path}'.split('.')
+node = d
+for k in keys:
+    node = node[int(k)] if isinstance(node, list) and k.isdigit() else node[k]
+assert node is not None and node != '' and node != [] and node != {}
+" 2>/dev/null || { echo "[FAIL] ${label}: missing or empty .${key_path}"; return 1; }
+}
+```
+
+### Non-destructive actions only
+
+Never test actions that:
+- Send real notifications to users (send, notify, alert)
+- Delete data (delete_*, remove_*)
+- Modify state (update_*, set_*, authorize_*)
+
+For services where "send" IS the primary action (Apprise, Gotify), use a dedicated
+test tag/app (`APPRISE_TEST_TAG`, `GOTIFY_TEST_APP_ID`) gated by an env var.
+
+---
+
+## 18. Three-Tier Skill Pattern
+
+Every server has a skill covering three fallback tiers:
+
+```markdown
+# example — Claude Code Skill
+
+Use this skill whenever... [trigger phrases]
+
+## Tier 1: MCP tool (preferred)
+Use when the example MCP server is configured.
+
+example(action="things")
+example(action="thing", id="abc123")
+example(action="help")          # always available
+
+## Tier 2: CLI binary
+Use when MCP is unavailable but the binary is installed.
+
+example things [--json]
+example thing <id> [--json]
+
+Env required: EXAMPLE_API_URL, EXAMPLE_API_KEY
+
+## Tier 3: Direct API (last resort)
+Use when neither MCP nor CLI is available.
+
+curl -H "Authorization: Bearer $EXAMPLE_API_KEY" \
+     "$EXAMPLE_API_URL/things"
+
+## Gotchas
+- [service-specific pitfalls]
+```
+
+---
+
+## 19. Port Assignments
+
+| Service | MCP Port | Binary name |
+|---|---|---|
+| unraid-mcp (unrust) | 6970 | `unraid` |
+| gotify-mcp (rustify) | 9158 | `gotify` |
+| unifi-mcp (rustifi) | 7474 | `unifi` |
+| tailscale-mcp (rustscale) | 7575 | `tailscale` |
+| apprise-mcp | 8765 | `apprise` |
+| rmcp-template | 3000 | `example` |
+
+---
+
+## 20. Checklist for New Servers
+
+Use this when creating a new server from rmcp-template:
+
+- [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
+- [ ] Implement API client in `src/<service>.rs` (transport only)
+- [ ] Add service methods to `src/app.rs` (all logic here)
+- [ ] Add tool actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs`
+- [ ] Add CLI commands to `src/cli.rs`
+- [ ] Update `src/config.rs` with service-specific config fields
+- [ ] Set correct port in `config.toml` and `docker-compose.yml`
+- [ ] Update `EXPOSE` in `config/Dockerfile`
+- [ ] Update `plugin.json` userConfig for your service's credentials
+- [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
+- [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
+- [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
+- [ ] Update `install.sh` with correct binary/repo name
+- [ ] Run `cargo check` — must compile clean, zero warnings
+- [ ] Run `cargo nextest run` — all tests pass
+- [ ] Run `./tests/mcporter/test-tools.sh` against a live server instance
+
+---
+
+## 21. Git LFS — Binary Distribution
+
+Every server repo uses Git LFS to store the pre-built binary that is bundled with the
+Claude Code plugin. Users who install the plugin get the binary without needing Rust.
+
+```bash
+# In each repo root
+git lfs install
+git lfs track "bin/*"
+git lfs track "*.tar.gz"
+git lfs track "*.zip"
+```
+
+`.gitattributes` must include:
+```
+bin/* filter=lfs diff=lfs merge=lfs -text
+*.tar.gz filter=lfs diff=lfs merge=lfs -text
+```
+
+CI builds the release binary and commits it to `bin/<service>` (linux/amd64 only for
+now — the plugin runtime fetches the right arch at install time via `install.sh`).
+
+---
+
+## 22. Thin Shim Rule — Absolute Prohibition
+
+**No business logic in `mcp/tools.rs` OR `cli.rs`. Ever.**
+
+This is the hardest architectural rule to enforce and the most commonly violated.
+The full prohibition:
+
+| Layer | Allowed | Prohibited |
+|---|---|---|
+| `<service>.rs` | HTTP requests, response parsing | Defaults, validation, error messages |
+| `app.rs` | Everything else | Nothing |
+| `mcp/tools.rs` | Parse args, call service, return Value | Any conditional logic, defaults |
+| `cli.rs` | Parse flags, call service, format output | Any conditional logic, defaults |
+| `main.rs` | Config loading, mode dispatch | Any domain logic |
+
+Signs you are violating the rule:
+- An `if` statement in `tools.rs` that isn't arg parsing
+- A default value set in `cli.rs` rather than `app.rs`  
+- An error message about the domain in `tools.rs` (not "action is required")
+- Any `match` in `cli.rs` beyond `cmd_name → service.method()`
+
+---
+
+## 23. Elicitation — Destructive Action Protection
+
+Any action that can cause data loss MUST use MCP elicitation to confirm with the user
+before proceeding. Elicitation is the server asking the client for additional input
+mid-call.
+
+**Which actions require elicitation:**
+- Any `delete_*` action
+- Any `remove_*`, `destroy_*`, `wipe_*` action
+- Any action that overwrites existing data without rollback
+- Any action that sends irreversible notifications to many users
+
+**Implementation pattern (when rmcp supports it):**
+
+```rust
+// In rmcp_server.rs — check rmcp::model for ElicitRequest/ElicitResult
+async fn call_tool(&self, request: CallToolRequestParams, context: RequestContext<RoleServer>)
+    -> Result<CallToolResult, ErrorData>
+{
+    // ... parse action ...
+    if is_destructive_action(&action) && !bool_arg(&arguments, "confirm") {
+        // Use rmcp elicitation to ask the user
+        if let Ok(response) = context.elicit(ElicitRequest {
+            message: format!("⚠️ `{action}` is irreversible. Confirm?"),
+            requested_schema: json!({"type": "boolean"}),
+        }).await {
+            if response.content != json!(true) {
+                return Ok(CallToolResult::error(vec![Content::text("Cancelled.")]));
+            }
+        }
+    }
+    // proceed...
+}
+```
+
+**Until elicitation is available in your rmcp version**, the service-layer `confirm`
+flag + `ALLOW_DESTRUCTIVE` env var is the fallback (already implemented).
+
+---
+
+## 24. nextest + xtasks
+
+### nextest
+
+All repos use `cargo nextest` instead of `cargo test`. Add to `Cargo.toml`:
+```toml
+[dev-dependencies]
+# no special dep needed — nextest is a cargo plugin
+```
+
+Install: `cargo install cargo-nextest`
+
+Justfile `test` recipe:
+```just
+test:
+    cargo nextest run
+test-ci:
+    cargo nextest run --profile ci
+```
+
+`.config/nextest.toml`:
+```toml
+[profile.default]
+fail-fast = false
+
+[profile.ci]
+fail-fast = true
+retries = 2
+```
+
+### xtasks
+
+Every repo has an `xtask/` crate for repo automation:
+
+```
+xtask/
+  Cargo.toml    # name = "xtask", path dep on main crate
+  src/
+    main.rs     # cargo xtask <command>
+```
+
+Commands every xtask must implement:
+- `cargo xtask dist` — build release binary, copy to `bin/`, update Git LFS
+- `cargo xtask ci` — run all checks (fmt, clippy, test, audit)
+- `cargo xtask symlink-docs` — symlink CLAUDE.md → AGENTS.md, GEMINI.md everywhere
+- `cargo xtask check-env` — validate required env vars are set
+
+Justfile delegates to xtask:
+```just
+dist:
+    cargo xtask dist
+symlink-docs:
+    cargo xtask symlink-docs
+```
+
+---
+
+## 25. Appdata Convention — `~/.<service>`
+
+All servers use `~/.<service>` as their local data directory by default. This is
+consistent between Docker and bare-metal deployments.
+
+| Deployment | Data directory |
+|---|---|
+| Local binary | `~/.unraid/`, `~/.gotify/`, `~/.tailscale-mcp/`, etc. |
+| Docker | `/data/` inside container, mounted from `~/.<service>/` on host |
+| Plugin | `$CLAUDE_PLUGIN_DATA` (symlinked to `~/.<service>/`) |
+
+The binary detects its environment and resolves the correct path:
+
+```rust
+fn default_data_dir() -> PathBuf {
+    // In container: /data is mounted from ~/.<service> — use it directly
+    if std::env::var("RUNNING_IN_CONTAINER").is_ok() || std::path::Path::new("/.dockerenv").exists() {
+        return PathBuf::from("/data");
+    }
+    // Local: use ~/.<service>
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".example")  // replace with actual service name
+}
+```
+
+`docker-compose.yml` always mounts the host `~/.<service>` to `/data`:
+```yaml
+volumes:
+  - ${HOME}/.example:/data
+```
+
+This means `config.toml`, `.env`, `auth.db`, `auth-jwt.pem`, etc. are all in the same
+place whether the server runs in Docker or locally.
+
+---
+
+## 26. entrypoint.sh — Docker Entrypoint
+
+Every Docker image has an `entrypoint.sh` that runs as root before dropping to the
+service user. It handles permissions, creates required directories, and validates config.
+
+```bash
+#!/bin/sh
+# entrypoint.sh — Docker entrypoint
+# Runs as root, then exec's the service as USER 1000:1000
+set -e
+
+DATA_DIR="${DATA_DIR:-/data}"
+
+# Ensure data directory exists and is owned by the service user
+mkdir -p "${DATA_DIR}"
+chown -R 1000:1000 "${DATA_DIR}"
+chmod 750 "${DATA_DIR}"
+
+# Ensure config file is readable
+if [ -f "${DATA_DIR}/config.toml" ]; then
+    chmod 640 "${DATA_DIR}/config.toml"
+fi
+
+# Ensure .env (if present) is not world-readable
+if [ -f "${DATA_DIR}/.env" ]; then
+    chmod 600 "${DATA_DIR}/.env"
+fi
+
+# Validate required env vars are set (fail fast)
+if [ -z "${EXAMPLE_API_KEY:-}" ]; then
+    echo "ERROR: EXAMPLE_API_KEY is not set" >&2
+    exit 1
+fi
+
+# Drop to service user and exec the binary
+exec su-exec 1000:1000 "$@"
+```
+
+Dockerfile:
+```dockerfile
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && apk add --no-cache su-exec  # or use gosu on debian
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["example", "serve", "mcp"]
+```
+
+---
+
+## 27. Security — No 0.0.0.0 Without Auth
+
+The server MUST refuse to bind to a non-loopback address without authentication
+configured, unless the operator explicitly opts out.
+
+```rust
+fn validate_bind_security(config: &Config) -> anyhow::Result<()> {
+    let is_loopback = config.mcp.host.starts_with("127.") || config.mcp.host == "::1";
+    let has_auth = config.mcp.no_auth == false && config.mcp.api_token.is_some()
+        || config.mcp.auth.mode == AuthMode::OAuth;
+    let noauth_override = std::env::var("EXAMPLE_NOAUTH")
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
+
+    if !is_loopback && !has_auth && !noauth_override {
+        anyhow::bail!(
+            "Refusing to bind MCP server to {} without authentication.\n\
+             Set EXAMPLE_MCP_TOKEN, use auth_mode=oauth, or set EXAMPLE_NOAUTH=true \
+             if a upstream gateway handles auth.",
+            config.mcp.host
+        );
+    }
+    Ok(())
+}
+```
+
+Called in `serve_mcp()` before binding the TCP listener.
+
+---
+
+## 28. Binary Environment Awareness
+
+The binary normalizes paths, IPs, and ports based on its deployment context:
+
+```rust
+fn is_containerized() -> bool {
+    std::path::Path::new("/.dockerenv").exists()
+        || std::env::var("RUNNING_IN_CONTAINER").is_ok()
+        || std::env::var("container").is_ok()
+}
+
+fn resolve_data_dir(config_path: Option<&str>) -> PathBuf {
+    if let Some(p) = config_path { return PathBuf::from(p); }
+    if is_containerized() { return PathBuf::from("/data"); }
+    dirs::home_dir().unwrap_or_default().join(".example")
+}
+
+fn resolve_bind_host(configured: &str) -> &str {
+    // Inside a container, 0.0.0.0 is always correct (NAT handles external access)
+    // Outside, prefer 127.0.0.1 unless explicitly configured otherwise
+    if configured == "0.0.0.0" && !is_containerized() {
+        return "127.0.0.1";  // safe default for bare-metal
+    }
+    configured
+}
+```
+
+The key invariant: **the same `.env` and `config.toml` in `~/.<service>/` work for
+both Docker and bare-metal deployment without modification.**
+
+---
+
+## 29. taplo — TOML Formatter
+
+Every repo has a `taplo.toml` configuration:
+
+```toml
+# taplo.toml
+[formatting]
+align_entries = false
+array_trailing_comma = true
+array_auto_expand = true
+array_auto_collapse = true
+compact_arrays = true
+compact_inline_tables = false
+column_width = 100
+indent_string = "  "
+trailing_newline = true
+allowed_blank_lines = 1
+```
+
+Justfile:
+```just
+fmt-toml:
+    taplo format
+check-toml:
+    taplo check
+```
+
+CI runs `taplo check` on all PRs. Install: `cargo install taplo-cli` or `mise use taplo`.
+
+---
+
+## 30. lefthook — Minimal Pre-commit
+
+Pre-commit hooks must be FAST and NON-BLOCKING for developer flow. Heavy checks
+live in CI, not pre-commit.
+
+```yaml
+# lefthook.yml
+pre-commit:
+  parallel: true
+  commands:
+    # Fast: just check for obvious problems
+    diff_check:
+      run: git --no-pager diff --check --cached
+    toml_fmt:
+      glob: "*.toml"
+      run: taplo check {staged_files}
+    env_guard:
+      run: bash scripts/block-env-commits.sh  # prevents committing .env with secrets
+
+# NOT in pre-commit (too slow / too blocking):
+# - cargo clippy  → CI only
+# - cargo test    → CI only  
+# - cargo nextest → CI only
+# - cargo fmt check → CI only (fmt is ok locally but check blocks flow)
+```
+
+The philosophy: **commit early, commit often**. A pre-commit that takes 30 seconds
+kills momentum. Only block on things that catch secrets or obviously broken syntax.
+
+---
+
+## 31. GitHub Workflows
+
+Every repo has three workflows:
+
+### `.github/workflows/ci.yml`
+Runs on push/PR to main:
+- `fmt`: `cargo fmt -- --check`
+- `clippy`: `cargo clippy -- -D warnings`  
+- `test`: `cargo nextest run --profile ci`
+- `toml`: `taplo check`
+- `audit`: `cargo audit`
+- `gitleaks`: secret scanning
+
+### `.github/workflows/docker-publish.yml`
+Runs on push to main + tags:
+- Multi-platform build (linux/amd64, linux/arm64)
+- Push to `ghcr.io/jmagar/<repo>:latest` on main, `:<version>` on tags
+- Trivy vulnerability scan
+- SBOM generation
+- MCP registry publish on version tags
+
+### `.github/workflows/release.yml`
+Runs on version tags (`v*`):
+- Build release binaries for linux/amd64 and linux/arm64
+- Copy to `bin/` and push via Git LFS
+- Create GitHub Release with binary assets
+- Update `install.sh` download URLs
+
+---
+
+## 32. CLAUDE.md as Source of Truth
+
+`CLAUDE.md` is the authoritative project instructions file. `AGENTS.md` and `GEMINI.md`
+are symlinks to it. This applies to ALL `CLAUDE.md` files in the repo, not just the root.
+
+```bash
+# cargo xtask symlink-docs (or: just symlink-docs)
+find . -name "CLAUDE.md" -not -path "./.git/*" -not -path "./target/*" | while read f; do
+    dir=$(dirname "$f")
+    ln -sf "CLAUDE.md" "${dir}/AGENTS.md"
+    ln -sf "CLAUDE.md" "${dir}/GEMINI.md"
+done
+```
+
+Justfile:
+```just
+symlink-docs:
+    cargo xtask symlink-docs
+
+# Or inline if no xtask yet:
+symlink-docs:
+    find . -name "CLAUDE.md" -not -path "./.git/*" -not -path "./target/*" \
+        -exec sh -c 'ln -sf CLAUDE.md "$(dirname {})/AGENTS.md"; ln -sf CLAUDE.md "$(dirname {})/GEMINI.md"' \;
+```
+
+Run `just symlink-docs` after adding any new `CLAUDE.md` file.
+
+---
+
+## 33. .gitignore and .dockerignore
+
+Use the canonical files from syslog-mcp as the base. Copy them without modification.
+
+Key `.gitignore` rules:
+- `.env` and `.env.*` ignored, `.env.example` committed
+- `target/` ignored
+- `*.db`, `*.db-shm`, `*.db-wal` ignored
+- AI tooling dirs ignored (`.claude/`, `.omc/`, `.lavra/`, etc.)
+- `bin/` NOT ignored (LFS-tracked binaries are committed)
+
+Key `.dockerignore` rules:
+- `target/` excluded (built inside container)
+- `tests/`, `docs/`, `scripts/`, `*.md` excluded (not needed at runtime)
+- `.env`, `.env.*` excluded (injected at runtime)
+- `Justfile`, `lefthook.yml` excluded
+- Never exclude: `src/`, `Cargo.toml`, `Cargo.lock`, `config/`
+
+---
+
+## 34. CHANGELOG.md
+
+Every repo has a `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/):
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] — 2026-05-13
+
+### Added
+- Initial release
+- MCP server with action-based tool dispatch
+- CLI thin shim
+- Bearer token + Google OAuth authentication
+- Streamable HTTP + stdio transport
+- Docker + systemd deployment
+- Claude Code plugin with userConfig
+```
+
+---
+
+## Updated Checklist for New Servers
+
+- [ ] Replace `example`/`EXAMPLE` with your service name throughout
+- [ ] Implement API client in `src/<service>.rs` (transport only)
+- [ ] Add service methods to `src/app.rs` (ALL logic here)
+- [ ] Add actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs` (thin shim ONLY)
+- [ ] Add CLI commands to `src/cli.rs` (thin shim ONLY)
+- [ ] Update `src/config.rs` with service-specific fields
+- [ ] Add elicitation to destructive actions (or confirm flag fallback)
+- [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
+- [ ] Implement `validate_bind_security()` in `main.rs`
+- [ ] Implement `default_data_dir()` with container detection
+- [ ] Write `entrypoint.sh` with permission setup
+- [ ] Configure Git LFS (`git lfs track "bin/*"`)
+- [ ] Set up xtask crate with `dist`, `ci`, `symlink-docs`, `check-env`
+- [ ] Configure nextest (`.config/nextest.toml`)
+- [ ] Configure taplo (`taplo.toml`)
+- [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
+- [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
+- [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
+- [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
+- [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
+- [ ] Write `install.sh` with LFS binary download
+- [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
+- [ ] Write `CHANGELOG.md`
+- [ ] Run `just symlink-docs` to create AGENTS.md + GEMINI.md symlinks
+- [ ] Write `server.json` for MCP registry
+- [ ] Write `.codex-plugin/plugin.json` next to `.claude-plugin/plugin.json`
+- [ ] Verify CLI ↔ MCP action parity (every action reachable from both)
+- [ ] Run `cargo check` — zero warnings
+- [ ] Run `cargo nextest run` — all pass
+- [ ] Run `taplo check` — all TOML valid
+- [ ] Run `./tests/mcporter/test-tools.sh` against live server
+
+---
+
+## 35. MCP Registry — server.json
+
+Every server must have a `server.json` in the repo root for publishing to the
+[official MCP registry](https://modelcontextprotocol.io/registry/quickstart).
+
+### Publishing steps
+
+1. Install `mcp-publisher`:
+```bash
+curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+```
+
+2. Authenticate (DNS ownership proof — requires your domain):
+```bash
+./mcp-publisher login dns --domain yourdomain.com --private-key $MCP_PRIVATE_KEY
+```
+Or via GitHub OAuth:
+```bash
+./mcp-publisher login github
+```
+
+3. Publish on version tag (done automatically via `docker-publish.yml` CI):
+```bash
+./mcp-publisher publish
+```
+
+### server.json structure
+
+```json
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "tv.tootie/example-mcp",
+  "title": "Example MCP",
+  "description": "One-line description of what the server does.",
+  "repository": {
+    "url": "https://github.com/jmagar/example-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/jmagar/example-mcp:0.1.0",
+      "version": "0.1.0",
+      "environmentVariables": [
+        {
+          "name": "EXAMPLE_API_URL",
+          "description": "Base URL of your Example service.",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "EXAMPLE_API_KEY",
+          "description": "API key for authentication.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "EXAMPLE_MCP_TOKEN",
+          "description": "Bearer token for MCP endpoint auth.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://example.yourdomain.com/mcp"
+    }
+  ]
+}
+```
+
+### Version management
+
+The `release.yml` workflow updates `server.json` version automatically on tag:
+```yaml
+- name: Set version in server.json
+  run: |
+    VERSION="${GITHUB_REF_NAME#v}"
+    jq --arg v "$VERSION" \
+       --arg img "ghcr.io/jmagar/example-mcp:${VERSION}" \
+       '.version = $v | .packages[0].identifier = $img | .packages[0].version = $v' \
+       server.json > server.tmp && mv server.tmp server.json
+```
+
+### Name namespace
+
+The `name` field uses reverse-DNS format: `tv.tootie/<service>-mcp`. Verify you
+own the domain before publishing to the official registry.
+
+---
+
+## 36. Codex Plugin — .codex-plugin/plugin.json
+
+Every server needs a Codex plugin manifest alongside the Claude plugin:
+
+```
+plugins/
+  <service>/
+    .claude-plugin/
+      plugin.json     ← Claude Code plugin
+    .codex-plugin/
+      plugin.json     ← Codex plugin (this section)
+    .mcp.json
+    hooks/
+    skills/
+```
+
+### .codex-plugin/plugin.json structure
+
+```json
+{
+  "name": "example-mcp",
+  "version": "0.1.0",
+  "description": "Example service MCP server for Codex.",
+  "homepage": "https://github.com/jmagar/example-mcp",
+  "repository": "https://github.com/jmagar/example-mcp",
+  "license": "MIT",
+  "keywords": ["example", "mcp", "homelab"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Example MCP",
+    "shortDescription": "Query and manage Example service",
+    "longDescription": "Full description of what this MCP server does, what data it exposes, and what operations it supports.",
+    "developerName": "Jacob Magar",
+    "category": "Infrastructure",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/jmagar/example-mcp",
+    "defaultPrompt": [
+      "Check Example service status.",
+      "List all items in Example.",
+      "Show Example health."
+    ],
+    "brandColor": "#6366F1"
+  },
+  "author": {
+    "name": "Jacob Magar",
+    "email": "jmagar@users.noreply.github.com",
+    "url": "https://github.com/jmagar"
+  }
+}
+```
+
+The `.mcp.json` referenced is the shared one at `plugins/<service>/.mcp.json` —
+both Claude and Codex plugins point to the same MCP server connection config.
+
+---
+
+## 37. CLI ↔ MCP Action Parity
+
+**Every action accessible via the MCP tool MUST also be accessible via the CLI, and vice versa.**
+
+This is the corollary to the thin-shim rule: since both CLI and MCP call the same
+service methods, parity is achieved automatically IF the shims are complete.
+
+### Parity enforcement
+
+Maintain a parity table in `CLAUDE.md`:
+
+| Service Method | MCP Action | CLI Command |
+|---|---|---|
+| `service.list_things()` | `example(action="things")` | `example things` |
+| `service.get_thing(id)` | `example(action="thing", id=...)` | `example thing <id>` |
+| `service.create_thing(name)` | `example(action="create_thing", name=...)` | `example create <name>` |
+| `service.delete_thing(id)` | `example(action="delete_thing", id=...)` | `example delete <id> [--confirm]` |
+
+### Common parity gaps to check
+
+- `help` action in MCP → `example --help` or `example help` in CLI
+- Resource listing in MCP → no CLI equivalent needed (resources are MCP-only)
+- Prompts in MCP → no CLI equivalent needed (prompts are MCP-only)
+- `health` action in MCP → `example health` in CLI
+- Actions with optional params → CLI needs `--flag` for each optional param
+
+### Template parity table (rmcp-template)
+
+| Method | MCP | CLI |
+|---|---|---|
+| `service.greet(name)` | `example(action="greet", name="...")` | `example greet [--name N]` |
+| `service.echo(message)` | `example(action="echo", message="...")` | `example echo <message>` |
+| `service.status()` | `example(action="status")` | `example status` |
+| `service.help()` | `example(action="help")` | `example --help` |
+
+---
+
+## 38. refresh-docs.sh — Reference Documentation Refresh
+
+Every server repo has a `scripts/refresh-docs.sh` that fetches fresh reference
+material into `docs/references/`. This gives AI agents working in the repo accurate,
+up-to-date docs for both the service API and the MCP transport layer.
+
+### Pattern source
+
+Adapted from `agentcast/scripts/refresh-docs.sh`. The core mechanics are identical:
+- **Axon crawls** — `axon crawl <url> --wait --yes` → copies markdown output into `docs/references/<target>/`
+- **Repomix packs** — `repomix --remote <repo> --style xml --output <file>` → XML snapshot for codebase-level reference
+- **Sparse clones** — `git clone --sparse` to pull only specific doc directories
+- **Change tracking** — sha256 checksums of all files before/after; appends a diff summary to `docs/references/CHANGES.md`
+
+### What each server fetches
+
+| Repo | Crawled sites | Repomix packs |
+|---|---|---|
+| unrust | docs.unraid.net, modelcontextprotocol.io | jmagar/unraid-api, mcp/rust-sdk, mcp/registry |
+| rustify | gotify.net/docs, modelcontextprotocol.io | gotify/server, gotify/android, mcp/rust-sdk |
+| rustifi | developer.ui.com, modelcontextprotocol.io | Art-of-WiFi/UniFi-API-client, mcp/rust-sdk |
+| rustscale | tailscale.com/api, modelcontextprotocol.io | tailscale/tailscale (filtered), mcp/rust-sdk |
+| apprise-mcp | github.com/caronc/apprise/wiki, modelcontextprotocol.io | caronc/apprise, caronc/apprise-api, mcp/rust-sdk |
+| rmcp-template | modelcontextprotocol.io, code.claude.com | mcp/rust-sdk, mcp/spec, mcp/registry, openclaw/mcporter |
+
+### docs/references/ layout
+
+```
+docs/references/
+  INDEX.md              ← auto-generated index of all reference material
+  CHANGES.md            ← append-only change log from each refresh run
+  <service>/
+    docs/               ← Axon crawl output (manifest.jsonl + markdown/)
+    repos/              ← Repomix XML packs
+  mcp/
+    docs/               ← modelcontextprotocol.io crawl
+    repos/              ← rust-sdk, spec, registry XML packs
+```
+
+### Justfile recipes
+
+```just
+refresh-docs:           bash scripts/refresh-docs.sh
+refresh-docs-repomix:   bash scripts/refresh-docs.sh --skip-crawl
+refresh-docs-crawl:     bash scripts/refresh-docs.sh --skip-repomix
+refresh-docs-dry:       bash scripts/refresh-docs.sh --dry-run
+```
+
+### .gitignore
+
+`docs/references/` is in `.gitignore` — the content is large, auto-generated, and
+should be fetched fresh by each developer. Only `docs/references/INDEX.md` and
+`docs/references/CHANGES.md` are meaningful to commit (optional).
+
+If you want to commit the INDEX and CHANGES but not the bulk content:
+```gitignore
+docs/references/
+!docs/references/INDEX.md
+!docs/references/CHANGES.md
+```
+
+### When to run
+
+- When starting development on a new feature touching the service API
+- When the service releases a new API version
+- When debugging an unexpected API response shape
+- Monthly, to keep docs current
+
+### Dependencies
+
+- `axon` — the Axon crawl CLI (`axon crawl <url> --wait --yes`)
+- `repomix` or `npx --yes repomix` — codebase packer
+- `git` — for sparse clones
+- `sha256sum` — for change detection
+
+### Adding your service's docs (when adapting the template)
+
+In `scripts/refresh-docs.sh`, find the `TEMPLATE:` comment blocks and add:
+
+```bash
+# In the crawl_docs section:
+crawl_docs "https://your-service.com/api-docs" "your-service.com" "your-service/docs"
+
+# In the pack_repo section:
+pack_repo "your-org/your-service" "your-service/repos/your-service.xml" \
+  "api/**,src/**" "test/**,node_modules/**"
+```
+
+Then update `write_index()` to include your new paths in the generated `INDEX.md`.
+
+---
+
+## 39. Informative Error Messages — Agent-First Design
+
+Every error that can be returned from an MCP tool, CLI command, or API endpoint
+must tell an agent exactly what went wrong AND how to fix it.
+
+### MCP tool error structure
+
+```rust
+// Bad — opaque error
+Err(anyhow::anyhow!("not found"))
+
+// Good — agent-correctable error
+Err(anyhow::anyhow!(
+    "docker_logs: container not found: id={id}\n\
+     Hint: use action=docker to list available container IDs first.\n\
+     Example: example(action=\"docker\") → pick an id from the results"
+))
+```
+
+### Error response shape for MCP
+
+When a tool call fails, return `CallToolResult::error()` with structured text:
+
+```rust
+Ok(CallToolResult::error(vec![Content::text(format!(
+    "ERROR: {action} failed\n\
+     Reason: {reason}\n\
+     Hint: {how_to_fix}\n\
+     See: action=help for full documentation"
+))]))
+```
+
+### Required error fields
+
+Every MCP error message must include:
+
+| Field | Example |
+|---|---|
+| What failed | `"docker_logs: container id not found"` |
+| The bad value | `"id=\"abc123\""` |
+| Why it failed | `"container may be stopped or removed"` |
+| How to fix | `"use action=docker to list running container ids"` |
+
+### Validation errors vs runtime errors
+
+- **Missing required arg**: `"`id` is required for docker_logs — pass id=<container_id>"`
+- **Wrong type**: `"`tail` must be an integer, got \"fifty\""`
+- **Unknown action**: `"unknown action: \"florp\" — valid actions: array, disks, docker, ..., help"`
+- **API unreachable**: `"EXAMPLE_URL unreachable: connection refused (http://localhost:8765) — is the service running?"`
+- **Auth failure**: `"API key rejected (EXAMPLE_API_KEY) — check the key is valid and has not expired"`
+
+### CLI error messages
+
+CLI errors go to stderr, always include the failing command, and suggest the fix:
+
+```
+Error: `example thing abc` — id must be numeric
+       Run `example things` to list valid IDs
+```
+
+---
+
+## 40. Agent-First Output — Token Discipline
+
+Every surface assumes an agent may be consuming the output. Agents have finite
+context windows. All outputs must be bounded, structured, and paginated.
+
+### 10K token cap
+
+No single response may return more than ~10,000 tokens (~40KB of text). If the
+raw response would exceed this, truncate with a clear message:
+
+```rust
+const MAX_RESPONSE_BYTES: usize = 40_000; // ~10K tokens
+
+fn truncate_response(text: &str) -> String {
+    if text.len() <= MAX_RESPONSE_BYTES {
+        return text.to_string();
+    }
+    let truncated = &text[..MAX_RESPONSE_BYTES];
+    format!("{truncated}\n\n[TRUNCATED: response exceeded 10K token limit. Use limit/offset or more specific filters.]")
+}
+```
+
+### Pagination for list actions
+
+Every action that returns a list MUST support `limit` and `offset` (or `cursor`):
+
+```rust
+// In tools.rs:
+"things" => {
+    let limit  = u32_arg(&args, "limit")?.unwrap_or(50).min(200);
+    let offset = u32_arg(&args, "offset")?.unwrap_or(0);
+    state.service.list_things(limit, offset).await
+}
+
+// Response shape includes pagination metadata:
+{
+  "items": [...],
+  "total": 1842,
+  "limit": 50,
+  "offset": 0,
+  "has_more": true,
+  "next_offset": 50
+}
+```
+
+### Filtering for list actions
+
+List actions that return heterogeneous data MUST support filtering:
+
+```rust
+// In schemas.rs — add to inputSchema properties:
+"filter": {
+    "type": "string",
+    "description": "Filter by name/label (substring match, case-insensitive)"
+},
+"state": {
+    "type": "string",
+    "description": "Filter by state (e.g. running, stopped)"
+}
+```
+
+### --json flag on all CLI commands
+
+Every CLI command that outputs data MUST support `--json`. JSON output:
+- Is machine-readable without parsing
+- Matches the MCP response shape exactly
+- Goes to stdout (human-readable output goes to stderr)
+- Enables piping: `example things --json | jq '.items[].name'`
+
+### Stable output shapes
+
+JSON shapes must be stable across versions. Field additions are OK; removals and
+renames are breaking changes. Every field returned must be documented.
+
+### Summarize by default, expand on request
+
+```
+# Default: summary view (fits on screen)
+$ example things
+  ID   NAME               STATE    UPDATED
+  42   my-thing           active   2m ago
+  43   other-thing        idle     1h ago
+
+# Full detail: --verbose or specific action
+$ example thing 42
+$ example thing 42 --json
+```
+
+---
+
+## 41. Observability — Glass House, Not Black Box
+
+Every server must expose its internal state through observable surfaces.
+Agents and operators should never have to guess what the server is doing.
+
+### Required HTTP endpoints
+
+| Endpoint | Auth | Description |
+|---|---|---|
+| `GET /health` | none | Basic liveness + upstream connectivity |
+| `GET /status` | bearer | Full runtime state (counters, config, uptime) |
+| `GET /metrics` | bearer | Prometheus-compatible metrics (optional) |
+
+### /health response (always fast, no auth)
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "uptime_secs": 3600,
+  "upstream": {
+    "reachable": true,
+    "latency_ms": 12
+  }
+}
+```
+
+If upstream is unreachable, return HTTP 200 with `status: "degraded"` — the MCP
+server is up even if the upstream service is down.
+
+### /status response (full runtime state)
+
+```json
+{
+  "status": "ok",
+  "server": {
+    "version": "0.1.0",
+    "uptime_secs": 3600,
+    "pid": 12345,
+    "data_dir": "/home/user/.example"
+  },
+  "config": {
+    "host": "0.0.0.0",
+    "port": 3000,
+    "auth_mode": "bearer",
+    "upstream_url": "https://example.com/api"
+  },
+  "counters": {
+    "requests_total": 1234,
+    "errors_total": 5,
+    "upstream_calls": 1200,
+    "upstream_errors": 3
+  },
+  "upstream": {
+    "reachable": true,
+    "last_check_ms_ago": 250,
+    "consecutive_failures": 0
+  }
+}
+```
+
+### MCP tool: status action
+
+Expose runtime state via MCP too (same data as /status):
+
+```rust
+"status" => state.service.status().await,
+```
+
+The `status` action must ALWAYS be available even when the upstream service is down.
+
+### Structured tracing spans
+
+Every external API call must be wrapped in a tracing span:
+
+```rust
+async fn list_things(&self) -> Result<Value> {
+    let span = tracing::info_span!("upstream.list_things");
+    let _guard = span.enter();
+    tracing::debug!(url = %self.base_url, "calling upstream API");
+    let result = self.client.list_things().await;
+    match &result {
+        Ok(v)  => tracing::debug!(count = v.as_array().map(|a| a.len()).unwrap_or(0), "upstream call ok"),
+        Err(e) => tracing::warn!(error = %e, "upstream call failed"),
+    }
+    result
+}
+```
+
+### Atomic request counters
+
+```rust
+pub struct Counters {
+    pub requests_total:     AtomicU64,
+    pub errors_total:       AtomicU64,
+    pub upstream_calls:     AtomicU64,
+    pub upstream_errors:    AtomicU64,
+}
+```
+
+These counters live on `AppState` and increment in the MCP tool dispatcher and
+the API client respectively.
+
+---
+
+## 42. Logging — Dual Output, One File, Aurora Colors
+
+### Two writers, always
+
+Every server writes logs to two destinations simultaneously:
+1. **Console (stderr)**: human-readable, colored, pretty format
+2. **File**: structured JSON (one field per line), machine-readable
+
+```rust
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+pub fn init_logging(data_dir: &Path, service_name: &str) -> anyhow::Result<()> {
+    let log_path = data_dir.join("logs").join(format!("{service_name}.log"));
+    std::fs::create_dir_all(log_path.parent().unwrap())?;
+
+    let file = rolling_file(log_path, 10 * 1024 * 1024)?; // 10MB cap, 1 file
+    let console_ansi = should_colorize();
+
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with(
+            // Console: pretty, colored, human-readable
+            tracing_subscriber::fmt::layer()
+                .with_ansi(console_ansi)
+                .with_writer(std::io::stderr)
+                .event_format(AuroraFormatter)  // custom formatter, see below
+        )
+        .with(
+            // File: structured JSON, no ANSI
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_ansi(false)
+                .with_writer(file)
+        )
+        .init();
+    Ok(())
+}
+```
+
+### Log file rotation — 1 file, 10MB cap, then restart
+
+One log file only. When it reaches 10MB, truncate it and start over:
+
+```rust
+fn rolling_file(path: PathBuf, max_bytes: u64) -> anyhow::Result<impl std::io::Write + Send + Sync> {
+    // Check size on open; truncate if over limit
+    if path.exists() && path.metadata()?.len() >= max_bytes {
+        std::fs::write(&path, b"")?; // truncate
+    }
+    Ok(RollingWriter { path, max_bytes, current_size: 0 })
+}
+```
+
+Or use `tracing-appender` with a custom sink. The key invariant: **exactly one log file, never more**.
+
+Log file location: `{data_dir}/logs/{service}.log` (which resolves to `~/.{service}/logs/{service}.log`)
+
+### Aurora color palette for console logs
+
+Copy the aurora constants from `lab/crates/lab/src/output/theme.rs`:
+
+```rust
+// src/logging/aurora.rs  (ANSI 256 — matches lab's aurora palette exactly)
+pub const SERVICE_NAME:    u8 = 211; // pink        (255,175,215)
+pub const ACCENT_PRIMARY:  u8 = 39;  // bright blue (41,182,246)
+pub const TEXT_MUTED:      u8 = 250; // light grey  (167,188,201)
+pub const SUCCESS:         u8 = 115; // teal        (125,211,199)
+pub const WARN:            u8 = 180; // amber       (198,163,107)
+pub const ERROR:           u8 = 174; // muted red   (199,132,144)
+```
+
+Level colors for the console formatter:
+- `ERROR` → aurora::ERROR (muted red), bold
+- `WARN`  → aurora::WARN (amber), bold
+- `INFO`  → no color (white/default)
+- `DEBUG` → dim
+- `TRACE` → dim
+
+Structured field colors (matching lab's `style_value`):
+- `action`, `tool`, `route` → aurora::ACCENT_PRIMARY (bright blue)
+- `service` → aurora::SERVICE_NAME (pink)
+- `error` → aurora::ERROR (muted red)
+- `status` HTTP code < 300 → aurora::SUCCESS, < 500 → aurora::WARN, else aurora::ERROR
+
+### Environment-aware colorization
+
+```rust
+fn should_colorize() -> bool {
+    // Respect NO_COLOR (https://no-color.org)
+    if std::env::var_os("NO_COLOR").is_some() { return false; }
+    // Force color in containers (Docker sets TERM=xterm or similar)
+    if std::env::var("FORCE_COLOR").is_ok()   { return true; }
+    // Check if stderr is a TTY
+    use std::io::IsTerminal;
+    std::io::stderr().is_terminal()
+}
+```
+
+This keeps logs colored in docker (for `docker compose logs`) while staying
+pipeable when stderr is redirected.
+
+### Log format — console
+
+```
+2026-05-13T14:32:01Z  INFO  unraid-mcp started  bind=0.0.0.0:6970  auth=bearer
+2026-05-13T14:32:05Z  INFO  MCP tool call  tool=unraid  action=array  elapsed_ms=42
+2026-05-13T14:32:10Z  WARN  upstream slow  action=metrics  elapsed_ms=3200
+2026-05-13T14:32:15Z ERROR  upstream failed  action=docker  error="connection refused"
+```
+
+### Log format — file (JSON)
+
+```json
+{"timestamp":"2026-05-13T14:32:01Z","level":"INFO","message":"MCP tool call","tool":"unraid","action":"array","elapsed_ms":42}
+```
+
+---
+
+## 43. Graceful Degradation
+
+The MCP server must stay running and return useful responses even when the
+upstream service is unavailable. Never crash on upstream failures.
+
+### Principles
+
+1. **MCP server UP, upstream DOWN** — return tool errors, not panics
+2. **Partial failures** — return what succeeded, mark what failed
+3. **Startup with bad config** — warn, don't crash (except security violations)
+4. **Upstream timeouts** — fail fast with a clear error, suggest health check
+
+### Error handling hierarchy
+
+```rust
+// In the API client — never panic, always Result
+pub async fn list_things(&self) -> Result<Value> {
+    self.client
+        .get(&url)
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await
+        .context("upstream request failed — is EXAMPLE_URL correct?")?
+        .json::<Value>()
+        .await
+        .context("upstream returned invalid JSON")
+}
+
+// In the service — categorize errors
+pub async fn list_things(&self) -> Result<Value> {
+    self.client.list_things().await.map_err(|e| {
+        if e.to_string().contains("connection refused") {
+            anyhow::anyhow!(
+                "upstream unreachable: {}\n\
+                 Hint: run `example health` to check service status\n\
+                 Config: EXAMPLE_URL={}",
+                e, self.base_url
+            )
+        } else {
+            e
+        }
+    })
+}
+```
+
+### MCP tool — never return Err from execute_tool
+
+MCP tool errors should be `CallToolResult::error()`, not `Err(ErrorData)`.
+An `Err` crashes the tool call at the protocol level; a `CallToolResult::error`
+gives the agent a readable message:
+
+```rust
+match state.service.list_things().await {
+    Ok(result)  => tool_result_from_json(result),
+    Err(error)  => Ok(CallToolResult::error(vec![
+        Content::text(format!(
+            "ERROR: list_things failed\n\
+             Reason: {error}\n\
+             Hint: use action=status to check server health"
+        ))
+    ])),
+}
+```
+
+---
+
+## 44. Code Organization — Small Focused Modules
+
+### File size targets (from agentcast CODE_ORGANIZATION.md)
+
+| Threshold | Action |
+|---|---|
+| ≤ 250 non-test lines | Target — ideal module size |
+| > 400 non-test lines | Must add split/refactor note in PR |
+| > 600 non-test lines | Requires documented exception |
+| > 800 total lines | Must split unless generated/fixture/schema mirror |
+
+### Function size targets
+
+| Threshold | Action |
+|---|---|
+| ≤ 60 lines | Target |
+| > 100 lines | Requires refactor or documented exception |
+
+### Module naming — one responsibility per file
+
+Good:
+```
+src/mcp/tools/dispatch.rs     — action dispatch match arm
+src/mcp/tools/arg_helpers.rs  — string_arg, i64_arg, bool_arg helpers
+src/logging/console.rs        — console formatter
+src/logging/file.rs           — file writer + rotation
+src/logging/aurora.rs         — color constants
+src/error.rs                  — error types and helpers
+src/pagination.rs             — limit/offset/cursor helpers
+src/token_limit.rs            — response truncation
+```
+
+Bad:
+```
+src/utils.rs      — catch-all
+src/helpers.rs    — catch-all
+src/manager.rs    — ambiguous
+src/mod.rs        — BANNED (see §45)
+```
+
+### Split large files immediately
+
+When a file approaches 400 lines, split it before it gets larger. Common splits:
+- `tools.rs` → `tools/dispatch.rs` + `tools/arg_helpers.rs` + `tools/formatters.rs`
+- `cli.rs`   → `cli/commands.rs` + `cli/parse.rs` + `cli/format.rs`
+- `config.rs`→ `config/env.rs` + `config/toml.rs` + `config/validate.rs`
+
+---
+
+## 45. Modern Rust — No mod.rs
+
+**`mod.rs` files are BANNED.** Use named module files instead.
+
+```
+# Wrong (old style)
+src/mcp/mod.rs
+src/mcp/tools.rs
+
+# Correct (modern)
+src/mcp.rs          ← module entry point (replaces mod.rs)
+src/mcp/tools.rs
+src/mcp/schemas.rs
+```
+
+This makes the module tree navigable without opening `mod.rs` everywhere.
+
+### Other modern Rust requirements
+
+- Rust 2021 edition minimum, target 2024 where possible
+- Use `async fn` in traits where the crate supports it (rmcp 1.6+ does)
+- Prefer `?` operator chains over nested `match`
+- `#[must_use]` on functions returning `Result` or important values
+- `impl Display for Error` instead of raw string errors where types are reused
+- `thiserror` for structured error types in the service layer
+- `serde_json::json!()` macro over manual Value construction
+- Avoid `unwrap()`/`expect()` in production paths — use `?` or proper error handling
+
+
+---
+
+## 46. Binary Commands — Canonical Mode Names
+
+Every server binary exposes exactly two server modes and a CLI:
+
+| Command | Mode | Description |
+|---|---|---|
+| `<service> mcp` | stdio MCP transport | For Claude Code `.claude/settings.json` stdio servers; output goes to stdout, logs to stderr |
+| `<service> serve` | Streamable HTTP MCP | For remote/Docker deployment; binds to `EXAMPLE_MCP_HOST:EXAMPLE_MCP_PORT` |
+| `<service> [subcommand]` | CLI | Direct API access; all subcommands support `--json` |
+| `<service> doctor` | Pre-flight check | Validates environment and config before deployment (see §48) |
+| `<service> --help` | Help | Print usage |
+| `<service> --version` | Version | Print version |
+
+### Claude Code stdio config (`~/.claude/settings.json`)
+
+```json
+{
+  "mcpServers": {
+    "example": {
+      "type": "stdio",
+      "command": "example",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The binary MUST be in `$PATH` for the stdio config to work (see §47).
+
+---
+
+## 47. Binary Installation — Copying to PATH
+
+The install script MUST copy (or symlink) the binary to `~/.local/bin/` so it is
+available in the user's `$PATH` without prefixing the full path.
+
+### install.sh binary installation
+
+```bash
+INSTALL_DIR="${HOME}/.local/bin"
+mkdir -p "${INSTALL_DIR}"
+
+# Download and install
+BINARY_URL="https://github.com/jmagar/example-mcp/releases/latest/download/example-linux-amd64"
+curl -fsSL "${BINARY_URL}" -o "${INSTALL_DIR}/example"
+chmod +x "${INSTALL_DIR}/example"
+
+# Ensure ~/.local/bin is in PATH
+if ! echo "$PATH" | grep -q "${HOME}/.local/bin"; then
+    echo "⚠  Add ~/.local/bin to your PATH:"
+    echo "   echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+fi
+
+echo "✓ example installed to ${INSTALL_DIR}/example"
+echo "  Run: example doctor    # validate environment"
+echo "  Run: example --version # verify install"
+```
+
+### plugin-setup.sh binary symlinking
+
+The Claude Code plugin hook (`plugin-setup.sh`) symlinks the plugin-bundled binary into
+`~/.local/bin/` on every SessionStart so it stays current after plugin updates:
+
+```bash
+link_binary() {
+    mkdir -p "${HOME}/.local/bin"
+    ln -sf "${CLAUDE_PLUGIN_ROOT}/bin/<service>" "${HOME}/.local/bin/<service>"
+}
+```
+
+---
+
+## 48. doctor Command — Pre-flight Validation
+
+Every server binary MUST implement a `doctor` subcommand that validates the
+environment and reports what's missing before the user tries to start the server.
+
+### doctor output format
+
+```
+$ example doctor
+
+example-mcp v0.1.0 — environment check
+
+  Config
+  ──────────────────────────────────────────────
+  ✓ Config file:       ~/.example/config.toml
+  ✓ Data directory:    ~/.example/ (writable)
+  ✓ Log directory:     ~/.example/logs/ (writable, 1.2 MB)
+  ✓ Binary in PATH:    /home/user/.local/bin/example
+
+  Service credentials
+  ──────────────────────────────────────────────
+  ✓ EXAMPLE_API_URL:   https://example.internal/api (set)
+  ✗ EXAMPLE_API_KEY:   not set
+    → Set EXAMPLE_API_KEY in ~/.example/.env or your environment
+
+  Connectivity
+  ──────────────────────────────────────────────
+  ✓ Upstream reachable: https://example.internal/api → 200 OK (42 ms)
+
+  MCP server
+  ──────────────────────────────────────────────
+  ✓ MCP port 3000:     available
+  ✓ Auth mode:         no-auth (EXAMPLE_NOAUTH=true)
+
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1 issue found. Fix it before running: example serve
+
+```
+
+### doctor Rust implementation
+
+```rust
+// In src/cli/doctor.rs (or src/cli.rs CliCommand::Doctor)
+pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
+    let mut checks: Vec<DoctorCheck> = Vec::new();
+
+    // 1. Config file
+    let data_dir = default_data_dir();
+    checks.push(check_config_file(&data_dir));
+    checks.push(check_dir_writable("Data directory", &data_dir));
+    checks.push(check_dir_writable("Log directory", &data_dir.join("logs")));
+    checks.push(check_binary_in_path("example"));
+
+    // 2. Required env vars / config
+    checks.push(check_required_var("EXAMPLE_API_URL", &config.example.url));
+    checks.push(check_required_var("EXAMPLE_API_KEY", &config.example.api_key));
+
+    // 3. Connectivity (non-fatal if unreachable)
+    if !config.example.url.is_empty() {
+        checks.push(check_upstream(&config.example.url, &config.example.api_key).await);
+    }
+
+    // 4. MCP port availability
+    checks.push(check_port_available(config.mcp.port));
+
+    // 5. Auth config
+    checks.push(check_auth_config(config));
+
+    let issues = checks.iter().filter(|c| !c.ok).count();
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&checks)?);
+    } else {
+        print_doctor_report(&checks);
+    }
+
+    if issues > 0 {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+#[derive(serde::Serialize)]
+struct DoctorCheck {
+    category: &'static str,
+    name: String,
+    ok: bool,
+    value: Option<String>,     // what was found
+    hint: Option<String>,      // how to fix (only when !ok)
+    latency_ms: Option<u64>,   // for connectivity checks
+}
+```
+
+### doctor --json output
+
+```json
+[
+  {"category": "config", "name": "Config file", "ok": true, "value": "~/.example/config.toml"},
+  {"category": "credentials", "name": "EXAMPLE_API_KEY", "ok": false, "hint": "Set EXAMPLE_API_KEY in ~/.example/.env"},
+  {"category": "connectivity", "name": "Upstream", "ok": true, "value": "200 OK", "latency_ms": 42}
+]
+```
+
+Exit code: `0` = all checks pass, `1` = one or more failures.
+
+---
+
+## 49. install.sh — Pre-flight Checks
+
+The install script must validate the environment BEFORE installing anything and
+report a clear summary of what it found and what it will do.
+
+### Pre-flight checklist
+
+```bash
+preflight() {
+    local errors=0
+
+    echo "Pre-flight checks..."
+
+    # 1. OS / arch
+    local os arch
+    os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch="$(uname -m)"
+    case "${arch}" in
+        x86_64)  arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *) echo "✗ Unsupported arch: ${arch}"; (( errors++ )) ;;
+    esac
+    [[ "${os}" == "linux" ]] || { echo "✗ Only Linux is supported (got: ${os})"; (( errors++ )); }
+    echo "✓ Platform: ${os}/${arch}"
+
+    # 2. Required tools
+    for cmd in curl tar grep; do
+        command -v "${cmd}" >/dev/null 2>&1 \
+            && echo "✓ ${cmd}: $(command -v ${cmd})" \
+            || { echo "✗ ${cmd}: not found (required)"; (( errors++ )); }
+    done
+
+    # 3. Disk space (need at least 50MB)
+    local free_mb
+    free_mb="$(df -k "${HOME}" | awk 'NR==2{printf "%d", $4/1024}')"
+    if (( free_mb < 50 )); then
+        echo "✗ Disk space: only ${free_mb}MB free in ${HOME} (need 50MB)"; (( errors++ ))
+    else
+        echo "✓ Disk space: ${free_mb}MB free"
+    fi
+
+    # 4. ~/.local/bin writable (or can be created)
+    local install_dir="${INSTALL_DIR:-${HOME}/.local/bin}"
+    if mkdir -p "${install_dir}" && [[ -w "${install_dir}" ]]; then
+        echo "✓ Install dir: ${install_dir} (writable)"
+    else
+        echo "✗ Install dir: ${install_dir} (not writable)"; (( errors++ ))
+    fi
+
+    # 5. PATH check
+    echo "${PATH}" | grep -q "${HOME}/.local/bin" \
+        && echo "✓ PATH: ~/.local/bin is present" \
+        || echo "⚠  PATH: ~/.local/bin not in PATH — will print instructions"
+
+    # 6. Required env vars (warn, don't fail — can be set post-install)
+    [[ -n "${EXAMPLE_API_URL:-}" ]] \
+        && echo "✓ EXAMPLE_API_URL: set" \
+        || echo "⚠  EXAMPLE_API_URL: not set (required before running the server)"
+    [[ -n "${EXAMPLE_API_KEY:-}" ]] \
+        && echo "✓ EXAMPLE_API_KEY: set" \
+        || echo "⚠  EXAMPLE_API_KEY: not set (required before running the server)"
+
+    # 7. Port availability (warn only)
+    local port="${EXAMPLE_MCP_PORT:-3000}"
+    if ss -tlnp "sport = :${port}" 2>/dev/null | awk 'NR>1' | grep -q .; then
+        echo "⚠  Port ${port}: already in use (change EXAMPLE_MCP_PORT if needed)"
+    else
+        echo "✓ Port ${port}: available"
+    fi
+
+    echo ""
+    if (( errors > 0 )); then
+        echo "✗ Pre-flight failed with ${errors} error(s). Fix them and re-run."
+        return 1
+    fi
+    echo "✓ Pre-flight passed — proceeding with install"
+    return 0
+}
+```
+
+### Post-install setup
+
+After installing the binary, the script MUST:
+
+1. Copy/link binary to `INSTALL_DIR`
+2. Create `~/.{service}/` data directory
+3. Write a starter `.env` if none exists (with required vars as comments/examples)
+4. Run `<service> doctor` to validate the installation
+5. Print next steps
+
+```bash
+post_install() {
+    echo ""
+    echo "Running doctor check..."
+    if "${INSTALL_DIR}/${BINARY}" doctor 2>/dev/null; then
+        echo ""
+        echo "✓ Installation complete and verified."
+    else
+        echo ""
+        echo "⚠  Installation complete but doctor found issues."
+        echo "   Fix the reported issues, then run: ${BINARY} serve"
+    fi
+
+    echo ""
+    echo "Next steps:"
+    echo "  1. Edit ~/.${SERVICE}/.env with your credentials"
+    echo "  2. Run: ${BINARY} doctor       # validate config"
+    echo "  3. Run: ${BINARY} serve        # start HTTP server"
+    echo "  4. Or:  ${BINARY} mcp          # stdio for Claude Code"
+}
+```
+
+---
+
+## 50. entrypoint.sh — Defense in Numbers
+
+The Docker entrypoint must be defensive at every step. Never assume anything is set up correctly.
+
+```bash
+#!/bin/sh
+# entrypoint.sh — Docker container entrypoint
+# Runs as root, then drops to service user (1000:1000).
+# Defense in numbers: validate every assumption before exec'ing the service.
+set -e
+
+DATA_DIR="${DATA_DIR:-/data}"
+SERVICE_NAME="example"
+BINARY="/usr/local/bin/${SERVICE_NAME}"
+
+# ── 1. Binary exists and is executable ───────────────────────────────────────
+if [ ! -x "${BINARY}" ]; then
+    echo "FATAL: ${BINARY} is missing or not executable" >&2
+    exit 1
+fi
+
+# ── 2. Required env vars ──────────────────────────────────────────────────────
+# Fail fast with a clear message rather than a cryptic runtime error.
+# TEMPLATE: Add your service's required vars here.
+missing_vars=""
+for var in EXAMPLE_API_URL EXAMPLE_API_KEY; do
+    eval "val=\${${var}:-}"
+    if [ -z "${val}" ]; then
+        missing_vars="${missing_vars} ${var}"
+    fi
+done
+if [ -n "${missing_vars}" ]; then
+    echo "FATAL: required environment variables not set:${missing_vars}" >&2
+    echo "  Set them in your .env file or docker run -e flags." >&2
+    exit 1
+fi
+
+# ── 3. Data directory ─────────────────────────────────────────────────────────
+mkdir -p "${DATA_DIR}/logs"
+
+# Fix ownership — container may have been started with a different UID
+# or the volume may have been created by another process.
+if ! chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null; then
+    echo "WARN: could not chown ${DATA_DIR} to 1000:1000 — permissions may be wrong" >&2
+fi
+
+# Verify the data dir is actually writable by UID 1000 before starting
+if ! su-exec 1000:1000 sh -c "touch ${DATA_DIR}/.write_test 2>/dev/null && rm -f ${DATA_DIR}/.write_test"; then
+    echo "FATAL: ${DATA_DIR} is not writable by UID 1000" >&2
+    echo "  Check the volume mount permissions." >&2
+    exit 1
+fi
+
+# ── 4. Secure secret files ────────────────────────────────────────────────────
+for f in "${DATA_DIR}/.env" "${DATA_DIR}/auth-jwt.pem" "${DATA_DIR}/auth.db"; do
+    [ -f "${f}" ] && chmod 600 "${f}" 2>/dev/null || true
+done
+[ -f "${DATA_DIR}/config.toml" ] && chmod 640 "${DATA_DIR}/config.toml" 2>/dev/null || true
+
+# ── 5. Log startup info (redact secrets) ─────────────────────────────────────
+echo "[entrypoint] Starting ${SERVICE_NAME}"
+echo "[entrypoint] Data dir: ${DATA_DIR}"
+echo "[entrypoint] Binary:   ${BINARY}"
+echo "[entrypoint] User:     1000:1000"
+# Log non-secret config
+[ -n "${EXAMPLE_MCP_PORT:-}" ] && echo "[entrypoint] MCP port: ${EXAMPLE_MCP_PORT}"
+[ -n "${EXAMPLE_MCP_HOST:-}" ] && echo "[entrypoint] MCP host: ${EXAMPLE_MCP_HOST}"
+
+# ── 6. Signal handling ────────────────────────────────────────────────────────
+# Let su-exec / the service handle SIGTERM cleanly.
+# Do NOT trap signals here — pass them through to the child process.
+
+# ── 7. Drop privileges and exec ──────────────────────────────────────────────
+# exec replaces this shell process — signals go directly to the service.
+exec su-exec 1000:1000 "${BINARY}" "$@"
+```
+
+### Key principles
+
+1. **Fail fast** — exit 1 with clear message rather than starting in a broken state
+2. **Every assumption is checked** — binary exists, vars set, dir writable, files secured
+3. **exec, not run** — `exec su-exec` replaces the shell so PID 1 is the actual service
+4. **No traps** — let signals pass through to the service for graceful shutdown
+5. **Log non-secret config** — operators need to see what the container started with
+6. **Idempotent** — running entrypoint twice should be safe (chown, mkdir -p, etc.)
+
+---
+
+# Advanced Patterns
+
+---
+
+## A1. Single Binary, Single Port — Multi-Surface Architecture
+
+Every service runs all surfaces (MCP, REST API, web UI) from **one binary on one port**.
+There is no separate web server, no separate API server — just one axum router.
+
+```
+Port 3000
+  ├── /mcp                   → Streamable HTTP MCP transport
+  ├── /health                → Unauthenticated liveness probe
+  ├── /status                → Runtime state (auth required)
+  ├── /v1/<service>          → REST API action dispatch
+  │     POST {"action":"greet","params":{"name":"Alice"}}
+  ├── /.well-known/*         → OAuth metadata (when auth_mode=oauth)
+  ├── /authorize, /token     → OAuth flow endpoints
+  └── /*                     → SPA fallback (serves embedded web UI)
+```
+
+### Why one port?
+
+- No port management complexity for operators
+- Auth middleware wraps the whole stack consistently
+- Claude Code stdio + HTTP MCP + browser all connect to the same server
+- Docker config is one port mapping, one healthcheck
+
+### Route composition pattern (axum)
+
+```rust
+// src/mcp/routes.rs
+pub fn build_router(state: AppState) -> Router {
+    // 1. Public routes (no auth)
+    let public = Router::new()
+        .route("/health", get(health))
+        .route("/status", get(status));  // returns degraded if auth absent
+
+    // 2. REST API — action dispatch (same methods as MCP tools)
+    let api = Router::new()
+        .route("/v1/example", post(api_dispatch))  // see §A2
+        .route_layer(auth_layer.clone());
+
+    // 3. MCP transport
+    let mcp_service = Router::new()
+        .nest_service("/mcp", streamable_http_service(state.clone(), mcp_config));
+    let mcp = if let Some(layer) = build_auth_layer(&state.auth_policy, ...) {
+        mcp_service.layer(layer)
+    } else {
+        mcp_service
+    };
+
+    // 4. OAuth routes (when auth_mode=oauth)
+    let oauth = oauth_routes_if_configured(&state);
+
+    // 5. Compose — order matters: specific routes before fallback
+    let mut router = Router::new()
+        .merge(public)
+        .merge(api)
+        .merge(mcp);
+    if let Some(oauth) = oauth {
+        router = router.merge(oauth);
+    }
+    // 6. SPA fallback — LAST (catches anything not matched above)
+    if state.web_assets_enabled() {
+        router = router.fallback(serve_web_assets);
+    }
+
+    router
+        .with_state(state)
+        .layer(CorsLayer::new()...)
+        .layer(CompressionLayer::new())
+        .layer(TimeoutLayer::new(Duration::from_secs(30)))
+        .layer(TraceLayer::new_for_http())
+}
+```
+
+---
+
+## A2. REST API — Action Dispatch Mirrors MCP
+
+The REST API uses the same `action` + `params` pattern as MCP tools. This means:
+- **One service method** serves both MCP and HTTP — no duplication
+- Agents can use whichever surface is available
+- The request shape is identical: `{"action":"greet","params":{"name":"Alice"}}`
+
+```rust
+// src/api/dispatch.rs
+#[derive(Deserialize)]
+pub struct ActionRequest {
+    pub action: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+}
+
+async fn api_dispatch(
+    State(state): State<AppState>,
+    Json(body): Json<ActionRequest>,
+) -> impl IntoResponse {
+    // Reuse the same service methods as MCP tools
+    let result = match body.action.as_str() {
+        "greet" => {
+            let name = body.params["name"].as_str();
+            state.service.greet(name).await
+        }
+        "echo" => {
+            let msg = body.params["message"].as_str().unwrap_or("");
+            state.service.echo(msg).await
+        }
+        "status" => state.service.status().await,
+        other => Err(anyhow::anyhow!(
+            "unknown action: {other}. POST to /v1/example with action=help"
+        )),
+    };
+
+    match result {
+        Ok(value) => Json(value).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": e.to_string()})),
+        ).into_response(),
+    }
+}
+```
+
+### API parity table
+
+| Surface | Call pattern |
+|---|---|
+| MCP | `example(action="greet", name="Alice")` |
+| REST | `POST /v1/example {"action":"greet","params":{"name":"Alice"}}` |
+| CLI | `example greet --name Alice` |
+
+All three call `state.service.greet(Some("Alice"))`.
+
+---
+
+## A3. Embedded Static Web Assets
+
+The web UI is a Next.js (or Vite) app compiled to static files and embedded in the
+Rust binary at compile time using `include_dir!`. No separate file serving process.
+
+### Build flow
+
+```
+apps/web/           ← Next.js or Vite app source
+  next.config.ts    ← output: "export" (static HTML/CSS/JS)
+  out/              ← compiled static output (gitignored, built in CI)
+
+src/web.rs          ← Rust: embeds out/ into binary with include_dir!
+```
+
+### Embedding (src/web.rs)
+
+```rust
+use include_dir::{Dir, include_dir};
+use axum::{
+    extract::Request,
+    response::{IntoResponse, Response},
+    http::{StatusCode, header},
+    body::Body,
+};
+
+// Compiled at build time — zero runtime file I/O
+static WEB_ASSETS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/apps/web/out");
+
+pub fn web_assets_available() -> bool {
+    WEB_ASSETS.get_file("index.html").is_some()
+}
+
+pub async fn serve_web_assets(request: Request<Body>) -> Response {
+    let path = request.uri().path().trim_start_matches('/');
+
+    // Try exact path, then with .html, then index.html (SPA fallback)
+    let candidates = [
+        path.to_string(),
+        format!("{path}.html"),
+        format!("{path}/index.html"),
+        "index.html".to_string(),
+    ];
+
+    for candidate in &candidates {
+        if let Some(file) = WEB_ASSETS.get_file(candidate) {
+            let content_type = guess_mime(candidate);
+            let cache_control = if candidate == "index.html" {
+                "no-store"  // SPA shell must not be cached
+            } else {
+                "public, max-age=31536000, immutable"  // hashed assets = forever
+            };
+            return (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, content_type),
+                 (header::CACHE_CONTROL, cache_control)],
+                file.contents().to_vec(),
+            ).into_response();
+        }
+    }
+
+    // 404 → SPA fallback (client-side routing handles the rest)
+    if let Some(file) = WEB_ASSETS.get_file("index.html") {
+        return (StatusCode::OK, [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                file.contents().to_vec()).into_response();
+    }
+
+    StatusCode::NOT_FOUND.into_response()
+}
+
+fn guess_mime(path: &str) -> &'static str {
+    if path.ends_with(".html") { "text/html; charset=utf-8" }
+    else if path.ends_with(".css")  { "text/css; charset=utf-8" }
+    else if path.ends_with(".js")   { "application/javascript; charset=utf-8" }
+    else if path.ends_with(".json") { "application/json" }
+    else if path.ends_with(".svg")  { "image/svg+xml" }
+    else if path.ends_with(".png")  { "image/png" }
+    else if path.ends_with(".ico")  { "image/x-icon" }
+    else if path.ends_with(".woff2"){ "font/woff2" }
+    else { "application/octet-stream" }
+}
+```
+
+### Build script (build.rs)
+
+```rust
+// build.rs — ensure Next.js output is built before embedding
+fn main() {
+    // Tell cargo to re-run if web source changes
+    println!("cargo:rerun-if-changed=apps/web/src");
+    println!("cargo:rerun-if-changed=apps/web/package.json");
+
+    // Build Next.js in CI; skip in local dev if out/ already exists
+    let out_dir = std::path::Path::new("apps/web/out");
+    if !out_dir.exists() {
+        let status = std::process::Command::new("pnpm")
+            .args(["--dir", "apps/web", "build"])
+            .status();
+        if let Err(e) = status {
+            // Don't fail the Rust build — just warn. Serve will show 404 for web.
+            println!("cargo:warning=Web build failed: {e}. Web UI will be unavailable.");
+        }
+    }
+}
+```
+
+### AppState: web_assets_enabled()
+
+```rust
+impl AppState {
+    pub fn web_assets_enabled(&self) -> bool {
+        crate::web::web_assets_available()
+        // Can also be controlled by: !config.mcp.disable_web_ui
+    }
+}
+```
+
+---
+
+## A4. Aurora Design System Integration
+
+The web UI uses the Aurora design system — a shadcn-compatible registry of
+128 components designed for operator-grade AI products.
+
+Registry URL: `https://aurora.tootie.tv`
+GitHub: `https://github.com/jmagar/aurora-design-system`
+
+### Setup
+
+```bash
+cd apps/web
+# 1. Add Aurora to components.json registries
+# Already configured if using the template — see apps/web/components.json
+
+# 2. Install Aurora token layer (required first)
+npx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
+
+# 3. Install all Aurora components
+npx shadcn@latest add @aurora/aurora-button @aurora/aurora-card @aurora/aurora-badge \
+  @aurora/aurora-input @aurora/aurora-table @aurora/aurora-dialog @aurora/aurora-tabs \
+  @aurora/aurora-alert @aurora/aurora-toast @aurora/aurora-progress @aurora/aurora-skeleton
+  # ... all 64 UI primitives from the registry
+```
+
+### components.json setup
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "registries": {
+    "@aurora": "https://aurora.tootie.tv/r/{name}.json"
+  }
+}
+```
+
+### Aurora palette (ANSI 256 ↔ CSS custom properties)
+
+The Aurora design system uses the same palette in both Rust (ANSI 256 for terminal)
+and CSS (custom properties for the browser). The source of truth is the token layer:
+
+| Purpose | ANSI 256 (Rust) | CSS token | Hex |
+|---|---|---|---|
+| Service name | 211 | `--aurora-pink` | #ffd7d7 |
+| Primary accent | 39 | `--aurora-blue` | #29b6f6 |
+| Text muted | 250 | `--aurora-muted` | #a7bcc9 |
+| Success | 115 | `--aurora-teal` | #7dd3c7 |
+| Warning | 180 | `--aurora-amber` | #c6a36b |
+| Error | 174 | `--aurora-red` | #c78490 |
+
+### Typical web UI structure for an MCP server
+
+```
+apps/web/
+  app/
+    layout.tsx          ← Aurora tokens loaded here
+    page.tsx            ← Dashboard: server status + quick actions
+    tools/
+      page.tsx          ← Tool runner: call any action from browser
+    doctor/
+      page.tsx          ← Doctor check results (calls /status)
+  components/
+    ui/                 ← Aurora components (installed via shadcn CLI)
+    server-status.tsx   ← Polls /health every 30s
+    tool-runner.tsx     ← Form to call /v1/<service> actions
+    log-viewer.tsx      ← Tails /v1/logs (if log API available)
+  lib/
+    api.ts              ← Typed client for /v1/<service> REST API
+  next.config.ts        ← output: "export", trailingSlash: true
+```
+
+### next.config.ts for static export
+
+```typescript
+/** @type {import('next').NextConfig} */
+const config = {
+  output: "export",           // Static HTML — embedded in Rust binary
+  trailingSlash: true,        // index.html files for each route
+  images: { unoptimized: true }, // No Next.js image optimization in static mode
+  basePath: "",               // Served from root of the Rust binary
+};
+export default config;
+```
+
+---
+
+## A5. Cargo.toml — Web Feature Gate
+
+Embedding 64KB+ of web assets is always-on by default. To opt-out:
+
+```toml
+[features]
+default = ["web"]
+web = ["include_dir"]
+
+[dependencies]
+include_dir = { version = "0.7", optional = true }
+```
+
+```rust
+// src/web.rs
+#[cfg(feature = "web")]
+static WEB_ASSETS: Dir<'static> = include_dir!("...");
+
+pub fn web_assets_available() -> bool {
+    #[cfg(feature = "web")] { WEB_ASSETS.get_file("index.html").is_some() }
+    #[cfg(not(feature = "web"))] { false }
+}
+```
+
+Build without web UI:
+```bash
+cargo build --no-default-features   # fast local dev, no asset embedding
+cargo build                          # includes web UI (CI / release)
+```

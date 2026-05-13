@@ -1,0 +1,169 @@
+# =============================================================================
+# .github/workflows/release.yml — Build release binaries and GitHub Release
+#
+# TEMPLATE substitutions required:
+#   BINARY_NAME  → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
+#   REPO_NAME    → your GitHub repo name (e.g. "myservice-mcp")
+#
+# Replace every occurrence of "example" in this file with your binary name.
+#
+# Triggers: push of v* tags (e.g. v1.2.3)
+#
+# What this does:
+#   1. Builds release binaries for linux/amd64 and linux/arm64
+#   2. Copies binaries to bin/ and commits via Git LFS
+#   3. Creates a GitHub Release with binaries as downloadable assets
+#   4. The commit in step 2 updates the LFS pointer so plugin install.sh
+#      can `git lfs pull` the binary without building from source
+#
+# TEMPLATE: After creating your first real release, update install.sh to
+#           reference the correct GitHub release download URL pattern.
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  # TEMPLATE: Replace "example" with your binary name.
+  BINARY_NAME: example
+
+jobs:
+  # ── Build release binaries ────────────────────────────────────────────────────
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # linux/amd64 — most common deployment target
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            arch: amd64
+          # linux/arm64 — Raspberry Pi, AWS Graviton, etc.
+          # TEMPLATE: Remove this entry if you only need amd64.
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Cross-compilation toolchain for arm64 on amd64 runners.
+      - name: Install cross-compilation tools (arm64 only)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      # TEMPLATE: If you need OpenSSL, add it here:
+      #   sudo apt-get install -y libssl-dev
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          # TEMPLATE: Change "rmcp-template" to your repo name.
+          key: rmcp-template-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: rmcp-template-release-${{ matrix.target }}-
+
+      # Build the release binary.
+      # TEMPLATE: Replace BINARY_NAME env references if you renamed the env var.
+      - name: Build release binary
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Prepare binary artifact
+        run: |
+          mkdir -p artifacts
+          # TEMPLATE: Replace "example" with your binary name.
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} \
+             artifacts/${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
+          chmod +x artifacts/${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
+          path: artifacts/
+
+  # ── Commit binaries to bin/ via Git LFS ──────────────────────────────────────
+  lfs-commit:
+    name: Commit binaries to bin/ (Git LFS)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          # Use a deploy key or token with write access to push the commit.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Copy binaries to bin/
+        run: |
+          mkdir -p bin
+          # TEMPLATE: Replace "example" with your binary name.
+          cp artifacts/${{ env.BINARY_NAME }}-linux-amd64  bin/${{ env.BINARY_NAME }}
+          cp artifacts/${{ env.BINARY_NAME }}-linux-arm64  bin/${{ env.BINARY_NAME }}-arm64
+          chmod +x bin/*
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit LFS binaries
+        run: |
+          git add bin/
+          git diff --staged --quiet || \
+            git commit -m "chore: release binaries ${{ github.ref_name }}"
+          git push origin HEAD:main
+
+  # ── Create GitHub Release ─────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [build, lfs-commit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          # TEMPLATE: Update release notes format if you have a CHANGELOG.
+          generate_release_notes: true
+          files: artifacts/*

@@ -1,0 +1,76 @@
+# =============================================================================
+# config.toml — Non-secret configuration for the Example MCP server
+#
+# TEMPLATE: Rename "example" sections and identifiers to match your service.
+#           Search-replace: example → myservice, EXAMPLE → MYSERVICE
+#
+# SPLIT PHILOSOPHY:
+#   Rule: if it's a secret or a URL, use an env var. If it's configuration,
+#         use config.toml. Never put secrets in config.toml.
+#
+#   config.toml  → ports, bind addresses, feature flags, tuning knobs,
+#                  timeouts, log levels, retention settings
+#   .env         → API URLs, API keys, tokens, OAuth credentials, passwords
+#
+# Environment variables ALWAYS take priority over values here.
+# Variable naming: EXAMPLE_MCP_* for server settings, EXAMPLE_API_* for upstream.
+# =============================================================================
+
+# ── Upstream service ──────────────────────────────────────────────────────────
+# TEMPLATE: Rename this section to match your service (e.g. [myservice]).
+#           Map to ExampleConfig in src/config.rs.
+#
+#           Do NOT put real credentials here — use .env for that.
+#           These values are fine as comments showing the format; the real
+#           values come from EXAMPLE_API_URL / EXAMPLE_API_KEY env vars.
+[example]
+# api_url = "https://api.example.com/v1"   # overridden by EXAMPLE_API_URL
+# api_key = ""                              # overridden by EXAMPLE_API_KEY (use env var)
+
+# ── MCP HTTP server ───────────────────────────────────────────────────────────
+# TEMPLATE: Adjust port and bind address for your deployment.
+#           3000 avoids collision with syslog-mcp (3100) and common Node.js
+#           dev servers. Override with EXAMPLE_MCP_PORT env var.
+[mcp]
+host = "0.0.0.0"            # bind to all interfaces; use 127.0.0.1 for local-only
+port = 40060                 # EXAMPLE_MCP_PORT; also update Dockerfile EXPOSE and docker-compose.yml
+server_name = "example-mcp" # advertised to MCP clients in tools/list response
+
+# Static bearer token — ALWAYS set via EXAMPLE_MCP_TOKEN env var, not here.
+# api_token = ""
+
+# Disable auth entirely. Only safe when host=127.* (local dev only).
+# Prefer EXAMPLE_MCP_NO_AUTH=true env var over uncommenting this.
+# no_auth = false
+
+# Extra Host header values allowed by the RMCP host-validation middleware.
+# Add your reverse-proxy or Docker service hostname here.
+# Comma-separated in env: EXAMPLE_MCP_ALLOWED_HOSTS=myservice.lan,myservice.example.com
+# allowed_hosts = ["myservice.example.com"]
+
+# Extra CORS origins allowed for browser-based clients.
+# Comma-separated in env: EXAMPLE_MCP_ALLOWED_ORIGINS=https://myservice.example.com
+# allowed_origins = ["https://myservice.example.com"]
+
+# ── OAuth / JWT auth ──────────────────────────────────────────────────────────
+# TEMPLATE: All sensitive OAuth values (client_id, client_secret, public_url)
+#           MUST come from env vars — see .env.example.
+#           These settings control the token lifecycle and rate limiting.
+#           Activate OAuth with: EXAMPLE_MCP_AUTH_MODE=oauth in .env
+[mcp.auth]
+# mode = "bearer"           # bearer (default) or oauth; EXAMPLE_MCP_AUTH_MODE
+# public_url = ""           # EXAMPLE_MCP_PUBLIC_URL (required for oauth)
+# google_client_id = ""     # EXAMPLE_MCP_GOOGLE_CLIENT_ID (use env var)
+# google_client_secret = "" # EXAMPLE_MCP_GOOGLE_CLIENT_SECRET (use env var)
+admin_email = "" # EXAMPLE_MCP_AUTH_ADMIN_EMAIL
+allowed_emails = [] # additional allowed emails beyond admin_email
+sqlite_path = "/data/auth.db" # OAuth session storage; update for your data dir
+key_path = "/data/auth-jwt.pem" # RS256 key for JWT signing; auto-generated on first run
+access_token_ttl_secs = 3600 # 1 hour — how long issued JWTs are valid
+refresh_token_ttl_secs = 86400 # 24 hours — how long refresh tokens last
+auth_code_ttl_secs = 300 # 5 minutes — OAuth auth code window
+register_rpm = 10 # max registration attempts per minute per IP
+authorize_rpm = 60 # max authorization attempts per minute per IP
+disable_static_token_with_oauth = true # set false to allow both bearer + oauth
+allowed_client_redirect_uris = [
+] # extra redirect URIs beyond claude.ai defaults

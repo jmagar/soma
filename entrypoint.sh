@@ -1,0 +1,105 @@
+#!/bin/sh
+# =============================================================================
+# entrypoint.sh — Docker entrypoint for rmcp-template
+#
+# TEMPLATE: This script runs as root before dropping privileges to UID 1000.
+#           Copy it to the repo root and update the TEMPLATE sections below.
+#
+# Pattern §26: Every Docker image runs this entrypoint before the binary.
+#   1. Creates the data directory if it doesn't exist
+#   2. Fixes ownership so the service user can write files
+#   3. Hardens file permissions on sensitive config
+#   4. Validates required env vars (fast-fail with a clear error)
+#   5. Drops to UID 1000:1000 and exec's the binary
+#
+# Dockerfile wires this in:
+#   COPY entrypoint.sh /entrypoint.sh
+#   RUN chmod +x /entrypoint.sh
+#   ENTRYPOINT ["/entrypoint.sh"]
+#   CMD ["example", "serve", "mcp"]
+#
+# The ENTRYPOINT + CMD split means:
+#   - `docker run image`                   → runs: /entrypoint.sh example serve mcp
+#   - `docker run image example --help`    → runs: /entrypoint.sh example --help
+#   - `docker run image sh`                → runs: /entrypoint.sh sh  (useful for debugging)
+#
+# TEMPLATE: Update REQUIRED_VARS and binary name below.
+# =============================================================================
+set -e
+
+# ── Data directory ─────────────────────────────────────────────────────────────
+# TEMPLATE: DATA_DIR is the container's persistent storage path. It is always
+#           /data inside the container and bind-mounted from ~/.<service>/ on
+#           the host via docker-compose.yml.
+#           DO NOT change this to a non-/data path inside the container.
+DATA_DIR="${DATA_DIR:-/data}"
+
+# Create the data directory if it doesn't exist.
+# This is idempotent — running twice is safe.
+mkdir -p "${DATA_DIR}"
+
+# Fix ownership so the service user (UID 1000) can write files.
+# The container starts as root so chown works; we drop privileges at the end.
+chown -R 1000:1000 "${DATA_DIR}"
+
+# Restrict directory permissions:
+#   750 = owner rwx, group rx, others nothing
+# This prevents other processes in the container from reading the data dir.
+chmod 750 "${DATA_DIR}"
+
+# ── Harden sensitive files ────────────────────────────────────────────────────
+# If config.toml exists, make it group-readable but not world-readable.
+# TEMPLATE: Add similar blocks for any other sensitive files your service writes.
+if [ -f "${DATA_DIR}/config.toml" ]; then
+    chmod 640 "${DATA_DIR}/config.toml"
+fi
+
+# .env must not be world-readable — it contains API keys.
+if [ -f "${DATA_DIR}/.env" ]; then
+    chmod 600 "${DATA_DIR}/.env"
+fi
+
+# JWT signing key — extremely sensitive; owner-only.
+if [ -f "${DATA_DIR}/auth-jwt.pem" ]; then
+    chmod 600 "${DATA_DIR}/auth-jwt.pem"
+fi
+
+# Auth database — owner + group read, no others.
+if [ -f "${DATA_DIR}/auth.db" ]; then
+    chmod 640 "${DATA_DIR}/auth.db"
+fi
+
+# ── Validate required environment variables ────────────────────────────────────
+# TEMPLATE: Add your service's required env vars here.
+#           Comment out or remove lines for vars that have safe defaults.
+#           The goal: fail loudly here rather than silently misbehave later.
+#
+# Example (uncomment for a real service):
+#   if [ -z "${EXAMPLE_API_KEY:-}" ]; then
+#       echo "ERROR: EXAMPLE_API_KEY is not set." >&2
+#       echo "       Set it in your .env file or Docker environment." >&2
+#       exit 1
+#   fi
+#
+# The template binary works without API credentials (stub mode), so no
+# required vars are checked here. Uncomment the block above when you replace
+# the stub with a real upstream service.
+
+# ── Drop privileges and exec the service ──────────────────────────────────────
+# `su-exec` (Alpine) or `gosu` (Debian/Ubuntu) replaces the current process
+# with the service binary running as UID 1000:1000.
+#
+# TEMPLATE: The Dockerfile installs su-exec (Alpine) or gosu (Debian).
+#           The current Dockerfile uses Debian, so install gosu there:
+#             RUN apt-get install -y gosu
+#           and replace su-exec below with gosu.
+#
+# `exec` is critical — it replaces the shell process so the binary receives
+# OS signals (SIGTERM, SIGINT) directly. Without exec, the shell would buffer
+# signals and Docker's stop timeout would kill the container ungracefully.
+#
+# TEMPLATE: Replace "su-exec" with "gosu" if using a Debian-based image,
+#           or use "exec setpriv --reuid=1000 --regid=1000 --clear-groups" if
+#           neither su-exec nor gosu is available.
+# TEMPLATE: This image uses Debian + gosu. For Alpine, replace "gosu" with "su-exec".
+exec gosu 1000:1000 "$@"
