@@ -27,7 +27,7 @@ A static web UI served by the Rust binary alongside the MCP API. Three pages:
 ```bash
 pnpm dev        # dev server at http://localhost:3000
 pnpm build      # static export -> out/
-pnpm start      # start the Next.js production server (serves .next/)
+pnpm start      # serve the built out/ directory
 pnpm lint       # Biome lint
 pnpm check      # Biome lint + format check
 ```
