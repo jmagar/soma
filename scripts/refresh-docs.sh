@@ -256,8 +256,8 @@ append_changes_log() {
   ensure_changes_file
   {
     printf '\n## %s\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf '- scope: `%s`\n' "$(refresh_scope)"
-    printf '- summary: `%s added, %s modified, %s removed`\n' "$4" "$5" "$6"
+    printf -- '- scope: `%s`\n' "$(refresh_scope)"
+    printf -- '- summary: `%s added, %s modified, %s removed`\n' "$4" "$5" "$6"
   } >> "$CHANGES_FILE"
 }
 
@@ -302,9 +302,9 @@ main() {
   # ── Crawled docs ──────────────────────────────────────────────────────────
   if [[ "$SKIP_CRAWL" != true ]]; then
     # MCP protocol documentation — essential for any MCP server development
-    crawl_docs "https://modelcontextprotocol.io"  "modelcontextprotocol.io" "mcp/docs"
+    crawl_docs "https://modelcontextprotocol.io"  "modelcontextprotocol.io" "mcp/docs" || log "WARN: mcp docs crawl failed, continuing"
     # Claude Code documentation — for plugin/skill/hook development
-    crawl_docs "https://code.claude.com/"         "code.claude.com"         "claude-code"
+    crawl_docs "https://code.claude.com/"         "code.claude.com"         "claude-code" || log "WARN: claude-code docs crawl failed, continuing"
 
     # TEMPLATE: Add your service's documentation site here:
     # crawl_docs "https://your-service.com/docs"  "your-service.com"  "your-service/docs"

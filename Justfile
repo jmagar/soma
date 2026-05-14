@@ -151,17 +151,12 @@ status:
 
 # ── Plugin ────────────────────────────────────────────────────────────────────
 
-# Repair the plugin deployment (re-runs plugin-setup.sh manually)
-# Useful after a failed install or config change
+# Repair: bring the Docker Compose stack back up cleanly
+# Useful after config changes, env updates, or a failed restart
 repair:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    SCRIPT="plugins/example/hooks/plugin-setup.sh"
-    if [[ ! -f "${SCRIPT}" ]]; then
-        echo "ERROR: ${SCRIPT} not found — run from the project root"
-        exit 1
-    fi
-    bash "${SCRIPT}"
+    docker compose down || true
+    docker compose up -d
+    @echo "example-mcp: stack restarted"
 
 # Install the release binary into bin/ (for plugin distribution)
 # Linux only — Windows needs .exe; requires release build first

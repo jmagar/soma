@@ -15,7 +15,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::AppState;
+use crate::server::AppState;
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
 ///

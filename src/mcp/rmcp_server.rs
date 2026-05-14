@@ -28,7 +28,9 @@ use serde_json::{Map, Value};
 
 use crate::config::McpConfig;
 
-use super::{prompts, schemas::tool_definitions, tools::execute_tool, AppState, AuthPolicy};
+use crate::server::{AppState, AuthPolicy};
+
+use super::{prompts, schemas::tool_definitions, tools::execute_tool};
 
 // ── scopes ────────────────────────────────────────────────────────────────────
 
@@ -367,7 +369,7 @@ pub(super) fn allowed_hosts(config: &McpConfig) -> Vec<String> {
     hosts
 }
 
-pub(super) fn allowed_origins(config: &McpConfig) -> Vec<String> {
+pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
     let mut origins = vec![
         format!("http://localhost:{}", config.port),
         format!("http://127.0.0.1:{}", config.port),

@@ -34,8 +34,8 @@ fn test_echo_message_parsed() {
 fn test_echo_no_message_defaults() {
     // Simulated: `example echo` (no --message)
     let args: Vec<String> = vec!["echo".into()];
-    let message = flag_value(&args[1..], "--message")
-        .unwrap_or_else(|| "(no message provided)".to_string());
+    let message =
+        flag_value(&args[1..], "--message").unwrap_or_else(|| "(no message provided)".to_string());
     assert_eq!(message, "(no message provided)");
 }
 

@@ -1,8 +1,9 @@
 # rmcp-server Patterns
 
 Canonical reference for all patterns used across the Rust MCP server family:
-`unrust` (Unraid), `rustify` (Gotify), `rustifi` (UniFi), `rustscale` (Tailscale),
-`apprise-mcp`, and `rmcp-template` (this repo).
+`lab`, `axon_rust` (Axon), `syslog-mcp`, `rustify` (Gotify), `rustifi` (UniFi),
+`apprise-mcp`, `rustscale` (Tailscale), `rmcp-template` (this repo), and
+`unrust` (Unraid).
 
 Every server in the family MUST follow these patterns. Deviation requires an explicit
 architectural decision recorded in the repo.
@@ -13,20 +14,31 @@ architectural decision recorded in the repo.
 
 ```
 src/
-  <service>.rs      ← HTTP/API transport ONLY (no logic)
-  app.rs            ← ALL business logic lives here, nowhere else
+  <service>.rs      ← HTTP/API transport ONLY (no business logic)
+  app/
+    errors.rs       ← domain-specific errors and shared Result aliases
+    common.rs       ← shared validation/helpers used across domain modules
+    read.rs         ← read/query use-cases
+    write.rs        ← create/update/delete use-cases
+    # add more focused modules as needed: auth.rs, sync.rs, cache.rs, etc.
   config.rs         ← Config structs + env overrides
-  mcp.rs            ← AppState, AuthPolicy, build_auth_layer
+  api.rs            ← REST API handlers (api_dispatch, health, status)
+  server.rs         ← AppState, AuthPolicy, build_auth_layer
+  server/
+    routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
+  mcp.rs            ← MCP module entry: submodule decls + re-exports only
   mcp/
-    tools.rs        ← thin shim: parse args → call service → return Value
+    tools.rs        ← thin shim: parse args → call service facade → return Value
     schemas.rs      ← tool JSON schema + ACTIONS const
     rmcp_server.rs  ← ServerHandler impl (tools, resources, prompts)
-    routes.rs       ← axum router: /mcp + /health + OAuth routes
     prompts.rs      ← MCP prompts
-  cli.rs            ← thin shim: parse args → call service → format/print
+  cli.rs            ← thin shim: parse args → call service facade → format/print
   lib.rs            ← pub modules + test helpers (testing::*)
   main.rs           ← mode dispatch ONLY (serve_mcp / serve_stdio / run_cli)
-```
+
+Rule: keep business logic out of transports, but DO NOT force all logic into one giant file.
+The service layer may be split across multiple focused modules under `src/app/`; what matters
+is that transports stay thin and all domain logic lives in the service layer.
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or
 `main.rs`, you are doing it wrong. Move it to `app.rs`.
@@ -45,6 +57,105 @@ src/
 
 **Zero validation, zero defaults, zero error message crafting** in shims. All of that
 lives in `app.rs`.
+
+---
+
+## 1a. Module Architecture — Advanced (MCP + REST API + Web UI)
+
+Use this layout when the server also exposes a REST/JSON API surface and/or a web UI
+in addition to MCP. The guiding constraints are the same as the base layout — thin
+shims, domain logic in `app/` — with two additions:
+
+1. **Any surface that would exceed ~400 lines becomes a directory.**
+   `api/`, `web/`, `app/`, and `mcp/` are all directories from the start.
+2. **The `api/` surface mirrors `mcp/` structurally** — thin router + thin handlers,
+   all real logic delegated to the shared `app/` service facade.
+
+```
+src/
+  ├── <service>.rs            ← HTTP/API transport ONLY (single upstream client)
+  │   or <service>/           ← split into a directory when ≥ 2 resource groups
+  │       client.rs           ← reqwest/tonic client, request helpers, error mapping
+  │       things.rs           ← /things resource (one file per upstream group)
+  │       users.rs            ← /users resource
+  │       └── ...
+  │
+  ├── app/                    ← ALL business logic lives here; never in shims
+  │   ├── errors.rs           ← domain error types + shared Result<T> alias
+  │   ├── common.rs           ← shared validation helpers, pagination, cursors
+  │   ├── read.rs             ← read/query use-cases (impl ExampleService block)
+  │   ├── write.rs            ← create/update/delete use-cases
+  │   ├── auth.rs             ← service-level auth helpers (token exchange, refresh)
+  │   └── ...                 ← add focused modules as the domain grows
+  │
+  ├── config.rs               ← Config structs + env overrides (single file is fine)
+  │
+  ├── api.rs                  ← REST API handlers: api_dispatch, health, status
+  │   or api/                 ← split into a directory when ≥ 2 resource groups
+  │       things.rs           ← GET/POST/PUT/DELETE /things → service calls
+  │       users.rs
+  │       └── ...
+  │
+  ├── server.rs               ← AppState, AuthPolicy, build_auth_layer
+  ├── server/
+  │   └── routes.rs           ← axum router: wires mcp + api + auth + SPA fallback
+  │
+  ├── mcp.rs                  ← MCP module entry: submodule decls + re-exports only
+  ├── mcp/                    ← MCP protocol layer (thin shims, no business logic)
+  │   ├── tools.rs            ← dispatch: parse args → call service → return Value
+  │   ├── schemas.rs          ← ACTIONS const + tool_definitions()
+  │   ├── rmcp_server.rs      ← ServerHandler impl (tools, resources, prompts, scopes)
+  │   └── prompts.rs          ← MCP prompt definitions
+  │
+  ├── web.rs                  ← embedded SPA asset serving (include_dir! + fallback)
+  │
+  ├── cli.rs                  ← thin shim: parse args → call service → format/print
+  ├── lib.rs                  ← pub modules + test helpers (testing::*)
+  └── main.rs                 ← mode dispatch ONLY (serve / serve_stdio / run_cli)
+```
+
+### Port/router layout
+
+```
+:3100  (or $PORT)
+  /mcp            ← MCP JSON-RPC (rmcp ServerHandler)
+  /health         ← health check
+  /api/v1/...     ← REST API (api/ handlers)
+  /               ← Web UI (web/ static or SSR)
+  /.well-known/   ← OAuth discovery (when auth_mode=oauth)
+```
+
+All four surfaces share one `AppState` (same `Arc<ExampleService>`, same auth layer).
+The axum router nests them as separate sub-routers:
+
+```rust
+// main.rs — router assembly (no logic here)
+let app = Router::new()
+    .nest("/mcp",    mcp::router(state.clone()))
+    .nest("/api/v1", api::router(state.clone()))
+    .nest("/",       web::router(state.clone()))
+    .route("/health", get(health_handler));
+```
+
+### Split rules — when to make a directory vs a file
+
+| Surface | Split into a directory when… |
+|---|---|
+| `<service>/` | upstream API has ≥ 2 resource groups (things, users, etc.) |
+| `app/` | service methods exceed one focused domain (always use a directory) |
+| `mcp/` | already a directory in the base layout |
+| `api/handlers/` | ≥ 2 resource groups; each file stays thin (≤ 200 lines target) |
+| `web/pages/` | ≥ 3 page routes |
+| `web/templates/` | any SSR; omit entirely for SPAs served from `assets/` |
+
+### Thin-shim rule applies to `api/handlers/` too
+
+`api/handlers/things.rs` does exactly three things per endpoint:
+1. Extract typed inputs from the request (path params, query, JSON body) via extractors
+2. Call the corresponding `state.service.method()`
+3. Return `ApiResponse<T>` or the mapped error
+
+No validation, no defaults, no business logic in handlers — same as `mcp/tools.rs`.
 
 ---
 
@@ -251,7 +362,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
 }
 ```
 
-### AuthLayer wiring (mcp.rs)
+### AuthLayer wiring (server.rs)
 
 ```rust
 pub fn build_auth_layer(
@@ -273,7 +384,7 @@ pub fn build_auth_layer(
 }
 ```
 
-### OAuth routes (mcp/routes.rs)
+### OAuth routes (server/routes.rs)
 
 When `auth_state: Some(_)`, the OAuth router is automatically mounted:
 - `/.well-known/oauth-authorization-server`
@@ -893,6 +1004,9 @@ curl -H "Authorization: Bearer $EXAMPLE_API_KEY" \
 
 | Service | MCP Port | Binary name |
 |---|---|---|
+| lab | 8765 | `labby` |
+| axon_rust (axon) | 8001 | `axon` |
+| syslog-mcp | 3100 | `syslog` |
 | unraid-mcp (unrust) | 6970 | `unraid` |
 | gotify-mcp (rustify) | 9158 | `gotify` |
 | unifi-mcp (rustifi) | 7474 | `unifi` |
@@ -1628,6 +1742,9 @@ Adapted from `agentcast/scripts/refresh-docs.sh`. The core mechanics are identic
 
 | Repo | Crawled sites | Repomix packs |
 |---|---|---|
+| lab | project docs and service docs as needed | jmagar/lab |
+| axon_rust | modelcontextprotocol.io, Gemini/Qdrant/TEI docs as needed | jmagar/axon, mcp/rust-sdk |
+| syslog-mcp | RFC/syslog and modelcontextprotocol.io docs as needed | jmagar/syslog-mcp, mcp/rust-sdk |
 | unrust | docs.unraid.net, modelcontextprotocol.io | jmagar/unraid-api, mcp/rust-sdk, mcp/registry |
 | rustify | gotify.net/docs, modelcontextprotocol.io | gotify/server, gotify/android, mcp/rust-sdk |
 | rustifi | developer.ui.com, modelcontextprotocol.io | Art-of-WiFi/UniFi-API-client, mcp/rust-sdk |
@@ -2018,17 +2135,35 @@ Log file location: `{data_dir}/logs/{service}.log` (which resolves to `~/.{servi
 
 ### Aurora color palette for console logs
 
-Copy the aurora constants from `lab/crates/lab/src/output/theme.rs`:
+Copy the aurora constants from `lab/crates/lab/src/output/theme.rs`.
+All repos in the family **must** use these exact values — they are ground-truthed
+against the Aurora design system CSS tokens in `aurora-design-system/registry/aurora/styles/aurora.css`.
 
 ```rust
 // src/logging/aurora.rs  (ANSI 256 — matches lab's aurora palette exactly)
-pub const SERVICE_NAME:    u8 = 211; // pink        (255,175,215)
-pub const ACCENT_PRIMARY:  u8 = 39;  // bright blue (41,182,246)
-pub const TEXT_MUTED:      u8 = 250; // light grey  (167,188,201)
-pub const SUCCESS:         u8 = 115; // teal        (125,211,199)
-pub const WARN:            u8 = 180; // amber       (198,163,107)
-pub const ERROR:           u8 = 174; // muted red   (199,132,144)
+pub const SERVICE_NAME:   u8 = 211; // pink        RGB (255,175,215)
+pub const ACCENT_PRIMARY: u8 = 39;  // bright blue RGB (41,182,246)
+pub const TEXT_MUTED:     u8 = 250; // light grey  RGB (167,188,201)
+pub const SUCCESS:        u8 = 115; // teal        RGB (125,211,199)
+pub const WARN:           u8 = 180; // amber       RGB (198,163,107)
+pub const ERROR:          u8 = 174; // muted red   RGB (199,132,144)
 ```
+
+Cross-reference to Aurora CSS tokens (terminals that support TrueColor use the RGB column;
+ANSI 256 is the fallback for terminals like `docker compose logs`):
+
+| Const | ANSI 256 | TrueColor RGB | Aurora CSS token | CSS hex |
+|---|---|---|---|---|
+| `SERVICE_NAME` | 211 | (255, 175, 215) | `--aurora-accent-pink` | `#f9a8c4` |
+| `ACCENT_PRIMARY` | 39 | (41, 182, 246) | `--aurora-accent-primary` | `#29b6f6` |
+| `TEXT_MUTED` | 250 | (167, 188, 201) | `--aurora-text-muted` | `#a7bcc9` |
+| `SUCCESS` | 115 | (125, 211, 199) | `--aurora-success` | `#7dd3c7` |
+| `WARN` | 180 | (198, 163, 107) | `--aurora-warn` | `#c6a36b` |
+| `ERROR` | 174 | (199, 132, 144) | `--aurora-error` | `#c78490` |
+
+Note: `SERVICE_NAME` ANSI 256 (211) and TrueColor RGB are the closest terminal
+approximations to `--aurora-accent-pink: #f9a8c4`; the palette is tuned for readability
+in log streams rather than pixel-perfect CSS parity.
 
 Level colors for the console formatter:
 - `ERROR` → aurora::ERROR (muted red), bold
@@ -2208,6 +2343,18 @@ src/mcp/schemas.rs
 ```
 
 This makes the module tree navigable without opening `mod.rs` everywhere.
+
+A pre-commit git hook enforces this at commit time:
+
+```sh
+# .git/hooks/pre-commit (chmod +x)
+mod_rs_files=$(git diff --cached --name-only | grep '/mod\.rs$\|^mod\.rs$')
+if [ -n "$mod_rs_files" ]; then
+  echo "error: mod.rs is banned. Use foo.rs + foo/ instead of foo/mod.rs." >&2
+  echo "$mod_rs_files" | sed 's/^/  /' >&2
+  exit 1
+fi
+```
 
 ### Other modern Rust requirements
 
@@ -2635,8 +2782,8 @@ Port 3000
 ### Route composition pattern (axum)
 
 ```rust
-// src/mcp/routes.rs
-pub fn build_router(state: AppState) -> Router {
+// src/server/routes.rs
+pub fn router(state: AppState) -> Router {
     // 1. Public routes (no auth)
     let public = Router::new()
         .route("/health", get(health))
@@ -2691,7 +2838,7 @@ The REST API uses the same `action` + `params` pattern as MCP tools. This means:
 - The request shape is identical: `{"action":"greet","params":{"name":"Alice"}}`
 
 ```rust
-// src/api/dispatch.rs
+// src/api.rs
 #[derive(Deserialize)]
 pub struct ActionRequest {
     pub action: String,
@@ -2916,14 +3063,14 @@ npx shadcn@latest add @aurora/aurora-button @aurora/aurora-card @aurora/aurora-b
 The Aurora design system uses the same palette in both Rust (ANSI 256 for terminal)
 and CSS (custom properties for the browser). The source of truth is the token layer:
 
-| Purpose | ANSI 256 (Rust) | CSS token | Hex |
-|---|---|---|---|
-| Service name | 211 | `--aurora-pink` | #ffd7d7 |
-| Primary accent | 39 | `--aurora-blue` | #29b6f6 |
-| Text muted | 250 | `--aurora-muted` | #a7bcc9 |
-| Success | 115 | `--aurora-teal` | #7dd3c7 |
-| Warning | 180 | `--aurora-amber` | #c6a36b |
-| Error | 174 | `--aurora-red` | #c78490 |
+| Const | ANSI 256 | TrueColor RGB | Aurora CSS token | CSS hex |
+|---|---|---|---|---|
+| `SERVICE_NAME` | 211 | (255, 175, 215) | `--aurora-accent-pink` | `#f9a8c4` |
+| `ACCENT_PRIMARY` | 39 | (41, 182, 246) | `--aurora-accent-primary` | `#29b6f6` |
+| `TEXT_MUTED` | 250 | (167, 188, 201) | `--aurora-text-muted` | `#a7bcc9` |
+| `SUCCESS` | 115 | (125, 211, 199) | `--aurora-success` | `#7dd3c7` |
+| `WARN` | 180 | (198, 163, 107) | `--aurora-warn` | `#c6a36b` |
+| `ERROR` | 174 | (199, 132, 144) | `--aurora-error` | `#c78490` |
 
 ### Typical web UI structure for an MCP server
 
@@ -2990,3 +3137,43 @@ Build without web UI:
 cargo build --no-default-features   # fast local dev, no asset embedding
 cargo build                          # includes web UI (CI / release)
 ```
+
+---
+
+## A6. Worktree File Propagation — `.worktreeinclude`
+
+Claude Code worktrees are fresh checkouts. Gitignored files like `.env` and
+`config.toml` are absent by default, so the server can't start without them.
+The `.worktreeinclude` file tells Claude Code which gitignored files to copy
+into each new worktree automatically.
+
+**Rule**: Every repo in this family carries a `.worktreeinclude` at the root.
+
+```
+# .worktreeinclude — files to copy into Claude Code worktrees
+# Uses .gitignore syntax. Only gitignored files are ever copied.
+.env
+config.toml
+```
+
+This covers the two files a service needs to run:
+
+| File | What it holds |
+|---|---|
+| `.env` | Secrets: API keys, tokens, URLs |
+| `config.toml` | Runtime settings: ports, host, auth mode, timeouts |
+
+**Why `config.toml` is gitignored**: per the config split pattern (§9), the
+committed `config.toml` is the canonical defaults. A developer's local
+`config.toml` may override port, host, auth mode, etc. — it must never land
+in git. Add `config.toml` to `.gitignore` (not just `config.local.toml`).
+
+**.gitignore additions** (required alongside `.worktreeinclude`):
+```gitignore
+config.toml
+.beagle/
+```
+
+**Applies to**: `--worktree` flag, subagent worktrees, and parallel sessions
+in the Claude Code desktop app. The copy is one-way (main → worktree) and
+happens at worktree creation time only.

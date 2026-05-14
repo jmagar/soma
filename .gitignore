@@ -1,48 +1,126 @@
 # =============================================================================
-# .gitignore — Canonical gitignore for rmcp-template (from syslog-mcp)
-#
-# TEMPLATE: This is the shared gitignore for the Rust MCP server family.
-#           Copy it unchanged to any new server repo.
-#
-# Key rules:
-#   .env* are ignored (secrets) — only .env.example is committed
-#   target/ is ignored (Rust build artifacts)
-#   *.db, *.pem, *.key are ignored (runtime state)
-#   bin/ is NOT ignored — LFS-tracked binaries are committed
-#   AI tooling dirs (.omc/, .lavra/, etc.) are ignored
+# .gitignore
+# Standard ignore rules for the rmcp server family (Rust + optional Node/Python).
 # =============================================================================
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
-# Never commit real env files. .env.example is the only allowed exception.
+# ONLY .env.example is ever committed. Every other .env variant is blocked.
 .env
 .env.*
+*.env
 !.env.example
 
-# ── Runtime artifacts ─────────────────────────────────────────────────────────
+# ── Local config (runtime settings — never commit) ───────────────────────────
+config.toml
+config.local.toml
+config/docker-hosts.toml
+
+# ── Rust ──────────────────────────────────────────────────────────────────────
+/target/
+**/*.rs.bk
+*.profraw
+*.profdata
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+*.egg
+.eggs/
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.pdm-build/
+.uv/
+pip-wheel-metadata/
+
+# ── Node / JavaScript ─────────────────────────────────────────────────────────
+node_modules/
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.next/
+.nuxt/
+.output/
+.vercel/
+.turbo/
+*.tsbuildinfo
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
+dist/
+build/
+out/
+
+# ── Generated docs ────────────────────────────────────────────────────────────
+# Do not commit build output from doc generators.
+.docs/
+book/
+site/
+_site/
+
+# ── Test / coverage artifacts ─────────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ── Benchmarks / profiling ────────────────────────────────────────────────────
+.benchmarks/
+criterion/
+flamegraph.svg
+perf.data
+perf.data.old
+
+# ── Runtime state ─────────────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.key
+*.pem
+*.cert
 *.log
 *.pid
 *.bak
 *.bak-*
 storage/
+data/
+logs/
+backups/
 
 # ── Claude Code / AI tooling ──────────────────────────────────────────────────
-# These dirs are created by AI coding assistants and should never be committed.
 .claude/settings.local.json
 .claude/worktrees/
 .omc/
 .lavra/
 .beads/
-.dolt/
-*.db
-*.db-shm
-*.db-wal
 .beads-credential-key
+.beagle/
+.dolt/
 .serena/
 .worktrees/
 .worktree/
+.worktrees
 .full-review/
 .full-review-archive-*
 .bivvy
+.superpowers/
 
 # ── IDE / editor ──────────────────────────────────────────────────────────────
 .vscode/
@@ -57,44 +135,35 @@ storage/
 *~
 .emdash.json
 
-# ── OS generated ──────────────────────────────────────────────────────────────
+# ── Version managers / env tools ──────────────────────────────────────────────
+.direnv/
+.mise/
+.rtx/
+.trunk/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # ── Caches ────────────────────────────────────────────────────────────────────
 .cache/
 
-# ── Build artifacts ───────────────────────────────────────────────────────────
-dist/
-
-# ── Rust ──────────────────────────────────────────────────────────────────────
-# target/ is the Cargo build directory — never commit it.
-# bin/ is intentionally NOT listed here — it's LFS-tracked and must be committed.
-/target/
-**/*.rs.bk
-*.profraw
-*.profdata
-
-# ── Repo-specific ─────────────────────────────────────────────────────────────
-# Runtime config overrides and generated keys — use .env for secrets.
-config.local.toml
-config/docker-hosts.toml
-data/
-*.key
-*.pem
-*.cert
-
-.worktrees
-
-# Personal local cheatsheet (never commit)
-CLAUDE.md.local
-logs/
-backups/
-
-# Auto-generated reference docs (refresh-docs.sh output)
+# ── Auto-generated ────────────────────────────────────────────────────────────
+# Reference docs produced by scripts/refresh-docs.sh — large, never commit.
 docs/references/
 
-# ── Web UI (Next.js) ──────────────────────────────────────────────────────────
+# ── Personal ──────────────────────────────────────────────────────────────────
+CLAUDE.md.local
+
+# ── Next.js web UI (apps/web/) ────────────────────────────────────────────────
+# apps/web/out/ is the static export embedded in the Rust binary via include_dir!
+# It is NOT committed — build it before `docker build` or `cargo build`.
 apps/web/node_modules/
 apps/web/.next/
 apps/web/out/

@@ -10,12 +10,14 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 |------|------|
 | `src/example.rs` | `ExampleClient` — HTTP/API transport stub; one method per remote operation |
 | `src/app.rs` | `ExampleService` — business layer; all logic lives here, never in shims |
+| `src/server.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` — HTTP server state and auth policy |
+| `src/server/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
+| `src/api.rs` | REST API handlers: `POST /v1/example`, `GET /health`, `GET /status` |
+| `src/mcp.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
 | `src/mcp/tools.rs` | MCP shim: parse JSON args → call service → return `Value` |
 | `src/mcp/schemas.rs` | Tool JSON schema (`EXAMPLE_ACTIONS`, `tool_definitions()`) |
 | `src/mcp/rmcp_server.rs` | `ServerHandler` impl: tools, resources, prompts, scope checks |
-| `src/mcp/routes.rs` | Axum router: `/mcp`, `/health`, OAuth discovery routes |
 | `src/mcp/prompts.rs` | MCP prompts (`quick_start`) |
-| `src/mcp.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` |
 | `src/config.rs` | `Config`, `ExampleConfig`, `McpConfig`, `AuthConfig`, env loading |
 | `src/cli.rs` | CLI shim: parse args → call service → print |
 | `src/main.rs` | Mode dispatch: HTTP server / stdio / CLI |

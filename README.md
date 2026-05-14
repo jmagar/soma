@@ -2,6 +2,22 @@
 
 A reusable Rust template for building MCP servers using the [rmcp](https://crates.io/crates/rmcp) crate. Clone this, rename a handful of identifiers, drop in your API client, and you have a working MCP server with both stdio and Streamable HTTP transports, bearer token or Google OAuth authentication, elicitation support, resources, and prompts.
 
+## Rust Server Family
+
+This template is the reference point for the local Rust MCP/server family:
+
+| Local path | GitHub repo | Binary |
+| --- | --- | --- |
+| `../lab` | `jmagar/lab` | `labby` |
+| `../axon_rust` | `jmagar/axon` | `axon` |
+| `../syslog-mcp` | `jmagar/syslog-mcp` | `syslog` |
+| `../rustify` | `jmagar/rustify` | `gotify` |
+| `../rustifi` | `jmagar/rustifi` | `unifi` |
+| `../apprise-mcp` | `jmagar/apprise-mcp` | `apprise` |
+| `../rustscale` | `jmagar/rustscale` | `tailscale` |
+| `../rmcp-template` | `jmagar/rmcp-template` | `example` |
+| `../unrust` | `jmagar/unrust` | `unraid` |
+
 ## What this template gives you
 
 - **Layered architecture** — transport client → service → MCP/CLI shims, enforced by convention
