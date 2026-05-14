@@ -27,6 +27,9 @@
 # =============================================================================
 set -e
 
+SERVICE_NAME="example"
+BINARY="/usr/local/bin/${SERVICE_NAME}"
+
 # ── Data directory ─────────────────────────────────────────────────────────────
 # TEMPLATE: DATA_DIR is the container's persistent storage path. It is always
 #           /data inside the container and bind-mounted from ~/.<service>/ on
@@ -86,20 +89,29 @@ fi
 # the stub with a real upstream service.
 
 # ── Drop privileges and exec the service ──────────────────────────────────────
-# `su-exec` (Alpine) or `gosu` (Debian/Ubuntu) replaces the current process
+# `gosu` (Alpine) or `gosu` (Debian/Ubuntu) replaces the current process
 # with the service binary running as UID 1000:1000.
 #
-# TEMPLATE: The Dockerfile installs su-exec (Alpine) or gosu (Debian).
+# TEMPLATE: The Dockerfile installs gosu (Alpine) or gosu (Debian).
 #           The current Dockerfile uses Debian, so install gosu there:
 #             RUN apt-get install -y gosu
-#           and replace su-exec below with gosu.
+#           and replace gosu below with gosu.
 #
 # `exec` is critical — it replaces the shell process so the binary receives
 # OS signals (SIGTERM, SIGINT) directly. Without exec, the shell would buffer
 # signals and Docker's stop timeout would kill the container ungracefully.
 #
-# TEMPLATE: Replace "su-exec" with "gosu" if using a Debian-based image,
+# TEMPLATE: Replace "gosu" with "gosu" if using a Debian-based image,
 #           or use "exec setpriv --reuid=1000 --regid=1000 --clear-groups" if
-#           neither su-exec nor gosu is available.
-# TEMPLATE: This image uses Debian + gosu. For Alpine, replace "gosu" with "su-exec".
-exec gosu 1000:1000 "$@"
+#           neither gosu nor gosu is available.
+# TEMPLATE: This image uses Debian + gosu. For Alpine, replace "gosu" with "gosu".
+# Passthrough: if the first argument is not a known subcommand (e.g. docker run ... bash),
+# exec it directly under gosu without prepending the binary.
+case "${1:-}" in
+  serve|mcp|greet|echo|status|watch|doctor|setup|help|--help|-h|--version|"")
+    exec gosu 1000:1000 "${BINARY}" "$@"
+    ;;
+  *)
+    exec gosu 1000:1000 "$@"
+    ;;
+esac

@@ -1,0 +1,21 @@
+name: cargo-deny
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deny:
+    name: Licenses & Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo-deny check
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # Checks: licenses, bans (duplicates), advisories, sources
+          command: check
+          arguments: --all-features

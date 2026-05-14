@@ -15,7 +15,11 @@ use serde_json::json;
 async fn call_service_action(action: &str) -> serde_json::Value {
     let state = loopback_state();
     match action {
-        "greet" => state.service.greet(None).await.expect("greet should succeed"),
+        "greet" => state
+            .service
+            .greet(None)
+            .await
+            .expect("greet should succeed"),
         "greet_named" => state
             .service
             .greet(Some("Alice"))

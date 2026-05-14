@@ -52,7 +52,7 @@ pub async fn run_doctor(config: &Config, json: bool) -> Result<()> {
     // TEMPLATE: The data dir is resolved via `config::default_data_dir()`.
     //           In Docker it resolves to /data; bare-metal to ~/.example/.
     //           Replace ".example" with your service name in config.rs.
-    let data_dir = default_data_dir();
+    let data_dir = default_data_dir()?;
 
     checks.push(check_config_file(&data_dir));
     checks.push(check_dir_writable("Data directory", &data_dir));
@@ -408,9 +408,15 @@ pub async fn check_upstream(base_url: &str) -> DoctorCheck {
     //           If the upstream has no health endpoint, try GET / or HEAD /.
     let health_url = format!("{}/health", base_url.trim_end_matches('/'));
 
+    // Use strict TLS by default. Set EXAMPLE_DOCTOR_ACCEPT_INVALID_CERTS=true
+    // only for dev environments with self-signed certificates.
+    // TEMPLATE: Replace the env var prefix when adapting this template.
+    let accept_invalid_certs = std::env::var("EXAMPLE_DOCTOR_ACCEPT_INVALID_CERTS")
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false);
     let client = match reqwest::ClientBuilder::new()
         .timeout(std::time::Duration::from_secs(5))
-        .danger_accept_invalid_certs(true) // tolerate self-signed certs in doctor
+        .danger_accept_invalid_certs(accept_invalid_certs)
         .build()
     {
         Ok(c) => c,
@@ -500,7 +506,7 @@ pub fn check_port_available(port: u16) -> DoctorCheck {
 /// friendly report instead of aborting. No logic changes needed unless you
 /// add a new auth mode.
 pub fn check_auth_config(config: &Config) -> DoctorCheck {
-    let is_loopback = config.mcp.host.starts_with("127.") || config.mcp.host == "::1";
+    let is_loopback = config.mcp.is_loopback();
     let has_token = config.mcp.api_token.is_some();
     let is_oauth = config.mcp.auth.mode == AuthMode::OAuth;
     let no_auth = config.mcp.no_auth;

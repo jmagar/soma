@@ -11,22 +11,17 @@ set -euo pipefail
 
 REPO_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+# Cargo.toml is the canonical version source for this template.
+# Plugin manifests intentionally do not contain a version field.
 VERSION_FILES=(
     "${REPO_ROOT}/Cargo.toml"
-    "${REPO_ROOT}/pyproject.toml"
-    "${REPO_ROOT}/.claude-plugin/plugin.json"
-    "${REPO_ROOT}/.codex-plugin/plugin.json"
-    "${REPO_ROOT}/.gemini-extension.json"
+    "${REPO_ROOT}/Cargo.lock"
+    "${REPO_ROOT}/server.json"
 )
 
-# Resolve gemini path (handles both naming conventions)
-if [ -f "${REPO_ROOT}/gemini-extension.json" ]; then
-    VERSION_FILES[3]="${REPO_ROOT}/gemini-extension.json"
-fi
-
 current_version() {
-    grep -m1 '"version"' "${REPO_ROOT}/.claude-plugin/plugin.json" \
-        | sed 's/.*"version": "\(.*\)".*/\1/'
+    grep -m1 '^version = ' "${REPO_ROOT}/Cargo.toml" \
+        | sed 's/.*"\(.*\)".*/\1/'
 }
 
 bump() {
@@ -55,8 +50,13 @@ echo "Bumping $CURRENT → $NEW"
 for file in "${VERSION_FILES[@]}"; do
     [ -f "$file" ] || { echo "  skip (not found): $file"; continue; }
     sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEW}\"/" "$file"
+    sed -i "s/\"packageVersion\": \"${CURRENT}\"/\"packageVersion\": \"${NEW}\"/" "$file"
     sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" "$file"
     echo "  updated: ${file#"${REPO_ROOT}/"}"
 done
+
+if [ -f "${REPO_ROOT}/Cargo.toml" ]; then
+    (cd "${REPO_ROOT}" && cargo check 2>/dev/null || true)
+fi
 
 echo "Done. Don't forget to add a CHANGELOG.md entry for ${NEW}."

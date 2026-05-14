@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
-# Check whether the running syslog-mcp systemd unit or Docker container is using
-# the currently installed artifact.
+# Check whether the running systemd unit or Docker container uses the current artifact.
 set -euo pipefail
 
 MODE="auto"
 PULL="false"
-UNIT="syslog-mcp.service"
-SERVICE="syslog-mcp"
-COMPOSE_DIR="${SYSLOG_MCP_COMPOSE_DIR:-${HOME}/.claude/plugins/data/syslog-jmagar-lab}"
-EXPECTED_BINARY="${SYSLOG_MCP_EXPECTED_BINARY:-}"
+UNIT="${EXAMPLE_MCP_SYSTEMD_UNIT:-example-mcp.service}"
+SERVICE="${EXAMPLE_MCP_DOCKER_SERVICE:-example-mcp}"
+COMPOSE_DIR="${EXAMPLE_MCP_COMPOSE_DIR:-$(pwd)}"
+EXPECTED_BINARY="${EXAMPLE_MCP_EXPECTED_BINARY:-}"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/check-runtime-current.sh [--mode auto|systemd|docker] [--pull] [--compose-dir DIR] [--expected-binary PATH]
+Usage: scripts/check-runtime-current.sh [OPTIONS]
 
 Checks:
   systemd: running /proc/<pid>/exe hash == unit ExecStart binary hash
   docker:  running container image ID == local compose image ID
 
 Options:
-  --pull                  Docker only: pull compose image before comparing.
-                          Without this, Docker mode only proves the container
-                          matches the image already present in the local cache.
-  --compose-dir DIR       Docker compose project dir (default: plugin data dir)
-  --expected-binary PATH  Systemd: also compare running binary to this path
+  --mode auto|systemd|docker  Runtime to check. Default: auto.
+  --pull                      Docker only: pull compose image before comparing.
+  --unit NAME                 Systemd user unit. Default: example-mcp.service.
+  --service NAME              Docker Compose service/container. Default: example-mcp.
+  --compose-dir DIR           Docker Compose project dir. Default: current directory.
+  --expected-binary PATH      Systemd: also compare running binary to this path.
+  -h, --help                  Show this help.
+
+TEMPLATE:
+  Replace EXAMPLE_* env vars, example-mcp, and example binary names when adapting.
 EOF
 }
 
@@ -33,16 +37,21 @@ while [[ $# -gt 0 ]]; do
       MODE="${2:?--mode requires a value}"
       case "$MODE" in
         auto|systemd|docker) ;;
-        *)
-          echo "invalid mode: $MODE" >&2
-          exit 2
-          ;;
+        *) echo "invalid mode: $MODE" >&2; exit 2 ;;
       esac
       shift 2
       ;;
     --pull)
       PULL="true"
       shift
+      ;;
+    --unit)
+      UNIT="${2:?--unit requires a value}"
+      shift 2
+      ;;
+    --service)
+      SERVICE="${2:?--service requires a value}"
+      shift 2
       ;;
     --compose-dir)
       COMPOSE_DIR="${2:?--compose-dir requires a value}"
@@ -76,7 +85,7 @@ version_of() {
 }
 
 status_line() {
-  printf '%-10s %s\n' "$1" "$2"
+  printf '%-18s %s\n' "$1" "$2"
 }
 
 detect_mode() {
@@ -166,6 +175,7 @@ check_docker() {
   local cid running_image image local_image repo_digests
   status_line mode docker
   status_line compose_dir "$COMPOSE_DIR"
+  status_line service "$SERVICE"
 
   if [[ -d "$COMPOSE_DIR" ]]; then
     cid="$(cd "$COMPOSE_DIR" && docker compose ps -q "$SERVICE" 2>/dev/null || true)"
@@ -176,7 +186,7 @@ check_docker() {
     cid="$(docker ps --filter "name=^/${SERVICE}$" --format '{{.ID}}' 2>/dev/null | head -1)"
   fi
   if [[ -z "$cid" ]]; then
-    echo "FAIL: syslog-mcp container is not running"
+    echo "FAIL: $SERVICE container is not running"
     return 1
   fi
 
@@ -219,7 +229,7 @@ case "$MODE" in
   systemd) check_systemd ;;
   docker) check_docker ;;
   none)
-    echo "FAIL: no running syslog-mcp systemd unit or container detected"
+    echo "FAIL: no running $UNIT systemd unit or $SERVICE container detected"
     exit 1
     ;;
   *)

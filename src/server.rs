@@ -1,0 +1,81 @@
+//! HTTP server application state and auth policy.
+//!
+//! `AppState` is injected into every request handler via axum's `State` extractor.
+//! `AuthPolicy` determines which auth middleware (if any) is mounted on the router.
+
+use std::sync::Arc;
+
+use lab_auth::AuthLayer;
+
+use crate::{app::ExampleService, config::McpConfig};
+
+pub mod routes;
+
+pub use routes::router;
+
+/// Authentication policy attached to [`AppState`].
+///
+/// Intentionally an enum — constructing `AppState` requires an explicit choice.
+/// There is no `Default` impl.
+#[derive(Clone)]
+pub enum AuthPolicy {
+    /// No authentication. Only legal when bound to a loopback address.
+    /// Scope checks are bypassed — the bind itself is the trust boundary.
+    LoopbackDev,
+    /// Authentication middleware is mounted. Scope checks MUST run.
+    /// - `Some(auth_state)`: OAuth mode (Google flow + JWKS issuance)
+    /// - `None`: static bearer token only
+    Mounted {
+        auth_state: Option<Arc<lab_auth::state::AuthState>>,
+    },
+}
+
+impl std::fmt::Debug for AuthPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuthPolicy::LoopbackDev => f.write_str("AuthPolicy::LoopbackDev"),
+            AuthPolicy::Mounted {
+                auth_state: Some(_),
+            } => f.write_str("AuthPolicy::Mounted { auth_state: Some(<AuthState>) }"),
+            AuthPolicy::Mounted { auth_state: None } => {
+                f.write_str("AuthPolicy::Mounted { auth_state: None /* bearer-only */ }")
+            }
+        }
+    }
+}
+
+/// Shared application state injected into every request handler.
+#[derive(Clone)]
+pub struct AppState {
+    pub config: McpConfig,
+    pub auth_policy: AuthPolicy,
+    pub service: ExampleService,
+}
+
+/// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` for
+/// [`AuthPolicy::LoopbackDev`] (loopback bind is the trust boundary).
+pub fn build_auth_layer(
+    policy: &AuthPolicy,
+    static_token: Option<Arc<str>>,
+    resource_url: Option<Arc<str>>,
+) -> Option<AuthLayer> {
+    match policy {
+        AuthPolicy::LoopbackDev => None,
+        AuthPolicy::Mounted { auth_state } => {
+            if static_token.is_none() && auth_state.is_none() {
+                tracing::warn!(
+                    "auth layer mounted but no static_token or auth_state configured — \
+                     all requests will be rejected; set EXAMPLE_MCP_TOKEN or configure OAuth"
+                );
+            }
+            Some(
+                AuthLayer::new()
+                    .with_static_token(static_token)
+                    .with_auth_state(auth_state.clone())
+                    .with_static_token_scopes(vec!["example:read".into(), "example:admin".into()])
+                    .with_resource_url(resource_url)
+                    .with_allow_session_cookie(false),
+            )
+        }
+    }
+}

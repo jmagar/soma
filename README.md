@@ -2,6 +2,26 @@
 
 A reusable Rust template for building MCP servers using the [rmcp](https://crates.io/crates/rmcp) crate. Clone this, rename a handful of identifiers, drop in your API client, and you have a working MCP server with both stdio and Streamable HTTP transports, bearer token or Google OAuth authentication, elicitation support, resources, and prompts.
 
+## Rust Server Family
+
+This template is the reference point for the local Rust MCP/server family:
+
+| Local path | GitHub repo | Binary |
+| --- | --- | --- |
+| `../lab` | `jmagar/lab` | `labby` |
+| `../axon_rust` | `jmagar/axon` | `axon` |
+| `../syslog-mcp` | `jmagar/syslog-mcp` | `syslog` |
+| `../rustify` | `jmagar/rustify` | `gotify` |
+| `../rustifi` | `jmagar/rustifi` | `unifi` |
+| `../apprise-mcp` | `jmagar/apprise-mcp` | `apprise` |
+| `../rustscale` | `jmagar/rustscale` | `tailscale` |
+| `../rmcp-template` | `jmagar/rmcp-template` | `example` |
+| `../unrust` | `jmagar/unrust` | `unraid` |
+
+## Plugin Surfaces
+
+The template ships Claude Code, Codex, and Gemini plugin surfaces from one shared `plugins/example/` package. See [docs/PLUGINS.md](docs/PLUGINS.md) for the manifest layout, shared MCP config, skills, hook setup contract, and per-host adaptation checklist.
+
 ## What this template gives you
 
 - **Layered architecture** — transport client → service → MCP/CLI shims, enforced by convention
@@ -34,7 +54,7 @@ The rule: **zero business logic in `tools.rs` or `cli.rs`**. Both are pure shims
 ```bash
 git clone https://github.com/jmagar/rmcp-template
 cd rmcp-template
-cargo run -- serve          # Streamable HTTP on :3100
+cargo run -- serve          # Streamable HTTP on :40060
 # or
 cargo run -- mcp            # stdio transport
 # or
@@ -44,14 +64,14 @@ cargo run -- greet --name Alice
 Health check:
 
 ```bash
-curl http://localhost:3100/health
+curl http://localhost:40060/health
 # {"status":"ok"}
 ```
 
 Call the MCP tool directly:
 
 ```bash
-curl -s -X POST http://localhost:3100/mcp \
+curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"greet","name":"Alice"}}}'
@@ -207,7 +227,7 @@ Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issue
 | `EXAMPLE_API_URL` | no | — | Upstream service base URL |
 | `EXAMPLE_API_KEY` | no | — | Upstream service API key |
 | `EXAMPLE_MCP_HOST` | no | `0.0.0.0` | Bind host |
-| `EXAMPLE_MCP_PORT` | no | `3100` | Bind port |
+| `EXAMPLE_MCP_PORT` | no | `40060` | Bind port |
 | `EXAMPLE_MCP_NO_AUTH` | no | `false` | Disable auth (loopback only; 1/true/yes) |
 | `EXAMPLE_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
 | `EXAMPLE_MCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
@@ -235,8 +255,51 @@ just fmt              # cargo fmt
 just build            # cargo build
 just release          # cargo build --release
 just gen-token        # openssl rand -hex 32
-just health           # curl http://localhost:3100/health | jq .
+just health           # curl http://localhost:40060/health | jq .
 ```
+
+## Portable automation
+
+This template includes reusable automation pulled from the local Rust server
+family and generalized for new MCP services:
+
+| Command | Purpose |
+|---|---|
+| `just install-tools` / `just bootstrap` | Install common local tools (`cargo-nextest`, `taplo`, `cargo-deny`, `bacon`, `cargo-llvm-cov`, `lefthook`, `cargo-audit`) |
+| `just install-hooks` | Enable the fast lefthook pre-commit checks |
+| `just deps-check` | Report lockfile-compatible and latest direct dependency updates |
+| `just blob-size-check` | Block oversized changed blobs before they land in git |
+| `just file-size-check` | Check staged source files against line-count budgets |
+| `just ascii-check` / `just ascii-fix` | Find or rewrite unexpected non-ASCII characters in tracked source/config/docs |
+| `just test-cov` | Generate an HTML Rust coverage report with `cargo llvm-cov` |
+| `just watch` | Run interactive Rust checks with `bacon` |
+| `just validate-plugin` | Validate plugin manifests, shared MCP config, hook config, and skills |
+| `just runtime-current` | Detect whether Docker/systemd is running the current built artifact |
+| `just schema-docs` / `just schema-docs-check` | Generate or verify [docs/MCP_SCHEMA.md](docs/MCP_SCHEMA.md) from the MCP action schema |
+| `just template-check` | Run plugin layout, schema drift, and template feature checks |
+| `just auth-smoke` | Smoke-test bearer-token MCP HTTP auth against a running server |
+| `just pre-release` | Run the release-readiness gate |
+| `just up` / `just down` | Short aliases for Docker Compose start/stop |
+
+See [scripts/README.md](scripts/README.md) for script-level options and
+template adaptation notes.
+
+## Documentation map
+
+When changing template automation or generated surfaces, update the matching
+docs in the same change:
+
+| Surface | Documentation |
+|---|---|
+| Just recipes and portable commands | This README's portable automation table |
+| Script options and environment variables | [scripts/README.md](scripts/README.md) |
+| MCP actions, scopes, and schema resource | [docs/MCP_SCHEMA.md](docs/MCP_SCHEMA.md), generated by `just schema-docs` |
+| Claude/Codex/Gemini plugin manifests and hook contract | [docs/PLUGINS.md](docs/PLUGINS.md) |
+| Test layers and template checks | [tests/README.md](tests/README.md) |
+| MCP registry publishing | [docs/MCP-REGISTRY-PUBLISH-GUIDE.md](docs/MCP-REGISTRY-PUBLISH-GUIDE.md) |
+
+`just template-check` and CI enforce the highest-risk drift points: plugin
+layout, schema docs, shell template smoke tests, and coupled file changes.
 
 ## MCP client configuration
 
@@ -246,7 +309,7 @@ just health           # curl http://localhost:3100/health | jq .
 {
   "mcpServers": {
     "example": {
-      "url": "http://localhost:3000/mcp",
+      "url": "http://localhost:40060/mcp",
       "headers": { "Authorization": "Bearer YOUR_TOKEN" }
     }
   }
@@ -327,7 +390,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 9. **Update `docker-compose.yml`**
 
-   - Change `3000` to your service's port (must match `config.toml [mcp] port`)
+   - Change `40060` to your service's port (must match `config.toml [mcp] port`)
    - The `${HOME}/.example:/data` volume is already set; rename `.example` to your service
 
 10. **Update `entrypoint.sh`**
@@ -399,7 +462,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
     - `packages[0].identifier` — your OCI image ref
     - `environmentVariables` — your service's actual env vars
 
-    See `docs/server-json-guide.md` for step-by-step publishing instructions.
+    See `docs/MCP-REGISTRY-PUBLISH-GUIDE.md` for step-by-step publishing instructions.
 
 #### Tests
 
@@ -407,7 +470,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
     Add semantic checks for your actions. Validate actual field values, not just key existence.
 
-21. **Run all checks**
+23. **Run all checks**
 
     ```bash
     cargo check               # must compile clean
@@ -429,7 +492,7 @@ cargo nextest run
 cargo xtask check-env
 
 # Start the server in dev mode
-just dev       # no-auth mode on :3000
+just dev       # no-auth mode on :40060
 
 # Symlink docs for all AI systems
 just symlink-docs

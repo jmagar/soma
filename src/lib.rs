@@ -7,12 +7,16 @@
 //!   [`app`]     — `ExampleService` (business logic)
 //!   [`config`]  — `Config`, `ExampleConfig`, `McpConfig`
 //!   [`example`] — `ExampleClient` (transport stub)
-//!   [`mcp`]     — `AppState`, `AuthPolicy`, router, rmcp handler
+//!   [`mcp`]     — MCP protocol layer (tools, schemas, prompts, server handler)
+//!   [`server`]  — `AppState`, `AuthPolicy`, HTTP router
+//!   [`api`]     — REST API handlers (`POST /v1/example`, health, status)
 
+pub mod api;
 pub mod app;
 pub mod config;
 pub mod example;
 pub mod mcp;
+pub mod server;
 pub mod web;
 
 /// Test helpers — available when `features = ["test-support"]` or in `cfg(test)`.
@@ -27,7 +31,7 @@ pub mod testing {
         app::ExampleService,
         config::{ExampleConfig, McpConfig},
         example::ExampleClient,
-        mcp::{AppState, AuthPolicy},
+        server::{AppState, AuthPolicy},
     };
 
     fn stub_service() -> ExampleService {

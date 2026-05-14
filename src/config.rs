@@ -46,7 +46,7 @@ pub struct McpConfig {
     /// Bind host (EXAMPLE_MCP_HOST). Default: `0.0.0.0`.
     #[serde(default = "default_mcp_host")]
     pub host: String,
-    /// Bind port (EXAMPLE_MCP_PORT). Default: `3100`.
+    /// Bind port (EXAMPLE_MCP_PORT). Default: `40060`.
     #[serde(default = "default_mcp_port")]
     pub port: u16,
     /// MCP server name advertised to clients (EXAMPLE_MCP_SERVER_NAME).
@@ -67,6 +67,20 @@ pub struct McpConfig {
 impl McpConfig {
     pub fn bind_addr(&self) -> String {
         format!("{}:{}", self.host, self.port)
+    }
+
+    /// Return true if the configured bind host resolves to a loopback address.
+    ///
+    /// Uses `IpAddr::is_loopback()` for numeric addresses. Accepts "localhost"
+    /// as a canonical loopback hostname. Any other hostname or parse failure is
+    /// treated as non-loopback — callers must not assume safety in that case.
+    pub fn is_loopback(&self) -> bool {
+        self.host == "localhost"
+            || self
+                .host
+                .parse::<std::net::IpAddr>()
+                .map(|ip| ip.is_loopback())
+                .unwrap_or(false)
     }
 }
 
@@ -183,7 +197,7 @@ impl Default for AuthConfig {
 ///
 /// TEMPLATE: Replace `.example` with your service name (e.g. `.unraid`, `.gotify`).
 ///           The name should match the docker-compose.yml volume mount source.
-pub fn default_data_dir() -> std::path::PathBuf {
+pub fn default_data_dir() -> anyhow::Result<std::path::PathBuf> {
     // Running inside a Docker container — /data is always the mount point.
     // Detection uses /.dockerenv (created by the Docker runtime) or an explicit
     // RUNNING_IN_CONTAINER env var (useful for testing or systemd-nspawn).
@@ -191,14 +205,15 @@ pub fn default_data_dir() -> std::path::PathBuf {
         || std::env::var("RUNNING_IN_CONTAINER").is_ok()
         || std::env::var("container").is_ok()
     {
-        return std::path::PathBuf::from("/data");
+        return Ok(std::path::PathBuf::from("/data"));
     }
 
     // Bare-metal or local dev — use ~/.<service>/
     // TEMPLATE: Replace ".example" with your service name.
-    dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".example")
+    let home = dirs::home_dir().ok_or_else(|| {
+        anyhow::anyhow!("cannot determine home directory — set HOME or RUNNING_IN_CONTAINER=1")
+    })?;
+    Ok(home.join(".example"))
 }
 
 // ── Config loading ────────────────────────────────────────────────────────────
@@ -252,6 +267,28 @@ impl Config {
             "EXAMPLE_MCP_AUTH_ADMIN_EMAIL",
             &mut config.mcp.auth.admin_email,
         );
+        env_opt_str(
+            "EXAMPLE_MCP_GOOGLE_CLIENT_ID",
+            &mut config.mcp.auth.google_client_id,
+        );
+        env_opt_str(
+            "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET",
+            &mut config.mcp.auth.google_client_secret,
+        );
+        if let Ok(v) = std::env::var("EXAMPLE_MCP_AUTH_MODE") {
+            if !v.is_empty() {
+                config.mcp.auth.mode = match v.to_lowercase().as_str() {
+                    "oauth" => AuthMode::OAuth,
+                    "bearer" => AuthMode::Bearer,
+                    other => {
+                        return Err(anyhow::anyhow!(
+                            "invalid EXAMPLE_MCP_AUTH_MODE {:?}: must be \"bearer\" or \"oauth\"",
+                            other
+                        ));
+                    }
+                };
+            }
+        }
 
         // Upstream service config
         env_str("EXAMPLE_API_URL", &mut config.example.api_url);

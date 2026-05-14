@@ -33,23 +33,29 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 # BuildKit cache the compiled dependencies as a separate layer — subsequent
 # builds that only change src/ skip this expensive step entirely.
 COPY Cargo.toml Cargo.lock ./
+# Strip xtask workspace member — not needed in Docker build context
+RUN sed -i 's/, \"xtask\"//g; s/\"xtask\", //g; s/\"xtask\"//g' Cargo.toml
 
 # TEMPLATE: Replace "example" cache IDs with your service name to avoid
 #           sharing cache with other projects on the same build host.
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked && rm -rf src
+    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked -p rmcp-template && rm -rf src
 
 # ── Application build ─────────────────────────────────────────────────────────
 # Now copy the real source and build the actual binary.
 # The `touch src/main.rs` forces Cargo to re-link even when timestamps haven't
 # changed (Docker layer caching can confuse Cargo's incremental build detection).
 COPY src/ src/
+# Embed pre-built Next.js web UI (apps/web/out/ built before docker build).
+# apps/web/out/.gitkeep ensures this COPY always succeeds even on a fresh clone.
+# Populate with `just build-web` or `npm run build` inside apps/web/ first.
+COPY apps/web/out/ apps/web/out/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked && \
+    touch src/main.rs && cargo build --release --locked -p rmcp-template && \
     cp target/release/example /usr/local/bin/example
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
@@ -113,4 +119,4 @@ LABEL io.modelcontextprotocol.server.name="tv.tootie/example-mcp"
 # CMD is the default argument passed to entrypoint.sh.
 # TEMPLATE: Replace "example" with your binary name.
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["example", "serve", "mcp"]
+CMD ["serve", "mcp"]

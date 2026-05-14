@@ -10,12 +10,14 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 |------|------|
 | `src/example.rs` | `ExampleClient` — HTTP/API transport stub; one method per remote operation |
 | `src/app.rs` | `ExampleService` — business layer; all logic lives here, never in shims |
+| `src/server.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` — HTTP server state and auth policy |
+| `src/server/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
+| `src/api.rs` | REST API handlers: `POST /v1/example`, `GET /health`, `GET /status` |
+| `src/mcp.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
 | `src/mcp/tools.rs` | MCP shim: parse JSON args → call service → return `Value` |
 | `src/mcp/schemas.rs` | Tool JSON schema (`EXAMPLE_ACTIONS`, `tool_definitions()`) |
 | `src/mcp/rmcp_server.rs` | `ServerHandler` impl: tools, resources, prompts, scope checks |
-| `src/mcp/routes.rs` | Axum router: `/mcp`, `/health`, OAuth discovery routes |
 | `src/mcp/prompts.rs` | MCP prompts (`quick_start`) |
-| `src/mcp.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` |
 | `src/config.rs` | `Config`, `ExampleConfig`, `McpConfig`, `AuthConfig`, env loading |
 | `src/cli.rs` | CLI shim: parse args → call service → print |
 | `src/main.rs` | Mode dispatch: HTTP server / stdio / CLI |
@@ -56,7 +58,7 @@ For actions with parameters, extract them with `string_arg(&args, "param_name")`
 
 | Variant | When | Effect |
 |---------|------|--------|
-| `AuthPolicy::LoopbackDev` | `no_auth=true` or host starts with `127.` | No auth middleware; scope checks bypassed |
+| `AuthPolicy::LoopbackDev` | `no_auth=true` or host is loopback (`localhost`, `127.*`, `::1`) via `McpConfig::is_loopback()` | No auth middleware; scope checks bypassed |
 | `AuthPolicy::Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
 | `AuthPolicy::Mounted { auth_state: Some(_) }` | `auth_mode = "oauth"` | Full Google OAuth + RS256 JWT issuance |
 
@@ -69,7 +71,7 @@ Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `example:read
 | `EXAMPLE_API_URL` | — | Upstream service base URL |
 | `EXAMPLE_API_KEY` | — | Upstream service API key |
 | `EXAMPLE_MCP_HOST` | `0.0.0.0` | Bind host |
-| `EXAMPLE_MCP_PORT` | `3100` | Bind port |
+| `EXAMPLE_MCP_PORT` | `40060` | Bind port |
 | `EXAMPLE_MCP_NO_AUTH` | `false` | Disable auth (loopback only) |
 | `EXAMPLE_MCP_TOKEN` | — | Static bearer token |
 | `EXAMPLE_MCP_ALLOWED_HOSTS` | — | Extra comma-separated Host header values |
@@ -103,7 +105,7 @@ just test                 # cargo test
 just lint                 # cargo clippy -- -D warnings
 just fmt                  # cargo fmt
 just gen-token            # openssl rand -hex 32
-just health               # curl http://localhost:3100/health | jq .
+just health               # curl http://localhost:40060/health | jq .
 ```
 
 ## Test helpers
@@ -134,11 +136,64 @@ with no CLI analogue.
 the template. The rule is: one row per service method, with both the MCP action name
 and the CLI subcommand/flag documented.
 
+## Plugin versioning
+
+Plugin manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `gemini-extension.json`) do **not** contain a `version` field. The marketplace derives the version from the git commit SHA on every push — adding an explicit version causes every push to be treated as a new version and creates duplicate entries. Do not add `version` to any plugin manifest and do not run `scripts/bump-version.sh` targets against plugin manifests.
+
 ## Common gotchas
 
 - **Stdio mode suppresses logs** — `main.rs` sets log level to `warn` in stdio mode so JSON-RPC is not corrupted by log lines on stdout.
 - **`config.toml` is a template file** — it still contains `unraid-mcp` values; update it when adapting this template.
 - **Scope checks run in `rmcp_server.rs`**, not in `tools.rs`. `tools.rs` only dispatches.
 - **`help` action is public** — `required_scope_for("help")` returns `None`. All other actions require at least `example:read`.
-- **Default port is 3100** — set in `default_mcp_port()` in `config.rs`. Override with `EXAMPLE_MCP_PORT`.
+- **Default port is 40060** — set in `default_mcp_port()` in `config.rs`. Override with `EXAMPLE_MCP_PORT`.
 - **`elicit_name` is MCP-only** — elicitation requires a live client connection; it cannot be invoked from the CLI. This is the one intentional parity exception.
+- **`watch`, `serve`, and `doctor` are CLI infrastructure** — they are not MCP actions and have no parity requirement. `watch` polls `/health` and emits state-change lines to stdout (used by the plugin monitor). `serve` starts the HTTP server. `doctor` runs pre-flight checks. None belong in the MCP parity table.
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd dolt push
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

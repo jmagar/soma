@@ -20,7 +20,8 @@ use rmcp_template::{
     app::ExampleService,
     config::{AuthMode, Config},
     example::ExampleClient,
-    mcp::{self, AppState, AuthPolicy},
+    mcp,
+    server::{self, AppState, AuthPolicy},
 };
 use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -91,7 +92,7 @@ async fn serve_mcp() -> Result<()> {
     );
 
     let bind = state.config.bind_addr();
-    let app = mcp::router(state).layer(tower_http::trace::TraceLayer::new_for_http());
+    let app = server::router(state).layer(tower_http::trace::TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     info!(bind = %bind, "MCP HTTP server listening");
 
@@ -128,6 +129,12 @@ async fn run_cli() -> Result<()> {
             // MCP port, auth mode, etc. — intercept here before service construction.
             cli::doctor::run_doctor(&config, json).await
         }
+        Some(cli::Command::Watch { url, interval }) => {
+            // Watch needs the MCP port to build the default URL but no service layer.
+            let base = url.unwrap_or_else(|| format!("http://localhost:{}", config.mcp.port));
+            cli::watch::run_watch(&base, interval).await
+        }
+        Some(cli::Command::Setup(command)) => cli::run_setup(&config, command).await,
         Some(cmd) => cli::run(cmd, &config.example).await,
         None => {
             eprintln!("Unknown command. Run `example --help` for usage.");
@@ -143,35 +150,34 @@ async fn run_cli() -> Result<()> {
 /// Pattern §27: Binding MCP on 0.0.0.0 with no auth exposes the server to
 /// anyone on the network. This guard prevents accidental exposure.
 ///
-/// Three ways to satisfy the guard:
-///   1. Bind to loopback:  set EXAMPLE_MCP_HOST=127.0.0.1  (or ::1)
-///   2. Enable auth:       set EXAMPLE_MCP_TOKEN=<token>   (bearer mode)
-///                         or set EXAMPLE_MCP_AUTH_MODE=oauth
-///   3. Explicit override: set EXAMPLE_NOAUTH=true          (upstream gateway handles auth)
+/// Five ways to satisfy the guard:
+///   1. Bind to loopback:  EXAMPLE_MCP_HOST=127.0.0.1  (or ::1)
+///   2. Enable auth:       EXAMPLE_MCP_TOKEN=<token>   (bearer mode)
+///                         or EXAMPLE_MCP_AUTH_MODE=oauth
+///   3. Disable auth:      EXAMPLE_MCP_NO_AUTH=true    (local dev / testing)
+///   4. Gateway override:  EXAMPLE_NOAUTH=true          (upstream proxy handles auth)
 ///
-/// TEMPLATE: The env var name for the override is EXAMPLE_NOAUTH (not
-///           EXAMPLE_MCP_NO_AUTH). The latter disables auth for the server's
-///           own middleware. EXAMPLE_NOAUTH tells THIS check that an upstream
-///           reverse proxy or gateway handles auth instead.
+/// TEMPLATE: The env var names use the EXAMPLE_ prefix — update if you change it.
 ///
-/// Note: EXAMPLE_MCP_NO_AUTH (config.mcp.no_auth) disables the auth middleware.
-///       EXAMPLE_NOAUTH is a separate acknowledgement that the operator knows
-///       auth is absent and accepts responsibility.
+/// Note: EXAMPLE_MCP_NO_AUTH removes the auth middleware entirely (LoopbackDev policy).
+///       EXAMPLE_NOAUTH is a separate acknowledgement for the gateway deployment case:
+///       the server mounts an auth layer with no credentials, trusting the upstream
+///       proxy to reject unauthenticated requests before they arrive.
 fn validate_bind_security(config: &Config) -> Result<()> {
-    let is_loopback = config.mcp.host.starts_with("127.") || config.mcp.host == "::1";
-    // has_auth is true when:
-    //   a) auth middleware is active (no_auth is false) AND
-    //   b) at least one auth mechanism is configured (token OR OAuth)
-    // no_auth=true means the server itself disables auth — NOT a safe state for 0.0.0.0.
+    let is_loopback = config.mcp.is_loopback();
+    // has_auth: auth middleware is active AND at least one mechanism is configured.
     let has_auth = !config.mcp.no_auth
         && (config.mcp.api_token.is_some() || config.mcp.auth.mode == AuthMode::OAuth);
+
+    // no_auth=true: operator explicitly opted out of auth (local dev / testing).
+    let no_auth_explicit = config.mcp.no_auth;
 
     // TEMPLATE: The env var name is EXAMPLE_NOAUTH — update if you change the prefix.
     let noauth_override = std::env::var("EXAMPLE_NOAUTH")
         .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
         .unwrap_or(false);
 
-    if !is_loopback && !has_auth && !noauth_override {
+    if !is_loopback && !has_auth && !no_auth_explicit && !noauth_override {
         anyhow::bail!(
             "Refusing to bind MCP server to {} without authentication.\n\
              \n\
@@ -179,9 +185,10 @@ fn validate_bind_security(config: &Config) -> Result<()> {
              1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1\n\
              2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)\n\
              3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth (+ OAuth credentials)\n\
-             4. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)\n\
+             4. Disable auth:        EXAMPLE_MCP_NO_AUTH=true  (local dev or testing)\n\
+             5. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)\n\
              \n\
-             For local dev, run:  just dev   (sets EXAMPLE_MCP_NO_AUTH=true on 0.0.0.0)\n\
+             For local dev, run:  just dev   (sets EXAMPLE_MCP_NO_AUTH=true)\n\
              \n\
              TEMPLATE: Replace EXAMPLE_ prefix with your service's prefix throughout.",
             config.mcp.host
@@ -203,7 +210,7 @@ async fn build_state(config: Config) -> Result<AppState> {
 }
 
 async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
-    if config.mcp.no_auth || config.mcp.host.starts_with("127.") {
+    if config.mcp.no_auth || config.mcp.is_loopback() {
         return Ok(AuthPolicy::LoopbackDev);
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
@@ -236,6 +243,10 @@ fn print_usage() {
   example greet [--name NAME]       Greet NAME (or the world)
   example echo --message MSG        Echo MSG back
   example status                    Show server status
+  example watch [--url URL] [--interval N]  Poll /health and emit on state change
+  example setup check               Check plugin setup without mutating appdata
+  example setup repair              Create missing appdata/env setup files
+  example setup plugin-hook [--no-repair]  Plugin hook JSON contract
 
   example --help                    Show this help
   example --version                 Show version

@@ -1,8 +1,9 @@
 {
   "name": "example",
-  "version": "0.1.0",
-  "description": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server — a Rust-based MCP server built from rmcp-template.",
-  "author": { "name": "your-username" },
+  "description": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server \u2014 a Rust-based MCP server built from rmcp-template.",
+  "author": {
+    "name": "your-username"
+  },
   "repository": "https://github.com/your-org/example-mcp",
   "license": "MIT",
   "keywords": [
@@ -13,20 +14,23 @@
   "mcpServers": "./.mcp.json",
   "hooks": "./hooks/hooks.json",
   "skills": "./skills",
+  "experimental": {
+    "monitors": "./monitors/monitors.json"
+  },
   "userConfig": {
     "use_docker": {
       "type": "boolean",
       "title": "Deploy with Docker",
-      "description": "TEMPLATE: Keep this — both Docker and systemd deployment modes are useful defaults. True: run via docker compose (containerized, easier to upgrade, auto-restart). False: run as a systemd user service (lighter weight, no Docker dependency, logs to journald). Both produce identical behavior — pick based on your host conventions.",
+      "description": "TEMPLATE: Keep this \u2014 both Docker and systemd deployment modes are useful defaults. True: run via docker compose (containerized, easier to upgrade, auto-restart). False: run as a systemd user service (lighter weight, no Docker dependency, logs to journald). Both produce identical behavior \u2014 pick based on your host conventions.",
       "required": true,
       "default": false
     },
     "server_url": {
       "type": "string",
       "title": "Server URL",
-      "description": "Base URL of the MCP HTTP server this Claude Code session connects to. If running locally: keep http://localhost:3000. If connecting to a remote server: set to http://hostname:3000 or https://example.yourdomain.com. Do NOT include a trailing /mcp — the plugin appends it automatically.",
+      "description": "Base URL of the MCP HTTP server this Claude Code session connects to. If running locally: keep http://localhost:40060. If connecting to a remote server: set to http://hostname:40060 or https://example.yourdomain.com. Do NOT include a trailing /mcp \u2014 the plugin appends it automatically.",
       "required": true,
-      "default": "http://localhost:3000"
+      "default": "http://localhost:40060"
     },
     "api_token": {
       "type": "string",
@@ -38,7 +42,7 @@
     "no_auth": {
       "type": "boolean",
       "title": "Disable service auth",
-      "description": "Run the MCP server without authentication. ONLY safe when the server is bound to 127.x (loopback). Use this for local development only — never expose an unauthed MCP server on a network interface.",
+      "description": "Run the MCP server without authentication. ONLY safe when the server is bound to 127.x (loopback). Use this for local development only \u2014 never expose an unauthed MCP server on a network interface.",
       "required": true,
       "default": false
     },
@@ -78,7 +82,7 @@
     "example_api_url": {
       "type": "string",
       "title": "Service API URL",
-      "description": "TEMPLATE: Replace 'example_api_url' with your service's credential field name (e.g. 'myservice_api_url'). Your service's API endpoint — the URL this MCP server calls to fetch data. Example: https://api.example.com/v1. Maps to EXAMPLE_API_URL env var.",
+      "description": "TEMPLATE: Replace 'example_api_url' with your service's credential field name (e.g. 'myservice_api_url'). Your service's API endpoint \u2014 the URL this MCP server calls to fetch data. Example: https://api.example.com/v1. Maps to EXAMPLE_API_URL env var.",
       "sensitive": true,
       "default": ""
     },

@@ -2,14 +2,18 @@
 # Justfile — Development and deployment commands for the Example MCP server
 #
 # TEMPLATE: Replace "example" with your binary/service name throughout.
-#           Replace port 3000 with your service's port if different.
+#           Replace port 40060 with your service's port if different.
 #
 # Usage: just <recipe>   (install just: cargo install just)
 # =============================================================================
 
+# List all available recipes
+default:
+    @just --list
+
 # ── Development ───────────────────────────────────────────────────────────────
 
-# Run the MCP server in development mode (HTTP transport, port 3000, no auth)
+# Run the MCP server in development mode (HTTP transport 40060, no auth)
 dev:
     EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
 
@@ -21,6 +25,10 @@ mcp:
 greet:
     cargo run -- greet --name "Developer"
 
+# Run the doctor pre-flight check
+doctor:
+    cargo run -- doctor
+
 # ── Building ──────────────────────────────────────────────────────────────────
 
 # Compile debug build (fast, includes debug symbols)
@@ -31,12 +39,62 @@ build:
 build-release:
     cargo build --release
 
+# Build the Next.js web UI static export (required before cargo build embeds it)
+# Output lands in apps/web/out/ and is baked into the binary via the `web` feature
+build-web:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -d apps/web ]; then
+        echo "No apps/web directory found — skipping web build"
+        exit 0
+    fi
+    cd apps/web
+    if [ ! -d node_modules ]; then
+        echo "Installing web dependencies..."
+        npm install
+    fi
+    npm run build
+    echo "Web assets built → apps/web/out/"
+
+# Watch apps/web for changes and rebuild on save (requires watchexec: cargo install watchexec-cli)
+web-watch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v watchexec >/dev/null 2>&1; then
+        echo "error: watchexec is required for web-watch" >&2
+        echo "install: cargo install watchexec-cli" >&2
+        exit 1
+    fi
+    echo "Building apps/web once, then watching for changes..."
+    watchexec \
+        --project-origin . \
+        --watch apps/web \
+        --ignore 'apps/web/.next' \
+        --ignore 'apps/web/.next/**' \
+        --ignore 'apps/web/out' \
+        --ignore 'apps/web/out/**' \
+        --ignore 'apps/web/node_modules' \
+        --ignore 'apps/web/node_modules/**' \
+        --debounce 1000ms \
+        --on-busy-update queue \
+        --wrap-process=none \
+        'cd apps/web && npm run build'
+
+# Build the full binary with embedded web assets (runs build-web first)
+build-full: build-web build-release
+
+# Compile optimized release build (short alias used across the Rust server repos)
+release: build-release
+
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 # Run cargo check (fast syntax/type check, no binary output)
-# Use this before committing to catch errors quickly
 check:
     cargo check
+
+# Check Rust formatting without modifying files (used in CI + lefthook)
+fmt-check:
+    cargo fmt -- --check
 
 # Run the full test suite using cargo-nextest (faster, better output than cargo test)
 # Install nextest: cargo install cargo-nextest
@@ -55,6 +113,11 @@ lint:
 fmt:
     cargo fmt
 
+# Auto-fix clippy warnings and format in one pass
+fix:
+    cargo fmt
+    cargo clippy --fix --all-targets --allow-dirty --allow-staged
+
 # Format all TOML files (requires taplo: cargo install taplo-cli)
 fmt-toml:
     taplo format
@@ -63,10 +126,90 @@ fmt-toml:
 check-toml:
     taplo check
 
+# Run license, vulnerability, and source checks (requires cargo-deny: cargo install cargo-deny)
+deny:
+    cargo deny check
+
+# Watch Rust checks interactively (requires bacon: cargo install bacon)
+watch:
+    bacon
+
+# Generate Rust coverage report (requires cargo-llvm-cov)
+test-cov:
+    cargo llvm-cov --html --workspace --all-features
+
+# Report dependency updates without modifying Cargo.lock
+deps-check:
+    bash scripts/check-dependency-updates.sh
+
+# Fail if changed blobs exceed the repo size budget
+blob-size-check:
+    python3 scripts/check-blob-size.py
+
+# Check coupled files such as Justfile/lefthook and scripts/docs
+coupled-files-check:
+    bash scripts/check-coupled-files.sh
+
+# Check tracked source/config/docs for non-ASCII characters
+ascii-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
+    if [[ "${#files[@]}" -eq 0 ]]; then
+        echo "No files to check"
+        exit 0
+    fi
+    python3 scripts/asciicheck.py "${files[@]}"
+
+# Replace common smart punctuation with ASCII in tracked source/config/docs
+ascii-fix:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
+    if [[ "${#files[@]}" -eq 0 ]]; then
+        echo "No files to fix"
+        exit 0
+    fi
+    python3 scripts/asciicheck.py --fix "${files[@]}"
+
+# Check staged source files against line-count budgets
+file-size-check:
+    bash scripts/check-file-size.sh
+
+# Regenerate MCP schema contract docs from src/mcp/schemas.rs
+schema-docs:
+    python3 scripts/check-schema-docs.py --write
+
+# Verify MCP schema contract docs and action surfaces are in sync
+schema-docs-check:
+    python3 scripts/check-schema-docs.py --check
+
+# Run shell/Rust-adjacent template invariant smoke tests
+template-features:
+    bash scripts/test-template-features.sh
+
+# Run fast template-specific checks
+template-check:
+    just validate-plugin
+    just schema-docs-check
+    just template-features
+
+# Run all local quality checks in sequence: fmt-check → lint → check → test
+verify:
+    just fmt-check
+    just lint
+    just check
+    just test
+
 # Run all quality checks in sequence (mirrors CI pipeline)
 # Delegates to cargo xtask ci for the full suite (fmt, clippy, nextest, taplo, audit)
 ci:
     cargo xtask ci
+
+# Remove build artifacts and generated files
+clean:
+    cargo clean
+    rm -rf .cache/ dist/
 
 # ── xtask automation ─────────────────────────────────────────────────────────
 
@@ -78,13 +221,11 @@ dist:
 # Create AGENTS.md and GEMINI.md symlinks next to every CLAUDE.md in the repo.
 # Pattern §32: CLAUDE.md is the single source of truth for project instructions.
 # Run after adding any new CLAUDE.md file.
-# Delegates to cargo xtask (cross-platform, handles nested CLAUDE.md files).
 symlink-docs:
     cargo xtask symlink-docs
 
 # Inline version of symlink-docs — no xtask required.
 # TEMPLATE: Use this if xtask is unavailable (e.g. before first cargo build).
-#           Both versions produce the same result.
 symlink-docs-inline:
     find . -name "CLAUDE.md" -not -path "./.git/*" -not -path "./target/*" \
         -exec sh -c 'dir=$(dirname "$1"); ln -sf CLAUDE.md "${dir}/AGENTS.md"; ln -sf CLAUDE.md "${dir}/GEMINI.md"; echo "  link ${dir}/AGENTS.md + ${dir}/GEMINI.md"' _ {} \;
@@ -92,6 +233,35 @@ symlink-docs-inline:
 # Validate required environment variables are set before starting the server.
 check-env:
     cargo xtask check-env
+
+# Install common development tools used by this Justfile
+install-tools:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v cargo-binstall >/dev/null 2>&1; then
+        cargo install cargo-binstall
+    fi
+    cargo binstall cargo-nextest --quiet --no-confirm
+    cargo binstall taplo-cli --quiet --no-confirm
+    cargo binstall cargo-deny --quiet --no-confirm
+    cargo binstall bacon --quiet --no-confirm
+    cargo binstall cargo-llvm-cov --quiet --no-confirm
+    cargo binstall lefthook --quiet --no-confirm
+    cargo binstall cargo-audit --quiet --no-confirm
+    if [ -d apps/web ]; then
+        (cd apps/web && npm install)
+    fi
+
+# Alias for install-tools, matching the other Rust workspace convention
+bootstrap: install-tools
+
+# Install lefthook git hooks
+install-hooks:
+    lefthook install
+
+# Uninstall lefthook git hooks
+uninstall-hooks:
+    lefthook uninstall
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -107,6 +277,10 @@ setup:
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 
+# Build the Docker image from source (does not start the container)
+docker-build:
+    docker build -f config/Dockerfile -t example-mcp .
+
 # Start the Docker Compose stack in detached mode
 # TEMPLATE: The compose file references the "jakenet" external network.
 #           Create it first if it doesn't exist: docker network create jakenet
@@ -117,6 +291,16 @@ docker-up:
 docker-down:
     docker compose down
 
+# Short alias for docker-up
+up: docker-up
+
+# Short alias for docker-down
+down: docker-down
+
+# Restart the running container (faster than down+up; no image rebuild)
+restart:
+    docker compose restart
+
 # Rebuild the Docker image from source and restart the stack
 docker-rebuild:
     docker compose build --no-cache
@@ -126,14 +310,32 @@ docker-rebuild:
 docker-logs:
     docker compose logs -f
 
+# Short alias for docker-logs
+logs:
+    docker compose logs -f
+
 # ── Health & diagnostics ──────────────────────────────────────────────────────
 
 # Check the MCP server health endpoint (no auth required)
-# TEMPLATE: Change port 3000 if you use a different port
+# TEMPLATE: Change port 40060 if you use a different port
 health:
-    curl -sf http://localhost:3000/health | python3 -m json.tool
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if command -v jq >/dev/null 2>&1; then
+        curl -sf http://localhost:40060/health | jq .
+    else
+        curl -sf http://localhost:40060/health | python3 -m json.tool
+    fi
 
-# Call the status action via the MCP tool (requires EXAMPLE_MCP_TOKEN in env)
+# Verify that the running Docker/systemd service matches the current artifact
+runtime-current:
+    bash scripts/check-runtime-current.sh --expected-binary target/release/example
+
+# Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
+auth-smoke:
+    bash scripts/test-mcp-auth.sh
+
+# Call the status action via the REST API (requires EXAMPLE_MCP_TOKEN in env)
 status:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -142,55 +344,77 @@ status:
         echo "Set EXAMPLE_MCP_TOKEN or use 'just dev' (no-auth mode)"
         exit 1
     fi
-    curl -sf http://localhost:3000/mcp \
+    curl -sf http://localhost:40060/mcp \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
         -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"status"}}}' \
-        | python3 -m json.tool
+        | { if command -v jq >/dev/null 2>&1; then jq .; else python3 -m json.tool; fi; }
 
 # ── Plugin ────────────────────────────────────────────────────────────────────
 
-# Repair the plugin deployment (re-runs plugin-setup.sh manually)
-# Useful after a failed install or config change
+# Repair: stop, rebuild, and restart via systemd user unit or Docker Compose
 repair:
     #!/usr/bin/env bash
     set -euo pipefail
-    SCRIPT="plugins/example/hooks/plugin-setup.sh"
-    if [[ ! -f "${SCRIPT}" ]]; then
-        echo "ERROR: ${SCRIPT} not found — run from the project root"
-        exit 1
+    echo "==> Stopping example-mcp..."
+    if systemctl --user is-active --quiet example-mcp.service 2>/dev/null; then
+        systemctl --user stop example-mcp.service
+        echo "    stopped systemd unit"
+    elif docker ps --filter 'name=^/example-mcp$' --quiet 2>/dev/null | grep -q .; then
+        docker stop example-mcp >/dev/null 2>&1 || true
+        echo "    stopped docker container"
+    else
+        echo "    no running instance found"
     fi
-    bash "${SCRIPT}"
+    echo "==> Rebuilding release binary..."
+    cargo build --release
+    echo "==> Restarting..."
+    if systemctl --user list-unit-files example-mcp.service 2>/dev/null | grep -q example-mcp; then
+        mkdir -p "${HOME}/.local/bin"
+        install -m 755 target/release/example "${HOME}/.local/bin/example"
+        systemctl --user start example-mcp.service
+        echo "    started systemd unit"
+    elif [ -f docker-compose.yml ]; then
+        docker compose build
+        docker compose up -d --force-recreate
+        echo "    started docker compose service"
+    else
+        echo "    no service manager detected; binary at target/release/example"
+    fi
+    echo "==> Done"
 
-# Install the release binary into bin/ (for plugin distribution)
-# Linux only — Windows needs .exe; requires release build first
-install: build-release
+# Copy the release binary into bin/ (for plugin distribution; Linux only; requires git lfs)
+# TEMPLATE: Replace "example" with your binary name
+build-plugin: build-release
     #!/bin/sh
     set -eu
-    # TEMPLATE: Replace "example" with your binary name
     target_dir="${CARGO_TARGET_DIR:-target}"
-    mkdir -p bin
+    if [ ! -x "${target_dir}/release/example" ] && [ -x ".cache/cargo/release/example" ]; then
+        target_dir=".cache/cargo"
+    fi
+    mkdir -p bin plugins/example/bin
     install -m 755 "${target_dir}/release/example" bin/example
-    echo "Installed bin/example"
+    install -m 755 "${target_dir}/release/example" plugins/example/bin/example
+    echo "Installed bin/example and plugins/example/bin/example"
+
+# Install the release binary into bin/ (alias for build-plugin kept for compatibility)
+install: build-plugin
+
+# Install the release binary on the local PATH for runtime smoke testing
+install-local: build-release
+    mkdir -p "${HOME}/.local/bin"
+    install -m 755 target/release/example "${HOME}/.local/bin/example"
+    @echo "Installed ${HOME}/.local/bin/example"
+
+# Validate all plugin manifests, MCP config, hooks, and skills
+validate-plugin:
+    bash scripts/validate-plugin-layout.sh
 
 # Validate all plugin skills have required SKILL.md fields
-validate-skills:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    found=0
-    for dir in plugins/example/skills/*; do
-        [[ -d "$dir" ]] || continue
-        found=1
-        test -f "$dir/SKILL.md" || { echo "MISSING: $dir/SKILL.md"; exit 1; }
-        grep -q '^name:' "$dir/SKILL.md" || { echo "MISSING name: in $dir/SKILL.md"; exit 1; }
-        grep -q '^description:' "$dir/SKILL.md" || { echo "MISSING description: in $dir/SKILL.md"; exit 1; }
-        echo "OK: $dir/SKILL.md"
-    done
-    [[ "$found" -eq 1 ]] || { echo "No skills found in plugins/example/skills/"; exit 1; }
-    echo "All skills valid"
+validate-skills: validate-plugin
 
-# ── mcporter integration tests ────────────────────────────────────────────────
+# ── mcporter ─────────────────────────────────────────────────────────────────
 
 # Run mcporter-based integration tests (requires running server + mcporter CLI)
 # TEMPLATE: Ensure the server is running first: just dev   or   just docker-up
@@ -203,9 +427,40 @@ test-mcporter:
     fi
     bash tests/mcporter/test-tools.sh
 
+# Run the release-readiness gate
+pre-release:
+    bash scripts/pre-release-check.sh
+
+# Generate a standalone CLI for this server via mcporter (requires running server)
+# TEMPLATE: Update port and token env var name
+generate-cli:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Server must be running on port 40060 (run 'just dev' first)"
+    echo "Generated CLI embeds your token — do not commit or share"
+    mkdir -p dist dist/.cache
+    current_hash=$(timeout 10 curl -sf \
+        -H "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
+        -H "Accept: application/json, text/event-stream" \
+        http://localhost:40060/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
+    cache_file="dist/.cache/example-cli.schema_hash"
+    if [[ -f "$cache_file" ]] && [[ "$(cat "$cache_file")" == "$current_hash" ]] && [[ -f "dist/example-cli" ]]; then
+        echo "SKIP: tool schema unchanged — use existing dist/example-cli"
+        exit 0
+    fi
+    timeout 30 mcporter generate-cli \
+        --command http://localhost:40060/mcp \
+        --header "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
+        --name example-cli \
+        --output dist/example-cli
+    printf '%s' "$current_hash" > "$cache_file"
+    echo "Generated dist/example-cli (requires bun at runtime)"
+
 # ── Publishing ────────────────────────────────────────────────────────────────
 
 # Bump version, tag, and push (triggers CI publish workflow)
+# Updates Cargo.toml + Cargo.lock only — plugin manifests have no version field
+# (GitHub SHA is the version for plugins; every push is a new release automatically)
 # TEMPLATE: Requires main branch + clean working tree
 publish bump="patch":
     #!/usr/bin/env bash
@@ -222,14 +477,13 @@ publish bump="patch":
       *) echo "Usage: just publish [major|minor|patch]"; exit 1 ;;
     esac
     NEW="${major}.${minor}.${patch}"
-    echo "Bumping ${CURRENT} → ${NEW}"
+    echo "Version: ${CURRENT} → ${NEW}"
     sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
     cargo check 2>/dev/null || true
-    git add Cargo.toml Cargo.lock
-    git commit -m "release: v${NEW}"
-    git tag "v${NEW}"
-    git push origin main --tags
+    git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"
+
+# ── Reference docs ────────────────────────────────────────────────────────────
 
 # Refresh local reference documentation (crawls + repomix)
 refresh-docs:
