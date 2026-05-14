@@ -122,7 +122,7 @@ async fn serve_stdio_mcp() -> Result<()> {
 /// Dispatch CLI subcommands.
 async fn run_cli() -> Result<()> {
     let config = Config::load()?;
-    match cli::parse_args() {
+    match cli::parse_args()? {
         Some(cli::Command::Doctor { json }) => {
             // Doctor needs the full Config (not just ExampleConfig) to check
             // MCP port, auth mode, etc. — intercept here before service construction.
@@ -157,13 +157,16 @@ async fn build_state(config: Config) -> Result<AppState> {
 async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
     match resolve_auth_policy_kind(config, trusted_gateway_from_env())? {
         AuthPolicyKind::LoopbackDev => Ok(AuthPolicy::LoopbackDev),
-        AuthPolicyKind::TrustedGateway => Ok(AuthPolicy::TrustedGateway),
+        AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
         AuthPolicyKind::MountedBearer => Ok(AuthPolicy::Mounted { auth_state: None }),
         AuthPolicyKind::MountedOAuth => {
             let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
                 .env_prefix("EXAMPLE_MCP")
                 .session_cookie_name("example_mcp_session")
-                .scopes_supported(vec!["example:read".into(), "example:write".into()])
+                .scopes_supported(vec![
+                    rmcp_template::actions::READ_SCOPE.into(),
+                    rmcp_template::actions::WRITE_SCOPE.into(),
+                ])
                 .default_scope("example:read")
                 .resource_path("/mcp")
                 .enable_dynamic_registration(true)

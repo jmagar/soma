@@ -5,8 +5,8 @@
 //!   - Enforces auth scopes on every call
 //!   - Delegates business logic to `tools.rs` → `app.rs` → `example.rs`
 //!
-//! **Template**: rename `ExampleRmcpServer`. Update `READ_SCOPE`, `DENY_SCOPE`,
-//! and `READ_ONLY_ACTIONS` to match your tool's actions.
+//! **Template**: rename `ExampleRmcpServer`. Update action metadata in
+//! `src/actions.rs` to keep schemas, scope rules, and dispatch in sync.
 
 use std::{borrow::Cow, net::Ipv6Addr, sync::Arc, time::Instant};
 
@@ -26,26 +26,15 @@ use rmcp::{
 };
 use serde_json::{Map, Value};
 
-use crate::{config::McpConfig, token_limit};
+use crate::{
+    actions::{required_scope_for_action, READ_SCOPE, WRITE_SCOPE},
+    config::McpConfig,
+    token_limit,
+};
 
 use crate::server::{AppState, AuthPolicy};
 
 use super::{prompts, schemas::tool_definitions, tools::execute_tool};
-
-// ── scopes ────────────────────────────────────────────────────────────────────
-
-/// OAuth scope required for read operations.
-/// **Template**: change to `"myservice:read"`.
-const READ_SCOPE: &str = "example:read";
-
-/// Sentinel scope for actions that should always be denied.
-/// Add admin-only actions here once you implement write operations.
-const DENY_SCOPE: &str = "example:__deny__";
-
-/// Actions allowed with `example:read` scope.
-/// `help` requires no scope (public docs).
-/// **Template**: keep this in sync with `EXAMPLE_ACTIONS` in `schemas.rs`.
-const READ_ONLY_ACTIONS: &[&str] = &["greet", "echo", "status", "elicit_name"];
 
 // ── server ────────────────────────────────────────────────────────────────────
 
@@ -131,9 +120,10 @@ impl ServerHandler for ExampleRmcpServer {
                     error = %error,
                     "MCP tool execution failed"
                 );
-                Ok(CallToolResult::error(vec![Content::text(format!(
-                    "Tool execution failed for action '{action}'. Check server logs for details."
-                ))]))
+                Err(ErrorData::internal_error(
+                    format!("tool execution failed for action '{action}'"),
+                    None,
+                ))
             }
         }
     }
@@ -296,7 +286,7 @@ fn require_auth_context<'a>(
     ctx: &'a RequestContext<RoleServer>,
 ) -> Result<Option<&'a AuthContext>, ErrorData> {
     match &state.auth_policy {
-        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGateway => Ok(None),
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => Ok(None),
         AuthPolicy::Mounted { .. } => {
             let parts = ctx
                 .extensions
@@ -320,7 +310,7 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
     let satisfied = auth
         .scopes
         .iter()
-        .any(|s| s == required_scope || (required_scope == READ_SCOPE && s == "example:admin"));
+        .any(|s| s == required_scope || (required_scope == READ_SCOPE && s == WRITE_SCOPE));
     if satisfied {
         return Ok(());
     }
@@ -337,18 +327,11 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
 }
 
 fn required_scope_for(action: &str) -> Option<&'static str> {
-    if action == "help" {
-        None // help is always public
-    } else if READ_ONLY_ACTIONS.contains(&action) {
-        Some(READ_SCOPE)
-    } else {
-        Some(DENY_SCOPE)
-    }
+    required_scope_for_action(action)
 }
 
 fn is_validation_error(error: &anyhow::Error) -> bool {
-    let msg = error.to_string();
-    msg.contains(" is required") || msg.contains("unknown example action")
+    crate::actions::is_validation_error(error)
 }
 
 // ── allowed hosts / origins ───────────────────────────────────────────────────

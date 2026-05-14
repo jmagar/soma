@@ -1,6 +1,6 @@
 # MCP Schema Contract
 
-Generated from `src/mcp/schemas.rs` and checked against README, skill docs, help text, and scope routing.
+Generated from `src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.
 
 Run:
 
@@ -29,7 +29,7 @@ python3 scripts/check-schema-docs.py --check
 
 ## Drift Rules
 
-- `EXAMPLE_ACTIONS` in `src/mcp/schemas.rs` is the canonical action list.
-- `READ_ONLY_ACTIONS` in `src/mcp/rmcp_server.rs` must include every scoped read action.
-- `help` is intentionally public and must not appear in `READ_ONLY_ACTIONS`.
+- `ACTION_SPECS` in `src/actions.rs` is the canonical action and scope list.
+- `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.
+- `help` is intentionally public and must have no required scope.
 - `src/mcp/tools.rs`, `README.md`, and `plugins/example/skills/example/SKILL.md` must mention every action.

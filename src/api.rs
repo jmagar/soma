@@ -16,10 +16,12 @@ use crate::server::AppState;
 
 /// Request body for `POST /v1/example`.
 ///
-/// Same `action` + `params` shape as the MCP tool interface — all three surfaces
-/// (MCP, REST, CLI) call the same `ExampleService` methods.
+/// REST uses an explicit `{ action, params }` envelope. MCP uses a flat
+/// argument object such as `{ action, message }`. Both convert into the same
+/// typed `ExampleAction` before calling `ExampleService`.
 #[derive(Deserialize)]
 pub struct ActionRequest {
+    #[serde(default)]
     pub action: String,
     #[serde(default)]
     pub params: Value,
@@ -40,11 +42,19 @@ pub async fn api_dispatch(
 
     match result {
         Ok(value) => Json(value).into_response(),
-        Err(e) => (
+        Err(e) if crate::actions::is_validation_error(&e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),
         )
             .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, action = %body.action, "REST action execution failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -55,11 +65,22 @@ pub async fn health() -> impl IntoResponse {
 
 /// `GET /status` — runtime status (unauthenticated, redacts secrets).
 pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
-    Json(json!({
-        "status": "ok",
-        "server": state.config.server_name,
-        "version": env!("CARGO_PKG_VERSION"),
-        "transport": "http",
-    }))
-    .into_response()
+    match state.service.status().await {
+        Ok(mut value) => {
+            if let Some(object) = value.as_object_mut() {
+                object.insert("server".into(), json!(state.config.server_name));
+                object.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
+                object.insert("transport".into(), json!("http"));
+            }
+            Json(value).into_response()
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "runtime status check failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "status check failed"})),
+            )
+                .into_response()
+        }
+    }
 }

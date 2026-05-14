@@ -278,10 +278,19 @@ pub fn check_dir_writable(label: &str, dir: &Path) -> DoctorCheck {
     let test_file = dir.join(".doctor_write_test");
     match std::fs::write(&test_file, b"") {
         Ok(_) => {
-            let _ = std::fs::remove_file(&test_file);
+            if let Err(e) = std::fs::remove_file(&test_file) {
+                return DoctorCheck::fail(
+                    "config",
+                    name,
+                    format!(
+                        "Writable, but cleanup failed for {}: {e}",
+                        test_file.display()
+                    ),
+                );
+            }
 
-            // Report size if it's the log dir.
-            let size_label = dir_size_label(dir);
+            let size_label =
+                dir_size_label(dir).unwrap_or_else(|error| format!("; size unavailable: {error}"));
             DoctorCheck::pass("config", name, format!("writable{size_label}"))
         }
         Err(e) => DoctorCheck::fail(
@@ -292,34 +301,33 @@ pub fn check_dir_writable(label: &str, dir: &Path) -> DoctorCheck {
     }
 }
 
-/// Return a human-readable size label for a directory, or empty string on error.
-fn dir_size_label(dir: &Path) -> String {
-    fn du(dir: &Path) -> Option<u64> {
+/// Return a human-readable size label for a directory.
+fn dir_size_label(dir: &Path) -> Result<String> {
+    fn du(dir: &Path) -> Result<u64> {
         let mut total = 0u64;
-        let entries = std::fs::read_dir(dir).ok()?;
-        for entry in entries.flatten() {
-            let meta = entry.metadata().ok()?;
+        let entries = std::fs::read_dir(dir)?;
+        for entry in entries {
+            let entry = entry?;
+            let meta = entry.metadata()?;
             if meta.is_file() {
                 total += meta.len();
             } else if meta.is_dir() {
-                total += du(&entry.path()).unwrap_or(0);
+                total += du(&entry.path())?;
             }
         }
-        Some(total)
+        Ok(total)
     }
 
-    match du(dir) {
-        Some(bytes) if bytes > 0 => {
-            if bytes < 1024 {
-                format!(", {} B", bytes)
-            } else if bytes < 1024 * 1024 {
-                format!(", {:.1} KB", bytes as f64 / 1024.0)
-            } else {
-                format!(", {:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-            }
-        }
-        _ => String::new(),
-    }
+    let bytes = du(dir)?;
+    Ok(if bytes == 0 {
+        String::new()
+    } else if bytes < 1024 {
+        format!(", {} B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!(", {:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!(", {:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+    })
 }
 
 /// Check that the binary is on `$PATH`.
@@ -505,9 +513,9 @@ pub fn check_port_available(port: u16) -> DoctorCheck {
 /// - Warns if no auth is configured.
 ///
 /// # TEMPLATE
-/// This check mirrors `validate_bind_security()` in main.rs but produces a
-/// friendly report instead of aborting. No logic changes needed unless you
-/// add a new auth mode.
+/// This check mirrors `resolve_auth_policy_kind()` but produces a friendly
+/// report instead of aborting. No logic changes needed unless you add a new
+/// auth mode.
 pub fn check_auth_config(config: &Config) -> DoctorCheck {
     let noauth_override = std::env::var("EXAMPLE_NOAUTH")
         .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
@@ -519,10 +527,10 @@ pub fn check_auth_config(config: &Config) -> DoctorCheck {
         Ok(AuthPolicyKind::LoopbackDev) => {
             DoctorCheck::pass("auth", "Auth mode", "no-auth (loopback bind)")
         }
-        Ok(AuthPolicyKind::TrustedGateway) => DoctorCheck::pass(
+        Ok(AuthPolicyKind::TrustedGatewayUnscoped) => DoctorCheck::pass(
             "auth",
             "Auth mode",
-            "trusted gateway (EXAMPLE_NOAUTH=true — upstream handles auth)",
+            "trusted gateway unscoped (EXAMPLE_NOAUTH=true — upstream handles auth and authz)",
         ),
         Ok(AuthPolicyKind::MountedOAuth) => {
             DoctorCheck::pass("auth", "Auth mode", "OAuth (Google)")

@@ -121,9 +121,9 @@ just schema-docs
 just schema-docs-check
 ```
 
-The checker treats `EXAMPLE_ACTIONS` in `src/mcp/schemas.rs` as canonical, then
-verifies `READ_ONLY_ACTIONS`, `src/mcp/tools.rs` help text, `README.md`, and the
-shared skill mention every action. Generated output lives in
+The checker treats `ACTION_SPECS` in `src/actions.rs` as canonical, then
+verifies the schema, `src/mcp/tools.rs` help text, `README.md`, and the shared
+skill mention every action. Generated output lives in
 `docs/MCP_SCHEMA.md`.
 
 ---

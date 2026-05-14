@@ -27,9 +27,9 @@ pub enum AuthPolicy {
     /// No authentication. Only legal when bound to a loopback address.
     /// Scope checks are bypassed — the bind itself is the trust boundary.
     LoopbackDev,
-    /// No local authentication because an upstream gateway is responsible for
-    /// rejecting unauthenticated traffic before it reaches this server.
-    TrustedGateway,
+    /// No local authentication or scope checks. The deployment must enforce
+    /// both authentication and authorization before traffic reaches this server.
+    TrustedGatewayUnscoped,
     /// Authentication middleware is mounted. Scope checks MUST run.
     /// - `Some(auth_state)`: OAuth mode (Google flow + JWKS issuance)
     /// - `None`: static bearer token only
@@ -42,7 +42,7 @@ impl std::fmt::Debug for AuthPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AuthPolicy::LoopbackDev => f.write_str("AuthPolicy::LoopbackDev"),
-            AuthPolicy::TrustedGateway => f.write_str("AuthPolicy::TrustedGateway"),
+            AuthPolicy::TrustedGatewayUnscoped => f.write_str("AuthPolicy::TrustedGatewayUnscoped"),
             AuthPolicy::Mounted {
                 auth_state: Some(_),
             } => f.write_str("AuthPolicy::Mounted { auth_state: Some(<AuthState>) }"),
@@ -56,7 +56,7 @@ impl std::fmt::Debug for AuthPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthPolicyKind {
     LoopbackDev,
-    TrustedGateway,
+    TrustedGatewayUnscoped,
     MountedBearer,
     MountedOAuth,
 }
@@ -68,6 +68,8 @@ pub fn trusted_gateway_from_env() -> bool {
 }
 
 pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Result<AuthPolicyKind> {
+    validate_public_url(config)?;
+
     if config.mcp.is_loopback() {
         return Ok(AuthPolicyKind::LoopbackDev);
     }
@@ -82,7 +84,7 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
 
     if config.mcp.no_auth {
         if trusted_gateway {
-            return Ok(AuthPolicyKind::TrustedGateway);
+            return Ok(AuthPolicyKind::TrustedGatewayUnscoped);
         }
         anyhow::bail!(
             "Refusing to bind MCP server to {} with EXAMPLE_MCP_NO_AUTH=true.\n\
@@ -98,7 +100,7 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
     } else if has_token {
         Ok(AuthPolicyKind::MountedBearer)
     } else if trusted_gateway {
-        Ok(AuthPolicyKind::TrustedGateway)
+        Ok(AuthPolicyKind::TrustedGatewayUnscoped)
     } else {
         anyhow::bail!(
             "Refusing to bind MCP server to {} without authentication.\n\
@@ -114,6 +116,21 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
             config.mcp.host
         );
     }
+}
+
+fn validate_public_url(config: &Config) -> Result<()> {
+    let Some(public_url) = config.mcp.auth.public_url.as_deref() else {
+        return Ok(());
+    };
+    let parsed = url::Url::parse(public_url)
+        .map_err(|error| anyhow::anyhow!("EXAMPLE_MCP_PUBLIC_URL is invalid: {error}"))?;
+    let Some(host) = parsed.host_str() else {
+        anyhow::bail!("EXAMPLE_MCP_PUBLIC_URL must include a host");
+    };
+    if host.contains('*') {
+        anyhow::bail!("EXAMPLE_MCP_PUBLIC_URL must not contain wildcard hosts");
+    }
+    Ok(())
 }
 
 /// Shared application state injected into every request handler.
@@ -132,7 +149,7 @@ pub fn build_auth_layer(
     resource_url: Option<Arc<str>>,
 ) -> Option<AuthLayer> {
     match policy {
-        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGateway => None,
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => None,
         AuthPolicy::Mounted { auth_state } => {
             if static_token.is_none() && auth_state.is_none() {
                 tracing::warn!(
@@ -144,7 +161,7 @@ pub fn build_auth_layer(
                 AuthLayer::new()
                     .with_static_token(static_token)
                     .with_auth_state(auth_state.clone())
-                    .with_static_token_scopes(vec!["example:read".into()])
+                    .with_static_token_scopes(vec![crate::actions::READ_SCOPE.into()])
                     .with_resource_url(resource_url)
                     .with_allow_session_cookie(false),
             )
@@ -185,21 +202,21 @@ mod tests {
     }
 
     #[test]
-    fn non_loopback_no_auth_with_gateway_is_trusted_gateway() {
+    fn non_loopback_no_auth_with_gateway_is_trusted_gateway_unscoped() {
         let mut config = config("0.0.0.0");
         config.mcp.no_auth = true;
         assert_eq!(
             resolve_auth_policy_kind(&config, true).unwrap(),
-            AuthPolicyKind::TrustedGateway
+            AuthPolicyKind::TrustedGatewayUnscoped
         );
     }
 
     #[test]
-    fn non_loopback_gateway_without_credentials_is_trusted_gateway() {
+    fn non_loopback_gateway_without_credentials_is_trusted_gateway_unscoped() {
         let config = config("0.0.0.0");
         assert_eq!(
             resolve_auth_policy_kind(&config, true).unwrap(),
-            AuthPolicyKind::TrustedGateway
+            AuthPolicyKind::TrustedGatewayUnscoped
         );
     }
 
@@ -231,5 +248,25 @@ mod tests {
         let config = config("0.0.0.0");
         let error = resolve_auth_policy_kind(&config, false).unwrap_err();
         assert!(error.to_string().contains("without authentication"));
+    }
+
+    #[test]
+    fn invalid_public_url_is_rejected() {
+        let mut config = config("0.0.0.0");
+        config.mcp.auth.public_url = Some("not a url".into());
+        let error = resolve_auth_policy_kind(&config, true).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("EXAMPLE_MCP_PUBLIC_URL is invalid"));
+    }
+
+    #[test]
+    fn wildcard_public_url_is_rejected() {
+        let mut config = config("0.0.0.0");
+        config.mcp.auth.public_url = Some("https://*.example.com".into());
+        let error = resolve_auth_policy_kind(&config, true).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("EXAMPLE_MCP_PUBLIC_URL must not contain wildcard hosts"));
     }
 }

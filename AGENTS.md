@@ -43,9 +43,9 @@ ExampleService (app.rs)        ← all business logic
 
 1. `src/example.rs` — add transport method returning `Result<Value>`
 2. `src/app.rs` — add service method delegating to client
-3. `src/mcp/schemas.rs` — add action name to `EXAMPLE_ACTIONS`; add parameters to `tool_definitions()`
-4. `src/mcp/tools.rs` — add match arm in `dispatch_example()`; update `HELP_TEXT`
-5. `src/mcp/rmcp_server.rs` — add to `READ_ONLY_ACTIONS`
+3. `src/actions.rs` — add action metadata to `ACTION_SPECS`
+4. `src/mcp/schemas.rs` — add new parameter schema entries to `tool_definitions()`
+5. `src/mcp/tools.rs` — add match arm in `dispatch_example()`; update `HELP_TEXT`
 6. `src/cli.rs` — add `Command` variant, parse arm, dispatch arm
 7. `tests/tool_dispatch.rs` — add a test
 
@@ -54,10 +54,11 @@ ExampleService (app.rs)        ← all business logic
 | State | Condition | Behavior |
 |-------|-----------|----------|
 | `LoopbackDev` | `no_auth=true` or host starts with `127.` | No auth, no scope checks |
+| `TrustedGatewayUnscoped` | `EXAMPLE_NOAUTH=true` behind an authz-enforcing gateway | No auth, no scope checks |
 | `Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
 | `Mounted { auth_state: Some(_) }` | `EXAMPLE_MCP_AUTH_MODE=oauth` | Google OAuth + RS256 JWT |
 
-`help` action requires no scope. All other actions require `example:read` (or `example:admin` which satisfies read).
+`help` action requires no scope. Read actions require `example:read`; mutating actions require `example:write`, which satisfies read.
 
 ## Environment variables
 

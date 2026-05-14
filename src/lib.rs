@@ -118,7 +118,10 @@ pub mod testing {
         let auth_config = lab_auth::config::AuthConfigBuilder::new()
             .env_prefix("EXAMPLE_MCP")
             .session_cookie_name("example_mcp_session")
-            .scopes_supported(vec!["example:read".into(), "example:admin".into()])
+            .scopes_supported(vec![
+                crate::actions::READ_SCOPE.into(),
+                crate::actions::WRITE_SCOPE.into(),
+            ])
             .default_scope("example:read")
             .resource_path("/mcp")
             .build_from_sources(vars)

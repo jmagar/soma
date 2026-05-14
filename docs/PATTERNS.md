@@ -478,10 +478,15 @@ async fn dispatch(state: &AppState, args: Value) -> anyhow::Result<Value> {
 }
 ```
 
-### JSON schema (mcp/schemas.rs)
+### Action metadata (actions.rs) and JSON schema (mcp/schemas.rs)
 
 ```rust
-pub(super) const EXAMPLE_ACTIONS: &[&str] = &["things", "thing", "delete_thing", "help"];
+pub const ACTION_SPECS: &[ActionSpec] = &[
+    ActionSpec { name: "things", required_scope: Some(READ_SCOPE), transport: ActionTransport::Any },
+    ActionSpec { name: "thing", required_scope: Some(READ_SCOPE), transport: ActionTransport::Any },
+    ActionSpec { name: "delete_thing", required_scope: Some(WRITE_SCOPE), transport: ActionTransport::Any },
+    ActionSpec { name: "help", required_scope: None, transport: ActionTransport::Any },
+];
 
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
@@ -490,7 +495,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "action": { "type": "string", "enum": EXAMPLE_ACTIONS },
+                "action": { "type": "string", "enum": action_names() },
                 "id":     { "type": "string", "description": "Item ID (thing, delete_thing)" },
                 "confirm":{ "type": "boolean", "description": "Required true for destructive ops" }
             },
@@ -507,14 +512,8 @@ const READ_SCOPE:  &str = "example:read";
 const WRITE_SCOPE: &str = "example:write";
 const DENY_SCOPE:  &str = "example:__deny__";  // sentinel — never granted
 
-const READ_ONLY_ACTIONS:  &[&str] = &["things", "thing"];
-const WRITE_ACTIONS:      &[&str] = &["delete_thing"];
-
 fn required_scope_for(action: &str) -> Option<&'static str> {
-    if action == "help" { None }  // auth required but no scope gate
-    else if READ_ONLY_ACTIONS.contains(&action) { Some(READ_SCOPE) }
-    else if WRITE_ACTIONS.contains(&action) { Some(WRITE_SCOPE) }
-    else { Some(DENY_SCOPE) }  // fail-closed: unknown → denied
+    required_scope_for_action(action)
 }
 ```
 
@@ -695,7 +694,7 @@ plugins/
     .mcp.json             ← MCP server connection (uses ${user_config.*})
     hooks/
       hooks.json          ← SessionStart + ConfigChange → plugin-setup.sh
-      plugin-setup.sh     ← deploys server (systemd or docker)
+      plugin-setup.sh     ← thin adapter into `<binary> setup plugin-hook`
     skills/
       <service>/
         SKILL.md          ← three-tier skill (MCP → CLI → curl)
@@ -715,7 +714,6 @@ Adding an explicit version creates drift and requires manual bumping on every re
     "api_token":     { "type": "string",  "title": "API token",          "sensitive": true },
     "no_auth":       { "type": "boolean", "title": "Disable auth",        "default": false },
     "auth_mode":     { "type": "string",  "title": "Auth mode",           "default": "bearer" },
-    "use_docker":    { "type": "boolean", "title": "Deploy with Docker",   "default": false },
     "public_url":    { "type": "string",  "title": "Public URL (OAuth)" },
     "google_client_id":     { "type": "string", "title": "Google client ID",     "sensitive": true },
     "google_client_secret": { "type": "string", "title": "Google client secret", "sensitive": true },
@@ -757,11 +755,13 @@ Adding an explicit version creates drift and requires manual bumping on every re
 ### plugin-setup.sh responsibilities
 
 1. Read `CLAUDE_PLUGIN_OPTION_*` env vars (set by plugin runtime from userConfig)
-2. Write `.env` to `$CLAUDE_PLUGIN_DATA/` with secrets/URLs only
-3. Copy `docker-compose.yml` from plugin root to data dir
-4. Deploy via systemd OR docker based on `use_docker` flag
-5. Handle cutover: if switching from systemd→docker or vice versa, cleanly stop the old deployment
-6. Link binary to `~/.local/bin/<service>` for CLI access
+2. Reject unsafe newline-bearing option values
+3. Export plugin options as runtime env vars
+4. Create the canonical appdata root with private permissions
+5. Ensure the binary is available on `PATH`
+6. Call `<binary> setup plugin-hook "$@"`
+
+The hook script must not own Docker/systemd orchestration, config file rewriting, smoke-test policy, or failure classification. Those behaviors live in the binary setup commands.
 
 ---
 
@@ -1263,7 +1263,7 @@ configured, unless the operator explicitly opts out.
 Centralize this decision in library code, not the binary:
 
 - loopback bind with `EXAMPLE_MCP_NO_AUTH=true` → `LoopbackDev`
-- non-loopback with `EXAMPLE_NOAUTH=true` → `TrustedGateway`
+- non-loopback with `EXAMPLE_NOAUTH=true` → `TrustedGatewayUnscoped`
 - non-loopback with bearer token → mounted bearer auth
 - non-loopback with OAuth mode → mounted OAuth auth
 - non-loopback with `EXAMPLE_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
@@ -1467,7 +1467,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI thin shim
 - Bearer token + Google OAuth authentication
 - Streamable HTTP + stdio transport
-- Docker + systemd deployment
+- Thin plugin setup hook plus binary-owned setup/repair
 - Claude Code plugin with userConfig
 ```
 
@@ -1478,7 +1478,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
 - [ ] Implement API client in `src/<service>.rs` (transport only)
 - [ ] Add service methods to `src/app.rs` (ALL logic here)
-- [ ] Add actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs` (thin shim ONLY)
+- [ ] Add actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs` (thin shim ONLY)
 - [ ] Add CLI commands to `src/cli.rs` (thin shim ONLY)
 - [ ] Update `src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
@@ -1494,7 +1494,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
 - [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
-- [ ] Write `install.sh` with LFS binary download
+- [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
 - [ ] Write `CHANGELOG.md`
 - [ ] Run `just symlink-docs` to create AGENTS.md + GEMINI.md symlinks
@@ -1953,7 +1953,7 @@ Agents and operators should never have to guess what the server is doing.
 | Endpoint | Auth | Description |
 |---|---|---|
 | `GET /health` | none | Basic liveness + upstream connectivity |
-| `GET /status` | bearer | Full runtime state (counters, config, uptime) |
+| `GET /status` | none | Redacted runtime status from the service layer |
 | `GET /metrics` | bearer | Prometheus-compatible metrics (optional) |
 
 ### /health response (always fast, no auth)
@@ -1973,7 +1973,7 @@ Agents and operators should never have to guess what the server is doing.
 If upstream is unreachable, return HTTP 200 with `status: "degraded"` — the MCP
 server is up even if the upstream service is down.
 
-### /status response (full runtime state)
+### /status response (redacted runtime state)
 
 ```json
 {

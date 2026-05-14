@@ -32,7 +32,6 @@ Claude Code plugin manifest. Defines the plugin identity, MCP server connection,
 
 | Field | Type | Description |
 |---|---|---|
-| `use_docker` | boolean | Docker vs systemd deployment |
 | `server_url` | string | MCP HTTP server base URL (default: `http://localhost:3000`) |
 | `api_token` | string (sensitive) | Bearer token for auth |
 | `no_auth` | boolean | Disable auth (loopback dev only; non-loopback requires an upstream gateway) |
@@ -92,25 +91,15 @@ Timeout: 300 seconds.
 
 ### `hooks/plugin-setup.sh`
 
-The deployment and validation script. Runs on every session start and config change.
+The lifecycle adapter. Runs on every session start and config change.
 
-**Two modes** depending on whether `server_url` points to localhost or a remote host:
-
-**Server mode** (localhost) — deploys and manages the MCP server:
 - Reads `CLAUDE_PLUGIN_OPTION_*` env vars from plugin `userConfig`
-- Writes a `.env` file with 600 permissions (idempotent — no restart if unchanged)
-- Symlinks the binary to `~/.local/bin/` so upgrades take effect immediately
-- Detects port conflicts before binding
-- Supports two deployment backends:
-  - **systemd** (`use_docker=false`): creates a user `.service` unit, manages start/stop/reload
-  - **Docker** (`use_docker=true`): runs via `docker-compose`, manages the stack
-- Handles mode switching (stops Docker when switching to systemd and vice versa)
-- Constructs OAuth env blocks and derives Google OAuth redirect URIs when `auth_mode=oauth`
+- Exports those values as the binary's runtime environment variables
+- Prepares the plugin appdata directory
+- Ensures `example` is available on `PATH`
+- Calls `example setup plugin-hook "$@"`
 
-**Client mode** (remote `server_url`) — validates connectivity:
-- Hits the `/health` endpoint and reports reachability
-
-The script is idempotent — safe to run repeatedly. It only restarts the service when the `.env` file actually changes.
+Deployment policy, repair behavior, and failure classification live in the Rust binary, not in the hook script. The script is idempotent and intentionally does not manage Docker, systemd, config rewrites, port conflicts, or OAuth redirect construction itself.
 
 ---
 

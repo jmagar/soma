@@ -146,13 +146,17 @@ pub async fn get_things(&self) -> Result<Value> {
 
 For each new action:
 
-**a. `src/mcp/schemas.rs`** — add to `EXAMPLE_ACTIONS`:
+**a. `src/actions.rs`** — add one entry to `ACTION_SPECS`:
 
 ```rust
-pub(super) const EXAMPLE_ACTIONS: &[&str] = &["greet", "echo", "status", "get_things", "help"];
+ActionSpec {
+    name: "get_things",
+    required_scope: Some(READ_SCOPE),
+    transport: ActionTransport::Any,
+}
 ```
 
-Add any new parameters to `tool_definitions()`.
+Then add any new parameters to `tool_definitions()` in `src/mcp/schemas.rs`.
 
 **b. `src/mcp/tools.rs`** — add a match arm in `dispatch_example()`:
 
@@ -160,7 +164,7 @@ Add any new parameters to `tool_definitions()`.
 "get_things" => state.service.get_things().await,
 ```
 
-Also add the action to `READ_ONLY_ACTIONS` in `src/mcp/rmcp_server.rs`.
+Scope rules are derived from `ACTION_SPECS`.
 
 **c. `src/cli.rs`** — add a `Command` variant and dispatch arm:
 
@@ -365,9 +369,10 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
    Each public method on `ExampleService` corresponds to one MCP action. Business logic, caching, and retries go here — not in `tools.rs`.
 
-4. **Add MCP actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs`**
+4. **Add MCP actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs`**
 
-   - `schemas.rs`: add action names to `EXAMPLE_ACTIONS` slice
+   - `actions.rs`: add action metadata to `ACTION_SPECS`
+   - `schemas.rs`: add any new action parameters to the schema
    - `tools.rs`: add match arms in `dispatch_example()`
 
 5. **Add CLI commands to `src/cli.rs`**

@@ -384,7 +384,7 @@ repair:
     fi
     echo "==> Done"
 
-# Copy the release binary into bin/ (for plugin distribution; Linux only; requires git lfs)
+# Copy the release binary into plugin bin/ for local plugin packaging.
 # TEMPLATE: Replace "example" with your binary name
 build-plugin: build-release
     #!/bin/sh

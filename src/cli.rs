@@ -22,7 +22,7 @@ use crate::{
     example::ExampleClient,
     server::{resolve_auth_policy_kind, trusted_gateway_from_env},
 };
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
@@ -78,17 +78,17 @@ pub enum SetupCommand {
 /// 2. Add a match arm here to construct it from args.
 /// 3. Add a dispatch arm in `run()` below.
 /// 4. Update `print_usage()` in main.rs.
-pub fn parse_args() -> Option<Command> {
+pub fn parse_args() -> Result<Option<Command>> {
     parse_args_from(std::env::args().skip(1))
 }
 
-pub fn parse_args_from<I, S>(args: I) -> Option<Command>
+pub fn parse_args_from<I, S>(args: I) -> Result<Option<Command>>
 where
     I: IntoIterator<Item = S>,
     S: Into<String>,
 {
     let args: Vec<String> = args.into_iter().map(Into::into).collect();
-    match args.as_slice() {
+    let command = match args.as_slice() {
         [] => None,
         [subcommand, rest @ ..] => match subcommand.as_str() {
             "greet" => {
@@ -97,7 +97,8 @@ where
             }
             "echo" => {
                 let message = flag_value(rest, "--message")
-                    .unwrap_or_else(|| "(no message provided)".to_string());
+                    .filter(|message| !message.is_empty())
+                    .ok_or_else(|| anyhow!("echo requires non-empty --message"))?;
                 Some(Command::Echo { message })
             }
             "status" => Some(Command::Status),
@@ -110,9 +111,12 @@ where
             }
             "watch" => {
                 let url = flag_value(rest, "--url");
-                let interval = flag_value(rest, "--interval")
-                    .and_then(|v| v.parse().ok())
-                    .unwrap_or(10);
+                let interval = match flag_value(rest, "--interval") {
+                    Some(value) => value.parse().map_err(|_| {
+                        anyhow!("watch --interval must be a positive integer number of seconds")
+                    })?,
+                    None => 10,
+                };
                 Some(Command::Watch { url, interval })
             }
             "setup" => match rest {
@@ -127,7 +131,8 @@ where
             },
             _ => None,
         },
-    }
+    };
+    Ok(command)
 }
 
 /// Run a CLI command, print the result, and exit.

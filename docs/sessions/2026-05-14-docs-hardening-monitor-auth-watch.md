@@ -24,7 +24,7 @@ Long-form session covering: renaming and creating docs across every major subdir
 
 1. Renamed `docs/server-json-guide.md` → `docs/MCP-REGISTRY-PUBLISH-GUIDE.md` → `docs/MCP-REGISTRY-PUBLISH-GUIDE.md` (uppercase)
 2. Created `docs/AUTH.md` — bearer token + OAuth dual-auth explanation, startup guard, gateway case
-3. Fixed bug in `validate_bind_security`: `just dev` (sets `EXAMPLE_MCP_NO_AUTH=true`) would always fail the bind guard — added `!no_auth_explicit` to bypass condition
+3. Fixed bug in the startup auth policy resolver: `just dev` (sets `EXAMPLE_MCP_NO_AUTH=true`) would always fail the bind guard — added `!no_auth_explicit` to bypass condition
 4. Updated `CLAUDE.md` and `AGENTS.md` module maps for the `server.rs`/`mcp.rs` split (added `server.rs`, `server/routes.rs`, `api.rs`; corrected `mcp.rs` description)
 5. Created `docs/CLAUDE.md` using patterns from `agentcast/docs/AGENTS.md`
 6. Created READMEs: `xtask/README.md`, `tests/README.md`, `scripts/README.md`, `plugins/README.md`, `apps/web/README.md`
@@ -45,8 +45,8 @@ Long-form session covering: renaming and creating docs across every major subdir
 
 ## Key Findings
 
-- **`validate_bind_security` bug** (`src/main.rs`): `just dev` sets `EXAMPLE_MCP_NO_AUTH=true` but the guard treated this as insecure and would bail. Fixed by adding `!no_auth_explicit` to the bypass conditions.
-- **Two copies of fragile loopback check**: `starts_with("127.")` used in both `validate_bind_security` and `build_auth_policy`, plus `check_auth_config` in doctor.rs. Consolidated into `McpConfig::is_loopback()` in `config.rs` using `IpAddr::is_loopback()`.
+- **Startup auth policy bug** (`src/main.rs`): `just dev` sets `EXAMPLE_MCP_NO_AUTH=true` but the guard treated this as insecure and would bail. Fixed by adding `!no_auth_explicit` to the bypass conditions.
+- **Two copies of fragile loopback check**: `starts_with("127.")` used in both auth policy resolution and `build_auth_policy`, plus `check_auth_config` in doctor.rs. Consolidated into `McpConfig::is_loopback()` in `config.rs` using `IpAddr::is_loopback()`.
 - **`format_event` hardcoded `0`** (`src/cli/watch.rs`): `DOWN` message said "retrying every 0s". Fixed by threading `interval_secs` through to `format_event`.
 - **`prev.unwrap()` in recovery branch**: Replaced with `prev_state @` binding in match arm.
 - **Monitor binary path race** (`monitors/monitors.json`): bare `example` in PATH races with `plugin-setup.sh` hook on first session. Changed to `${CLAUDE_PLUGIN_ROOT}/bin/example`.
@@ -92,7 +92,7 @@ Long-form session covering: renaming and creating docs across every major subdir
 | `src/cli.rs` | Added `Watch` and `Setup` command variants |
 | `src/cli/doctor.rs` | Fixed loopback check, `default_data_dir()?`, TLS flag |
 | `src/config.rs` | Added `McpConfig::is_loopback()`; `default_data_dir()` → `Result<PathBuf>` |
-| `src/main.rs` | Fixed `validate_bind_security` `just dev` bug; use `is_loopback()`; added `Watch` dispatch |
+| `src/main.rs` | Fixed startup auth policy `just dev` bug; use `is_loopback()`; added `Watch` dispatch |
 | `src/server.rs` | Added warning when `Mounted` with no auth mechanism |
 | `src/server/routes.rs` | CORS headers whitelist; warn on invalid origin |
 | `plugins/example/hooks/plugin-setup.sh` | Verify bundled binary before symlinking |

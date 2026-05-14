@@ -11,8 +11,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS_RS = ROOT / "src/mcp/schemas.rs"
+ACTION_RS = ROOT / "src/actions.rs"
 TOOLS_RS = ROOT / "src/mcp/tools.rs"
-RMCP_SERVER_RS = ROOT / "src/mcp/rmcp_server.rs"
 README = ROOT / "README.md"
 SKILL = ROOT / "plugins/example/skills/example/SKILL.md"
 DOC = ROOT / "docs/MCP_SCHEMA.md"
@@ -23,19 +23,30 @@ def read(path: Path) -> str:
 
 
 def extract_actions() -> list[str]:
-    text = read(SCHEMAS_RS)
-    match = re.search(r"EXAMPLE_ACTIONS:\s*&\[&str\]\s*=\s*&\[(.*?)\];", text, re.S)
-    if not match:
-        raise SystemExit("could not find EXAMPLE_ACTIONS in src/mcp/schemas.rs")
-    return re.findall(r'"([^"]+)"', match.group(1))
+    text = read(ACTION_RS)
+    return re.findall(r'name:\s*"([^"]+)"', text)
 
 
-def extract_read_only_actions() -> list[str]:
-    text = read(RMCP_SERVER_RS)
-    match = re.search(r"READ_ONLY_ACTIONS:\s*&\[&str\]\s*=\s*&\[(.*?)\];", text, re.S)
-    if not match:
-        raise SystemExit("could not find READ_ONLY_ACTIONS in src/mcp/rmcp_server.rs")
-    return re.findall(r'"([^"]+)"', match.group(1))
+def extract_scope_for_actions() -> dict[str, str]:
+    text = read(ACTION_RS)
+    entries = re.findall(r"ActionSpec\s*\{(.*?)\}", text, re.S)
+    scopes: dict[str, str] = {}
+    for entry in entries:
+        name_match = re.search(r'name:\s*"([^"]+)"', entry)
+        scope_match = re.search(r"required_scope:\s*([^,\n]+)", entry)
+        if not name_match or not scope_match:
+            continue
+        name = name_match.group(1)
+        scope_expr = scope_match.group(1).strip()
+        if scope_expr == "None":
+            scopes[name] = "public"
+        elif scope_expr == "Some(READ_SCOPE)":
+            scopes[name] = "`example:read`"
+        elif scope_expr == "Some(WRITE_SCOPE)":
+            scopes[name] = "`example:write`"
+        else:
+            scopes[name] = "`example:__deny__`"
+    return scopes
 
 
 def action_description(action: str) -> str:
@@ -51,11 +62,11 @@ def action_description(action: str) -> str:
 
 def render() -> str:
     actions = extract_actions()
-    read_only = set(extract_read_only_actions())
+    scopes = extract_scope_for_actions()
     lines = [
         "# MCP Schema Contract",
         "",
-        "Generated from `src/mcp/schemas.rs` and checked against README, skill docs, help text, and scope routing.",
+        "Generated from `src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.",
         "",
         "Run:",
         "",
@@ -78,16 +89,16 @@ def render() -> str:
         "|---|---|---|",
     ]
     for action in actions:
-        scope = "public" if action == "help" else "`example:read`" if action in read_only else "`example:__deny__`"
+        scope = scopes[action]
         lines.append(f"| `{action}` | {scope} | {action_description(action)} |")
     lines.extend(
         [
             "",
             "## Drift Rules",
             "",
-            "- `EXAMPLE_ACTIONS` in `src/mcp/schemas.rs` is the canonical action list.",
-            "- `READ_ONLY_ACTIONS` in `src/mcp/rmcp_server.rs` must include every scoped read action.",
-            "- `help` is intentionally public and must not appear in `READ_ONLY_ACTIONS`.",
+            "- `ACTION_SPECS` in `src/actions.rs` is the canonical action and scope list.",
+            "- `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.",
+            "- `help` is intentionally public and must have no required scope.",
             "- `src/mcp/tools.rs`, `README.md`, and `plugins/example/skills/example/SKILL.md` must mention every action.",
             "",
         ]
@@ -111,15 +122,17 @@ def check_mentions(actions: list[str]) -> list[str]:
 
 def check_scope(actions: list[str]) -> list[str]:
     failures: list[str] = []
-    read_only = set(extract_read_only_actions())
-    action_set = set(actions)
-    if "help" in read_only:
-        failures.append("help must be public and must not be in READ_ONLY_ACTIONS")
-    for action in sorted(read_only - action_set):
-        failures.append(f"READ_ONLY_ACTIONS contains unknown action `{action}`")
-    for action in action_set - {"help"}:
-        if action not in read_only:
-            failures.append(f"action `{action}` is missing from READ_ONLY_ACTIONS")
+    scopes = extract_scope_for_actions()
+    if set(scopes) != set(actions):
+        failures.append("ACTION_SPECS action names and scope entries are out of sync")
+    if scopes.get("help") != "public":
+        failures.append("help must be public")
+    for action in set(actions) - {"help"}:
+        if scopes.get(action) == "public":
+            failures.append(f"action `{action}` must declare a required scope")
+    schema_text = read(SCHEMAS_RS)
+    if "action_names()" not in schema_text:
+        failures.append("src/mcp/schemas.rs must derive action enum from action_names()")
     return failures
 
 

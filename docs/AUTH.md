@@ -16,7 +16,7 @@ When both are configured, each request is accepted if it satisfies either mechan
 
 ## Scopes
 
-All non-trivial actions require at least `example:read`. Admin-level actions require `example:admin`. The `help` action is always public.
+All non-trivial actions require at least `example:read`. Mutating actions require `example:write`, which also satisfies read checks. The `help` action is always public.
 
 Static bearer tokens default to `example:read` only. OAuth tokens carry whatever scopes the OAuth flow issued.
 
@@ -108,13 +108,10 @@ just dev
 If you deploy behind a gateway that handles authentication for all services (e.g. an MCP proxy that validates tokens before routing to this server), you can disable auth at the server level:
 
 ```bash
-EXAMPLE_MCP_NO_AUTH=true   # remove the auth middleware
-EXAMPLE_NOAUTH=true         # acknowledge the startup guard that this is intentional
+EXAMPLE_NOAUTH=true         # acknowledge the startup guard that an upstream gateway handles auth
 ```
 
-`EXAMPLE_NOAUTH=true` selects the explicit `TrustedGateway` policy. Without it, the startup guard refuses a non-loopback bind with no auth configured, even when `EXAMPLE_MCP_NO_AUTH=true` is set.
-
-Both variables must be set together for the gateway case.
+`EXAMPLE_NOAUTH=true` selects the explicit `TrustedGatewayUnscoped` policy. It removes the local auth middleware and scope checks, so only use it when a trusted upstream gateway enforces both authentication and authorization before traffic reaches this server.
 
 ---
 
@@ -131,7 +128,7 @@ The `AuthPolicy` enum in `src/server.rs` controls what the router does:
 | Policy | When | Auth enforced? | Scope checks? |
 |---|---|---|---|
 | `LoopbackDev` | Loopback bind with `EXAMPLE_MCP_NO_AUTH=true`, or stdio mode | No | No |
-| `TrustedGateway` | Non-loopback no-auth deployment with `EXAMPLE_NOAUTH=true` | No | No |
+| `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `EXAMPLE_NOAUTH=true` | No | No |
 | `Mounted { auth_state: None }` | Bearer-only mode | Yes (token) | Yes |
 | `Mounted { auth_state: Some(_) }` | OAuth mode (+ optional token) | Yes (OAuth / token) | Yes |
 

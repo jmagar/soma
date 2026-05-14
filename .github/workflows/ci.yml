@@ -170,6 +170,9 @@ jobs:
 
       - name: cargo deny check
         uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1 # v2
+        with:
+          command: check
+          arguments: --all-features
 
   # ── gitleaks: secret scanning ─────────────────────────────────────────────────
   gitleaks:

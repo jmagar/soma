@@ -126,12 +126,8 @@ async fn elicit_name(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
             }))
         }
         Err(e) => {
-            tracing::warn!(error = %e, "elicitation failed");
-            Ok(json!({
-                "message": "Elicitation failed — see server logs for details.",
-                "error": e.to_string(),
-                "fallback_greeting": "Hello, World!",
-            }))
+            tracing::error!(error = %e, "elicitation failed unexpectedly");
+            Err(anyhow::anyhow!("elicitation failed unexpectedly: {e}"))
         }
     }
 }
@@ -152,7 +148,7 @@ Return a greeting. Optional `name` parameter (string).
 Example: `{ "action": "greet", "name": "Alice" }`
 
 ### echo
-Echo a message back unchanged. Required `message` parameter (string).
+Echo a message back unchanged. Required `message` parameter (non-empty string).
 Example: `{ "action": "echo", "message": "Hello!" }`
 
 ### status
@@ -171,11 +167,10 @@ Example: `{ "action": "help" }`
 
 ## Adding a new action
 
-1. Add the action name to `EXAMPLE_ACTIONS` in `mcp/schemas.rs`.
+1. Add the action metadata to `ACTION_SPECS` in `actions.rs`.
 2. Add any new parameters to the `inputSchema` in `mcp/schemas.rs`.
 3. Add a method to `ExampleClient` in `example.rs` (transport).
 4. Add a method to `ExampleService` in `app.rs` (business logic).
 5. Add a match arm in `dispatch_example()` in `mcp/tools.rs`.
-6. Add the action to `READ_ONLY_ACTIONS` in `mcp/rmcp_server.rs`.
-7. Add a test in `tests/tool_dispatch.rs`.
+6. Add a test covering parser, schema, and dispatch behavior.
 "#;

@@ -37,6 +37,15 @@ jobs:
           key: rmcp-template-codeql-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: rmcp-template-codeql-
 
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Build web assets
+        working-directory: apps/web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
       - name: Build
         run: cargo build --release
 

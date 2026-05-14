@@ -7,7 +7,7 @@
 
 use rmcp_template::testing::loopback_state;
 
-/// Helper: call `execute_tool` with a loopback state and return the Value.
+/// Helper: call the service action with a loopback state and return the Value.
 ///
 /// We test at the service layer (via `AppState.service`) since `execute_tool`
 /// requires a `Peer<RoleServer>` for elicitation, which isn't available in unit tests.
