@@ -207,12 +207,22 @@ Every Rust server with a Claude plugin should expose:
 - run `setup check` first
 - run `setup repair` only when needed and only when `--no-repair` is absent
 - emit structured JSON when the global JSON flag is used
-- include `exit_policy`, `blocking_failures`, `advisory_failures`, and `ran_repair`
+- include `exit_policy`, `blocking_failures`, `advisory_failures`, `ran_repair`, and `no_repair`
 - exit `0` for success or advisory failures
 - exit nonzero for blocking failures
 - enforce a bounded total hook runtime
 
-Advisory failures are optional startup proofs such as smoke tests or model prewarm. Blocking failures are prerequisites or runtime assets required for the plugin to function.
+Advisory failures are non-blocking local conditions such as missing `.env` files when process env already supplies values, occupied MCP ports, optional startup proofs, or model prewarm. Blocking failures are prerequisites required for the plugin to function, such as missing appdata directories, missing required upstream credentials, or invalid OAuth/auth configuration.
+
+Use `scripts/check-plugin-hook-contract.py` to audit the cross-repo standard:
+
+```bash
+# Static hook/delegation checks for all known Rust servers.
+scripts/check-plugin-hook-contract.py
+
+# Also run each binary's `setup plugin-hook --no-repair` JSON contract.
+scripts/check-plugin-hook-contract.py --execute
+```
 
 ## Version And Release Sync
 
@@ -246,7 +256,7 @@ When creating a real server from the template:
 7. Update shared skill docs for the actual action surface.
 8. Replace Codex `defaultPrompt` entries with realistic prompts.
 9. Update Gemini `description`, `settings`, and `contextFileName` if needed.
-10. Run `just validate-plugin` and plugin contract tests before release.
+10. Run `just validate-plugin`, plugin contract tests, and `scripts/check-plugin-hook-contract.py` before release.
 
 ## Required Tests
 
@@ -255,7 +265,7 @@ Each server should include tests that prove:
 - Claude hook config points to `hooks/plugin-setup.sh`
 - hook script delegates to `<binary> setup plugin-hook`
 - `setup plugin-hook --no-repair` parses and does not mutate appdata
-- JSON plugin-hook output contains `exit_policy`, `blocking_failures`, `advisory_failures`, and `ran_repair`
+- JSON plugin-hook output contains `exit_policy`, `blocking_failures`, `advisory_failures`, `ran_repair`, and `no_repair`
 - advisory failures exit `0`
 - blocking failures exit nonzero
 - Claude, Codex, and Gemini manifests use the same service name, endpoint, token setting, and credential fields
