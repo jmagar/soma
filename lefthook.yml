@@ -59,5 +59,5 @@ pre-commit:
     # Blocks staged production source files that exceed template line budgets.
     # Test files and Rust inline #[cfg(test)] modules are exempt.
     file_size:
-      glob: "*.{rs,ts,tsx}"
+      glob: "**/*.{rs,ts,tsx}"
       run: bash scripts/check-file-size.sh

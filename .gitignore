@@ -164,7 +164,9 @@ CLAUDE.md.local
 # ── Next.js web UI (apps/web/) ────────────────────────────────────────────────
 # apps/web/out/ is the static export embedded in the Rust binary via include_dir!
 # It is NOT committed — build it before `docker build` or `cargo build`.
+# The .gitkeep file is tracked so COPY apps/web/out/ in the Dockerfile always succeeds.
 apps/web/node_modules/
 apps/web/.next/
 apps/web/out/
+!apps/web/out/.gitkeep
 apps/web/.env*.local

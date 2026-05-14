@@ -61,13 +61,21 @@ pub fn build_auth_layer(
 ) -> Option<AuthLayer> {
     match policy {
         AuthPolicy::LoopbackDev => None,
-        AuthPolicy::Mounted { auth_state } => Some(
-            AuthLayer::new()
-                .with_static_token(static_token)
-                .with_auth_state(auth_state.clone())
-                .with_static_token_scopes(vec!["example:read".into(), "example:admin".into()])
-                .with_resource_url(resource_url)
-                .with_allow_session_cookie(false),
-        ),
+        AuthPolicy::Mounted { auth_state } => {
+            if static_token.is_none() && auth_state.is_none() {
+                tracing::warn!(
+                    "auth layer mounted but no static_token or auth_state configured — \
+                     all requests will be rejected; set EXAMPLE_MCP_TOKEN or configure OAuth"
+                );
+            }
+            Some(
+                AuthLayer::new()
+                    .with_static_token(static_token)
+                    .with_auth_state(auth_state.clone())
+                    .with_static_token_scopes(vec!["example:read".into(), "example:admin".into()])
+                    .with_resource_url(resource_url)
+                    .with_allow_session_cookie(false),
+            )
+        }
     }
 }

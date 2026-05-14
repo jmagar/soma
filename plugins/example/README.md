@@ -27,13 +27,13 @@ plugins/example/
 
 ## Platform manifests
 
-All three manifests point at the same `.mcp.json` and `skills/` directory. Only the manifest format and UI metadata differ.
+Claude Code and Codex read their MCP connection config from the shared `.mcp.json`. Gemini CLI embeds its `mcpServers` config inline in `gemini-extension.json` (its own format). All three share the same `skills/` directory.
 
-| File | Platform | Variable syntax |
-|---|---|---|
-| `.claude-plugin/plugin.json` | Claude Code | `${user_config.*}` |
-| `.codex-plugin/plugin.json` | Codex | `${user_config.*}` |
-| `gemini-extension.json` | Gemini CLI | `${settings.*}` |
+| File | Platform | MCP config | Variable syntax |
+|---|---|---|---|
+| `.claude-plugin/plugin.json` | Claude Code | `.mcp.json` | `${user_config.*}` |
+| `.codex-plugin/plugin.json` | Codex | `.mcp.json` | `${user_config.*}` |
+| `gemini-extension.json` | Gemini CLI | inline `mcpServers` | `${settings.*}` |
 
 **No `version` field in any manifest.** The marketplace assigns version from the git commit SHA. Adding an explicit version creates duplicate entries on every push.
 

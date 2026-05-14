@@ -40,6 +40,9 @@ impl std::fmt::Display for ServerState {
 /// emits regardless of state. All other output goes to stderr so it doesn't
 /// pollute the event stream.
 pub async fn run_watch(base_url: &str, interval_secs: u64) -> Result<()> {
+    if interval_secs == 0 {
+        return Err(anyhow::anyhow!("interval must be at least 1 second"));
+    }
     let health_url = format!("{}/health", base_url.trim_end_matches('/'));
     let interval = Duration::from_secs(interval_secs);
 
@@ -81,7 +84,15 @@ async fn probe(client: &reqwest::Client, url: &str) -> ServerState {
     match client.get(url).send().await {
         Ok(r) if r.status().is_success() => ServerState::Up,
         Ok(r) => ServerState::Degraded(r.status().as_u16()),
-        Err(_) => ServerState::Down,
+        Err(e) => {
+            // Timeouts and connection refusals are expected transient DOWN states.
+            // Anything else (TLS error, DNS failure, etc.) likely indicates a
+            // configuration problem — log it to stderr so the operator can diagnose.
+            if !e.is_timeout() && !e.is_connect() {
+                eprintln!("[example watch] probe error (may indicate config issue): {e}");
+            }
+            ServerState::Down
+        }
     }
 }
 

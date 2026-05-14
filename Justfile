@@ -2,7 +2,7 @@
 # Justfile — Development and deployment commands for the Example MCP server
 #
 # TEMPLATE: Replace "example" with your binary/service name throughout.
-#           Replace port 3000 with your service's port if different.
+#           Replace port 3100 with your service's port if different.
 #
 # Usage: just <recipe>   (install just: cargo install just)
 # =============================================================================
@@ -13,7 +13,7 @@ default:
 
 # ── Development ───────────────────────────────────────────────────────────────
 
-# Run the MCP server in development mode (HTTP transport, port 3000, no auth)
+# Run the MCP server in development mode (HTTP transport, port 3100, no auth)
 dev:
     EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
 
@@ -317,14 +317,14 @@ logs:
 # ── Health & diagnostics ──────────────────────────────────────────────────────
 
 # Check the MCP server health endpoint (no auth required)
-# TEMPLATE: Change port 3000 if you use a different port
+# TEMPLATE: Change port 3100 if you use a different port
 health:
     #!/usr/bin/env bash
     set -euo pipefail
     if command -v jq >/dev/null 2>&1; then
-        curl -sf http://localhost:3000/health | jq .
+        curl -sf http://localhost:3100/health | jq .
     else
-        curl -sf http://localhost:3000/health | python3 -m json.tool
+        curl -sf http://localhost:3100/health | python3 -m json.tool
     fi
 
 # Verify that the running Docker/systemd service matches the current artifact
@@ -344,7 +344,7 @@ status:
         echo "Set EXAMPLE_MCP_TOKEN or use 'just dev' (no-auth mode)"
         exit 1
     fi
-    curl -sf http://localhost:3000/mcp \
+    curl -sf http://localhost:3100/mcp \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
@@ -436,20 +436,20 @@ pre-release:
 generate-cli:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Server must be running on port 3000 (run 'just dev' first)"
+    echo "Server must be running on port 3100 (run 'just dev' first)"
     echo "Generated CLI embeds your token — do not commit or share"
     mkdir -p dist dist/.cache
     current_hash=$(timeout 10 curl -sf \
         -H "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
         -H "Accept: application/json, text/event-stream" \
-        http://localhost:3000/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
+        http://localhost:3100/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
     cache_file="dist/.cache/example-cli.schema_hash"
     if [[ -f "$cache_file" ]] && [[ "$(cat "$cache_file")" == "$current_hash" ]] && [[ -f "dist/example-cli" ]]; then
         echo "SKIP: tool schema unchanged — use existing dist/example-cli"
         exit 0
     fi
     timeout 30 mcporter generate-cli \
-        --command http://localhost:3000/mcp \
+        --command http://localhost:3100/mcp \
         --header "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
         --name example-cli \
         --output dist/example-cli

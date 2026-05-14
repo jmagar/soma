@@ -301,10 +301,17 @@ main() {
 
   # ── Crawled docs ──────────────────────────────────────────────────────────
   if [[ "$SKIP_CRAWL" != true ]]; then
+    required_crawl_failed=0
     # MCP protocol documentation — essential for any MCP server development
-    crawl_docs "https://modelcontextprotocol.io"  "modelcontextprotocol.io" "mcp/docs" || log "WARN: mcp docs crawl failed, continuing"
+    crawl_docs "https://modelcontextprotocol.io"  "modelcontextprotocol.io" "mcp/docs" \
+      || { log "ERROR: mcp docs crawl failed"; required_crawl_failed=1; }
     # Claude Code documentation — for plugin/skill/hook development
-    crawl_docs "https://code.claude.com/"         "code.claude.com"         "claude-code" || log "WARN: claude-code docs crawl failed, continuing"
+    crawl_docs "https://code.claude.com/"         "code.claude.com"         "claude-code" \
+      || { log "ERROR: claude-code docs crawl failed"; required_crawl_failed=1; }
+    if [[ "$required_crawl_failed" -ne 0 ]]; then
+      log "ERROR: one or more required crawls failed — reference docs may be stale"
+      exit 1
+    fi
 
     # TEMPLATE: Add your service's documentation site here:
     # crawl_docs "https://your-service.com/docs"  "your-service.com"  "your-service/docs"

@@ -68,6 +68,20 @@ impl McpConfig {
     pub fn bind_addr(&self) -> String {
         format!("{}:{}", self.host, self.port)
     }
+
+    /// Return true if the configured bind host resolves to a loopback address.
+    ///
+    /// Uses `IpAddr::is_loopback()` for numeric addresses. Accepts "localhost"
+    /// as a canonical loopback hostname. Any other hostname or parse failure is
+    /// treated as non-loopback — callers must not assume safety in that case.
+    pub fn is_loopback(&self) -> bool {
+        self.host == "localhost"
+            || self
+                .host
+                .parse::<std::net::IpAddr>()
+                .map(|ip| ip.is_loopback())
+                .unwrap_or(false)
+    }
 }
 
 /// OAuth / JWT auth sub-config.
@@ -183,7 +197,7 @@ impl Default for AuthConfig {
 ///
 /// TEMPLATE: Replace `.example` with your service name (e.g. `.unraid`, `.gotify`).
 ///           The name should match the docker-compose.yml volume mount source.
-pub fn default_data_dir() -> std::path::PathBuf {
+pub fn default_data_dir() -> anyhow::Result<std::path::PathBuf> {
     // Running inside a Docker container — /data is always the mount point.
     // Detection uses /.dockerenv (created by the Docker runtime) or an explicit
     // RUNNING_IN_CONTAINER env var (useful for testing or systemd-nspawn).
@@ -191,14 +205,15 @@ pub fn default_data_dir() -> std::path::PathBuf {
         || std::env::var("RUNNING_IN_CONTAINER").is_ok()
         || std::env::var("container").is_ok()
     {
-        return std::path::PathBuf::from("/data");
+        return Ok(std::path::PathBuf::from("/data"));
     }
 
     // Bare-metal or local dev — use ~/.<service>/
     // TEMPLATE: Replace ".example" with your service name.
-    dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".example")
+    let home = dirs::home_dir().ok_or_else(|| {
+        anyhow::anyhow!("cannot determine home directory — set HOME or RUNNING_IN_CONTAINER=1")
+    })?;
+    Ok(home.join(".example"))
 }
 
 // ── Config loading ────────────────────────────────────────────────────────────
@@ -264,7 +279,13 @@ impl Config {
             if !v.is_empty() {
                 config.mcp.auth.mode = match v.to_lowercase().as_str() {
                     "oauth" => AuthMode::OAuth,
-                    _ => AuthMode::Bearer,
+                    "bearer" => AuthMode::Bearer,
+                    other => {
+                        return Err(anyhow::anyhow!(
+                            "invalid EXAMPLE_MCP_AUTH_MODE {:?}: must be \"bearer\" or \"oauth\"",
+                            other
+                        ));
+                    }
                 };
             }
         }

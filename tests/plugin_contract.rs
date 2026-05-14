@@ -154,6 +154,7 @@ fn setup_command(data_dir: &std::path::Path) -> Command {
         .env("CLAUDE_PLUGIN_DATA", data_dir)
         .env("EXAMPLE_API_URL", "https://api.example.test")
         .env("EXAMPLE_API_KEY", "example-secret")
+        .env("EXAMPLE_MCP_PORT", "0")
         .env("EXAMPLE_MCP_TOKEN", "mcp-secret");
     cmd
 }

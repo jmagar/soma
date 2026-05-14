@@ -28,7 +28,7 @@
       "name": "api_token",
       "description": "Bearer token for MCP HTTP authentication. Every request to /mcp includes: Authorization: Bearer <token>. Generate one with: openssl rand -hex 32",
       "required": false,
-      "secret": true
+      "sensitive": true
     },
     {
       "name": "example_api_url",
@@ -39,7 +39,7 @@
       "name": "example_api_key",
       "description": "TEMPLATE: Replace 'example_api_key' with your service's credential field name. API key or bearer token for your upstream service. Maps to EXAMPLE_API_KEY env var.",
       "required": false,
-      "secret": true
+      "sensitive": true
     }
   ]
 }

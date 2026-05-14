@@ -105,4 +105,13 @@ fi
 #           or use "exec setpriv --reuid=1000 --regid=1000 --clear-groups" if
 #           neither gosu nor gosu is available.
 # TEMPLATE: This image uses Debian + gosu. For Alpine, replace "gosu" with "gosu".
-exec gosu 1000:1000 "${BINARY}" "$@"
+# Passthrough: if the first argument is not a known subcommand (e.g. docker run ... bash),
+# exec it directly under gosu without prepending the binary.
+case "${1:-}" in
+  serve|mcp|greet|echo|status|watch|doctor|setup|help|--help|-h|--version|"")
+    exec gosu 1000:1000 "${BINARY}" "$@"
+    ;;
+  *)
+    exec gosu 1000:1000 "$@"
+    ;;
+esac

@@ -220,7 +220,18 @@ fn setup_plugin_hook(config: &Config, no_repair: bool) -> Result<SetupReport> {
 
 fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
     let mut report = SetupReport::new(no_repair);
-    let data_dir = setup_data_dir();
+    let data_dir = match setup_data_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            report.blocking_failures.push(SetupFailure {
+                code: "appdata_dir_unknown",
+                message: format!(
+                    "cannot determine appdata directory: {e} — set HOME or RUNNING_IN_CONTAINER=1"
+                ),
+            });
+            return report.finish();
+        }
+    };
 
     if !data_dir.is_dir() {
         report.blocking_failures.push(SetupFailure {
@@ -248,7 +259,7 @@ fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
 }
 
 fn setup_repair(config: &Config) -> Result<SetupReport> {
-    let data_dir = setup_data_dir();
+    let data_dir = setup_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
 
     let mut report = setup_check(config, false);
@@ -334,11 +345,13 @@ fn check_setup_port(port: u16, report: &mut SetupReport) {
     }
 }
 
-fn setup_data_dir() -> PathBuf {
-    std::env::var_os("CLAUDE_PLUGIN_DATA")
-        .or_else(|| std::env::var_os("EXAMPLE_HOME"))
-        .map(PathBuf::from)
-        .unwrap_or_else(default_data_dir)
+fn setup_data_dir() -> anyhow::Result<PathBuf> {
+    if let Some(val) =
+        std::env::var_os("CLAUDE_PLUGIN_DATA").or_else(|| std::env::var_os("EXAMPLE_HOME"))
+    {
+        return Ok(PathBuf::from(val));
+    }
+    default_data_dir()
 }
 
 fn write_setup_env(data_dir: &Path, config: &Config) -> Result<()> {
@@ -377,6 +390,12 @@ fn write_setup_env(data_dir: &Path, config: &Config) -> Result<()> {
         }
     }
 
-    std::fs::write(data_dir.join(".env"), format!("{}\n", lines.join("\n")))?;
+    let env_path = data_dir.join(".env");
+    std::fs::write(&env_path, format!("{}\n", lines.join("\n")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&env_path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(())
 }

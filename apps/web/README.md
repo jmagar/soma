@@ -27,7 +27,7 @@ A static web UI served by the Rust binary alongside the MCP API. Three pages:
 ```bash
 npm run dev     # dev server at http://localhost:3000
 npm run build   # static export → out/
-npm run start   # serve the built out/ directory
+npm run start   # start the Next.js production server (serves .next/)
 npm run lint    # ESLint
 ```
 

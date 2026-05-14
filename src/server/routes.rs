@@ -16,10 +16,7 @@ use axum::{
     Router,
 };
 use serde_json::json;
-use tower_http::{
-    cors::{Any, CorsLayer},
-    limit::RequestBodyLimitLayer,
-};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use crate::api::{api_dispatch, health, status};
 use crate::mcp::{allowed_origins, streamable_http_config, streamable_http_service};
@@ -107,10 +104,20 @@ pub fn router(state: AppState) -> Router {
 fn cors_layer(config: &crate::config::McpConfig) -> CorsLayer {
     let origins: Vec<HeaderValue> = allowed_origins(config)
         .into_iter()
-        .filter_map(|o| o.parse::<HeaderValue>().ok())
+        .filter_map(|o| match o.parse::<HeaderValue>() {
+            Ok(hv) => Some(hv),
+            Err(e) => {
+                tracing::warn!(origin = %o, error = %e, "invalid CORS origin — skipping");
+                None
+            }
+        })
         .collect();
     CorsLayer::new()
         .allow_origin(origins)
         .allow_methods([Method::POST, Method::GET])
-        .allow_headers(Any)
+        .allow_headers([
+            axum::http::header::AUTHORIZATION,
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::ACCEPT,
+        ])
 }

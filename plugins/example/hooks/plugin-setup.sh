@@ -29,14 +29,19 @@ ensure_example_binary() {
   fi
 
   local bundled="${CLAUDE_PLUGIN_ROOT}/bin/example"
-  if [[ -x "${bundled}" ]]; then
-    mkdir -p "${HOME}/.local/bin"
-    ln -sf "${bundled}" "${HOME}/.local/bin/example"
-    export PATH="${HOME}/.local/bin:${PATH}"
+  if [[ ! -x "${bundled}" ]]; then
+    printf 'example plugin setup: bundled binary not found at %s\n' "${bundled}" >&2
+    printf '  → run: just install   (builds release binary and copies to plugins/example/bin/)\n' >&2
+    exit 1
   fi
 
+  mkdir -p "${HOME}/.local/bin"
+  ln -sf "${bundled}" "${HOME}/.local/bin/example"
+  export PATH="${HOME}/.local/bin:${PATH}"
+
   command -v example >/dev/null 2>&1 || {
-    printf 'example plugin setup: example binary not found on PATH or at %s\n' "${bundled}" >&2
+    printf 'example plugin setup: symlink created but example still not found in PATH\n' >&2
+    printf '  → ensure %s is on your PATH\n' "${HOME}/.local/bin" >&2
     exit 1
   }
 }
@@ -48,6 +53,7 @@ main() {
   export_if_set EXAMPLE_API_URL CLAUDE_PLUGIN_OPTION_EXAMPLE_API_URL
   export_if_set EXAMPLE_API_KEY CLAUDE_PLUGIN_OPTION_EXAMPLE_API_KEY
   export_if_set EXAMPLE_MCP_AUTH_MODE CLAUDE_PLUGIN_OPTION_AUTH_MODE
+  export_if_set EXAMPLE_MCP_NO_AUTH CLAUDE_PLUGIN_OPTION_NO_AUTH
   export_if_set EXAMPLE_MCP_PUBLIC_URL CLAUDE_PLUGIN_OPTION_PUBLIC_URL
   export_if_set EXAMPLE_MCP_GOOGLE_CLIENT_ID CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_ID
   export_if_set EXAMPLE_MCP_GOOGLE_CLIENT_SECRET CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET

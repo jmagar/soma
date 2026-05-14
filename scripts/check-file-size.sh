@@ -58,11 +58,18 @@ count_effective_loc() {
 
 rs_production_lines() {
     local f="$1"
-    local test_line
     local end_line=0
-    test_line=$(grep -n '^#\[cfg(test)\]' "$f" | head -1 | cut -d: -f1 || true)
-    if [[ -n "$test_line" ]]; then
-        end_line=$(( test_line - 1 ))
+    # Only exclude a trailing test *module* — #[cfg(test)] immediately preceding `mod <name> {`.
+    # Stops at the first such pair to avoid cutting off production code annotated with
+    # other #[cfg(test)] attributes (e.g. on individual functions or impls).
+    local test_mod_line
+    test_mod_line=$(awk '
+        /#\[cfg\(test\)\]/ { cfg_line = NR; next }
+        cfg_line && /^[[:space:]]*(pub[[:space:]]+)?mod [a-z_]+ \{/ { print cfg_line; exit }
+        { cfg_line = 0 }
+    ' "$f" || true)
+    if [[ -n "$test_mod_line" ]]; then
+        end_line=$(( test_mod_line - 1 ))
     fi
     count_effective_loc "$f" "$end_line"
 }

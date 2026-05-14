@@ -90,6 +90,9 @@ fn schema_contract_doc_tracks_known_actions() {
     let schemas = read("src/mcp/schemas.rs");
     for action in ["greet", "echo", "status", "elicit_name", "help"] {
         assert!(schemas.contains(action), "schemas.rs missing {action}");
-        assert!(doc.contains(&format!("`{action}`")), "schema doc missing {action}");
+        assert!(
+            doc.contains(&format!("`{action}`")),
+            "schema doc missing {action}"
+        );
     }
 }

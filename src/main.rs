@@ -164,7 +164,7 @@ async fn run_cli() -> Result<()> {
 ///       the server mounts an auth layer with no credentials, trusting the upstream
 ///       proxy to reject unauthenticated requests before they arrive.
 fn validate_bind_security(config: &Config) -> Result<()> {
-    let is_loopback = config.mcp.host.starts_with("127.") || config.mcp.host == "::1";
+    let is_loopback = config.mcp.is_loopback();
     // has_auth: auth middleware is active AND at least one mechanism is configured.
     let has_auth = !config.mcp.no_auth
         && (config.mcp.api_token.is_some() || config.mcp.auth.mode == AuthMode::OAuth);
@@ -210,7 +210,7 @@ async fn build_state(config: Config) -> Result<AppState> {
 }
 
 async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
-    if config.mcp.no_auth || config.mcp.host.starts_with("127.") {
+    if config.mcp.no_auth || config.mcp.is_loopback() {
         return Ok(AuthPolicy::LoopbackDev);
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
