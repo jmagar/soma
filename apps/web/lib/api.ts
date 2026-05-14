@@ -39,7 +39,7 @@ export interface HealthResult {
 /** POST /v1/example — dispatch an action */
 export async function callAction<T = unknown>(
   action: string,
-  params: Record<string, unknown> = {}
+  params: Record<string, unknown> = {},
 ): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(`${BASE}/v1/example`, {
@@ -81,11 +81,8 @@ export async function getStatus(): Promise<ApiResponse<StatusResult>> {
   }
 }
 
-export const greet = (name?: string) =>
-  callAction<GreetResult>("greet", name ? { name } : {});
+export const greet = (name?: string) => callAction<GreetResult>("greet", name ? { name } : {});
 
-export const echo = (message: string) =>
-  callAction<EchoResult>("echo", { message });
+export const echo = (message: string) => callAction<EchoResult>("echo", { message });
 
-export const status = () =>
-  callAction<StatusResult>("status");
+export const status = () => callAction<StatusResult>("status");

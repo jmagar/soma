@@ -14,7 +14,9 @@ const ACTIONS = [
     id: "echo",
     label: "echo",
     description: "Echo a message back unchanged",
-    params: [{ name: "message", label: "Message", type: "text", placeholder: "Hello!", required: true }],
+    params: [
+      { name: "message", label: "Message", type: "text", placeholder: "Hello!", required: true },
+    ],
   },
   {
     id: "status",
@@ -39,7 +41,7 @@ export default function ToolsPage() {
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
 
-  const action = ACTIONS.find((a) => a.id === selectedAction)!;
+  const action = ACTIONS.find((a) => a.id === selectedAction) ?? ACTIONS[0];
 
   const handleSelect = (id: ActionId) => {
     setSelectedAction(id);
@@ -126,6 +128,7 @@ export default function ToolsPage() {
           <div className="space-y-1">
             {ACTIONS.map((a) => (
               <button
+                type="button"
                 key={a.id}
                 onClick={() => handleSelect(a.id)}
                 style={{
@@ -137,10 +140,7 @@ export default function ToolsPage() {
                   cursor: "pointer",
                   fontSize: "0.875rem",
                   fontFamily: "var(--aurora-font-mono)",
-                  background:
-                    selectedAction === a.id
-                      ? "var(--aurora-hover-bg)"
-                      : "transparent",
+                  background: selectedAction === a.id ? "var(--aurora-hover-bg)" : "transparent",
                   color:
                     selectedAction === a.id
                       ? "var(--aurora-accent-primary)"
@@ -181,7 +181,13 @@ export default function ToolsPage() {
             >
               {action.label}
             </p>
-            <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.8rem", marginBottom: "1rem" }}>
+            <p
+              style={{
+                color: "var(--aurora-text-muted)",
+                fontSize: "0.8rem",
+                marginBottom: "1rem",
+              }}
+            >
               {action.description}
             </p>
 
@@ -201,7 +207,9 @@ export default function ToolsPage() {
                     >
                       {param.label}
                       {param.required && (
-                        <span style={{ color: "var(--aurora-error)", marginLeft: "0.25rem" }}>*</span>
+                        <span style={{ color: "var(--aurora-error)", marginLeft: "0.25rem" }}>
+                          *
+                        </span>
                       )}
                     </label>
                     <input
@@ -235,7 +243,13 @@ export default function ToolsPage() {
                 ))}
               </div>
             ) : (
-              <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.8rem", marginBottom: "1rem" }}>
+              <p
+                style={{
+                  color: "var(--aurora-text-muted)",
+                  fontSize: "0.8rem",
+                  marginBottom: "1rem",
+                }}
+              >
                 No parameters required.
               </p>
             )}
@@ -330,11 +344,11 @@ export default function ToolsPage() {
                 {
                   action: selectedAction,
                   params: Object.fromEntries(
-                    Object.entries(paramValues).filter(([, v]) => v.trim())
+                    Object.entries(paramValues).filter(([, v]) => v.trim()),
                   ),
                 },
                 null,
-                2
+                2,
               )}`}
             </pre>
           </div>

@@ -46,7 +46,10 @@ export default function RootLayout({
             className="px-6 py-3 flex items-center gap-6"
           >
             <span
-              style={{ color: "var(--aurora-accent-primary)", fontFamily: "var(--aurora-font-display)" }}
+              style={{
+                color: "var(--aurora-accent-primary)",
+                fontFamily: "var(--aurora-font-display)",
+              }}
               className="font-bold text-lg tracking-tight"
             >
               rmcp-template

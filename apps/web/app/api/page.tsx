@@ -240,7 +240,9 @@ function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
         padding: "1.25rem",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}>
+      <div
+        style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}
+      >
         <span
           style={{
             background: "var(--aurora-hover-bg)",
@@ -290,7 +292,9 @@ function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
               {!p.required && (
                 <span style={{ color: "var(--aurora-warn)", fontSize: "0.7rem" }}>optional</span>
               )}
-              <span style={{ color: "var(--aurora-text-muted)", fontFamily: "var(--aurora-font-sans)" }}>
+              <span
+                style={{ color: "var(--aurora-text-muted)", fontFamily: "var(--aurora-font-sans)" }}
+              >
                 — {p.description}
               </span>
             </div>
@@ -300,11 +304,11 @@ function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
 
       <div className="space-y-3">
         <CodeBlock label="cURL" code={curlExample} />
-        <CodeBlock label="MCP equivalent" code={`example(action="${action.id}"${action.params.map((p) => `, ${p.name}="..."`).join("")})`} />
         <CodeBlock
-          label="Response"
-          code={JSON.stringify(action.response, null, 2)}
+          label="MCP equivalent"
+          code={`example(action="${action.id}"${action.params.map((p) => `, ${p.name}="..."`).join("")})`}
         />
+        <CodeBlock label="Response" code={JSON.stringify(action.response, null, 2)} />
       </div>
     </div>
   );

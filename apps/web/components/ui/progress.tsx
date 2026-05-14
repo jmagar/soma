@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 // ─── Keyframes ────────────────────────────────────────────────────────────────
 
@@ -15,46 +15,51 @@ const SHIMMER_KEYFRAMES = `
   60%  { left: 100%; right: -90%; }
   100% { left: 100%; right: -90%; }
 }
-`
+`;
 
-let shimmerInjected = false
+let shimmerInjected = false;
 function ensureShimmerKeyframes() {
-  if (shimmerInjected || typeof document === "undefined") return
-  const style = document.createElement("style")
-  style.textContent = SHIMMER_KEYFRAMES
-  document.head.appendChild(style)
-  shimmerInjected = true
+  if (shimmerInjected || typeof document === "undefined") return;
+  const style = document.createElement("style");
+  style.textContent = SHIMMER_KEYFRAMES;
+  document.head.appendChild(style);
+  shimmerInjected = true;
 }
 
 // ─── Fill color map ───────────────────────────────────────────────────────────
 
-type ProgressVariant = "default" | "warn" | "error" | "rose"
+type ProgressVariant = "default" | "warn" | "error" | "rose";
 
 const fillStyleMap: Record<ProgressVariant, React.CSSProperties> = {
   default: {
-    background: "linear-gradient(90deg, var(--aurora-accent-button) 0%, var(--aurora-accent-lift) 60%, var(--aurora-accent-strong) 100%)",
-    boxShadow: "0 0 8px color-mix(in srgb, var(--aurora-accent-primary) 50%, transparent), 0 0 2px var(--aurora-accent-primary)",
+    background:
+      "linear-gradient(90deg, var(--aurora-accent-button) 0%, var(--aurora-accent-lift) 60%, var(--aurora-accent-strong) 100%)",
+    boxShadow:
+      "0 0 8px color-mix(in srgb, var(--aurora-accent-primary) 50%, transparent), 0 0 2px var(--aurora-accent-primary)",
   },
   warn: {
-    background: "linear-gradient(90deg, color-mix(in srgb, var(--aurora-warn) 72%, black) 0%, var(--aurora-warn) 100%)",
+    background:
+      "linear-gradient(90deg, color-mix(in srgb, var(--aurora-warn) 72%, black) 0%, var(--aurora-warn) 100%)",
     boxShadow: "0 0 8px color-mix(in srgb, var(--aurora-warn) 40%, transparent)",
   },
   error: {
-    background: "linear-gradient(90deg, color-mix(in srgb, var(--aurora-error) 72%, black) 0%, var(--aurora-error) 100%)",
+    background:
+      "linear-gradient(90deg, color-mix(in srgb, var(--aurora-error) 72%, black) 0%, var(--aurora-error) 100%)",
     boxShadow: "0 0 8px color-mix(in srgb, var(--aurora-error) 40%, transparent)",
   },
   rose: {
-    background: "linear-gradient(90deg, var(--aurora-accent-pink-deep) 0%, var(--aurora-accent-pink) 100%)",
+    background:
+      "linear-gradient(90deg, var(--aurora-accent-pink-deep) 0%, var(--aurora-accent-pink) 100%)",
     boxShadow: "0 0 8px color-mix(in srgb, var(--aurora-accent-pink) 40%, transparent)",
   },
-}
+};
 
 const shimmerColorMap: Record<ProgressVariant, string> = {
   default: "rgba(255,255,255,0.30)",
   warn: "rgba(255,255,255,0.20)",
   error: "rgba(255,255,255,0.18)",
   rose: "rgba(255,255,255,0.22)",
-}
+};
 
 // ─── Size map ─────────────────────────────────────────────────────────────────
 
@@ -62,25 +67,25 @@ const heightMap = {
   sm: 4,
   default: 6,
   lg: 10,
-} as const
+} as const;
 
-type ProgressSize = keyof typeof heightMap
+type ProgressSize = keyof typeof heightMap;
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
   /** 0–100. If undefined the bar is indeterminate. */
-  value?: number
+  value?: number;
   /** Color variant */
-  variant?: ProgressVariant
+  variant?: ProgressVariant;
   /** Height preset */
-  size?: ProgressSize
+  size?: ProgressSize;
   /** Show percentage label */
-  showLabel?: boolean
+  showLabel?: boolean;
   /** Override label text */
-  label?: string
+  label?: string;
   /** Max value (default 100) */
-  max?: number
+  max?: number;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -98,27 +103,23 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
       style,
       ...props
     },
-    ref
+    ref,
   ) => {
     React.useEffect(() => {
-      ensureShimmerKeyframes()
-    }, [])
+      ensureShimmerKeyframes();
+    }, []);
 
-    const isIndeterminate = value === undefined || value === null
-    const clampedValue = isIndeterminate ? 0 : Math.min(Math.max(value, 0), max)
-    const percentage = isIndeterminate ? 0 : Math.round((clampedValue / max) * 100)
-    const height = heightMap[size]
-    const fillStyle = fillStyleMap[variant]
-    const shimmerColor = shimmerColorMap[variant]
+    const isIndeterminate = value === undefined || value === null;
+    const clampedValue = isIndeterminate ? 0 : Math.min(Math.max(value, 0), max);
+    const percentage = isIndeterminate ? 0 : Math.round((clampedValue / max) * 100);
+    const height = heightMap[size];
+    const fillStyle = fillStyleMap[variant];
+    const shimmerColor = shimmerColorMap[variant];
 
-    const displayLabel = label ?? `${percentage}%`
+    const displayLabel = label ?? `${percentage}%`;
 
     return (
-      <div
-        className={cn("flex flex-col gap-1.5 w-full", className)}
-        style={style}
-        {...props}
-      >
+      <div className={cn("flex flex-col gap-1.5 w-full", className)} style={style} {...props}>
         {showLabel && (
           <div className="flex items-center justify-between">
             <span
@@ -184,10 +185,10 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
           </div>
         </div>
       </div>
-    )
-  }
-)
-Progress.displayName = "Progress"
+    );
+  },
+);
+Progress.displayName = "Progress";
 
-export { Progress }
-export default Progress
+export { Progress };
+export default Progress;

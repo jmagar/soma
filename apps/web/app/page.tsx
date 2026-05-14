@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { getHealth, getStatus, greet, echo, status, type StatusResult } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { echo, getHealth, getStatus, greet, type StatusResult, status } from "@/lib/api";
 
 type HealthState = "ok" | "error" | "loading";
 
@@ -50,29 +50,17 @@ export default function DashboardPage() {
 
   const handleGreet = async () => {
     const res = await greet("Alice");
-    addActivity(
-      "greet(Alice)",
-      res.data?.greeting ?? res.error ?? "error",
-      !res.error
-    );
+    addActivity("greet(Alice)", res.data?.greeting ?? res.error ?? "error", !res.error);
   };
 
   const handleEcho = async () => {
     const res = await echo("Hello from the dashboard!");
-    addActivity(
-      "echo",
-      res.data?.echo ?? res.error ?? "error",
-      !res.error
-    );
+    addActivity("echo", res.data?.echo ?? res.error ?? "error", !res.error);
   };
 
   const handleStatus = async () => {
     const res = await status();
-    addActivity(
-      "status",
-      res.data?.status ?? res.error ?? "error",
-      !res.error
-    );
+    addActivity("status", res.data?.status ?? res.error ?? "error", !res.error);
   };
 
   const statusColor: Record<HealthState, string> = {
@@ -130,7 +118,9 @@ export default function DashboardPage() {
               {statusLabel[health]}
             </span>
           </div>
-          <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.5rem" }}>
+          <p
+            style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.5rem" }}
+          >
             Polls /health every 10s
           </p>
         </Card>
@@ -151,14 +141,23 @@ export default function DashboardPage() {
         <Card title="Status">
           <p
             style={{
-              color: serverStatus?.status === "ok" ? "var(--aurora-success)" : "var(--aurora-text-muted)",
+              color:
+                serverStatus?.status === "ok"
+                  ? "var(--aurora-success)"
+                  : "var(--aurora-text-muted)",
               fontWeight: 600,
             }}
           >
             {serverStatus?.status ?? "—"}
           </p>
           {serverStatus?.note && (
-            <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.25rem" }}>
+            <p
+              style={{
+                color: "var(--aurora-text-muted)",
+                fontSize: "0.75rem",
+                marginTop: "0.25rem",
+              }}
+            >
               {serverStatus.note}
             </p>
           )}
@@ -319,6 +318,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function ActionButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       style={{
         background: "var(--aurora-accent-button)",

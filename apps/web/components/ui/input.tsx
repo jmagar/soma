@@ -1,19 +1,19 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   /** Optional leading icon or adornment */
-  startAdornment?: React.ReactNode
+  startAdornment?: React.ReactNode;
   /** Optional trailing icon or adornment */
-  endAdornment?: React.ReactNode
+  endAdornment?: React.ReactNode;
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type = "text", startAdornment, endAdornment, style, ...props }, ref) => {
-    const hasStart = Boolean(startAdornment)
-    const hasEnd = Boolean(endAdornment)
+    const hasStart = Boolean(startAdornment);
+    const hasEnd = Boolean(endAdornment);
 
     return (
       <div className="relative inline-flex w-full items-center">
@@ -49,7 +49,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             // Adornment padding adjustments
             hasStart && "pl-9",
             hasEnd && "pr-9",
-            className
+            className,
           )}
           style={{
             background: "var(--aurora-control-surface, #0c1a24)",
@@ -63,32 +63,30 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ...style,
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = "var(--aurora-border-strong)"
+            e.currentTarget.style.borderColor = "var(--aurora-border-strong)";
             e.currentTarget.style.boxShadow = [
               "0 0 0 3px color-mix(in srgb, var(--aurora-accent-primary) 22%, transparent)",
               "0 0 0 1px color-mix(in srgb, var(--aurora-accent-primary) 45%, transparent)",
-            ].join(", ")
-            props.onFocus?.(e)
+            ].join(", ");
+            props.onFocus?.(e);
           }}
           onBlur={(e) => {
-            e.currentTarget.style.boxShadow = "none"
-            props.onBlur?.(e)
+            e.currentTarget.style.boxShadow = "none";
+            props.onBlur?.(e);
           }}
           {...props}
         />
 
         {hasEnd && (
-          <span
-            className="absolute right-3 flex items-center text-[var(--aurora-text-muted)]"
-          >
+          <span className="absolute right-3 flex items-center text-[var(--aurora-text-muted)]">
             {endAdornment}
           </span>
         )}
       </div>
-    )
-  }
-)
-Input.displayName = "Input"
+    );
+  },
+);
+Input.displayName = "Input";
 
-export { Input }
-export default Input
+export { Input };
+export default Input;

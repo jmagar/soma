@@ -1,17 +1,17 @@
-"use client"
+"use client";
 
 /**
  * Aurora Design System — Tabs & PillGroup
  * peer dep: @radix-ui/react-tabs
  */
 
-import * as React from "react"
-import * as TabsPrimitive from "@radix-ui/react-tabs"
-import { cn } from "@/lib/utils"
+import * as TabsPrimitive from "@radix-ui/react-tabs";
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 // ─── Line Tabs ────────────────────────────────────────────────────────────────
 
-const Tabs = TabsPrimitive.Root
+const Tabs = TabsPrimitive.Root;
 
 const TabsList = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.List>,
@@ -23,8 +23,8 @@ const TabsList = React.forwardRef<
     style={{ borderColor: "var(--aurora-border-default)", ...style }}
     {...props}
   />
-))
-TabsList.displayName = TabsPrimitive.List.displayName
+));
+TabsList.displayName = TabsPrimitive.List.displayName;
 
 const TabsTrigger = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.Trigger>,
@@ -45,7 +45,7 @@ const TabsTrigger = React.forwardRef<
       // active state
       "data-[state=active]:text-[var(--aurora-accent-primary)]",
       "data-[state=active]:after:bg-[var(--aurora-accent-primary)]",
-      className
+      className,
     )}
     style={{
       fontFamily: "var(--aurora-font-sans)",
@@ -56,8 +56,8 @@ const TabsTrigger = React.forwardRef<
     }}
     {...props}
   />
-))
-TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
+));
+TabsTrigger.displayName = TabsPrimitive.Trigger.displayName;
 
 const TabsContent = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.Content>,
@@ -68,8 +68,8 @@ const TabsContent = React.forwardRef<
     className={cn("mt-4 focus-visible:outline-none", className)}
     {...props}
   />
-))
-TabsContent.displayName = TabsPrimitive.Content.displayName
+));
+TabsContent.displayName = TabsPrimitive.Content.displayName;
 
 // ─── Pill Group ───────────────────────────────────────────────────────────────
 
@@ -85,29 +85,25 @@ TabsContent.displayName = TabsPrimitive.Content.displayName
  * Note: PillGroup renders only the TabsList, not TabsContent.
  * Pair with TabsContent outside PillGroup if panel switching is needed.
  */
-export type PillGroupProps = React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+export type PillGroupProps = React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>;
 
-const PillGroup = React.forwardRef<
-  React.ComponentRef<typeof TabsPrimitive.Root>,
-  PillGroupProps
->(({ className, children, style, ...props }, ref) => (
-  <TabsPrimitive.Root ref={ref} {...props}>
-    <TabsPrimitive.List
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border p-1",
-        className
-      )}
-      style={{
-        backgroundColor: "var(--aurora-control-surface)",
-        borderColor: "var(--aurora-border-default)",
-        ...style,
-      }}
-    >
-      {children}
-    </TabsPrimitive.List>
-  </TabsPrimitive.Root>
-))
-PillGroup.displayName = "PillGroup"
+const PillGroup = React.forwardRef<React.ComponentRef<typeof TabsPrimitive.Root>, PillGroupProps>(
+  ({ className, children, style, ...props }, ref) => (
+    <TabsPrimitive.Root ref={ref} {...props}>
+      <TabsPrimitive.List
+        className={cn("inline-flex items-center gap-1 rounded-full border p-1", className)}
+        style={{
+          backgroundColor: "var(--aurora-control-surface)",
+          borderColor: "var(--aurora-border-default)",
+          ...style,
+        }}
+      >
+        {children}
+      </TabsPrimitive.List>
+    </TabsPrimitive.Root>
+  ),
+);
+PillGroup.displayName = "PillGroup";
 
 const PillTrigger = React.forwardRef<
   React.ComponentRef<typeof TabsPrimitive.Trigger>,
@@ -125,7 +121,7 @@ const PillTrigger = React.forwardRef<
       "data-[state=active]:text-[var(--aurora-accent-primary)]",
       "[&[data-state=active]]:bg-[var(--aurora-panel-strong)]",
       "[&[data-state=active]]:[box-shadow:var(--aurora-active-glow)]",
-      className
+      className,
     )}
     style={{
       fontFamily: "var(--aurora-font-sans)",
@@ -136,14 +132,7 @@ const PillTrigger = React.forwardRef<
     }}
     {...props}
   />
-))
-PillTrigger.displayName = "PillTrigger"
+));
+PillTrigger.displayName = "PillTrigger";
 
-export {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  PillGroup,
-  PillTrigger,
-}
+export { PillGroup, PillTrigger, Tabs, TabsContent, TabsList, TabsTrigger };
