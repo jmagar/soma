@@ -7,6 +7,10 @@
 # Usage: just <recipe>   (install just: cargo install just)
 # =============================================================================
 
+# List all available recipes
+default:
+    @just --list
+
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Run the MCP server in development mode (HTTP transport, port 3000, no auth)
@@ -21,6 +25,10 @@ mcp:
 greet:
     cargo run -- greet --name "Developer"
 
+# Run the doctor pre-flight check
+doctor:
+    cargo run -- doctor
+
 # ── Building ──────────────────────────────────────────────────────────────────
 
 # Compile debug build (fast, includes debug symbols)
@@ -31,12 +39,59 @@ build:
 build-release:
     cargo build --release
 
+# Build the Next.js web UI static export (required before cargo build embeds it)
+# Output lands in apps/web/out/ and is baked into the binary via the `web` feature
+build-web:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -d apps/web ]; then
+        echo "No apps/web directory found — skipping web build"
+        exit 0
+    fi
+    cd apps/web
+    if [ ! -d node_modules ]; then
+        echo "Installing web dependencies..."
+        npm install
+    fi
+    npm run build
+    echo "Web assets built → apps/web/out/"
+
+# Watch apps/web for changes and rebuild on save (requires watchexec: cargo install watchexec-cli)
+web-watch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v watchexec >/dev/null 2>&1; then
+        echo "error: watchexec is required for web-watch" >&2
+        echo "install: cargo install watchexec-cli" >&2
+        exit 1
+    fi
+    echo "Building apps/web once, then watching for changes..."
+    watchexec \
+        --project-origin . \
+        --watch apps/web \
+        --ignore 'apps/web/.next' \
+        --ignore 'apps/web/.next/**' \
+        --ignore 'apps/web/out' \
+        --ignore 'apps/web/out/**' \
+        --ignore 'apps/web/node_modules' \
+        --ignore 'apps/web/node_modules/**' \
+        --debounce 1000ms \
+        --on-busy-update queue \
+        --wrap-process=none \
+        'cd apps/web && npm run build'
+
+# Build the full binary with embedded web assets (runs build-web first)
+build-full: build-web build-release
+
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 # Run cargo check (fast syntax/type check, no binary output)
-# Use this before committing to catch errors quickly
 check:
     cargo check
+
+# Check Rust formatting without modifying files (used in CI + lefthook)
+fmt-check:
+    cargo fmt -- --check
 
 # Run the full test suite using cargo-nextest (faster, better output than cargo test)
 # Install nextest: cargo install cargo-nextest
@@ -55,6 +110,11 @@ lint:
 fmt:
     cargo fmt
 
+# Auto-fix clippy warnings and format in one pass
+fix:
+    cargo fmt
+    cargo clippy --fix --all-targets --allow-dirty --allow-staged
+
 # Format all TOML files (requires taplo: cargo install taplo-cli)
 fmt-toml:
     taplo format
@@ -63,10 +123,26 @@ fmt-toml:
 check-toml:
     taplo check
 
+# Run license, vulnerability, and source checks (requires cargo-deny: cargo install cargo-deny)
+deny:
+    cargo deny check
+
+# Run all local quality checks in sequence: fmt-check → lint → check → test
+verify:
+    just fmt-check
+    just lint
+    just check
+    just test
+
 # Run all quality checks in sequence (mirrors CI pipeline)
 # Delegates to cargo xtask ci for the full suite (fmt, clippy, nextest, taplo, audit)
 ci:
     cargo xtask ci
+
+# Remove build artifacts and generated files
+clean:
+    cargo clean
+    rm -rf .cache/ dist/
 
 # ── xtask automation ─────────────────────────────────────────────────────────
 
@@ -78,13 +154,11 @@ dist:
 # Create AGENTS.md and GEMINI.md symlinks next to every CLAUDE.md in the repo.
 # Pattern §32: CLAUDE.md is the single source of truth for project instructions.
 # Run after adding any new CLAUDE.md file.
-# Delegates to cargo xtask (cross-platform, handles nested CLAUDE.md files).
 symlink-docs:
     cargo xtask symlink-docs
 
 # Inline version of symlink-docs — no xtask required.
 # TEMPLATE: Use this if xtask is unavailable (e.g. before first cargo build).
-#           Both versions produce the same result.
 symlink-docs-inline:
     find . -name "CLAUDE.md" -not -path "./.git/*" -not -path "./target/*" \
         -exec sh -c 'dir=$(dirname "$1"); ln -sf CLAUDE.md "${dir}/AGENTS.md"; ln -sf CLAUDE.md "${dir}/GEMINI.md"; echo "  link ${dir}/AGENTS.md + ${dir}/GEMINI.md"' _ {} \;
@@ -107,6 +181,10 @@ setup:
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 
+# Build the Docker image from source (does not start the container)
+docker-build:
+    docker build -f config/Dockerfile -t example-mcp .
+
 # Start the Docker Compose stack in detached mode
 # TEMPLATE: The compose file references the "jakenet" external network.
 #           Create it first if it doesn't exist: docker network create jakenet
@@ -117,6 +195,10 @@ docker-up:
 docker-down:
     docker compose down
 
+# Restart the running container (faster than down+up; no image rebuild)
+restart:
+    docker compose restart
+
 # Rebuild the Docker image from source and restart the stack
 docker-rebuild:
     docker compose build --no-cache
@@ -126,14 +208,18 @@ docker-rebuild:
 docker-logs:
     docker compose logs -f
 
+# Short alias for docker-logs
+logs:
+    docker compose logs -f
+
 # ── Health & diagnostics ──────────────────────────────────────────────────────
 
 # Check the MCP server health endpoint (no auth required)
 # TEMPLATE: Change port 3000 if you use a different port
 health:
-    curl -sf http://localhost:3000/health | python3 -m json.tool
+    curl -sf http://localhost:3000/health | jq .
 
-# Call the status action via the MCP tool (requires EXAMPLE_MCP_TOKEN in env)
+# Call the status action via the REST API (requires EXAMPLE_MCP_TOKEN in env)
 status:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -147,7 +233,7 @@ status:
         -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
         -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"status"}}}' \
-        | python3 -m json.tool
+        | jq .
 
 # ── Plugin ────────────────────────────────────────────────────────────────────
 
@@ -158,16 +244,18 @@ repair:
     docker compose up -d
     @echo "example-mcp: stack restarted"
 
-# Install the release binary into bin/ (for plugin distribution)
-# Linux only — Windows needs .exe; requires release build first
-install: build-release
+# Copy the release binary into bin/ (for plugin distribution; Linux only; requires git lfs)
+# TEMPLATE: Replace "example" with your binary name
+build-plugin: build-release
     #!/bin/sh
     set -eu
-    # TEMPLATE: Replace "example" with your binary name
     target_dir="${CARGO_TARGET_DIR:-target}"
     mkdir -p bin
     install -m 755 "${target_dir}/release/example" bin/example
     echo "Installed bin/example"
+
+# Install the release binary into bin/ (alias for build-plugin kept for compatibility)
+install: build-plugin
 
 # Validate all plugin skills have required SKILL.md fields
 validate-skills:
@@ -185,7 +273,7 @@ validate-skills:
     [[ "$found" -eq 1 ]] || { echo "No skills found in plugins/example/skills/"; exit 1; }
     echo "All skills valid"
 
-# ── mcporter integration tests ────────────────────────────────────────────────
+# ── mcporter ─────────────────────────────────────────────────────────────────
 
 # Run mcporter-based integration tests (requires running server + mcporter CLI)
 # TEMPLATE: Ensure the server is running first: just dev   or   just docker-up
@@ -198,9 +286,36 @@ test-mcporter:
     fi
     bash tests/mcporter/test-tools.sh
 
+# Generate a standalone CLI for this server via mcporter (requires running server)
+# TEMPLATE: Update port and token env var name
+generate-cli:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Server must be running on port 3000 (run 'just dev' first)"
+    echo "Generated CLI embeds your token — do not commit or share"
+    mkdir -p dist dist/.cache
+    current_hash=$(timeout 10 curl -sf \
+        -H "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
+        -H "Accept: application/json, text/event-stream" \
+        http://localhost:3000/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
+    cache_file="dist/.cache/example-cli.schema_hash"
+    if [[ -f "$cache_file" ]] && [[ "$(cat "$cache_file")" == "$current_hash" ]] && [[ -f "dist/example-cli" ]]; then
+        echo "SKIP: tool schema unchanged — use existing dist/example-cli"
+        exit 0
+    fi
+    timeout 30 mcporter generate-cli \
+        --command http://localhost:3000/mcp \
+        --header "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
+        --name example-cli \
+        --output dist/example-cli
+    printf '%s' "$current_hash" > "$cache_file"
+    echo "Generated dist/example-cli (requires bun at runtime)"
+
 # ── Publishing ────────────────────────────────────────────────────────────────
 
 # Bump version, tag, and push (triggers CI publish workflow)
+# Updates Cargo.toml + Cargo.lock only — plugin manifests have no version field
+# (GitHub SHA is the version for plugins; every push is a new release automatically)
 # TEMPLATE: Requires main branch + clean working tree
 publish bump="patch":
     #!/usr/bin/env bash
@@ -217,14 +332,13 @@ publish bump="patch":
       *) echo "Usage: just publish [major|minor|patch]"; exit 1 ;;
     esac
     NEW="${major}.${minor}.${patch}"
-    echo "Bumping ${CURRENT} → ${NEW}"
+    echo "Version: ${CURRENT} → ${NEW}"
     sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
     cargo check 2>/dev/null || true
-    git add Cargo.toml Cargo.lock
-    git commit -m "release: v${NEW}"
-    git tag "v${NEW}"
-    git push origin main --tags
+    git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"
+
+# ── Reference docs ────────────────────────────────────────────────────────────
 
 # Refresh local reference documentation (crawls + repomix)
 refresh-docs:

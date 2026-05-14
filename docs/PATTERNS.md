@@ -703,10 +703,13 @@ plugins/
 
 ### plugin.json — userConfig fields every server needs
 
+Plugin manifests (`plugin.json`) do **not** carry a `"version"` field. The GitHub
+commit SHA is the version — every push to the repo is a new release automatically.
+Adding an explicit version creates drift and requires manual bumping on every release.
+
 ```json
 {
   "name": "example",
-  "version": "0.1.0",
   "userConfig": {
     "server_url":    { "type": "string",  "title": "MCP server URL",    "default": "http://localhost:3000", "required": true },
     "api_token":     { "type": "string",  "title": "API token",          "sensitive": true },
@@ -1651,7 +1654,6 @@ plugins/
 ```json
 {
   "name": "example-mcp",
-  "version": "0.1.0",
   "description": "Example service MCP server for Codex.",
   "homepage": "https://github.com/jmagar/example-mcp",
   "repository": "https://github.com/jmagar/example-mcp",
