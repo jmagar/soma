@@ -83,6 +83,9 @@ web-watch:
 # Build the full binary with embedded web assets (runs build-web first)
 build-full: build-web build-release
 
+# Compile optimized release build (short alias used across the Rust server repos)
+release: build-release
+
 # ── Code quality ──────────────────────────────────────────────────────────────
 
 # Run cargo check (fast syntax/type check, no binary output)
@@ -127,6 +130,48 @@ check-toml:
 deny:
     cargo deny check
 
+# Watch Rust checks interactively (requires bacon: cargo install bacon)
+watch:
+    bacon
+
+# Generate Rust coverage report (requires cargo-llvm-cov)
+test-cov:
+    cargo llvm-cov --html --workspace --all-features
+
+# Report dependency updates without modifying Cargo.lock
+deps-check:
+    bash scripts/check-dependency-updates.sh
+
+# Fail if changed blobs exceed the repo size budget
+blob-size-check:
+    python3 scripts/check-blob-size.py
+
+# Check tracked source/config/docs for non-ASCII characters
+ascii-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**')
+    if [[ "${#files[@]}" -eq 0 ]]; then
+        echo "No files to check"
+        exit 0
+    fi
+    python3 scripts/asciicheck.py "${files[@]}"
+
+# Replace common smart punctuation with ASCII in tracked source/config/docs
+ascii-fix:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**')
+    if [[ "${#files[@]}" -eq 0 ]]; then
+        echo "No files to fix"
+        exit 0
+    fi
+    python3 scripts/asciicheck.py --fix "${files[@]}"
+
+# Check staged source files against line-count budgets
+file-size-check:
+    bash scripts/check-file-size.sh
+
 # Run all local quality checks in sequence: fmt-check → lint → check → test
 verify:
     just fmt-check
@@ -167,6 +212,35 @@ symlink-docs-inline:
 check-env:
     cargo xtask check-env
 
+# Install common development tools used by this Justfile
+install-tools:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v cargo-binstall >/dev/null 2>&1; then
+        cargo install cargo-binstall
+    fi
+    cargo binstall cargo-nextest --quiet --no-confirm
+    cargo binstall taplo-cli --quiet --no-confirm
+    cargo binstall cargo-deny --quiet --no-confirm
+    cargo binstall bacon --quiet --no-confirm
+    cargo binstall cargo-llvm-cov --quiet --no-confirm
+    cargo binstall lefthook --quiet --no-confirm
+    cargo binstall cargo-audit --quiet --no-confirm
+    if [ -d apps/web ]; then
+        (cd apps/web && npm install)
+    fi
+
+# Alias for install-tools, matching the other Rust workspace convention
+bootstrap: install-tools
+
+# Install lefthook git hooks
+install-hooks:
+    lefthook install
+
+# Uninstall lefthook git hooks
+uninstall-hooks:
+    lefthook uninstall
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
 # Generate a cryptographically random bearer token for EXAMPLE_MCP_TOKEN
@@ -195,6 +269,12 @@ docker-up:
 docker-down:
     docker compose down
 
+# Short alias for docker-up
+up: docker-up
+
+# Short alias for docker-down
+down: docker-down
+
 # Restart the running container (faster than down+up; no image rebuild)
 restart:
     docker compose restart
@@ -217,7 +297,17 @@ logs:
 # Check the MCP server health endpoint (no auth required)
 # TEMPLATE: Change port 3000 if you use a different port
 health:
-    curl -sf http://localhost:3000/health | jq .
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if command -v jq >/dev/null 2>&1; then
+        curl -sf http://localhost:3000/health | jq .
+    else
+        curl -sf http://localhost:3000/health | python3 -m json.tool
+    fi
+
+# Verify that the running Docker/systemd service matches the current artifact
+runtime-current:
+    bash scripts/check-runtime-current.sh --expected-binary target/release/example
 
 # Call the status action via the REST API (requires EXAMPLE_MCP_TOKEN in env)
 status:
@@ -233,16 +323,40 @@ status:
         -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
         -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"status"}}}' \
-        | jq .
+        | { if command -v jq >/dev/null 2>&1; then jq .; else python3 -m json.tool; fi; }
 
 # ── Plugin ────────────────────────────────────────────────────────────────────
 
-# Repair: bring the Docker Compose stack back up cleanly
-# Useful after config changes, env updates, or a failed restart
+# Repair: stop, rebuild, and restart via systemd user unit or Docker Compose
 repair:
-    docker compose down || true
-    docker compose up -d
-    @echo "example-mcp: stack restarted"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "==> Stopping example-mcp..."
+    if systemctl --user is-active --quiet example-mcp.service 2>/dev/null; then
+        systemctl --user stop example-mcp.service
+        echo "    stopped systemd unit"
+    elif docker ps --filter 'name=^/example-mcp$' --quiet 2>/dev/null | grep -q .; then
+        docker stop example-mcp >/dev/null 2>&1 || true
+        echo "    stopped docker container"
+    else
+        echo "    no running instance found"
+    fi
+    echo "==> Rebuilding release binary..."
+    cargo build --release
+    echo "==> Restarting..."
+    if systemctl --user list-unit-files example-mcp.service 2>/dev/null | grep -q example-mcp; then
+        mkdir -p "${HOME}/.local/bin"
+        install -m 755 target/release/example "${HOME}/.local/bin/example"
+        systemctl --user start example-mcp.service
+        echo "    started systemd unit"
+    elif [ -f docker-compose.yml ]; then
+        docker compose build
+        docker compose up -d --force-recreate
+        echo "    started docker compose service"
+    else
+        echo "    no service manager detected; binary at target/release/example"
+    fi
+    echo "==> Done"
 
 # Copy the release binary into bin/ (for plugin distribution; Linux only; requires git lfs)
 # TEMPLATE: Replace "example" with your binary name
@@ -250,28 +364,29 @@ build-plugin: build-release
     #!/bin/sh
     set -eu
     target_dir="${CARGO_TARGET_DIR:-target}"
-    mkdir -p bin
+    if [ ! -x "${target_dir}/release/example" ] && [ -x ".cache/cargo/release/example" ]; then
+        target_dir=".cache/cargo"
+    fi
+    mkdir -p bin plugins/example/bin
     install -m 755 "${target_dir}/release/example" bin/example
-    echo "Installed bin/example"
+    install -m 755 "${target_dir}/release/example" plugins/example/bin/example
+    echo "Installed bin/example and plugins/example/bin/example"
 
 # Install the release binary into bin/ (alias for build-plugin kept for compatibility)
 install: build-plugin
 
+# Install the release binary on the local PATH for runtime smoke testing
+install-local: build-release
+    mkdir -p "${HOME}/.local/bin"
+    install -m 755 target/release/example "${HOME}/.local/bin/example"
+    @echo "Installed ${HOME}/.local/bin/example"
+
+# Validate all plugin manifests, MCP config, hooks, and skills
+validate-plugin:
+    bash scripts/validate-plugin-layout.sh
+
 # Validate all plugin skills have required SKILL.md fields
-validate-skills:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    found=0
-    for dir in plugins/example/skills/*; do
-        [[ -d "$dir" ]] || continue
-        found=1
-        test -f "$dir/SKILL.md" || { echo "MISSING: $dir/SKILL.md"; exit 1; }
-        grep -q '^name:' "$dir/SKILL.md" || { echo "MISSING name: in $dir/SKILL.md"; exit 1; }
-        grep -q '^description:' "$dir/SKILL.md" || { echo "MISSING description: in $dir/SKILL.md"; exit 1; }
-        echo "OK: $dir/SKILL.md"
-    done
-    [[ "$found" -eq 1 ]] || { echo "No skills found in plugins/example/skills/"; exit 1; }
-    echo "All skills valid"
+validate-skills: validate-plugin
 
 # ── mcporter ─────────────────────────────────────────────────────────────────
 

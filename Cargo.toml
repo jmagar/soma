@@ -16,7 +16,7 @@ resolver = "2"
 
 [package]
 name = "rmcp-template"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.86"
 description = "Template for building MCP servers with the rmcp crate"

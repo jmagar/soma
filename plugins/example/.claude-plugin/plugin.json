@@ -14,6 +14,9 @@
   "mcpServers": "./.mcp.json",
   "hooks": "./hooks/hooks.json",
   "skills": "./skills",
+  "experimental": {
+    "monitors": "./monitors/monitors.json"
+  },
   "userConfig": {
     "use_docker": {
       "type": "boolean",

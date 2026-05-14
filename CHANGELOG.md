@@ -13,6 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- TEMPLATE: Add changes here as you work. They move to a version section on release. -->
 
+## [0.3.0] — 2026-05-14
+
+### Added
+
+- `src/cli/watch.rs` — `example watch` subcommand for live file-system monitoring.
+- `plugins/example/monitors/` — plugin monitor definitions for event-driven automation.
+- `plugins/example/gemini-extension.json` — Gemini extension manifest for multi-platform plugin distribution.
+- `.github/dependabot.yml` + `.github/workflows/dependabot-auto-merge.yml` — automated dependency updates with auto-merge for minor/patch bumps.
+- `scripts/asciicheck.py`, `scripts/check-blob-size.py`, `scripts/check-dependency-updates.sh`, `scripts/check-file-size.sh`, `scripts/check-runtime-current.sh`, `scripts/validate-plugin-layout.sh`, `scripts/blob-size-allowlist.txt` — repository validation and quality scripts.
+- `tests/plugin_contract.rs` — plugin contract integration tests.
+- `docs/PLUGINS.md` — documentation for the plugin system and distribution model.
+- `plugins/README.md`, `plugins/example/README.md`, `plugins/example/CLAUDE.md` — plugin-level documentation and agent guidance.
+- `apps/web/README.md`, `xtask/README.md`, `tests/README.md`, `scripts/README.md` — README coverage for every major directory.
+- `.claude/` — Claude Code project settings for agent-assisted development.
+
+### Changed
+
+- `plugins/example/hooks/plugin-setup.sh` — significant simplification; reduced from ~500 to ~50 lines by extracting reusable logic and removing duplication.
+- `Justfile` — expanded with additional recipes covering plugin validation, script checks, and workflow shortcuts.
+- `lefthook.yml` — pre-commit hook additions aligned with new script suite.
+- `AGENTS.md`, `CLAUDE.md` — updated agent and AI tooling guidance to reflect current project structure.
+- `README.md`, `docs/PATTERNS.md` — documentation refreshed for new scripts and plugin layout.
+
 ## [0.2.0] — 2026-05-14
 
 ### Changed

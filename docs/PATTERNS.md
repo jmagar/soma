@@ -2280,7 +2280,63 @@ match state.service.list_things().await {
 
 ---
 
-## 44. Code Organization — Small Focused Modules
+## 44. Binary-Owned Plugin Hooks
+
+Claude Code plugin hooks must be thin adapters. The durable setup behavior belongs in the service binary so hooks, manual repair, tests, and docs all exercise the same code path.
+
+### Required command surface
+
+Every Rust server with a Claude plugin should expose:
+
+```bash
+<binary> setup plugin-hook
+<binary> setup plugin-hook --no-repair
+<binary> setup check
+<binary> setup repair
+```
+
+Use `setup plugin-hook` as the command in `plugin-setup.sh`. Keep `setup check` read-only and non-mutating. Keep `setup repair` idempotent and safe to rerun. `--no-repair` is the rollout/audit mode: it reports what would block startup without mutating appdata or restarting services.
+
+### Hook script responsibilities
+
+`plugin-setup.sh` should only:
+
+- reject unsafe newline-bearing plugin option values
+- map `CLAUDE_PLUGIN_OPTION_*` values to runtime env vars
+- create the canonical appdata root with private permissions
+- warn about stale legacy service managers if applicable
+- ensure the binary is available
+- call `<binary> setup plugin-hook`
+
+It should not own Docker/systemd orchestration, config file rewriting, smoke-test policy, or failure classification.
+
+### Binary responsibilities
+
+`setup plugin-hook` should:
+
+- run `setup check` first
+- run `setup repair` only if check reports blocking failures and `--no-repair` is not set
+- return one structured JSON report for `--json`
+- include `exit_policy: success | advisory_failure | blocking_failure`
+- include `blocking_failures`, `advisory_failures`, and `ran_repair`
+- enforce a bounded total hook budget
+- exit `0` for success or advisory failures, nonzero for blocking failures
+
+Advisory failures are phases that should not break Claude Code SessionStart, such as optional prewarm or smoke checks. Blocking failures are setup prerequisites or runtime assets required for the plugin to work.
+
+### Required tests
+
+Each server should include focused contract tests for:
+
+- hook script delegates to `<binary> setup plugin-hook`
+- `setup plugin-hook --no-repair` parses and does not mutate
+- JSON output contains `exit_policy`, `blocking_failures`, `advisory_failures`, and `ran_repair`
+- advisory failures exit `0`
+- blocking failures exit nonzero
+
+---
+
+## 45. Code Organization — Small Focused Modules
 
 ### File size targets (from agentcast CODE_ORGANIZATION.md)
 

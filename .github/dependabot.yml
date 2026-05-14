@@ -1,0 +1,46 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 10
+    groups:
+      rmcp:
+        patterns:
+          - "rmcp*"
+      serde:
+        patterns:
+          - "serde*"
+      tokio:
+        patterns:
+          - "tokio*"
+      axum:
+        patterns:
+          - "axum*"
+          - "tower*"
+          - "hyper*"
+      tracing:
+        patterns:
+          - "tracing*"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels:
+      - "dependencies"
+      - "rust"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/New_York"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"

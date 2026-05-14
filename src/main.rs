@@ -129,6 +129,12 @@ async fn run_cli() -> Result<()> {
             // MCP port, auth mode, etc. — intercept here before service construction.
             cli::doctor::run_doctor(&config, json).await
         }
+        Some(cli::Command::Watch { url, interval }) => {
+            // Watch needs the MCP port to build the default URL but no service layer.
+            let base = url.unwrap_or_else(|| format!("http://localhost:{}", config.mcp.port));
+            cli::watch::run_watch(&base, interval).await
+        }
+        Some(cli::Command::Setup(command)) => cli::run_setup(&config, command).await,
         Some(cmd) => cli::run(cmd, &config.example).await,
         None => {
             eprintln!("Unknown command. Run `example --help` for usage.");
@@ -237,6 +243,10 @@ fn print_usage() {
   example greet [--name NAME]       Greet NAME (or the world)
   example echo --message MSG        Echo MSG back
   example status                    Show server status
+  example watch [--url URL] [--interval N]  Poll /health and emit on state change
+  example setup check               Check plugin setup without mutating appdata
+  example setup repair              Create missing appdata/env setup files
+  example setup plugin-hook [--no-repair]  Plugin hook JSON contract
 
   example --help                    Show this help
   example --version                 Show version

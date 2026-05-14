@@ -1,0 +1,107 @@
+# xtask
+
+Repo automation commands, invoked via `cargo xtask <command>`. Replaces ad-hoc shell scripts with cross-platform Rust.
+
+## Commands
+
+### `cargo xtask ci`
+
+Run all CI checks locally in the same order as `.github/workflows/ci.yml`. Stops on first failure.
+
+| Step | Tool | Skipped if absent |
+|---|---|---|
+| 1/5 | `cargo fmt --check` | — |
+| 2/5 | `cargo clippy -- -D warnings` | — |
+| 3/5 | `cargo nextest run --profile ci` | falls back to `cargo test` |
+| 4/5 | `taplo check` | yes |
+| 5/5 | `cargo audit` | yes |
+
+```bash
+cargo xtask ci
+# or via Justfile:
+just ci
+```
+
+---
+
+### `cargo xtask dist`
+
+Build the release binary and copy it to `bin/` for Git LFS-tracked distribution.
+
+1. Runs `cargo build --release --locked`
+2. Copies the binary to `bin/<binary-name>` (creating `bin/` if needed)
+3. Sets executable permissions on Unix
+4. Prints the `git add` / `git commit` / `git push` instructions
+
+```bash
+cargo xtask dist
+# or:
+just dist
+```
+
+Respects `CARGO_TARGET_DIR` if set. After running, commit the updated `bin/` pointer and push to update LFS.
+
+**TEMPLATE**: Update `BINARY_NAME` in `xtask/src/main.rs` to match the `[[bin]] name` in your `Cargo.toml`.
+
+---
+
+### `cargo xtask symlink-docs`
+
+Create `AGENTS.md` and `GEMINI.md` symlinks next to every `CLAUDE.md` in the repo (Pattern §32: single source of truth for AI documentation).
+
+- Walks the entire repo, skipping `.git/` and `target/`
+- For each `CLAUDE.md` found, creates two relative symlinks in the same directory:
+  - `AGENTS.md → CLAUDE.md` (Codex / OpenAI agents)
+  - `GEMINI.md → CLAUDE.md` (Google Gemini)
+- Skips entries that already exist or are dangling symlinks
+- Prints a created/skipped summary
+
+```bash
+cargo xtask symlink-docs
+# or:
+just symlink-docs
+```
+
+Symlinks use relative targets so they remain valid after `git clone`. Run this after adding any new `CLAUDE.md` file to the repo.
+
+---
+
+### `cargo xtask check-env`
+
+Validate environment variables before starting the server. Prints the status of every required and optional variable, then exits non-zero if any required variable is missing.
+
+```bash
+cargo xtask check-env
+# or:
+just check-env
+```
+
+Example output:
+
+```
+[OK]      EXAMPLE_MCP_TOKEN   — Static bearer token for MCP auth
+[MISSING] EXAMPLE_API_KEY     — Upstream service API key (required)
+
+Error: 1 required variable(s) missing. Copy .env.example to .env and fill in the values.
+```
+
+**TEMPLATE**: Update `REQUIRED_VARS` and `OPTIONAL_VARS` in `xtask/src/main.rs` for your service. The template ships with no required variables (the stub works without credentials).
+
+---
+
+## Design notes
+
+- **Minimal dependencies**: only `anyhow` and `walkdir` — keeps xtask compile time fast.
+- **Workspace root awareness**: all commands `cd` to the workspace root via `CARGO_MANIFEST_DIR` before running, so they work from any subdirectory.
+- **Delegation pattern**: shells out to existing tools (`cargo`, `taplo`, etc.) rather than reimplementing them.
+- **Optional tools**: `ci` gracefully skips `nextest`, `taplo`, and `cargo-audit` if they are not installed, so the command is always runnable on a fresh checkout.
+
+## Adding a new command
+
+1. Add a new function `fn your_command() -> anyhow::Result<()>` in `xtask/src/main.rs`.
+2. Add a match arm in `main()`:
+   ```rust
+   Some("your-command") => your_command(),
+   ```
+3. Add it to the `print_help()` output.
+4. Optionally add a `just` recipe in the root `Justfile`.

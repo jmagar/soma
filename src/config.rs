@@ -252,6 +252,22 @@ impl Config {
             "EXAMPLE_MCP_AUTH_ADMIN_EMAIL",
             &mut config.mcp.auth.admin_email,
         );
+        env_opt_str(
+            "EXAMPLE_MCP_GOOGLE_CLIENT_ID",
+            &mut config.mcp.auth.google_client_id,
+        );
+        env_opt_str(
+            "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET",
+            &mut config.mcp.auth.google_client_secret,
+        );
+        if let Ok(v) = std::env::var("EXAMPLE_MCP_AUTH_MODE") {
+            if !v.is_empty() {
+                config.mcp.auth.mode = match v.to_lowercase().as_str() {
+                    "oauth" => AuthMode::OAuth,
+                    _ => AuthMode::Bearer,
+                };
+            }
+        }
 
         // Upstream service config
         env_str("EXAMPLE_API_URL", &mut config.example.api_url);

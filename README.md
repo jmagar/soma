@@ -18,6 +18,10 @@ This template is the reference point for the local Rust MCP/server family:
 | `../rmcp-template` | `jmagar/rmcp-template` | `example` |
 | `../unrust` | `jmagar/unrust` | `unraid` |
 
+## Plugin Surfaces
+
+The template ships Claude Code, Codex, and Gemini plugin surfaces from one shared `plugins/example/` package. See [docs/PLUGINS.md](docs/PLUGINS.md) for the manifest layout, shared MCP config, skills, hook setup contract, and per-host adaptation checklist.
+
 ## What this template gives you
 
 - **Layered architecture** — transport client → service → MCP/CLI shims, enforced by convention
@@ -253,6 +257,28 @@ just release          # cargo build --release
 just gen-token        # openssl rand -hex 32
 just health           # curl http://localhost:3100/health | jq .
 ```
+
+## Portable automation
+
+This template includes reusable automation pulled from the local Rust server
+family and generalized for new MCP services:
+
+| Command | Purpose |
+|---|---|
+| `just install-tools` / `just bootstrap` | Install common local tools (`cargo-nextest`, `taplo`, `cargo-deny`, `bacon`, `cargo-llvm-cov`, `lefthook`, `cargo-audit`) |
+| `just install-hooks` | Enable the fast lefthook pre-commit checks |
+| `just deps-check` | Report lockfile-compatible and latest direct dependency updates |
+| `just blob-size-check` | Block oversized changed blobs before they land in git |
+| `just file-size-check` | Check staged source files against line-count budgets |
+| `just ascii-check` / `just ascii-fix` | Find or rewrite unexpected non-ASCII characters in tracked source/config/docs |
+| `just test-cov` | Generate an HTML Rust coverage report with `cargo llvm-cov` |
+| `just watch` | Run interactive Rust checks with `bacon` |
+| `just validate-plugin` | Validate plugin manifests, shared MCP config, hook config, and skills |
+| `just runtime-current` | Detect whether Docker/systemd is running the current built artifact |
+| `just up` / `just down` | Short aliases for Docker Compose start/stop |
+
+See [scripts/README.md](scripts/README.md) for script-level options and
+template adaptation notes.
 
 ## MCP client configuration
 
