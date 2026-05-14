@@ -1042,27 +1042,11 @@ Use this when creating a new server from rmcp-template:
 
 ---
 
-## 21. Git LFS — Binary Distribution
+## 21. Release Artifact Distribution
 
-Every server repo uses Git LFS to store the pre-built binary that is bundled with the
-Claude Code plugin. Users who install the plugin get the binary without needing Rust.
-
-```bash
-# In each repo root
-git lfs install
-git lfs track "bin/*"
-git lfs track "*.tar.gz"
-git lfs track "*.zip"
-```
-
-`.gitattributes` must include:
-```
-bin/* filter=lfs diff=lfs merge=lfs -text
-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-```
-
-CI builds the release binary and commits it to `bin/<service>` (linux/amd64 only for
-now — the plugin runtime fetches the right arch at install time via `install.sh`).
+Version tags build release binaries and attach them to the GitHub Release. The
+release workflow must not push generated binaries back to `main`. Local `dist`
+recipes are operator conveniences for preparing artifacts, not a CI write-back path.
 
 ---
 
@@ -1171,8 +1155,8 @@ xtask/
 ```
 
 Commands every xtask must implement:
-- `cargo xtask dist` — build release binary, copy to `bin/`, update Git LFS
-- `cargo xtask ci` — run all checks (fmt, clippy, test, audit)
+- `cargo xtask dist` — build release artifacts locally
+- `cargo xtask ci` — run all checks (fmt, clippy, test, deny)
 - `cargo xtask symlink-docs` — symlink CLAUDE.md → AGENTS.md, GEMINI.md everywhere
 - `cargo xtask check-env` — validate required env vars are set
 
@@ -1276,26 +1260,13 @@ CMD ["example", "serve", "mcp"]
 The server MUST refuse to bind to a non-loopback address without authentication
 configured, unless the operator explicitly opts out.
 
-```rust
-fn validate_bind_security(config: &Config) -> anyhow::Result<()> {
-    let is_loopback = config.mcp.host.starts_with("127.") || config.mcp.host == "::1";
-    let has_auth = config.mcp.no_auth == false && config.mcp.api_token.is_some()
-        || config.mcp.auth.mode == AuthMode::OAuth;
-    let noauth_override = std::env::var("EXAMPLE_NOAUTH")
-        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
-        .unwrap_or(false);
+Centralize this decision in library code, not the binary:
 
-    if !is_loopback && !has_auth && !noauth_override {
-        anyhow::bail!(
-            "Refusing to bind MCP server to {} without authentication.\n\
-             Set EXAMPLE_MCP_TOKEN, use auth_mode=oauth, or set EXAMPLE_NOAUTH=true \
-             if a upstream gateway handles auth.",
-            config.mcp.host
-        );
-    }
-    Ok(())
-}
-```
+- loopback bind with `EXAMPLE_MCP_NO_AUTH=true` → `LoopbackDev`
+- non-loopback with `EXAMPLE_NOAUTH=true` → `TrustedGateway`
+- non-loopback with bearer token → mounted bearer auth
+- non-loopback with OAuth mode → mounted OAuth auth
+- non-loopback with `EXAMPLE_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
 
 Called in `serve_mcp()` before binding the TCP listener.
 
@@ -1404,8 +1375,9 @@ Runs on push/PR to main:
 - `fmt`: `cargo fmt -- --check`
 - `clippy`: `cargo clippy -- -D warnings`  
 - `test`: `cargo nextest run --profile ci`
+- `web`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm build`
 - `toml`: `taplo check`
-- `audit`: `cargo audit`
+- `deny`: `cargo deny check`
 - `gitleaks`: secret scanning
 
 ### `.github/workflows/docker-publish.yml`
@@ -1419,7 +1391,6 @@ Runs on push to main + tags:
 ### `.github/workflows/release.yml`
 Runs on version tags (`v*`):
 - Build release binaries for linux/amd64 and linux/arm64
-- Copy to `bin/` and push via Git LFS
 - Create GitHub Release with binary assets
 - Update `install.sh` download URLs
 
@@ -1512,10 +1483,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Update `src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
 - [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
-- [ ] Implement `validate_bind_security()` in `main.rs`
+- [ ] Implement central auth policy resolution in library code
 - [ ] Implement `default_data_dir()` with container detection
 - [ ] Write `entrypoint.sh` with permission setup
-- [ ] Configure Git LFS (`git lfs track "bin/*"`)
 - [ ] Set up xtask crate with `dist`, `ci`, `symlink-docs`, `check-env`
 - [ ] Configure nextest (`.config/nextest.toml`)
 - [ ] Configure taplo (`taplo.toml`)

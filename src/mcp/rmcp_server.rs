@@ -26,7 +26,7 @@ use rmcp::{
 };
 use serde_json::{Map, Value};
 
-use crate::config::McpConfig;
+use crate::{config::McpConfig, token_limit};
 
 use crate::server::{AppState, AuthPolicy};
 
@@ -285,6 +285,7 @@ fn rmcp_tool_from_json(value: Value) -> Result<Tool, ErrorData> {
 fn tool_result_from_json(value: Value) -> Result<CallToolResult, ErrorData> {
     let text = serde_json::to_string_pretty(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
+    let text = token_limit::truncate_if_needed(&text);
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }
 
@@ -295,7 +296,7 @@ fn require_auth_context<'a>(
     ctx: &'a RequestContext<RoleServer>,
 ) -> Result<Option<&'a AuthContext>, ErrorData> {
     match &state.auth_policy {
-        AuthPolicy::LoopbackDev => Ok(None),
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGateway => Ok(None),
         AuthPolicy::Mounted { .. } => {
             let parts = ctx
                 .extensions
@@ -475,4 +476,28 @@ fn extract_origin(url: &str) -> Option<String> {
         _ => format!("{scheme}://{host}"),
     };
     Some(origin)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::token_limit::MAX_RESPONSE_BYTES;
+
+    use super::tool_result_from_json;
+
+    #[test]
+    fn tool_result_from_json_applies_response_cap() {
+        let result = tool_result_from_json(json!({
+            "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
+        }))
+        .expect("tool result should serialize");
+        let text = result.content[0]
+            .raw
+            .as_text()
+            .expect("tool result should contain text")
+            .text
+            .as_str();
+        assert!(text.contains("[TRUNCATED"));
+    }
 }

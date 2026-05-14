@@ -34,7 +34,7 @@ pub fn router(state: AppState) -> Router {
             .public_url
             .as_deref()
             .map(|u| Arc::<str>::from(format!("{}/mcp", u.trim_end_matches('/')))),
-        AuthPolicy::LoopbackDev => None,
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGateway => None,
     };
 
     // Auth layer applied to both /mcp and /v1/example.

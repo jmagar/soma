@@ -27,7 +27,7 @@
 //! Apply `truncate_if_needed()` in `mcp/tools.rs` AFTER the service call,
 //! BEFORE constructing the `CallToolResult`. Example:
 //!
-//! ```rust
+//! ```rust,ignore
 //! use rmcp_template::token_limit;
 //!
 //! let result = state.service.list_things(limit, offset).await?;
@@ -38,7 +38,7 @@
 //!
 //! Or for the whole serialized response:
 //!
-//! ```rust
+//! ```rust,ignore
 //! let json = serde_json::to_string(&result)?;
 //! let json = token_limit::truncate_if_needed(&json);
 //! ```
@@ -87,7 +87,7 @@ pub const MAX_RESPONSE_BYTES: usize = 40_000;
 /// This function returns a `String`, not a `Value`. The caller wraps it
 /// as appropriate:
 ///
-/// ```rust
+/// ```rust,ignore
 /// // In tools.rs:
 /// let raw = serde_json::to_string(&result)?;
 /// let output = token_limit::truncate_if_needed(&raw);
@@ -97,7 +97,7 @@ pub const MAX_RESPONSE_BYTES: usize = 40_000;
 ///
 /// Or embed the truncation check inside the serialized JSON directly:
 ///
-/// ```rust
+/// ```rust,ignore
 /// let text = serde_json::to_string_pretty(&result)?;
 /// let text = token_limit::truncate_if_needed(&text);
 /// tool_text_result(text)  // helper that wraps in CallToolResult

@@ -15,7 +15,7 @@ default:
 
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
 dev:
-    EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
+    EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
 
 # Run in stdio MCP transport mode (for Claude Desktop or direct pipe)
 mcp:
@@ -213,8 +213,8 @@ clean:
 
 # ── xtask automation ─────────────────────────────────────────────────────────
 
-# Build release binary and copy to bin/ (Git LFS tracked)
-# After running, commit bin/<binary> and push to update the LFS pointer.
+# Local operator convenience: build the release binary and copy it to dist/.
+# GitHub releases publish binaries as artifacts; this recipe does not update main.
 dist:
     cargo xtask dist
 

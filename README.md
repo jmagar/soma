@@ -403,13 +403,9 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 #### Infrastructure
 
-12. **Configure Git LFS** (if not already done)
+12. **Choose a binary distribution path**
 
-    ```bash
-    git lfs install    # one-time per machine
-    ```
-
-    `.gitattributes` already tracks `bin/*`, `*.tar.gz`, `*.zip`. Distribute your binary via `cargo xtask dist`.
+    GitHub release tags build Linux artifacts and attach them to the release. Local `just dist` is an operator convenience for preparing files under `dist/`; it does not push generated binaries back to `main`.
 
 13. **Run `just symlink-docs`** after any new CLAUDE.md
 
@@ -493,6 +489,9 @@ cargo xtask check-env
 
 # Start the server in dev mode
 just dev       # no-auth mode on :40060
+
+# Start the static web UI after `pnpm build`
+cd apps/web && pnpm start
 
 # Symlink docs for all AI systems
 just symlink-docs

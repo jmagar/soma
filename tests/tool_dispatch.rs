@@ -6,7 +6,6 @@
 //! **Template**: mirror this file for your service. Add one test per action.
 
 use rmcp_template::testing::loopback_state;
-use serde_json::json;
 
 /// Helper: call `execute_tool` with a loopback state and return the Value.
 ///
@@ -105,6 +104,6 @@ async fn test_greet_target_defaults_to_world() {
 #[test]
 fn test_schemas_actions_list_is_non_empty() {
     // Verify the schema action list compiles and has the expected entries
-    use rmcp_template::mcp;
-    let _ = mcp::router(loopback_state()); // builds router — exercises schema code path
+    use rmcp_template::server;
+    let _ = server::router(loopback_state()); // builds router — exercises schema code path
 }

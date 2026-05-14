@@ -35,7 +35,7 @@ Claude Code plugin manifest. Defines the plugin identity, MCP server connection,
 | `use_docker` | boolean | Docker vs systemd deployment |
 | `server_url` | string | MCP HTTP server base URL (default: `http://localhost:3000`) |
 | `api_token` | string (sensitive) | Bearer token for auth |
-| `no_auth` | boolean | Disable auth (local dev only) |
+| `no_auth` | boolean | Disable auth (loopback dev only; non-loopback requires an upstream gateway) |
 | `auth_mode` | string | `bearer` or `oauth` |
 | `public_url` | string | Public URL for OAuth callbacks |
 | `google_client_id` | string (sensitive) | Google OAuth client ID |

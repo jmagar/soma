@@ -6,7 +6,7 @@
 #   BINARY_NAME → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
 #
 # This workflow runs on every push and PR to main.
-# Jobs: fmt, clippy, test (nextest), toml (taplo), template checks, audit, gitleaks
+# Jobs: fmt, clippy, test (nextest), web, toml, template checks, deny, gitleaks
 #
 # All jobs must pass before merging. Adjust the matrix rust-version to match
 # your Cargo.toml `rust-version` field.
@@ -30,10 +30,10 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust (stable with rustfmt)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: rustfmt
 
@@ -45,17 +45,17 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust (stable with clippy)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: clippy
 
       # Cache Cargo registry and build artifacts between runs.
       # TEMPLATE: Change the cache key prefix from "rmcp-template" to your repo name.
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -72,14 +72,14 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       # TEMPLATE: Change cache key prefix from "rmcp-template" to your repo name.
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry
@@ -89,17 +89,42 @@ jobs:
           restore-keys: rmcp-template-test-
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@cargo-nextest
+        uses: taiki-e/install-action@95cc2373c3f00275e315c306e56fef1c7a8854c0 # cargo-nextest
 
       - name: cargo nextest run --profile ci
         run: cargo nextest run --profile ci
+
+  # ── web: pnpm install, lint, audit, static build ─────────────────────────────
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit
+        run: pnpm audit --prod --audit-level high
+
+      - name: pnpm lint
+        run: pnpm lint
+
+      - name: pnpm build
+        run: pnpm build
 
   # ── toml: taplo check ─────────────────────────────────────────────────────────
   toml:
     name: TOML Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Install taplo
         run: cargo install taplo-cli --locked
@@ -107,12 +132,12 @@ jobs:
       - name: taplo check
         run: taplo check
 
-  # ── audit: cargo audit ────────────────────────────────────────────────────────
+  # ── template: generated docs, plugin layout, coupled files ───────────────────
   template:
     name: Template Contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
@@ -136,32 +161,26 @@ jobs:
           mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
           python3 scripts/asciicheck.py "${files[@]}"
 
-  # ── audit: cargo audit ────────────────────────────────────────────────────────
+  # ── deny: dependency advisories, licenses, bans, sources ─────────────────────
   audit:
-    name: Security Audit
+    name: Cargo Deny
     runs-on: ubuntu-latest
-    # Don't block CI on new advisories — this is informational.
-    # TEMPLATE: Remove `continue-on-error` once you've reviewed existing advisories.
-    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: cargo audit
-        run: cargo audit
+      - name: cargo deny check
+        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1 # v2
 
   # ── gitleaks: secret scanning ─────────────────────────────────────────────────
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0  # full history needed for gitleaks
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

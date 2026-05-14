@@ -11,12 +11,15 @@
 //!   [`server`]  — `AppState`, `AuthPolicy`, HTTP router
 //!   [`api`]     — REST API handlers (`POST /v1/example`, health, status)
 
+pub mod actions;
 pub mod api;
 pub mod app;
+pub mod cli;
 pub mod config;
 pub mod example;
 pub mod mcp;
 pub mod server;
+pub mod token_limit;
 pub mod web;
 
 /// Test helpers — available when `features = ["test-support"]` or in `cfg(test)`.

@@ -15,6 +15,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::actions::{execute_service_action, ExampleAction};
 use crate::server::AppState;
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
@@ -39,25 +40,12 @@ async fn dispatch_example(
     args: Value,
     peer: &Peer<RoleServer>,
 ) -> anyhow::Result<Value> {
-    let action =
-        string_arg(&args, "action").ok_or_else(|| anyhow::anyhow!("action is required"))?;
+    let action = ExampleAction::from_mcp_args(&args)?;
 
-    match action.as_str() {
-        "greet" => {
-            let name = string_arg(&args, "name");
-            state.service.greet(name.as_deref()).await
-        }
-        "echo" => {
-            let message = string_arg(&args, "message")
-                .ok_or_else(|| anyhow::anyhow!("`message` is required for action=echo"))?;
-            state.service.echo(&message).await
-        }
-        "status" => state.service.status().await,
-        "elicit_name" => elicit_name(peer).await,
-        "help" => Ok(json!({ "help": HELP_TEXT })),
-        other => Err(anyhow::anyhow!(
-            "unknown example action: {other}; use action=help for documentation"
-        )),
+    match action {
+        ExampleAction::ElicitName => elicit_name(peer).await,
+        ExampleAction::Help => Ok(json!({ "help": HELP_TEXT })),
+        other => execute_service_action(&state.service, &other).await,
     }
 }
 
@@ -149,10 +137,6 @@ async fn elicit_name(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
 }
 
 // ── arg helpers ───────────────────────────────────────────────────────────────
-
-fn string_arg(args: &Value, name: &str) -> Option<String> {
-    args.get(name).and_then(|v| v.as_str()).map(String::from)
-}
 
 // ── help text ─────────────────────────────────────────────────────────────────
 

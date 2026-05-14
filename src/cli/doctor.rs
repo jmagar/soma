@@ -32,7 +32,10 @@ use std::time::Instant;
 use anyhow::Result;
 use serde::Serialize;
 
-use rmcp_template::config::{default_data_dir, AuthMode, Config};
+use crate::{
+    config::{default_data_dir, Config},
+    server::{resolve_auth_policy_kind, AuthPolicyKind},
+};
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -506,56 +509,40 @@ pub fn check_port_available(port: u16) -> DoctorCheck {
 /// friendly report instead of aborting. No logic changes needed unless you
 /// add a new auth mode.
 pub fn check_auth_config(config: &Config) -> DoctorCheck {
-    let is_loopback = config.mcp.is_loopback();
-    let has_token = config.mcp.api_token.is_some();
-    let is_oauth = config.mcp.auth.mode == AuthMode::OAuth;
-    let no_auth = config.mcp.no_auth;
     let noauth_override = std::env::var("EXAMPLE_NOAUTH")
         .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
         .unwrap_or(false);
 
     // TEMPLATE: Replace "EXAMPLE_NOAUTH" with your service prefix.
 
-    if is_loopback || no_auth {
-        DoctorCheck::pass(
+    match resolve_auth_policy_kind(config, noauth_override) {
+        Ok(AuthPolicyKind::LoopbackDev) => {
+            DoctorCheck::pass("auth", "Auth mode", "no-auth (loopback bind)")
+        }
+        Ok(AuthPolicyKind::TrustedGateway) => DoctorCheck::pass(
+            "auth",
+            "Auth mode",
+            "trusted gateway (EXAMPLE_NOAUTH=true — upstream handles auth)",
+        ),
+        Ok(AuthPolicyKind::MountedOAuth) => {
+            DoctorCheck::pass("auth", "Auth mode", "OAuth (Google)")
+        }
+        Ok(AuthPolicyKind::MountedBearer) => {
+            DoctorCheck::pass("auth", "Auth mode", "bearer token (set)")
+        }
+        Err(error) => DoctorCheck::fail(
             "auth",
             "Auth mode",
             format!(
-                "no-auth ({})",
-                if is_loopback {
-                    "loopback bind"
-                } else {
-                    "EXAMPLE_MCP_NO_AUTH=true"
-                }
-            ),
-        )
-    } else if is_oauth {
-        DoctorCheck::pass("auth", "Auth mode", "OAuth (Google)")
-    } else if has_token {
-        DoctorCheck::pass("auth", "Auth mode", "bearer token (set)")
-    } else if noauth_override {
-        DoctorCheck::pass(
-            "auth",
-            "Auth mode",
-            "no-auth (EXAMPLE_NOAUTH=true — upstream gateway handles auth)",
-        )
-    } else {
-        // Binding 0.0.0.0 with no auth — §27 violation.
-        DoctorCheck::fail(
-            "auth",
-            "Auth mode",
-            format!(
-                "Binding to {} with no authentication configured.\n    \
-                 This violates §27 (pattern: No 0.0.0.0 Without Auth).\n    \
+                "{error}\n    \
                  Fix ONE of:\n    \
                  1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1\n    \
                  2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)\n    \
                  3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth\n    \
                  4. Upstream gateway:    EXAMPLE_NOAUTH=true\n    \
-                 TEMPLATE: Replace EXAMPLE_ prefix with your service prefix.",
-                config.mcp.host
+                 TEMPLATE: Replace EXAMPLE_ prefix with your service prefix."
             ),
-        )
+        ),
     }
 }
 

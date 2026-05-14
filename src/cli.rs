@@ -6,7 +6,7 @@
 //!
 //! # Usage
 //!
-//! ```
+//! ```text
 //! example greet --name Alice
 //! example echo --message "Hello!"
 //! example status
@@ -16,19 +16,20 @@
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
-use rmcp_template::{
+use crate::{
     app::ExampleService,
     config::{default_data_dir, AuthMode, Config, ExampleConfig},
     example::ExampleClient,
+    server::{resolve_auth_policy_kind, trusted_gateway_from_env},
 };
+use anyhow::Result;
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
 pub mod doctor;
 pub mod watch;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Command {
     Greet {
         name: Option<String>,
@@ -78,7 +79,15 @@ pub enum SetupCommand {
 /// 3. Add a dispatch arm in `run()` below.
 /// 4. Update `print_usage()` in main.rs.
 pub fn parse_args() -> Option<Command> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    parse_args_from(std::env::args().skip(1))
+}
+
+pub fn parse_args_from<I, S>(args: I) -> Option<Command>
+where
+    I: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    let args: Vec<String> = args.into_iter().map(Into::into).collect();
     match args.as_slice() {
         [] => None,
         [subcommand, rest @ ..] => match subcommand.as_str() {
@@ -288,6 +297,14 @@ fn setup_repair(config: &Config) -> Result<SetupReport> {
 }
 
 fn validate_setup_auth(config: &Config, report: &mut SetupReport) {
+    if let Err(error) = resolve_auth_policy_kind(config, trusted_gateway_from_env()) {
+        report.blocking_failures.push(SetupFailure {
+            code: "invalid_auth_policy",
+            message: error.to_string(),
+        });
+        return;
+    }
+
     if config.mcp.no_auth {
         return;
     }
@@ -401,11 +418,30 @@ fn write_setup_env(data_dir: &Path, config: &Config) -> Result<()> {
     }
 
     let env_path = data_dir.join(".env");
-    std::fs::write(&env_path, format!("{}\n", lines.join("\n")))?;
+    let temp_path = data_dir.join(".env.tmp");
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o600)
+            .open(&temp_path)?;
+        writeln!(file, "{}", lines.join("\n"))?;
+        file.sync_all()?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&temp_path, format!("{}\n", lines.join("\n")))?;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&env_path, std::fs::Permissions::from_mode(0o600))?;
+        std::fs::set_permissions(&temp_path, std::fs::Permissions::from_mode(0o600))?;
     }
+    std::fs::rename(temp_path, env_path)?;
     Ok(())
 }

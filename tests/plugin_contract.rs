@@ -4,6 +4,9 @@ use std::process::Command;
 
 use tempfile::tempdir;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 fn read(path: &str) -> String {
     fs::read_to_string(path).unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
 }
@@ -207,4 +210,36 @@ fn setup_repair_creates_env_file_without_upstream_contact() {
     assert!(env_file.contains("EXAMPLE_API_URL=https://api.example.test"));
     assert!(env_file.contains("EXAMPLE_API_KEY=example-secret"));
     assert!(env_file.contains("EXAMPLE_MCP_TOKEN=mcp-secret"));
+    assert_env_file_mode(missing.join(".env").as_path());
+}
+
+#[test]
+fn setup_repair_replaces_existing_env_file_with_private_mode() {
+    let dir = tempdir().unwrap();
+    let env_path = dir.path().join(".env");
+    fs::write(&env_path, "OLD_VALUE=1\n").unwrap();
+    #[cfg(unix)]
+    fs::set_permissions(&env_path, fs::Permissions::from_mode(0o644)).unwrap();
+
+    let mut cmd = setup_command(dir.path());
+    let output = cmd.args(["setup", "repair"]).output().unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let env_file = fs::read_to_string(&env_path).unwrap();
+    assert!(!env_file.contains("OLD_VALUE"));
+    assert!(env_file.contains("EXAMPLE_API_URL=https://api.example.test"));
+    assert_env_file_mode(&env_path);
+}
+
+fn assert_env_file_mode(path: &std::path::Path) {
+    #[cfg(unix)]
+    assert_eq!(
+        fs::metadata(path).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
 }

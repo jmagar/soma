@@ -11,6 +11,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::actions::{execute_service_action, ExampleAction};
 use crate::server::AppState;
 
 /// Request body for `POST /v1/example`.
@@ -32,34 +33,9 @@ pub async fn api_dispatch(
     State(state): State<AppState>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
-    let result = match body.action.as_str() {
-        "greet" => {
-            let name = body.params["name"].as_str();
-            state.service.greet(name).await
-        }
-        "echo" => {
-            let msg = body.params["message"].as_str().unwrap_or("");
-            if msg.is_empty() {
-                Err(anyhow::anyhow!(
-                    "`message` param is required for action=echo"
-                ))
-            } else {
-                state.service.echo(msg).await
-            }
-        }
-        "status" => state.service.status().await,
-        "help" => Ok(json!({
-            "actions": ["greet", "echo", "status", "help"],
-            "usage": "POST /v1/example with {\"action\": \"<action>\", \"params\": {...}}",
-            "examples": {
-                "greet":  {"action": "greet",  "params": {"name": "Alice"}},
-                "echo":   {"action": "echo",   "params": {"message": "Hello!"}},
-                "status": {"action": "status", "params": {}},
-            }
-        })),
-        other => Err(anyhow::anyhow!(
-            "unknown action: {other}. POST {{\"action\":\"help\"}} for documentation."
-        )),
+    let result = match ExampleAction::from_rest(&body.action, &body.params) {
+        Ok(action) => execute_service_action(&state.service, &action).await,
+        Err(error) => Err(error),
     };
 
     match result {
@@ -79,12 +55,11 @@ pub async fn health() -> impl IntoResponse {
 
 /// `GET /status` — runtime status (unauthenticated, redacts secrets).
 pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
-    match state.service.status().await {
-        Ok(v) => Json(v).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
-    }
+    Json(json!({
+        "status": "ok",
+        "server": state.config.server_name,
+        "version": env!("CARGO_PKG_VERSION"),
+        "transport": "http",
+    }))
+    .into_response()
 }
