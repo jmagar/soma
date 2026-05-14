@@ -46,7 +46,7 @@ pub struct McpConfig {
     /// Bind host (EXAMPLE_MCP_HOST). Default: `0.0.0.0`.
     #[serde(default = "default_mcp_host")]
     pub host: String,
-    /// Bind port (EXAMPLE_MCP_PORT). Default: `3100`.
+    /// Bind port (EXAMPLE_MCP_PORT). Default: `40060`.
     #[serde(default = "default_mcp_port")]
     pub port: u16,
     /// MCP server name advertised to clients (EXAMPLE_MCP_SERVER_NAME).

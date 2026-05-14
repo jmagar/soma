@@ -174,11 +174,15 @@ fn setup_plugin_hook_no_repair_emits_json_contract() {
         String::from_utf8_lossy(&output.stderr)
     );
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["exit_policy"], "success");
+    assert_eq!(json["exit_policy"], "advisory_failure");
     assert_eq!(json["ran_repair"], false);
     assert_eq!(json["no_repair"], true);
     assert!(json["blocking_failures"].as_array().unwrap().is_empty());
-    assert!(json["advisory_failures"].is_array());
+    assert!(json["advisory_failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|failure| failure["code"] == "env_file_missing"));
     assert!(!dir.path().join(".env").exists());
 }
 

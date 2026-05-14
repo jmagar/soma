@@ -1015,7 +1015,7 @@ curl -H "Authorization: Bearer $EXAMPLE_API_KEY" \
 | unifi-mcp (rustifi) | 7474 | `unifi` |
 | tailscale-mcp (rustscale) | 7575 | `tailscale` |
 | apprise-mcp | 8765 | `apprise` |
-| rmcp-template | 3000 | `example` |
+| rmcp-template | 40060 | `example` |
 
 ---
 

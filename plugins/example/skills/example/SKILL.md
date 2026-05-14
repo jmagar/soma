@@ -152,7 +152,7 @@ mcp__example__example(action="help")
      The CLAUDE_PLUGIN_OPTION_* env vars are injected by the plugin runtime. -->
 
 Use only when the MCP tool is unavailable. The plugin exports connection settings as:
-- `CLAUDE_PLUGIN_OPTION_SERVER_URL` — base URL (e.g. `http://localhost:3000`)
+- `CLAUDE_PLUGIN_OPTION_SERVER_URL` — base URL (e.g. `http://localhost:40060`)
 - `CLAUDE_PLUGIN_OPTION_API_TOKEN` — bearer token
 
 **Sensitive value handling:** `api_token` is declared `sensitive: true` in plugin.json.

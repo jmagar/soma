@@ -166,3 +166,9 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Plugin setup hooks
+
+Plugin setup is owned by the binary. Keep `plugins/example/hooks/plugin-setup.sh` as a thin adapter that maps `CLAUDE_PLUGIN_OPTION_*` values to environment variables, prepares appdata, ensures `example` is on `PATH`, and then calls `example setup plugin-hook "$@"`.
+
+`example setup check` is read-only, `example setup repair` is idempotent, and `example setup plugin-hook --no-repair` is audit mode. Do not add Docker Compose, systemd, or service bootstrap logic back into the hook script. Use `scripts/check-plugin-hook-contract.py` to audit this pattern across the Rust servers.

@@ -58,7 +58,7 @@ For actions with parameters, extract them with `string_arg(&args, "param_name")`
 
 | Variant | When | Effect |
 |---------|------|--------|
-| `AuthPolicy::LoopbackDev` | `no_auth=true` or host starts with `127.` | No auth middleware; scope checks bypassed |
+| `AuthPolicy::LoopbackDev` | `no_auth=true` or host is loopback (`localhost`, `127.*`, `::1`) via `McpConfig::is_loopback()` | No auth middleware; scope checks bypassed |
 | `AuthPolicy::Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
 | `AuthPolicy::Mounted { auth_state: Some(_) }` | `auth_mode = "oauth"` | Full Google OAuth + RS256 JWT issuance |
 
@@ -71,7 +71,7 @@ Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `example:read
 | `EXAMPLE_API_URL` | — | Upstream service base URL |
 | `EXAMPLE_API_KEY` | — | Upstream service API key |
 | `EXAMPLE_MCP_HOST` | `0.0.0.0` | Bind host |
-| `EXAMPLE_MCP_PORT` | `3100` | Bind port |
+| `EXAMPLE_MCP_PORT` | `40060` | Bind port |
 | `EXAMPLE_MCP_NO_AUTH` | `false` | Disable auth (loopback only) |
 | `EXAMPLE_MCP_TOKEN` | — | Static bearer token |
 | `EXAMPLE_MCP_ALLOWED_HOSTS` | — | Extra comma-separated Host header values |
@@ -105,7 +105,7 @@ just test                 # cargo test
 just lint                 # cargo clippy -- -D warnings
 just fmt                  # cargo fmt
 just gen-token            # openssl rand -hex 32
-just health               # curl http://localhost:3100/health | jq .
+just health               # curl http://localhost:40060/health | jq .
 ```
 
 ## Test helpers
@@ -146,8 +146,9 @@ Plugin manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `ge
 - **`config.toml` is a template file** — it still contains `unraid-mcp` values; update it when adapting this template.
 - **Scope checks run in `rmcp_server.rs`**, not in `tools.rs`. `tools.rs` only dispatches.
 - **`help` action is public** — `required_scope_for("help")` returns `None`. All other actions require at least `example:read`.
-- **Default port is 3100** — set in `default_mcp_port()` in `config.rs`. Override with `EXAMPLE_MCP_PORT`.
+- **Default port is 40060** — set in `default_mcp_port()` in `config.rs`. Override with `EXAMPLE_MCP_PORT`.
 - **`elicit_name` is MCP-only** — elicitation requires a live client connection; it cannot be invoked from the CLI. This is the one intentional parity exception.
+- **`watch`, `serve`, and `doctor` are CLI infrastructure** — they are not MCP actions and have no parity requirement. `watch` polls `/health` and emits state-change lines to stdout (used by the plugin monitor). `serve` starts the HTTP server. `doctor` runs pre-flight checks. None belong in the MCP parity table.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->

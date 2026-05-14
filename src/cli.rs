@@ -239,6 +239,16 @@ fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
             message: format!("appdata directory does not exist: {}", data_dir.display()),
         });
     }
+    let env_path = data_dir.join(".env");
+    if !env_path.is_file() {
+        report.advisory_failures.push(SetupFailure {
+            code: "env_file_missing",
+            message: format!(
+                "{} does not exist; setup repair will create one, but process env can supply values",
+                env_path.display()
+            ),
+        });
+    }
     if config.example.api_url.is_empty() {
         report.blocking_failures.push(SetupFailure {
             code: "missing_example_api_url",
@@ -261,6 +271,7 @@ fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
 fn setup_repair(config: &Config) -> Result<SetupReport> {
     let data_dir = setup_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
+    write_setup_env(&data_dir, config)?;
 
     let mut report = setup_check(config, false);
     report.ran_repair = true;
@@ -273,7 +284,6 @@ fn setup_repair(config: &Config) -> Result<SetupReport> {
         report.ran_repair = true;
     }
 
-    write_setup_env(&data_dir, config)?;
     Ok(report.finish())
 }
 

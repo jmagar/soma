@@ -54,7 +54,7 @@ The rule: **zero business logic in `tools.rs` or `cli.rs`**. Both are pure shims
 ```bash
 git clone https://github.com/jmagar/rmcp-template
 cd rmcp-template
-cargo run -- serve          # Streamable HTTP on :3100
+cargo run -- serve          # Streamable HTTP on :40060
 # or
 cargo run -- mcp            # stdio transport
 # or
@@ -64,14 +64,14 @@ cargo run -- greet --name Alice
 Health check:
 
 ```bash
-curl http://localhost:3100/health
+curl http://localhost:40060/health
 # {"status":"ok"}
 ```
 
 Call the MCP tool directly:
 
 ```bash
-curl -s -X POST http://localhost:3100/mcp \
+curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"greet","name":"Alice"}}}'
@@ -227,7 +227,7 @@ Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issue
 | `EXAMPLE_API_URL` | no | — | Upstream service base URL |
 | `EXAMPLE_API_KEY` | no | — | Upstream service API key |
 | `EXAMPLE_MCP_HOST` | no | `0.0.0.0` | Bind host |
-| `EXAMPLE_MCP_PORT` | no | `3100` | Bind port |
+| `EXAMPLE_MCP_PORT` | no | `40060` | Bind port |
 | `EXAMPLE_MCP_NO_AUTH` | no | `false` | Disable auth (loopback only; 1/true/yes) |
 | `EXAMPLE_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
 | `EXAMPLE_MCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
@@ -255,7 +255,7 @@ just fmt              # cargo fmt
 just build            # cargo build
 just release          # cargo build --release
 just gen-token        # openssl rand -hex 32
-just health           # curl http://localhost:3100/health | jq .
+just health           # curl http://localhost:40060/health | jq .
 ```
 
 ## Portable automation
@@ -309,7 +309,7 @@ layout, schema docs, shell template smoke tests, and coupled file changes.
 {
   "mcpServers": {
     "example": {
-      "url": "http://localhost:3000/mcp",
+      "url": "http://localhost:40060/mcp",
       "headers": { "Authorization": "Bearer YOUR_TOKEN" }
     }
   }
@@ -390,7 +390,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 9. **Update `docker-compose.yml`**
 
-   - Change `3000` to your service's port (must match `config.toml [mcp] port`)
+   - Change `40060` to your service's port (must match `config.toml [mcp] port`)
    - The `${HOME}/.example:/data` volume is already set; rename `.example` to your service
 
 10. **Update `entrypoint.sh`**
@@ -492,7 +492,7 @@ cargo nextest run
 cargo xtask check-env
 
 # Start the server in dev mode
-just dev       # no-auth mode on :3000
+just dev       # no-auth mode on :40060
 
 # Symlink docs for all AI systems
 just symlink-docs

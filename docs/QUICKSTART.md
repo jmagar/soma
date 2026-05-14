@@ -13,21 +13,21 @@ cd rmcp-template
 cargo run -- serve
 ```
 
-The server starts on `http://localhost:3100`. In another terminal:
+The server starts on `http://localhost:40060`. In another terminal:
 
 ```bash
 # Health check (no auth required)
-curl http://localhost:3100/health
+curl http://localhost:40060/health
 # {"status":"ok"}
 
 # Call the greet action
-curl -s -X POST http://localhost:3100/mcp \
+curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"greet","name":"Alice"}}}'
 
 # List available tools
-curl -s -X POST http://localhost:3100/mcp \
+curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
@@ -76,7 +76,7 @@ EXAMPLE_MCP_TOKEN=a3f2c1... cargo run -- serve
 Now all `/mcp` calls require `Authorization: Bearer a3f2c1...`:
 
 ```bash
-curl -s -X POST http://localhost:3100/mcp \
+curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer a3f2c1..." \
@@ -105,7 +105,7 @@ Or use Streamable HTTP (server must be running):
 {
   "mcpServers": {
     "example": {
-      "url": "http://localhost:3100/mcp"
+      "url": "http://localhost:40060/mcp"
     }
   }
 }
