@@ -3081,10 +3081,10 @@ cd apps/web
 # Already configured if using the template — see apps/web/components.json
 
 # 2. Install Aurora token layer (required first)
-npx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
+pnpm dlx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
 
 # 3. Install all Aurora components
-npx shadcn@latest add @aurora/aurora-button @aurora/aurora-card @aurora/aurora-badge \
+pnpm dlx shadcn@latest add @aurora/aurora-button @aurora/aurora-card @aurora/aurora-badge \
   @aurora/aurora-input @aurora/aurora-table @aurora/aurora-dialog @aurora/aurora-tabs \
   @aurora/aurora-alert @aurora/aurora-toast @aurora/aurora-progress @aurora/aurora-skeleton
   # ... all 64 UI primitives from the registry

@@ -2,7 +2,7 @@
 
 ## What this app is
 
-A Next.js 15 frontend (static export) that serves the rmcp-template demo UI. It connects to the `example` MCP server's REST API and provides interactive tooling, an API explorer, and a dashboard.
+A Next.js 16 frontend (static export) that serves the rmcp-template demo UI. It connects to the `example` MCP server's REST API and provides interactive tooling, an API explorer, and a dashboard.
 
 The UI is built entirely on the **Aurora design system** — a shadcn-compatible component registry at `https://aurora.tootie.tv`. Aurora components are dark-first, operator-grade, and designed for AI/agent UIs.
 
@@ -22,17 +22,17 @@ The UI is built entirely on the **Aurora design system** — a shadcn-compatible
 
 **Install tokens first (one time only — already done):**
 ```bash
-npx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
+pnpm dlx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
 ```
 
 **Install any Aurora component:**
 ```bash
-npx shadcn@latest add @aurora/aurora-button
-npx shadcn@latest add @aurora/aurora-dialog
-npx shadcn@latest add @aurora/aurora-data-table
+pnpm dlx shadcn@latest add @aurora/aurora-button
+pnpm dlx shadcn@latest add @aurora/aurora-dialog
+pnpm dlx shadcn@latest add @aurora/aurora-data-table
 # blocks use the same pattern
-npx shadcn@latest add @aurora/aurora-prompt-input
-npx shadcn@latest add @aurora/aurora-artifact
+pnpm dlx shadcn@latest add @aurora/aurora-prompt-input
+pnpm dlx shadcn@latest add @aurora/aurora-artifact
 ```
 
 Components land in `components/ui/` and are immediately usable via their named exports.
@@ -126,7 +126,7 @@ These are foundational building blocks. All depend on `aurora-tokens`.
 
 ### Blocks (domain-organized)
 
-Complex multi-component blocks. Install via same `npx shadcn@latest add @aurora/aurora-{name}` pattern.
+Complex multi-component blocks. Install via same `pnpm dlx shadcn@latest add @aurora/aurora-{name}` pattern.
 
 **AI (48 blocks):** `aurora-prompt-input`, `aurora-message`, `aurora-conversation`, `aurora-artifact`, `aurora-thinking`, `aurora-tool-calls`, `aurora-reasoning`, `aurora-agent`, `aurora-checkpoint`, `aurora-commit`, `aurora-context`, `aurora-panel`, `aurora-plan`, `aurora-task`, `aurora-queue`, `aurora-stack-trace`, `aurora-test-results`, `aurora-model-selector`, `aurora-persona`, `aurora-suggestion`, `aurora-sandbox`, `aurora-audio-player`, `aurora-speech-input`, `aurora-transcription`, `aurora-voice-selector`, `aurora-inline-citation`, `aurora-sources`, `aurora-code-block` (AI variant)
 
@@ -155,7 +155,7 @@ apps/web/
 │   ├── aurora.css          # Aurora token definitions (auto-imported)
 │   └── ui/                 # Aurora components land here when installed
 │       ├── button.tsx      # Already has Aurora variants
-│       └── ...             # Others installed via npx shadcn add
+│       └── ...             # Others installed via pnpm dlx shadcn add
 ├── lib/
 │   ├── utils.ts            # cn() + devWarn()
 │   └── api.ts              # Typed REST client for example server
@@ -169,13 +169,13 @@ apps/web/
 ## Build commands
 
 ```bash
-npm run dev          # Dev server (http://localhost:3001 or next available)
-npm run build        # Static export to out/
-npm run lint         # ESLint
+pnpm dev             # Dev server (http://localhost:3001 or next available)
+pnpm build           # Static export to out/
+pnpm lint            # Biome lint
 
 # Install Aurora components
-npx shadcn@latest add @aurora/aurora-dialog
-npx shadcn@latest add @aurora/aurora-data-table
+pnpm dlx shadcn@latest add @aurora/aurora-dialog
+pnpm dlx shadcn@latest add @aurora/aurora-data-table
 ```
 
 ---

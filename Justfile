@@ -51,9 +51,9 @@ build-web:
     cd apps/web
     if [ ! -d node_modules ]; then
         echo "Installing web dependencies..."
-        npm install
+        pnpm install
     fi
-    npm run build
+    pnpm build
     echo "Web assets built → apps/web/out/"
 
 # Watch apps/web for changes and rebuild on save (requires watchexec: cargo install watchexec-cli)
@@ -78,7 +78,7 @@ web-watch:
         --debounce 1000ms \
         --on-busy-update queue \
         --wrap-process=none \
-        'cd apps/web && npm run build'
+        'cd apps/web && pnpm build'
 
 # Build the full binary with embedded web assets (runs build-web first)
 build-full: build-web build-release
@@ -249,7 +249,7 @@ install-tools:
     cargo binstall lefthook --quiet --no-confirm
     cargo binstall cargo-audit --quiet --no-confirm
     if [ -d apps/web ]; then
-        (cd apps/web && npm install)
+        (cd apps/web && pnpm install)
     fi
 
 # Alias for install-tools, matching the other Rust workspace convention

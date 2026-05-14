@@ -1,6 +1,6 @@
 # apps/web
 
-Operator dashboard and interactive tool runner for the MCP server. Built with Next.js 15 (static export), React 19, Tailwind CSS 4, and the Aurora design system.
+Operator dashboard and interactive tool runner for the MCP server. Built with Next.js 16 (static export), React 19, Tailwind CSS 4, Biome, and the Aurora design system.
 
 ## What it is
 
@@ -14,7 +14,7 @@ A static web UI served by the Rust binary alongside the MCP API. Three pages:
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 15 (App Router, static export) |
+| Framework | Next.js 16 (App Router, static export) |
 | Runtime | React 19 |
 | Language | TypeScript 5 (strict) |
 | Styles | Tailwind CSS 4 + Aurora design tokens |
@@ -25,10 +25,11 @@ A static web UI served by the Rust binary alongside the MCP API. Three pages:
 ## Dev commands
 
 ```bash
-npm run dev     # dev server at http://localhost:3000
-npm run build   # static export → out/
-npm run start   # start the Next.js production server (serves .next/)
-npm run lint    # ESLint
+pnpm dev        # dev server at http://localhost:3000
+pnpm build      # static export -> out/
+pnpm start      # start the Next.js production server (serves .next/)
+pnpm lint       # Biome lint
+pnpm check      # Biome lint + format check
 ```
 
 ## How it connects to the backend
@@ -64,8 +65,8 @@ Aurora tokens are bridged to shadcn's `--primary`, `--card`, `--destructive` ali
 **Adding a component:**
 
 ```bash
-npx shadcn@latest add @aurora/aurora-dialog
-npx shadcn@latest add @aurora/aurora-data-table
+pnpm dlx shadcn@latest add @aurora/aurora-dialog
+pnpm dlx shadcn@latest add @aurora/aurora-data-table
 ```
 
 Components land in `components/ui/`. Use CVA (`class-variance-authority`) for variants and `cn()` from `lib/utils.ts` for className construction.
