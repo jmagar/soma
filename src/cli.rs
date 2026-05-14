@@ -176,7 +176,7 @@ struct SetupReport {
 impl SetupReport {
     fn new(no_repair: bool) -> Self {
         Self {
-            exit_policy: "ok",
+            exit_policy: "success",
             ran_repair: false,
             no_repair,
             blocking_failures: Vec::new(),
@@ -185,10 +185,12 @@ impl SetupReport {
     }
 
     fn finish(mut self) -> Self {
-        self.exit_policy = if self.blocking_failures.is_empty() {
-            "ok"
+        self.exit_policy = if !self.blocking_failures.is_empty() {
+            "blocking_failure"
+        } else if !self.advisory_failures.is_empty() {
+            "advisory_failure"
         } else {
-            "block"
+            "success"
         };
         self
     }

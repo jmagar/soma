@@ -173,7 +173,7 @@ fn setup_plugin_hook_no_repair_emits_json_contract() {
         String::from_utf8_lossy(&output.stderr)
     );
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["exit_policy"], "ok");
+    assert_eq!(json["exit_policy"], "success");
     assert_eq!(json["ran_repair"], false);
     assert_eq!(json["no_repair"], true);
     assert!(json["blocking_failures"].as_array().unwrap().is_empty());
@@ -194,7 +194,7 @@ fn setup_repair_creates_env_file_without_upstream_contact() {
         String::from_utf8_lossy(&output.stderr)
     );
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["exit_policy"], "ok");
+    assert_eq!(json["exit_policy"], "success");
     assert_eq!(json["ran_repair"], true);
     assert_eq!(json["no_repair"], false);
 

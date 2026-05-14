@@ -275,6 +275,10 @@ family and generalized for new MCP services:
 | `just watch` | Run interactive Rust checks with `bacon` |
 | `just validate-plugin` | Validate plugin manifests, shared MCP config, hook config, and skills |
 | `just runtime-current` | Detect whether Docker/systemd is running the current built artifact |
+| `just schema-docs` / `just schema-docs-check` | Generate or verify [docs/MCP_SCHEMA.md](docs/MCP_SCHEMA.md) from the MCP action schema |
+| `just template-check` | Run plugin layout, schema drift, and template feature checks |
+| `just auth-smoke` | Smoke-test bearer-token MCP HTTP auth against a running server |
+| `just pre-release` | Run the release-readiness gate |
 | `just up` / `just down` | Short aliases for Docker Compose start/stop |
 
 See [scripts/README.md](scripts/README.md) for script-level options and

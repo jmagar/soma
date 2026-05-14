@@ -146,11 +146,15 @@ deps-check:
 blob-size-check:
     python3 scripts/check-blob-size.py
 
+# Check coupled files such as Justfile/lefthook and scripts/docs
+coupled-files-check:
+    bash scripts/check-coupled-files.sh
+
 # Check tracked source/config/docs for non-ASCII characters
 ascii-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**')
+    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
     if [[ "${#files[@]}" -eq 0 ]]; then
         echo "No files to check"
         exit 0
@@ -161,7 +165,7 @@ ascii-check:
 ascii-fix:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**')
+    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
     if [[ "${#files[@]}" -eq 0 ]]; then
         echo "No files to fix"
         exit 0
@@ -171,6 +175,24 @@ ascii-fix:
 # Check staged source files against line-count budgets
 file-size-check:
     bash scripts/check-file-size.sh
+
+# Regenerate MCP schema contract docs from src/mcp/schemas.rs
+schema-docs:
+    python3 scripts/check-schema-docs.py --write
+
+# Verify MCP schema contract docs and action surfaces are in sync
+schema-docs-check:
+    python3 scripts/check-schema-docs.py --check
+
+# Run shell/Rust-adjacent template invariant smoke tests
+template-features:
+    bash scripts/test-template-features.sh
+
+# Run fast template-specific checks
+template-check:
+    just validate-plugin
+    just schema-docs-check
+    just template-features
 
 # Run all local quality checks in sequence: fmt-check → lint → check → test
 verify:
@@ -309,6 +331,10 @@ health:
 runtime-current:
     bash scripts/check-runtime-current.sh --expected-binary target/release/example
 
+# Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
+auth-smoke:
+    bash scripts/test-mcp-auth.sh
+
 # Call the status action via the REST API (requires EXAMPLE_MCP_TOKEN in env)
 status:
     #!/usr/bin/env bash
@@ -400,6 +426,10 @@ test-mcporter:
         exit 1
     fi
     bash tests/mcporter/test-tools.sh
+
+# Run the release-readiness gate
+pre-release:
+    bash scripts/pre-release-check.sh
 
 # Generate a standalone CLI for this server via mcporter (requires running server)
 # TEMPLATE: Update port and token env var name

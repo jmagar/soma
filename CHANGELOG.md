@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- TEMPLATE: Add changes here as you work. They move to a version section on release. -->
 
+## [0.4.0] — 2026-05-14
+
+### Added
+
+- `.github/workflows/codeql.yml` — CodeQL SAST analysis on push/PR and weekly scheduled scan; results surface in the GitHub Security tab.
+- `.github/workflows/cargo-deny.yml` — license compliance, duplicate dependency, advisory, and source checks via `cargo-deny`.
+- `.github/workflows/msrv.yml` — compiles against the declared `rust-version` (1.86) to catch MSRV regressions early.
+
 ## [0.3.0] — 2026-05-14
 
 ### Added

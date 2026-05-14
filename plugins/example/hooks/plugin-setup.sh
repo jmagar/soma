@@ -58,7 +58,7 @@ main() {
   export EXAMPLE_HOME
 
   ensure_example_binary
-  example setup plugin-hook
+  example setup plugin-hook "$@"
 }
 
 main "$@"

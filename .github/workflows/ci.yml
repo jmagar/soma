@@ -6,7 +6,7 @@
 #   BINARY_NAME → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
 #
 # This workflow runs on every push and PR to main.
-# Jobs: fmt, clippy, test (nextest), toml (taplo), audit, gitleaks
+# Jobs: fmt, clippy, test (nextest), toml (taplo), template checks, audit, gitleaks
 #
 # All jobs must pass before merging. Adjust the matrix rust-version to match
 # your Cargo.toml `rust-version` field.
@@ -106,6 +106,35 @@ jobs:
 
       - name: taplo check
         run: taplo check
+
+  # ── audit: cargo audit ────────────────────────────────────────────────────────
+  template:
+    name: Template Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate plugin layout
+        run: bash scripts/validate-plugin-layout.sh
+
+      - name: Check schema docs
+        run: python3 scripts/check-schema-docs.py --check
+
+      - name: Run template feature smoke tests
+        run: bash scripts/test-template-features.sh
+
+      - name: Check blob sizes
+        run: python3 scripts/check-blob-size.py --base origin/main --head HEAD
+
+      - name: Check coupled files
+        run: bash scripts/check-coupled-files.sh origin/main HEAD
+
+      - name: ASCII hygiene
+        run: |
+          mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
+          python3 scripts/asciicheck.py "${files[@]}"
 
   # ── audit: cargo audit ────────────────────────────────────────────────────────
   audit:

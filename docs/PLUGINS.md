@@ -152,6 +152,9 @@ The validator checks:
 
 Use `PLUGIN_ROOT=plugins/<service>` when validating an adapted service package.
 
+For release checks, `just pre-release` includes this validator and the other
+template gates.
+
 ## Shared MCP Config
 
 Claude Code and Codex share `plugins/example/.mcp.json`:

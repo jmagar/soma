@@ -89,6 +89,91 @@ adapting this template to a real service.
 
 ---
 
+### `test-mcp-auth.sh`
+
+Smoke-tests the protected MCP HTTP auth path against a running server.
+
+```bash
+EXAMPLE_MCP_TOKEN=... scripts/test-mcp-auth.sh
+scripts/test-mcp-auth.sh --url http://localhost:3000/mcp --token ...
+```
+
+Checks that `/health` is public, `/mcp` rejects missing and bad bearer tokens
+with `401`, and `/mcp` accepts `Authorization: Bearer <token>`.
+
+`x-api-key` support is intentionally not assumed because this template's pinned
+auth layer accepts bearer tokens. For derived services that add `x-api-key`, run:
+
+```bash
+scripts/test-mcp-auth.sh --check-x-api-key
+```
+
+---
+
+### `check-schema-docs.py`
+
+Generates and verifies the MCP action schema contract.
+
+```bash
+python3 scripts/check-schema-docs.py --write
+python3 scripts/check-schema-docs.py --check
+just schema-docs
+just schema-docs-check
+```
+
+The checker treats `EXAMPLE_ACTIONS` in `src/mcp/schemas.rs` as canonical, then
+verifies `READ_ONLY_ACTIONS`, `src/mcp/tools.rs` help text, `README.md`, and the
+shared skill mention every action. Generated output lives in
+`docs/MCP_SCHEMA.md`.
+
+---
+
+### `test-template-features.sh`
+
+Runs fast shell smoke tests for template invariants that are not worth modeling
+as full integration tests.
+
+```bash
+bash scripts/test-template-features.sh
+just template-features
+```
+
+Current checks cover `.env` commit blocking, `CLAUDE.md` sibling symlink
+creation, plugin layout validation, schema-doc validation, and ASCII hygiene.
+
+---
+
+### `pre-release-check.sh`
+
+Runs the release-readiness gate.
+
+```bash
+scripts/pre-release-check.sh
+scripts/pre-release-check.sh --skip-verify --skip-build-plugin
+scripts/pre-release-check.sh --mcporter
+just pre-release
+```
+
+The default gate runs plugin validation, schema-doc validation, template feature
+smoke tests, version sync, blob-size check, ASCII hygiene, `just verify`, and
+`just build-plugin`. `--mcporter` adds the live MCP integration harness.
+
+---
+
+### `check-coupled-files.sh`
+
+CI-oriented guard for files that should usually change together.
+
+```bash
+scripts/check-coupled-files.sh origin/main HEAD
+just coupled-files-check
+```
+
+Examples: `Justfile` with `lefthook.yml`, scripts with `scripts/README.md`, and
+schema changes with `docs/MCP_SCHEMA.md`.
+
+---
+
 ### `validate-plugin-layout.sh`
 
 Validates the shipped plugin package.

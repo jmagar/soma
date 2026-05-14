@@ -40,6 +40,7 @@ A single MCP tool, `mcp__example__example`, dispatches on a required `action` ar
 | `greet` | Return a greeting (with optional name parameter) |
 | `echo` | Echo a message back unchanged |
 | `status` | Server status and upstream connectivity info |
+| `elicit_name` | Ask the MCP client to collect a name, then return a greeting |
 | `help` | Full in-tree action reference |
 
 **Always prefer the MCP tool**. Fall back to HTTP curl only when MCP is unavailable.
@@ -108,6 +109,28 @@ mcp__example__example(action="status")
   "status": "ok",
   "api_url": "https://api.example.com/v1",
   "note": "Replace with real health endpoint data"
+}
+```
+
+---
+
+### `action="elicit_name"` — Ask the user for a name
+
+Uses MCP elicitation so the server can ask the client to show a small input
+form to the user. Clients without elicitation support return a graceful fallback
+message instead of failing the tool call.
+
+No parameters.
+
+```
+mcp__example__example(action="elicit_name")
+```
+
+**Response shape:**
+```json
+{
+  "greeting": "Hello, Alice! Welcome to the example MCP server.",
+  "name": "Alice"
 }
 ```
 

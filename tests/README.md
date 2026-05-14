@@ -17,11 +17,35 @@ cargo nextest run --profile ci
 # End-to-end integration (requires a running server + mcporter)
 just dev &
 bash tests/mcporter/test-tools.sh
+
+# Template contract checks
+just template-check
+
+# Protected MCP auth smoke (requires running bearer-auth server)
+EXAMPLE_MCP_TOKEN=<token> just auth-smoke
 ```
 
 ---
 
 ## Test files
+
+### `plugin_contract.rs` — Plugin package contract
+
+Tests that the Claude, Codex, and Gemini plugin package surfaces stay aligned:
+manifest presence, shared endpoint settings, hook setup delegation, and the
+binary-owned hook standard in docs.
+
+### `template-check` — Template-level shell checks
+
+`just template-check` runs:
+
+- `just validate-plugin`
+- `just schema-docs-check`
+- `just template-features`
+
+`scripts/test-template-features.sh` covers `.env` commit blocking, `CLAUDE.md`
+sibling symlink creation, plugin validation, schema-doc validation, and ASCII
+hygiene.
 
 ### `tool_dispatch.rs` — Service layer
 
