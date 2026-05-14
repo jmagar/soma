@@ -1,6 +1,7 @@
 # Tests
 
-Three layers of tests covering the CLI parser, service layer, and full HTTP integration.
+Tests cover the CLI parser, service layer, template invariants, plugin package
+contract, and full HTTP integration.
 
 ## Running tests
 
@@ -46,6 +47,16 @@ binary-owned hook standard in docs.
 `scripts/test-template-features.sh` covers `.env` commit blocking, `CLAUDE.md`
 sibling symlink creation, plugin validation, schema-doc validation, and ASCII
 hygiene.
+
+### `template_invariants.rs` — Portable automation contract
+
+Rust tests that make the template automation visible and hard to drift:
+
+- every portable top-level script is executable
+- every portable top-level script is documented in `scripts/README.md`
+- ported Just recipes remain present
+- plugin manifests stay versionless
+- `docs/MCP_SCHEMA.md` names the known action surface
 
 ### `tool_dispatch.rs` — Service layer
 

@@ -1,5 +1,5 @@
 <!-- TEMPLATE: server.json — MCP Registry manifest for publishing your server.
-     See docs/server-json-guide.md for step-by-step publishing instructions.
+     See docs/MCP-REGISTRY-PUBLISH-GUIDE.md for step-by-step publishing instructions.
 
      Field reference:
        $schema        — Always use this exact URL for 2025-12-11 schema validation.
@@ -38,13 +38,13 @@
     "source": "github"
   },
 
-  "version": "0.1.0",
+  "version": "0.4.0",
 
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/example-mcp:0.1.0",
-      "version": "0.1.0",
+      "identifier": "ghcr.io/jmagar/example-mcp:0.4.0",
+      "version": "0.4.0",
       "environmentVariables": [
         {
           "name": "EXAMPLE_API_URL",

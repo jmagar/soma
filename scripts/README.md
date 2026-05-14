@@ -240,28 +240,34 @@ scripts/bump-version.sh minor    # 1.2.3 → 1.3.0
 scripts/bump-version.sh major    # 1.2.3 → 2.0.0
 ```
 
-Reads the current version from `.claude-plugin/plugin.json` (single source of truth) and updates:
+Reads the current version from `Cargo.toml`, which is the canonical version
+source for this template, and updates:
 
 - `Cargo.toml`
-- `pyproject.toml`
-- `.claude-plugin/plugin.json`
-- `.codex-plugin/plugin.json`
-- `.gemini-extension.json` / `gemini-extension.json`
+- `Cargo.lock` package entries, when present
+- `server.json`, when present
 
-Skips files that don't exist. Prints a summary and reminds you to update `CHANGELOG.md`.
+Plugin manifests intentionally do not carry a `version` field; Git SHA and
+release tags identify plugin builds. The script skips files that do not exist,
+prints a summary, and reminds you to update `CHANGELOG.md`.
 
 ---
 
 ### `check-version-sync.sh`
 
-Pre-commit hook that validates all version-bearing files agree and that `CHANGELOG.md` has an entry for the current version.
+Pre-commit hook that validates all version-bearing files agree and that
+`CHANGELOG.md` has an entry for the current version.
 
 ```bash
 scripts/check-version-sync.sh           # check current directory
 scripts/check-version-sync.sh /path/to  # check specific directory
 ```
 
-Checks `Cargo.toml`, `package.json`, `pyproject.toml`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `gemini-extension.json`. Exits non-zero if any versions differ. Missing `CHANGELOG.md` entry is a warning, not a failure.
+Checks `Cargo.toml`, `package.json`, `pyproject.toml`, root-level plugin
+manifests if they carry a version in an adapted repo, and `server.json`.
+Template plugin manifests under `plugins/example/` are expected to stay
+versionless. Exits non-zero if any versions differ. Missing `CHANGELOG.md`
+entry is a warning, not a failure.
 
 ---
 

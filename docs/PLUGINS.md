@@ -226,6 +226,11 @@ Keep version and metadata synchronized across:
 | `plugins/example/gemini-extension.json` | identity, repository, settings |
 | `server.json` | package version and registry metadata, when present |
 
+`Cargo.toml` is the canonical version source for this template. Use
+`scripts/bump-version.sh` to update Cargo and `server.json` together, then use
+`scripts/check-version-sync.sh` or `just pre-release` to verify that
+version-bearing files still agree. Plugin manifests should remain versionless.
+
 The template should not claim write capability unless the MCP server has real write actions. Read-only servers should use Codex `["Read"]` and avoid write-oriented sample prompts.
 
 ## Adaptation Checklist
