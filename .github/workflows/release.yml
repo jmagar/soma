@@ -10,7 +10,7 @@
 # Triggers: push of v* tags (e.g. v1.2.3)
 #
 # What this does:
-#   1. Builds release binaries for linux/amd64, linux/arm64, and windows/amd64
+#   1. Builds release binaries for linux/amd64 and windows/amd64
 #   2. Copies binaries to bin/ and commits via Git LFS
 #   3. Creates a GitHub Release with binaries as downloadable assets
 #   4. The commit in step 2 updates the LFS pointer so plugin install.sh
@@ -45,12 +45,6 @@ jobs:
             os: ubuntu-latest
             arch: x86_64
             ext: ""
-          # linux/arm64 — Raspberry Pi, AWS Graviton, etc.
-          # TEMPLATE: Remove this entry if you only need amd64.
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            arch: aarch64
-            ext: ""
           # windows/amd64 — cross-compiled via MinGW
           - target: x86_64-pc-windows-gnu
             os: ubuntu-latest
@@ -64,13 +58,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
-      # Cross-compilation toolchain for arm64 on amd64 runners.
-      - name: Install cross-compilation tools (arm64 only)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       # Cross-compilation toolchain for Windows on Linux runners.
       - name: Install cross-compilation tools (windows only)
@@ -110,7 +97,6 @@ jobs:
 
       - name: Build release binary
         env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
         run: |
           cargo build --release --locked --target ${{ matrix.target }}
@@ -173,13 +159,10 @@ jobs:
           tar -xz -C bin -f artifacts/${BIN}-x86_64.tar.gz
           mv bin/${BIN} bin/${BIN}-linux-amd64
 
-          tar -xz -C bin -f artifacts/${BIN}-aarch64.tar.gz
-          mv bin/${BIN} bin/${BIN}-linux-arm64
-
           tar -xz -C bin -f artifacts/${BIN}-windows-x86_64.tar.gz
           mv bin/${BIN}.exe bin/${BIN}-windows-amd64.exe
 
-          chmod +x bin/${BIN}-linux-*
+          chmod +x bin/${BIN}-linux-amd64
 
       - name: Configure Git
         run: |
