@@ -14,10 +14,12 @@ pub(super) fn display_path(path: &Path) -> String {
 }
 
 pub(super) fn contains_top_level_json_key(text: &str, key: &str) -> bool {
-    // Good enough for plugin manifests and avoids adding serde_json to xtask.
+    // Avoids serde_json in xtask. Handles both formatted JSON (key on its own
+    // line) and compact/single-line JSON (key after `{`).
+    let pattern = format!("\"{key}\"");
     text.lines().any(|line| {
-        let trimmed = line.trim_start();
-        trimmed.starts_with(&format!("\"{key}\"")) && trimmed.contains(':')
+        let content = line.trim_start().trim_start_matches('{').trim_start();
+        content.starts_with(&pattern) && content[pattern.len()..].trim_start().starts_with(':')
     })
 }
 
@@ -145,6 +147,24 @@ mod tests {
         ));
         assert!(!contains_top_level_json_key(
             "{\n  \"not_version\": true\n}",
+            "version"
+        ));
+    }
+
+    #[test]
+    fn top_level_json_key_handles_compact_json() {
+        // Single-line / compact JSON: key appears after `{`
+        assert!(contains_top_level_json_key(
+            "{ \"version\": \"1\" }",
+            "version"
+        ));
+        assert!(contains_top_level_json_key(
+            "{\"version\":\"1\"}",
+            "version"
+        ));
+        // Must not match a different key
+        assert!(!contains_top_level_json_key(
+            "{ \"name\": \"foo\" }",
             "version"
         ));
     }
