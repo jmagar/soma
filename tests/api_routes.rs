@@ -87,7 +87,10 @@ async fn rest_help_excludes_mcp_only_actions_from_rest_actions() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["actions"], json!(["greet", "echo", "status", "help"]));
-    assert_eq!(body["mcp_only_actions"], json!(["elicit_name"]));
+    assert_eq!(
+        body["mcp_only_actions"],
+        json!(["elicit_name", "scaffold_intent"])
+    );
 }
 
 #[tokio::test]

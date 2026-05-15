@@ -154,9 +154,10 @@ scripts/pre-release-check.sh --mcporter
 just pre-release
 ```
 
-The default gate runs plugin validation, schema-doc validation, template feature
-smoke tests, version sync, blob-size check, ASCII hygiene, `just verify`, and
-`just build-plugin`. `--mcporter` adds the live MCP integration harness.
+The default gate runs `cargo xtask patterns`, plugin validation, schema-doc
+validation, template feature smoke tests, version sync, blob-size check, ASCII
+hygiene, `just verify`, and `just build-plugin`. `--mcporter` adds the live MCP
+integration harness.
 
 ---
 

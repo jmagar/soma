@@ -44,6 +44,7 @@ async fn dispatch_example(
 
     match action {
         ExampleAction::ElicitName => elicit_name(peer).await,
+        ExampleAction::ScaffoldIntent => scaffold_intent(peer).await,
         ExampleAction::Help => Ok(json!({ "help": HELP_TEXT })),
         other => execute_service_action(&state.service, &other).await,
     }
@@ -67,7 +68,36 @@ struct NameInput {
 // Mark as safe for elicitation — proves this type generates an "object" JSON schema.
 rmcp::elicit_safe!(NameInput);
 
-/// Ask the MCP client to elicit the user's name, then return a personalised greeting.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+struct ScaffoldIntentInput {
+    /// Human-readable project name, e.g. "Unraid MCP" or "Lab Gateway"
+    display_name: String,
+    /// Cargo package name, e.g. "unraid-mcp"
+    crate_name: String,
+    /// Binary/tool name, e.g. "unraid"
+    binary_name: String,
+    /// Server category: "upstream-client" or "application-platform"
+    server_category: String,
+    /// Environment variable prefix, e.g. "UNRAID" or "LAB"
+    env_prefix: String,
+    /// Upstream auth kind: "none", "api-key", "bearer", "oauth", or "other"
+    auth_kind: String,
+    /// Upstream resource groups, comma-separated, e.g. "vms, shares, docker"
+    resource_groups: String,
+    /// Read actions, comma-separated, e.g. "list_vms, get_status"
+    read_actions: String,
+    /// Write/destructive actions, comma-separated. Leave blank if none.
+    write_actions: String,
+    /// MCP-only actions, comma-separated. Leave blank if none.
+    mcp_only_actions: String,
+}
+
+rmcp::elicit_safe!(ScaffoldIntentInput);
+
+/// Ask the MCP client to collect scaffold requirements, then return JSON for a skill handoff.
+///
+/// This function intentionally does not mutate files. The returned JSON is consumed by
+/// the `scaffold-project` skill, which drafts an approval-first plan for the user.
 ///
 /// # How MCP elicitation works
 ///
@@ -87,6 +117,112 @@ rmcp::elicit_safe!(NameInput);
 /// Only clients that declared the `elicitation` capability during the MCP initialisation
 /// handshake will respond. If the client doesn't support it, this returns a graceful
 /// fallback message rather than an error.
+async fn scaffold_intent(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
+    match peer
+        .elicit::<ScaffoldIntentInput>(
+            "Tell me what kind of project you are scaffolding. I will return JSON only; the scaffold-project skill will turn it into an approval-first plan.",
+        )
+        .await
+    {
+        Ok(Some(input)) => Ok(scaffold_intent_json(input)),
+        Ok(None) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "no_input",
+            "message": "No scaffold intent was provided.",
+        })),
+        Err(ElicitationError::UserDeclined) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "declined",
+            "message": "User declined to provide scaffold intent.",
+        })),
+        Err(ElicitationError::UserCancelled) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "cancelled",
+            "message": "Scaffold intent elicitation was cancelled.",
+        })),
+        Err(ElicitationError::CapabilityNotSupported) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "elicitation_not_supported",
+            "message": "This MCP client does not support elicitation.",
+            "fallback": {
+                "recommended_skill": "scaffold-project",
+                "instructions": "Ask the user for the scaffold fields manually, then create the same JSON shape documented by the scaffold-project skill. Do not mutate files until the user approves the plan."
+            }
+        })),
+        Err(e) => {
+            tracing::error!(error = %e, "scaffold intent elicitation failed unexpectedly");
+            Err(anyhow::anyhow!("scaffold intent elicitation failed unexpectedly: {e}"))
+        }
+    }
+}
+
+fn scaffold_intent_json(input: ScaffoldIntentInput) -> Value {
+    let category = normalize_category(&input.server_category);
+    let required_surfaces = if category == "application-platform" {
+        vec!["api", "cli", "mcp", "web"]
+    } else {
+        vec!["mcp", "cli"]
+    };
+    let service_name = input.binary_name.trim().replace('-', "_");
+    let env_prefix = input.env_prefix.trim().to_ascii_uppercase();
+
+    json!({
+        "kind": "rmcp_template_scaffold_intent",
+        "schema_version": 1,
+        "server_category": category,
+        "required_surfaces": required_surfaces,
+        "project": {
+            "display_name": input.display_name.trim(),
+            "crate_name": input.crate_name.trim(),
+            "binary_name": input.binary_name.trim(),
+            "service_name": service_name,
+            "env_prefix": env_prefix,
+        },
+        "upstream": {
+            "base_url_env": format!("{env_prefix}_API_URL"),
+            "auth_kind": input.auth_kind.trim(),
+            "resource_groups": split_csv(&input.resource_groups),
+        },
+        "actions": {
+            "read": split_csv(&input.read_actions),
+            "write": split_csv(&input.write_actions),
+            "mcp_only": split_csv(&input.mcp_only_actions),
+            "cli_only_operational": ["serve", "mcp", "doctor", "watch", "setup"],
+        },
+        "handoff": {
+            "recommended_skill": "scaffold-project",
+            "instructions": "Create an approval-first scaffold plan from this JSON. Do not mutate files until the user approves the plan.",
+        },
+        "policy": {
+            "business_action_minimum_surfaces": ["mcp", "cli"],
+            "upstream_client_surfaces": ["mcp", "cli"],
+            "application_platform_surfaces": ["api", "cli", "mcp", "web"],
+        }
+    })
+}
+
+fn normalize_category(category: &str) -> &'static str {
+    let normalized = category.trim().to_ascii_lowercase();
+    if normalized.contains("application") || normalized.contains("platform") {
+        "application-platform"
+    } else {
+        "upstream-client"
+    }
+}
+
+fn split_csv(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
 async fn elicit_name(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
     match peer
         .elicit::<NameInput>("What is your name? I'll use it to give you a personalised greeting.")
@@ -160,6 +296,12 @@ Demonstrates MCP elicitation — the server asks the user for their name
 via the MCP client UI, then returns a personalised greeting.
 Requires a client that supports the MCP elicitation capability (spec 2025-06-18).
 Example: `{ "action": "elicit_name" }`
+
+### scaffold_intent
+Uses MCP elicitation to collect project scaffold intent and returns JSON for the
+`scaffold-project` skill. This action does not mutate files; the skill creates an
+approval-first plan that the user can accept, edit, or reject.
+Example: `{ "action": "scaffold_intent" }`
 
 ### help
 Show this documentation.

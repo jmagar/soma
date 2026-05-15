@@ -55,6 +55,7 @@ def action_description(action: str) -> str:
         "echo": "Echo a required `message` string.",
         "status": "Return server status and configuration summary.",
         "elicit_name": "Ask the MCP client to elicit a name and return a personalized greeting.",
+        "scaffold_intent": "Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files.",
         "help": "Return the in-tool action reference. Public; no scope required.",
     }
     return descriptions.get(action, "TEMPLATE: document this action.")

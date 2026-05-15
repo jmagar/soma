@@ -35,11 +35,26 @@ ExampleService (app.rs)        ← all business logic
   └─────────────────────────────┘
 ```
 
+## Surface parity policy
+
+Every business action MUST be exposed through both MCP and CLI. Treat MCP + CLI as the minimum supported surface for every scaffolded server.
+
+REST API and Web UI are optional surfaces based on server type:
+
+| Server type | Required surfaces | Examples |
+|---|---|---|
+| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` |
+| Application/platform server | API + CLI + MCP + Web | `axon`, `lab`, `syslog` |
+
+Do not add a REST/Web surface just to mirror an upstream HTTP API. For upstream-client servers, the value is the MCP tool surface plus an equivalent CLI for scripting, debugging, and parity tests.
+
 ## Invariant: zero logic in shims
 
 `mcp/tools.rs` and `cli.rs` must not contain business logic. They parse inputs and delegate to `ExampleService`. All computation, validation, and transformation belongs in `app.rs`.
 
 ## How to add an action
+
+MCP + CLI steps are mandatory for every business action:
 
 1. `src/example.rs` — add transport method returning `Result<Value>`
 2. `src/app.rs` — add service method delegating to client
@@ -47,7 +62,12 @@ ExampleService (app.rs)        ← all business logic
 4. `src/mcp/schemas.rs` — add new parameter schema entries to `tool_definitions()`
 5. `src/mcp/tools.rs` — add match arm in `dispatch_example()`; update `HELP_TEXT`
 6. `src/cli.rs` — add `Command` variant, parse arm, dispatch arm
-7. `tests/tool_dispatch.rs` — add a test
+7. `tests/tool_dispatch.rs` and CLI tests — add parity coverage
+
+For application/platform servers only, also update:
+
+8. REST API handlers/schemas for the action
+9. `apps/web/lib/template.ts`, web forms, and API explorer examples
 
 ## Auth policy
 
@@ -95,6 +115,7 @@ Single tool `example`, dispatched by `action` parameter:
 | `echo` | `example:read` | Echo; required `message` string |
 | `status` | `example:read` | Server status |
 | `elicit_name` | `example:read` | Elicitation demo — asks user for name mid-call |
+| `scaffold_intent` | `example:read` | Elicitation setup wizard — returns JSON for the scaffold-project skill |
 | `help` | none (public) | Full action reference |
 
 ## MCP features implemented
@@ -102,7 +123,8 @@ Single tool `example`, dispatched by `action` parameter:
 - **Tools** — `example` tool with action dispatch
 - **Resources** — `example://schema/mcp-tool` (JSON schema for the tool)
 - **Prompts** — `quick_start` prompt
-- **Elicitation** — `elicit_name` action uses `peer.elicit::<NameInput>(...)` (spec 2025-06-18)
+- **Elicitation** — `elicit_name` and `scaffold_intent` actions use `peer.elicit::<...>(...)` (spec 2025-06-18)
+- **Scaffold handoff** — `scaffold_intent` returns JSON only; the `scaffold-project` plugin skill turns it into an approval-first plan
 
 ## Plugin versioning
 

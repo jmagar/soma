@@ -46,6 +46,7 @@ run_check() {
   fi
 }
 
+run_check "PATTERNS.md contracts" cargo xtask patterns
 run_check "plugin layout" just validate-plugin
 run_check "schema docs" python3 scripts/check-schema-docs.py --check
 run_check "template feature smoke" bash scripts/test-template-features.sh

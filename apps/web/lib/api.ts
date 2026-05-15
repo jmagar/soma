@@ -8,7 +8,7 @@
  * both the API and the web UI — no CORS or cross-origin config needed.
  */
 
-const BASE = "";
+import { endpoint, WEB_APP_CONFIG } from "@/lib/template";
 
 export interface ApiResponse<T = unknown> {
   data?: T;
@@ -42,7 +42,7 @@ export async function callAction<T = unknown>(
   params: Record<string, unknown> = {},
 ): Promise<ApiResponse<T>> {
   try {
-    const res = await fetch(`${BASE}/v1/example`, {
+    const res = await fetch(endpoint(WEB_APP_CONFIG.restEndpoint), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, params }),
@@ -60,7 +60,7 @@ export async function callAction<T = unknown>(
 /** GET /health */
 export async function getHealth(): Promise<ApiResponse<HealthResult>> {
   try {
-    const res = await fetch(`${BASE}/health`);
+    const res = await fetch(endpoint(WEB_APP_CONFIG.healthEndpoint));
     const json = await res.json();
     if (!res.ok) return { error: `HTTP ${res.status}` };
     return { data: json as HealthResult };
@@ -72,7 +72,7 @@ export async function getHealth(): Promise<ApiResponse<HealthResult>> {
 /** GET /status */
 export async function getStatus(): Promise<ApiResponse<StatusResult>> {
   try {
-    const res = await fetch(`${BASE}/status`);
+    const res = await fetch(endpoint(WEB_APP_CONFIG.statusEndpoint));
     const json = await res.json();
     if (!res.ok) return { error: `HTTP ${res.status}` };
     return { data: json as StatusResult };

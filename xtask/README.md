@@ -10,11 +10,12 @@ Run all CI checks locally in the same order as `.github/workflows/ci.yml`. Stops
 
 | Step | Tool | Skipped if absent |
 |---|---|---|
-| 1/5 | `cargo fmt --check` | — |
-| 2/5 | `cargo clippy -- -D warnings` | — |
-| 3/5 | `cargo nextest run --profile ci` | falls back to `cargo test` |
-| 4/5 | `taplo check` | yes |
-| 5/5 | `cargo audit` | yes |
+| 1/6 | `cargo fmt --check` | — |
+| 2/6 | `cargo clippy -- -D warnings` | — |
+| 3/6 | `cargo nextest run --profile ci` | falls back to `cargo test` |
+| 4/6 | `taplo check` | yes |
+| 5/6 | `cargo xtask patterns` | — |
+| 6/6 | `cargo audit` | yes |
 
 ```bash
 cargo xtask ci
@@ -66,6 +67,23 @@ Symlinks use relative targets so they remain valid after `git clone`. Run this a
 
 ---
 
+### `cargo xtask patterns`
+
+Check high-signal static contracts from `docs/PATTERNS.md`.
+
+```bash
+cargo xtask patterns
+cargo xtask patterns --strict
+# or:
+just patterns-check
+```
+
+The checker enforces required files, modern Rust module layout (`no mod.rs`), thin MCP/CLI shims, action schema/help/test/CLI surface drift, plugin manifest version rules, binary-owned plugin hook constraints, auth/config basics, route presence, and tooling hooks.
+
+File-size target overages are warnings until they exceed a hard limit, so existing borderline modules do not block unrelated work. Use `--strict` to fail on warnings for newly adapted servers or cleanup branches.
+
+---
+
 ### `cargo xtask check-env`
 
 Validate environment variables before starting the server. Prints the status of every required and optional variable, then exits non-zero if any required variable is missing.
@@ -93,7 +111,7 @@ Error: 1 required variable(s) missing. Copy .env.example to .env and fill in the
 
 - **Minimal dependencies**: only `anyhow` and `walkdir` — keeps xtask compile time fast.
 - **Workspace root awareness**: all commands `cd` to the workspace root via `CARGO_MANIFEST_DIR` before running, so they work from any subdirectory.
-- **Delegation pattern**: shells out to existing tools (`cargo`, `taplo`, etc.) rather than reimplementing them.
+- **Delegation pattern**: shells out to external tools when useful (`cargo`, `taplo`, etc.) and implements repo-specific contract checks directly in Rust.
 - **Optional tools**: `ci` gracefully skips `nextest`, `taplo`, and `cargo-audit` if they are not installed, so the command is always runnable on a fresh checkout.
 
 ## Adding a new command

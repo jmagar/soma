@@ -10,6 +10,30 @@ architectural decision recorded in the repo.
 
 ---
 
+## 0. Surface Parity Policy
+
+Every business action MUST have MCP + CLI parity. MCP is the primary integration
+surface for agents; CLI is the mandatory scripting, debugging, and regression-test
+surface. If an operation is exposed to one of those surfaces, expose it to both unless
+there is a documented protocol constraint.
+
+REST API and Web UI are required only for application/platform servers that are more
+than a thin client over an upstream API.
+
+| Server category | Required surfaces | Examples | Guidance |
+|---|---|---|---|
+| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` | Do not duplicate the upstream HTTP API as a local REST API by default. Add REST/Web only when the server owns meaningful state, workflows, dashboards, or non-MCP consumers. |
+| Application/platform server | API + CLI + MCP + Web | `axon`, `lab`, `syslog` | Keep all four surfaces thin and backed by the same service layer. Web talks to the local API; API/MCP/CLI all delegate to `app/`. |
+
+Allowed exceptions:
+
+- MCP-only protocol interactions, such as elicitation, may omit CLI when there is no
+  equivalent non-interactive command. Document the reason in the action metadata/docs.
+- CLI-only operational commands, such as `serve`, `mcp`, `doctor`, `watch`, and
+  `setup`, are not business actions and do not need MCP equivalents.
+
+---
+
 ## 1. Module Architecture — Strict Layering
 
 ```
@@ -60,11 +84,13 @@ lives in `app.rs`.
 
 ---
 
-## 1a. Module Architecture — Advanced (MCP + REST API + Web UI)
+## 1a. Module Architecture — Advanced (API + CLI + MCP + Web)
 
-Use this layout when the server also exposes a REST/JSON API surface and/or a web UI
-in addition to MCP. The guiding constraints are the same as the base layout — thin
-shims, domain logic in `app/` — with two additions:
+Use this layout for application/platform servers that expose REST/JSON and/or Web UI
+surfaces in addition to the mandatory MCP + CLI pair. Do not use this layout merely
+because the upstream service has an HTTP API; upstream-client MCP servers should stay
+focused on MCP + CLI unless they own additional workflows/state. The guiding constraints
+are the same as the base layout — thin shims, domain logic in `app/` — with two additions:
 
 1. **Any surface that would exceed ~400 lines becomes a directory.**
    `api/`, `web/`, `app/`, and `mcp/` are all directories from the start.

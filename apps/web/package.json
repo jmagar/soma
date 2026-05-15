@@ -9,7 +9,9 @@
     "start": "pnpm exec serve out",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "validate": "pnpm check && pnpm typecheck && pnpm build"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",

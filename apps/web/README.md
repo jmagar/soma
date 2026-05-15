@@ -4,11 +4,13 @@ Operator dashboard and interactive tool runner for the MCP server. Built with Ne
 
 ## What it is
 
-A static web UI served by the Rust binary alongside the MCP API. Three pages:
+A static web UI served by the Rust binary alongside the MCP API. This app is for application/platform servers that intentionally expose API + CLI + MCP + Web. Upstream-client MCP servers should keep MCP + CLI parity and omit REST/Web unless they own additional workflows, state, dashboards, or non-MCP consumers.
+
+Three pages:
 
 - **Dashboard** (`/`) — Server health (10s polling), status cards, quick action buttons, activity feed
 - **Tool Runner** (`/tools/`) — Select an action, fill in parameters, see the request preview and live JSON response
-- **API Explorer** (`/api/`) — Endpoint reference, surface parity table (MCP / REST / CLI), cURL examples for every action
+- **API Explorer** (`/api/`) — Endpoint reference, surface parity table (MCP / REST / CLI), cURL examples for REST-capable actions, and notes for MCP-only actions
 
 ## Stack
 
@@ -30,11 +32,15 @@ pnpm build      # static export -> out/
 pnpm start      # serve the built out/ directory
 pnpm lint       # Biome lint
 pnpm check      # Biome lint + format check
+pnpm typecheck  # TypeScript type check
+pnpm validate   # Biome check + typecheck + static build
 ```
 
 ## How it connects to the backend
 
-All API calls go through `lib/api.ts`. The base URL is empty (relative) — the Rust server serves both the static files and the API from the same origin, so no CORS configuration is needed.
+All API calls go through `lib/api.ts`. Template-facing service names, endpoints, and action metadata live in `lib/template.ts` so a scaffolded project has one obvious place to update the web UI.
+
+By default, the base URL is empty (relative) — the Rust server serves both the static files and the API from the same origin, so no CORS configuration is needed. For local `pnpm dev` against a separately running backend, copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_EXAMPLE_API_BASE_URL` (for example, `http://localhost:3100`).
 
 Every action is dispatched as:
 
@@ -86,6 +92,7 @@ apps/web/
 │   └── ui/               # Aurora/shadcn components
 ├── lib/
 │   ├── api.ts            # Typed REST client
+│   ├── template.ts       # Template knobs: branding, endpoints, action metadata
 │   └── utils.ts          # cn() helper
 ├── components.json       # shadcn config — @aurora registry
 ├── next.config.ts        # Static export, output: "export"
@@ -104,8 +111,9 @@ apps/web/
 
 When adapting for a real service:
 
-1. Update the action list in `tools/page.tsx` to match your service's actions.
-2. Update the parameter forms for each action.
-3. Update the action reference cards in `api/page.tsx`.
-4. Replace `"example"` tool name references throughout with your service name.
-5. Update `lib/api.ts` helper functions to match your service's actions and response shapes.
+0. First decide whether the service should keep only MCP + CLI. If it is an upstream-client server like `unrust`, `rustifi`, `rustify`, `rustscale`, or `apprise`, remove/ignore `apps/web` unless there is a specific product need for API/Web.
+1. For application/platform servers, update `WEB_APP_CONFIG` in `lib/template.ts` with your service name, display name, endpoints, and env var prefix.
+2. Update `ACTIONS` in `lib/template.ts` to match your service's actions, parameters, scopes, and examples.
+3. Update `lib/api.ts` helper functions and response interfaces to match your service's action result shapes.
+4. Replace `NEXT_PUBLIC_EXAMPLE_API_BASE_URL` in `.env.example` and docs with your service-specific public env var name.
+5. Run `pnpm validate` before committing the scaffolded web app.

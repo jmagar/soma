@@ -41,6 +41,7 @@ A single MCP tool, `mcp__example__example`, dispatches on a required `action` ar
 | `echo` | Echo a message back unchanged |
 | `status` | Server status and upstream connectivity info |
 | `elicit_name` | Ask the MCP client to collect a name, then return a greeting |
+| `scaffold_intent` | Elicit scaffold requirements and return JSON for the scaffold-project skill |
 | `help` | Full in-tree action reference |
 
 **Always prefer the MCP tool**. Fall back to HTTP curl only when MCP is unavailable.
@@ -136,6 +137,39 @@ mcp__example__example(action="elicit_name")
 
 ---
 
+### `action="scaffold_intent"` — Create scaffold intent JSON
+
+Uses MCP elicitation to collect what kind of project the user is building, then returns JSON for the `scaffold-project` skill. This action does **not** mutate files. The skill reads the JSON and creates an approval-first plan that the user can accept, edit, or reject.
+
+No parameters.
+
+```
+mcp__example__example(action="scaffold_intent")
+```
+
+**Response shape:**
+```json
+{
+  "kind": "rmcp_template_scaffold_intent",
+  "schema_version": 1,
+  "server_category": "upstream-client",
+  "required_surfaces": ["mcp", "cli"],
+  "project": {
+    "display_name": "Unraid MCP",
+    "crate_name": "unraid-mcp",
+    "binary_name": "unraid",
+    "service_name": "unraid",
+    "env_prefix": "UNRAID"
+  },
+  "handoff": {
+    "recommended_skill": "scaffold-project",
+    "instructions": "Create an approval-first scaffold plan from this JSON. Do not mutate files until the user approves the plan."
+  }
+}
+```
+
+---
+
 ### `action="help"` — Canonical reference
 
 Returns the authoritative in-tree action documentation. Use as ground truth if this skill document appears stale.
@@ -204,4 +238,14 @@ mcp__example__example(action="greet", name="test")
 
 # 3. Verify echo round-trip
 mcp__example__example(action="echo", message="ping")
+```
+
+### Scaffold a new project plan
+
+```
+# 1. Collect scaffold intent JSON through MCP elicitation
+mcp__example__example(action="scaffold_intent")
+
+# 2. Invoke/use the scaffold-project skill with the returned JSON
+# 3. Review the generated plan before approving any file mutations
 ```

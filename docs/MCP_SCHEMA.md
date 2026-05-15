@@ -25,6 +25,7 @@ python3 scripts/check-schema-docs.py --check
 | `echo` | `example:read` | Echo a required `message` string. |
 | `status` | `example:read` | Return server status and configuration summary. |
 | `elicit_name` | `example:read` | Ask the MCP client to elicit a name and return a personalized greeting. |
+| `scaffold_intent` | `example:read` | Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files. |
 | `help` | public | Return the in-tool action reference. Public; no scope required. |
 
 ## Drift Rules

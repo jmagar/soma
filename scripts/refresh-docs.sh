@@ -324,14 +324,18 @@ main() {
     pack_repo "modelcontextprotocol/rust-sdk" \
       "mcp/repos/modelcontextprotocol-rust-sdk.xml"
 
-    # MCP specification source — protocol-level reference
+    # MCP specification source — protocol-level reference.
+    # Exclude large diagrams; SVG/Excalidraw assets dominate token count while
+    # adding little value to text-first reference packs.
     pack_repo "modelcontextprotocol/modelcontextprotocol" \
       "mcp/repos/modelcontextprotocol-modelcontextprotocol.xml" \
-      "docs/**,spec/**" ""
+      "docs/**,spec/**" "**/*.svg,**/*.excalidraw.svg"
 
-    # MCP registry — server.json schema + publishing workflow reference
+    # MCP registry — server.json schema + publishing workflow reference.
+    # Exclude large diagrams for the same reason as the protocol spec pack.
     pack_repo "modelcontextprotocol/registry" \
-      "mcp/repos/modelcontextprotocol-registry.xml"
+      "mcp/repos/modelcontextprotocol-registry.xml" \
+      "" "**/*.svg,**/*.excalidraw.svg"
 
     # mcporter — integration test tool used in tests/mcporter/test-tools.sh
     pack_repo "openclaw/mcporter" \

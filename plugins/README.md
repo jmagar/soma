@@ -16,8 +16,10 @@ plugins/example/
 │   ├── hooks.json        # Lifecycle hook definitions
 │   └── plugin-setup.sh  # Deployment and validation script
 └── skills/
-    └── example/
-        └── SKILL.md      # Tool documentation for Claude and Codex
+    ├── example/
+    │   └── SKILL.md      # Tool documentation for Claude and Codex
+    └── scaffold-project/
+        └── SKILL.md      # Turns scaffold_intent JSON into an approval-first plan
 ```
 
 ---

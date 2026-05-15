@@ -42,6 +42,11 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::McpOnly,
     },
     ActionSpec {
+        name: "scaffold_intent",
+        required_scope: Some(READ_SCOPE),
+        transport: ActionTransport::McpOnly,
+    },
+    ActionSpec {
         name: "help",
         required_scope: None,
         transport: ActionTransport::Any,
@@ -83,6 +88,7 @@ pub enum ExampleAction {
     Status,
     Help,
     ElicitName,
+    ScaffoldIntent,
 }
 
 impl ExampleAction {
@@ -112,6 +118,7 @@ impl ExampleAction {
             "status" => Ok(Self::Status),
             "help" => Ok(Self::Help),
             "elicit_name" => Ok(Self::ElicitName),
+            "scaffold_intent" => Ok(Self::ScaffoldIntent),
             other => Err(anyhow!(
                 "unknown example action: {other}; use action=help for documentation"
             )),
@@ -130,6 +137,9 @@ pub async fn execute_service_action(
         ExampleAction::Help => Ok(rest_help()),
         ExampleAction::ElicitName => Err(anyhow!(
             "action=elicit_name is only available over MCP because it requires a peer"
+        )),
+        ExampleAction::ScaffoldIntent => Err(anyhow!(
+            "action=scaffold_intent is only available over MCP because it requires elicitation"
         )),
     }
 }
@@ -178,10 +188,20 @@ mod tests {
     fn action_metadata_is_the_action_source_of_truth() {
         assert_eq!(
             action_names(),
-            vec!["greet", "echo", "status", "elicit_name", "help"]
+            vec![
+                "greet",
+                "echo",
+                "status",
+                "elicit_name",
+                "scaffold_intent",
+                "help"
+            ]
         );
         assert_eq!(rest_action_names(), vec!["greet", "echo", "status", "help"]);
-        assert_eq!(mcp_only_action_names(), vec!["elicit_name"]);
+        assert_eq!(
+            mcp_only_action_names(),
+            vec!["elicit_name", "scaffold_intent"]
+        );
         assert_eq!(required_scope_for_action("help"), None);
         assert_eq!(required_scope_for_action("greet"), Some(READ_SCOPE));
         assert_eq!(required_scope_for_action("unknown"), Some(DENY_SCOPE));
@@ -240,6 +260,13 @@ mod tests {
         }))
         .unwrap_err();
         assert!(echo.to_string().contains("`message` must be a string"));
+    }
+
+    #[test]
+    fn scaffold_intent_parses_as_mcp_only_action() {
+        let action = ExampleAction::from_mcp_args(&json!({ "action": "scaffold_intent" }))
+            .expect("scaffold_intent should parse");
+        assert_eq!(action, ExampleAction::ScaffoldIntent);
     }
 
     #[test]

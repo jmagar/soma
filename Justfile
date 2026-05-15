@@ -184,12 +184,17 @@ schema-docs:
 schema-docs-check:
     python3 scripts/check-schema-docs.py --check
 
+# Check static contracts from docs/PATTERNS.md
+patterns-check:
+    cargo xtask patterns
+
 # Run shell/Rust-adjacent template invariant smoke tests
 template-features:
     bash scripts/test-template-features.sh
 
 # Run fast template-specific checks
 template-check:
+    just patterns-check
     just validate-plugin
     just schema-docs-check
     just template-features
