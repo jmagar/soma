@@ -91,3 +91,40 @@ async fn test_service_status_returns_ok() {
         "service status should return ok"
     );
 }
+
+#[test]
+fn test_scaffold_intent_transformation_lives_in_service() {
+    let service = stub_service();
+    let result = service.scaffold_intent(ScaffoldIntent {
+        display_name: "Lab Gateway".into(),
+        crate_name: "lab-gateway-mcp".into(),
+        binary_name: "lab-gateway".into(),
+        server_category: "application platform".into(),
+        env_prefix: "lab".into(),
+        auth_kind: "api key".into(),
+        host: "".into(),
+        port: 3100,
+        mcp_transport: "streamable-http".into(),
+        mcp_primitives: "tools, resources, tools".into(),
+        deployment: "containers".into(),
+        plugins: "claude, gemini, none".into(),
+        publish_mcp: true,
+        crawl_urls: "https://docs.example.test, https://api.example.test".into(),
+        crawl_repos: "".into(),
+        crawl_search_topics: "Lab API".into(),
+    });
+
+    assert_eq!(result["server_category"], "application-platform");
+    assert_eq!(result["project"]["service_name"], "lab_gateway");
+    assert_eq!(result["project"]["env_prefix"], "LAB");
+    assert_eq!(result["upstream"]["base_url_env"], "LAB_API_URL");
+    assert_eq!(result["upstream"]["auth_kind"], "api-key");
+    assert_eq!(result["runtime"]["host"], "127.0.0.1");
+    assert_eq!(result["runtime"]["mcp_transport"], "http");
+    assert_eq!(result["deployment"], "docker");
+    assert_eq!(result["plugins"], serde_json::json!(["claude", "gemini"]));
+    assert_eq!(
+        result["mcp_primitives"],
+        serde_json::json!(["tools", "resources"])
+    );
+}

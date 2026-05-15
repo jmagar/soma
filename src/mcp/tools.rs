@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::actions::{execute_service_action, ExampleAction};
+use crate::app::{ExampleService, ScaffoldIntent};
 use crate::server::AppState;
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
@@ -44,7 +45,7 @@ async fn dispatch_example(
 
     match action {
         ExampleAction::ElicitName => elicit_name(peer).await,
-        ExampleAction::ScaffoldIntent => scaffold_intent(peer).await,
+        ExampleAction::ScaffoldIntent => scaffold_intent(&state.service, peer).await,
         ExampleAction::Help => Ok(json!({ "help": HELP_TEXT })),
         other => execute_service_action(&state.service, &other).await,
     }
@@ -80,16 +81,28 @@ struct ScaffoldIntentInput {
     server_category: String,
     /// Environment variable prefix, e.g. "UNRAID" or "LAB"
     env_prefix: String,
-    /// Upstream auth kind: "none", "api-key", "bearer", "oauth", or "other"
+    /// Upstream auth kind: "none", "api-key", "bearer", "oauth", "both", or "other"
     auth_kind: String,
-    /// Upstream resource groups, comma-separated, e.g. "vms, shares, docker"
-    resource_groups: String,
-    /// Read actions, comma-separated, e.g. "list_vms, get_status"
-    read_actions: String,
-    /// Write/destructive actions, comma-separated. Leave blank if none.
-    write_actions: String,
-    /// MCP-only actions, comma-separated. Leave blank if none.
-    mcp_only_actions: String,
+    /// Default bind host, e.g. "127.0.0.1" or "0.0.0.0"
+    host: String,
+    /// Default HTTP port, e.g. 3100
+    port: u16,
+    /// MCP transport mode: "stdio", "http", or "dual"
+    mcp_transport: String,
+    /// MCP primitives to scaffold, comma-separated: "tools, resources, prompts, elicitation"
+    mcp_primitives: String,
+    /// Deployment scaffolding: "none", "systemd", or "docker"
+    deployment: String,
+    /// Plugin surfaces to scaffold, comma-separated: "claude, codex, gemini". Leave blank for none.
+    plugins: String,
+    /// Whether to scaffold MCP registry publishing through server.json
+    publish_mcp: bool,
+    /// Documentation URLs to crawl via Axon, comma-separated. Leave blank if none.
+    crawl_urls: String,
+    /// Repository URLs to crawl via Axon, comma-separated. Leave blank if none.
+    crawl_repos: String,
+    /// Search topics to crawl via Axon, comma-separated. Leave blank if none.
+    crawl_search_topics: String,
 }
 
 rmcp::elicit_safe!(ScaffoldIntentInput);
@@ -117,14 +130,17 @@ rmcp::elicit_safe!(ScaffoldIntentInput);
 /// Only clients that declared the `elicitation` capability during the MCP initialisation
 /// handshake will respond. If the client doesn't support it, this returns a graceful
 /// fallback message rather than an error.
-async fn scaffold_intent(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
+async fn scaffold_intent(
+    service: &ExampleService,
+    peer: &Peer<RoleServer>,
+) -> anyhow::Result<Value> {
     match peer
         .elicit::<ScaffoldIntentInput>(
             "Tell me what kind of project you are scaffolding. I will return JSON only; the scaffold-project skill will turn it into an approval-first plan.",
         )
         .await
     {
-        Ok(Some(input)) => Ok(scaffold_intent_json(input)),
+        Ok(Some(input)) => Ok(service.scaffold_intent(input.into())),
         Ok(None) => Ok(json!({
             "kind": "rmcp_template_scaffold_intent",
             "schema_version": 1,
@@ -160,67 +176,27 @@ async fn scaffold_intent(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
     }
 }
 
-fn scaffold_intent_json(input: ScaffoldIntentInput) -> Value {
-    let category = normalize_category(&input.server_category);
-    let required_surfaces = if category == "application-platform" {
-        vec!["api", "cli", "mcp", "web"]
-    } else {
-        vec!["mcp", "cli"]
-    };
-    let service_name = input.binary_name.trim().replace('-', "_");
-    let env_prefix = input.env_prefix.trim().to_ascii_uppercase();
-
-    json!({
-        "kind": "rmcp_template_scaffold_intent",
-        "schema_version": 1,
-        "server_category": category,
-        "required_surfaces": required_surfaces,
-        "project": {
-            "display_name": input.display_name.trim(),
-            "crate_name": input.crate_name.trim(),
-            "binary_name": input.binary_name.trim(),
-            "service_name": service_name,
-            "env_prefix": env_prefix,
-        },
-        "upstream": {
-            "base_url_env": format!("{env_prefix}_API_URL"),
-            "auth_kind": input.auth_kind.trim(),
-            "resource_groups": split_csv(&input.resource_groups),
-        },
-        "actions": {
-            "read": split_csv(&input.read_actions),
-            "write": split_csv(&input.write_actions),
-            "mcp_only": split_csv(&input.mcp_only_actions),
-            "cli_only_operational": ["serve", "mcp", "doctor", "watch", "setup"],
-        },
-        "handoff": {
-            "recommended_skill": "scaffold-project",
-            "instructions": "Create an approval-first scaffold plan from this JSON. Do not mutate files until the user approves the plan.",
-        },
-        "policy": {
-            "business_action_minimum_surfaces": ["mcp", "cli"],
-            "upstream_client_surfaces": ["mcp", "cli"],
-            "application_platform_surfaces": ["api", "cli", "mcp", "web"],
+impl From<ScaffoldIntentInput> for ScaffoldIntent {
+    fn from(input: ScaffoldIntentInput) -> Self {
+        Self {
+            display_name: input.display_name,
+            crate_name: input.crate_name,
+            binary_name: input.binary_name,
+            server_category: input.server_category,
+            env_prefix: input.env_prefix,
+            auth_kind: input.auth_kind,
+            host: input.host,
+            port: input.port,
+            mcp_transport: input.mcp_transport,
+            mcp_primitives: input.mcp_primitives,
+            deployment: input.deployment,
+            plugins: input.plugins,
+            publish_mcp: input.publish_mcp,
+            crawl_urls: input.crawl_urls,
+            crawl_repos: input.crawl_repos,
+            crawl_search_topics: input.crawl_search_topics,
         }
-    })
-}
-
-fn normalize_category(category: &str) -> &'static str {
-    let normalized = category.trim().to_ascii_lowercase();
-    if normalized.contains("application") || normalized.contains("platform") {
-        "application-platform"
-    } else {
-        "upstream-client"
     }
-}
-
-fn split_csv(value: &str) -> Vec<String> {
-    value
-        .split(',')
-        .map(str::trim)
-        .filter(|item| !item.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 async fn elicit_name(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
@@ -316,3 +292,113 @@ Example: `{ "action": "help" }`
 5. Add a match arm in `dispatch_example()` in `mcp/tools.rs`.
 6. Add a test covering parser, schema, and dispatch behavior.
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{config::ExampleConfig, example::ExampleClient};
+
+    fn service() -> ExampleService {
+        let client = ExampleClient::new(&ExampleConfig {
+            api_url: "http://localhost:1/stub".to_owned(),
+            api_key: "test-key".to_owned(),
+        })
+        .expect("stub client should build");
+        ExampleService::new(client)
+    }
+
+    fn upstream_input() -> ScaffoldIntentInput {
+        ScaffoldIntentInput {
+            display_name: "Unraid MCP".to_owned(),
+            crate_name: "unraid-mcp".to_owned(),
+            binary_name: "unraid".to_owned(),
+            server_category: "upstream-client".to_owned(),
+            env_prefix: "unraid".to_owned(),
+            auth_kind: "api key".to_owned(),
+            host: "".to_owned(),
+            port: 3100,
+            mcp_transport: "dual".to_owned(),
+            mcp_primitives: "tools, resources, prompts, elicitation".to_owned(),
+            deployment: "none".to_owned(),
+            plugins: "claude, codex, claude".to_owned(),
+            publish_mcp: true,
+            crawl_urls: "https://docs.unraid.net/".to_owned(),
+            crawl_repos: "".to_owned(),
+            crawl_search_topics: "Unraid API authentication".to_owned(),
+        }
+    }
+
+    #[test]
+    fn scaffold_intent_json_matches_simplified_contract_shape() {
+        let value = service().scaffold_intent(upstream_input().into());
+
+        assert_eq!(value["kind"], "rmcp_template_scaffold_intent");
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["server_category"], "upstream-client");
+        assert_eq!(value["required_surfaces"], json!(["mcp", "cli"]));
+        assert_eq!(value["project"]["env_prefix"], "UNRAID");
+        assert_eq!(
+            value["upstream"],
+            json!({
+                "base_url_env": "UNRAID_API_URL",
+                "auth_kind": "api-key"
+            })
+        );
+        assert_eq!(
+            value["runtime"],
+            json!({
+                "host": "127.0.0.1",
+                "port": 3100,
+                "mcp_transport": "dual"
+            })
+        );
+        assert_eq!(
+            value["mcp_primitives"],
+            json!(["tools", "resources", "prompts", "elicitation"])
+        );
+        assert_eq!(value["plugins"], json!(["claude", "codex"]));
+        assert_eq!(value["publish_mcp"], true);
+        assert_eq!(
+            value["crawl_docs"]["urls"],
+            json!(["https://docs.unraid.net/"])
+        );
+        assert!(value.get("actions").is_none());
+        assert!(value["upstream"].get("resource_groups").is_none());
+    }
+
+    #[test]
+    fn application_platform_intent_requires_all_surfaces() {
+        let mut input = upstream_input();
+        input.server_category = "application platform".to_owned();
+        input.auth_kind = "both".to_owned();
+        input.host = "0.0.0.0".to_owned();
+        input.mcp_transport = "streamable-http".to_owned();
+        input.deployment = "container".to_owned();
+        input.plugins = "claude, codex, gemini".to_owned();
+        input.crawl_repos = "https://github.com/example/lab-sdk".to_owned();
+
+        let value = service().scaffold_intent(input.into());
+
+        assert_eq!(value["server_category"], "application-platform");
+        assert_eq!(
+            value["required_surfaces"],
+            json!(["api", "cli", "mcp", "web"])
+        );
+        assert_eq!(value["upstream"]["auth_kind"], "both");
+        assert_eq!(value["runtime"]["mcp_transport"], "http");
+        assert_eq!(value["deployment"], "docker");
+        assert_eq!(value["plugins"], json!(["claude", "codex", "gemini"]));
+        assert_eq!(
+            value["crawl_docs"]["repos"],
+            json!(["https://github.com/example/lab-sdk"])
+        );
+    }
+
+    #[test]
+    fn primitive_defaults_to_tools_when_input_is_empty() {
+        let mut input = upstream_input();
+        input.mcp_primitives.clear();
+        let value = service().scaffold_intent(input.into());
+        assert_eq!(value["mcp_primitives"], json!(["tools"]));
+    }
+}

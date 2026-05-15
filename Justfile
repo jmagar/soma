@@ -154,7 +154,10 @@ coupled-files-check:
 ascii-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
+    mapfile -t files < <(
+        git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**' \
+            | while IFS= read -r file; do [[ -f "$file" ]] && printf '%s\n' "$file"; done
+    )
     if [[ "${#files[@]}" -eq 0 ]]; then
         echo "No files to check"
         exit 0
@@ -165,7 +168,10 @@ ascii-check:
 ascii-fix:
     #!/usr/bin/env bash
     set -euo pipefail
-    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
+    mapfile -t files < <(
+        git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**' \
+            | while IFS= read -r file; do [[ -f "$file" ]] && printf '%s\n' "$file"; done
+    )
     if [[ "${#files[@]}" -eq 0 ]]; then
         echo "No files to fix"
         exit 0
@@ -183,6 +189,18 @@ schema-docs:
 # Verify MCP schema contract docs and action surfaces are in sync
 schema-docs-check:
     python3 scripts/check-schema-docs.py --check
+
+# Regenerate OpenAPI docs for the REST API surface
+openapi:
+    python3 scripts/check-openapi.py --write
+
+# Verify generated OpenAPI docs are current
+openapi-check:
+    python3 scripts/check-openapi.py --check
+
+# Validate scaffold intent JSON Schema and checked-in examples
+scaffold-contract-check:
+    python3 scripts/check-scaffold-intent-contract.py
 
 # Check static contracts from docs/PATTERNS.md
 patterns-check:
@@ -205,6 +223,8 @@ template-check:
     just patterns-check
     just validate-plugin
     just schema-docs-check
+    just openapi-check
+    just scaffold-contract-check
     just template-features
 
 # Run all local quality checks in sequence: fmt-check → lint → check → test
@@ -438,7 +458,7 @@ test-mcporter:
         echo "mcporter not found. Install it first."
         exit 1
     fi
-    bash tests/mcporter/test-tools.sh
+    bash tests/mcporter/test-mcp.sh
 
 # Run the release-readiness gate
 pre-release:

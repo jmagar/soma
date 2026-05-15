@@ -28,7 +28,10 @@ than a thin client over an upstream API.
 Allowed exceptions:
 
 - MCP-only protocol interactions, such as elicitation, may omit CLI when there is no
-  equivalent non-interactive command. Document the reason in the action metadata/docs.
+  equivalent non-interactive command. `scaffold_intent` is the template's explicit
+  example: it combines MCP elicitation with plugin skill handoff, which has no true
+  CLI equivalent inside the user's agent/editor permission model. Document the reason
+  in the action metadata/docs.
 - CLI-only operational commands, such as `serve`, `mcp`, `doctor`, `watch`, and
   `setup`, are not business actions and do not need MCP equivalents.
 
@@ -932,7 +935,7 @@ echo "  3. Or:  ${BINARY} mcp             (stdio mode for Claude Code)"
 
 ## 17. mcporter Integration Test Pattern
 
-Every server has `tests/mcporter/test-tools.sh` and `config/mcporter.json`.
+Every server has `tests/mcporter/test-mcp.sh` and `config/mcporter.json`.
 
 ### Philosophy
 
@@ -963,7 +966,7 @@ run_test "server info hostname non-empty" "example" '{"action":"server_info"}' \
 }
 ```
 
-### Semantic validation helpers in test-tools.sh
+### Semantic validation helpers in test-mcp.sh
 
 ```bash
 # Validate that a JSON path exists and is non-empty
@@ -1059,12 +1062,12 @@ Use this when creating a new server from rmcp-template:
 - [ ] Update `EXPOSE` in `config/Dockerfile`
 - [ ] Update `plugin.json` userConfig for your service's credentials
 - [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
+- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Update `install.sh` with correct binary/repo name
 - [ ] Run `cargo check` — must compile clean, zero warnings
 - [ ] Run `cargo nextest run` — all tests pass
-- [ ] Run `./tests/mcporter/test-tools.sh` against a live server instance
+- [ ] Run `./tests/mcporter/test-mcp.sh` against a live server instance
 
 ---
 
@@ -1518,7 +1521,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
 - [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
 - [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
+- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
 - [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
@@ -1530,7 +1533,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Run `cargo check` — zero warnings
 - [ ] Run `cargo nextest run` — all pass
 - [ ] Run `taplo check` — all TOML valid
-- [ ] Run `./tests/mcporter/test-tools.sh` against live server
+- [ ] Run `./tests/mcporter/test-mcp.sh` against live server
 
 ---
 

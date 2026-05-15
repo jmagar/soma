@@ -48,6 +48,8 @@ REST API and Web UI are optional surfaces based on server type:
 
 Do not add a REST/Web surface just to mirror an upstream HTTP API. For upstream-client servers, the value is the MCP tool surface plus an equivalent CLI for scripting, debugging, and parity tests.
 
+Exception: `scaffold_intent` is MCP-only because it is specifically an MCP elicitation + plugin skill handoff workflow. There is no true CLI equivalent for exercising client-rendered elicitation and skill selection inside the user's agent/editor permission model.
+
 ## Invariant: zero logic in shims
 
 `mcp/tools.rs` and `cli.rs` must not contain business logic. They parse inputs and delegate to `ExampleService`. All computation, validation, and transformation belongs in `app.rs`.

@@ -141,6 +141,8 @@ mcp__example__example(action="elicit_name")
 
 Uses MCP elicitation to collect what kind of project the user is building, then returns JSON for the `scaffold-project` skill. This action does **not** mutate files. The skill reads the JSON and creates an approval-first plan that the user can accept, edit, or reject.
 
+This is intentionally MCP-only: it depends on MCP elicitation plus plugin skill handoff, which has no true CLI equivalent inside the user's agent/editor permission model.
+
 No parameters.
 
 ```
@@ -163,14 +165,21 @@ mcp__example__example(action="scaffold_intent")
   },
   "upstream": {
     "base_url_env": "UNRAID_API_URL",
-    "auth_kind": "api-key",
-    "resource_groups": ["vms", "shares", "docker"]
+    "auth_kind": "api-key"
   },
-  "actions": {
-    "read": ["list_vms", "get_status"],
-    "write": ["restart_vm"],
-    "mcp_only": [],
-    "cli_only_operational": ["serve", "mcp", "doctor", "watch", "setup"]
+  "runtime": {
+    "host": "127.0.0.1",
+    "port": 3100,
+    "mcp_transport": "dual"
+  },
+  "mcp_primitives": ["tools", "resources", "prompts", "elicitation"],
+  "deployment": "none",
+  "plugins": ["claude", "codex"],
+  "publish_mcp": true,
+  "crawl_docs": {
+    "urls": ["https://docs.unraid.net/"],
+    "repos": [],
+    "search_topics": ["Unraid API authentication"]
   },
   "handoff": {
     "recommended_skill": "scaffold-project",

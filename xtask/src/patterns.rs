@@ -3,6 +3,7 @@
 mod actions;
 mod checks;
 mod reporter;
+mod surfaces;
 mod util;
 
 use anyhow::{bail, Result};
@@ -22,6 +23,7 @@ pub fn run(options: PatternOptions) -> Result<()> {
     checks::no_mod_rs(&mut reporter);
     checks::file_sizes(&mut reporter)?;
     checks::thin_shims(&mut reporter);
+    surfaces::thin_surfaces(&mut reporter)?;
     actions::action_surfaces(&mut reporter);
     checks::routes(&mut reporter);
     checks::plugins(&mut reporter);

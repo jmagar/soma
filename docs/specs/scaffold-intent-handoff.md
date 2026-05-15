@@ -78,9 +78,14 @@ MCP-only.
 
 ### Rationale for MCP-only
 
-This action depends on MCP elicitation (`peer.elicit::<ScaffoldIntentInput>(...)`) so the server can ask the user for structured input through the MCP client. It has no REST equivalent by default.
+`scaffold_intent` is an explicit exception to the normal MCP + CLI business-action parity rule.
 
-A CLI equivalent may be added later if needed, but the current safety model intentionally routes the human-in-the-loop setup through MCP elicitation and a skill handoff.
+This action depends on two MCP/client capabilities that do not translate cleanly to CLI:
+
+1. MCP elicitation (`peer.elicit::<ScaffoldIntentInput>(...)`) for a client-rendered setup form.
+2. Plugin skill handoff (`scaffold-project`) for turning returned JSON into an approval-first plan inside the user's agent/editor permission model.
+
+A CLI command could collect similar fields, but it would not exercise MCP elicitation or plugin skill selection, which are the point of this setup wizard. For that reason, this remains MCP-only unless a future CLI command is explicitly scoped as a separate JSON planner, not a parity requirement.
 
 ## Elicitation fields
 
@@ -108,6 +113,11 @@ The intent should stay lightweight. The wizard asks enough to choose the scaffol
 The action returns a JSON object with `kind = "rmcp_template_scaffold_intent"` and `schema_version = 1`.
 
 Machine-readable contract: [`docs/contracts/scaffold-intent.schema.json`](../contracts/scaffold-intent.schema.json).
+
+Checked-in examples:
+
+- [`docs/contracts/examples/scaffold-intent-upstream-client.json`](../contracts/examples/scaffold-intent-upstream-client.json)
+- [`docs/contracts/examples/scaffold-intent-application-platform.json`](../contracts/examples/scaffold-intent-application-platform.json)
 
 ### Policy/runtime fields
 
@@ -257,7 +267,7 @@ The skill must not treat returned JSON as permission to mutate files.
 
 ## Surface policy
 
-Every business action must have MCP + CLI parity.
+Every business action must have MCP + CLI parity. `scaffold_intent` is not treated as a business action for parity purposes; it is a setup wizard that exists specifically to combine MCP elicitation with plugin skill handoff.
 
 | Server category | Required surfaces | Examples |
 |---|---|---|
@@ -312,6 +322,7 @@ After changing this flow, run:
 cargo fmt --package rmcp-template
 cargo test --lib
 just schema-docs-check
+just scaffold-contract-check
 just validate-plugin
 pnpm --dir apps/web check
 pnpm --dir apps/web typecheck

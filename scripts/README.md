@@ -1,44 +1,38 @@
 # scripts
 
-Maintenance and automation scripts. All use `set -euo pipefail`.
+Maintenance and automation scripts for the template. Shell scripts are written for Bash and generally use `set -euo pipefail`; Python scripts are executable with `python3`.
 
-## Scripts
+## Quick map
 
-### `check-dependency-updates.sh`
+| Script | Purpose |
+|---|---|
+| `asciicheck.py` | Check/fix unexpected non-ASCII characters. |
+| `block-env-commits.sh` | Prevent `.env*` secrets from being committed. |
+| `bump-version.sh` | Update version-bearing files from the `Cargo.toml` version. |
+| `check-blob-size.py` | Block unexpectedly large changed blobs. |
+| `check-coupled-files.sh` | Warn when files that normally change together drift. |
+| `check-dependency-updates.sh` | Report lockfile-compatible and latest dependency updates. |
+| `check-file-size.sh` | Pre-commit source file size budget. |
+| `check-plugin-hook-contract.py` | Audit plugin setup hook contract across Rust MCP servers. |
+| `check-runtime-current.sh` | Detect stale Docker/systemd runtimes. |
+| `check-openapi.py` | Generate/check `docs/generated/openapi.json` for the REST API surface. |
+| `check-schema-docs.py` | Generate/check `docs/MCP_SCHEMA.md` and action docs. |
+| `check-scaffold-intent-contract.py` | Validate scaffold intent schema and examples without third-party dependencies. |
+| `check-version-sync.sh` | Check version consistency. |
+| `pre-release-check.sh` | Full release-readiness gate. |
+| `refresh-docs.sh` | Refresh ignored reference docs with Axon/Repomix. |
+| `sync-cargo.sh` | Sync `Cargo.lock` into plugin data directories. |
+| `test-mcp-auth.sh` | Smoke-test HTTP MCP bearer auth. |
+| `test-template-features.sh` | Fast template invariant smoke tests. |
+| `validate-plugin-layout.sh` | Validate Claude/Codex/Gemini plugin package layout. |
 
-Read-only dependency drift report for Rust workspaces.
-
-```bash
-scripts/check-dependency-updates.sh
-scripts/check-dependency-updates.sh --skip-search
-scripts/check-dependency-updates.sh --fail-on-updates
-```
-
-Reports lockfile-compatible updates from `cargo update --dry-run`, then checks
-direct root dependencies against crates.io with `cargo search`. Git/path
-dependencies are skipped. Use `--skip-search` for offline runs.
-
----
-
-### `check-file-size.sh`
-
-Fast pre-commit guard for staged source files.
-
-```bash
-scripts/check-file-size.sh
-MAX_RS=450 MAX_TS=350 scripts/check-file-size.sh
-```
-
-Checks staged `.rs`, `.ts`, and `.tsx` files for effective production lines.
-Test files are exempt, and Rust inline `#[cfg(test)]` modules are excluded from
-the count. Defaults are `MAX_RS=350` and `MAX_TS=300`.
+`blob-size-allowlist.txt` is data for `check-blob-size.py`, not an executable script.
 
 ---
+
+## Script reference
 
 ### `asciicheck.py`
-
-Checks files for unexpected non-ASCII characters and can replace common smart
-punctuation with ASCII equivalents.
 
 ```bash
 python3 scripts/asciicheck.py README.md Justfile
@@ -47,15 +41,28 @@ just ascii-check
 just ascii-fix
 ```
 
-The template intentionally allows a small set of existing documentation
-characters used in comments and headings: section signs, em dashes, arrows, and
-box-drawing divider lines.
+Checks files for unexpected non-ASCII characters. A small allowlist covers intentional documentation glyphs such as section signs, arrows, and box-drawing characters.
 
----
+### `block-env-commits.sh`
+
+```bash
+bash scripts/block-env-commits.sh
+```
+
+Pre-commit guard that rejects staged `.env`, `.env.local`, `.env.prod`, etc. `.env.example` is allowed.
+
+### `bump-version.sh`
+
+```bash
+scripts/bump-version.sh 1.3.5
+scripts/bump-version.sh patch
+scripts/bump-version.sh minor
+scripts/bump-version.sh major
+```
+
+Updates `Cargo.toml`, `Cargo.lock`, and `server.json` when present. Plugin manifests intentionally remain versionless.
 
 ### `check-blob-size.py`
-
-Checks changed git blobs against a size budget.
 
 ```bash
 python3 scripts/check-blob-size.py
@@ -63,15 +70,68 @@ python3 scripts/check-blob-size.py --base origin/main --head HEAD --max-bytes 51
 just blob-size-check
 ```
 
-Defaults to `origin/main` as the base when available, then `main`, then
-`HEAD~1`. Allow unavoidable large checked-in artifacts with
-`scripts/blob-size-allowlist.txt`; patterns are repo-relative globs.
+Checks changed git blobs against a size budget. Use `scripts/blob-size-allowlist.txt` for intentional large artifacts such as plugin binaries.
 
----
+### `check-coupled-files.sh`
+
+```bash
+scripts/check-coupled-files.sh origin/main HEAD
+just coupled-files-check
+```
+
+CI-oriented guard for files that usually change together, such as script changes with `scripts/README.md`, schema changes with `docs/MCP_SCHEMA.md`, and automation changes with docs.
+
+### `check-dependency-updates.sh`
+
+```bash
+scripts/check-dependency-updates.sh
+scripts/check-dependency-updates.sh --skip-search
+scripts/check-dependency-updates.sh --fail-on-updates
+just deps-check
+```
+
+Read-only dependency drift report. It runs `cargo update --dry-run`, then checks direct root dependencies against crates.io unless `--skip-search` is used.
+
+### `check-file-size.sh`
+
+```bash
+scripts/check-file-size.sh
+MAX_RS=450 MAX_TS=350 scripts/check-file-size.sh
+just file-size-check
+```
+
+Checks staged `.rs`, `.ts`, and `.tsx` files for effective production lines. Test files and Rust inline `#[cfg(test)]` modules are exempted.
+
+### `check-openapi.py`
+
+```bash
+python3 scripts/check-openapi.py --write
+python3 scripts/check-openapi.py --check
+just openapi
+just openapi-check
+```
+
+Generates `docs/generated/openapi.json` for the template REST API surface: `GET /health`, `GET /status`, and `POST /v1/example`. The action enum is derived from `src/actions.rs` and excludes MCP-only actions such as `scaffold_intent`.
+
+### `check-scaffold-intent-contract.py`
+
+```bash
+python3 scripts/check-scaffold-intent-contract.py
+just scaffold-contract-check
+```
+
+Validates `docs/contracts/scaffold-intent.schema.json` plus checked-in examples under `docs/contracts/examples/`. This is a targeted validator, not a full JSON Schema implementation, so it can run in fresh checkouts without extra Python packages.
+
+### `check-plugin-hook-contract.py`
+
+```bash
+python3 scripts/check-plugin-hook-contract.py
+python3 scripts/check-plugin-hook-contract.py --execute
+```
+
+Audits plugin setup hooks across known Rust MCP servers. Without `--execute`, it is a static contract check. With `--execute`, it runs each binary setup command via Cargo.
 
 ### `check-runtime-current.sh`
-
-Detects stale deployed runtimes.
 
 ```bash
 scripts/check-runtime-current.sh
@@ -80,39 +140,9 @@ scripts/check-runtime-current.sh --mode docker --pull --compose-dir .
 just runtime-current
 ```
 
-Systemd mode compares the running process hash from `/proc/<pid>/exe` to the
-unit `ExecStart` binary, and optionally to an expected binary path. Docker mode
-compares the running container image ID with the local Compose image ID.
-
-**TEMPLATE**: Rename `example-mcp`, `example`, and `EXAMPLE_MCP_*` defaults when
-adapting this template to a real service.
-
----
-
-### `test-mcp-auth.sh`
-
-Smoke-tests the protected MCP HTTP auth path against a running server.
-
-```bash
-EXAMPLE_MCP_TOKEN=... scripts/test-mcp-auth.sh
-scripts/test-mcp-auth.sh --url http://localhost:3000/mcp --token ...
-```
-
-Checks that `/health` is public, `/mcp` rejects missing and bad bearer tokens
-with `401`, and `/mcp` accepts `Authorization: Bearer <token>`.
-
-`x-api-key` support is intentionally not assumed because this template's pinned
-auth layer accepts bearer tokens. For derived services that add `x-api-key`, run:
-
-```bash
-scripts/test-mcp-auth.sh --check-x-api-key
-```
-
----
+Systemd mode compares the running process hash to the unit `ExecStart` binary and optional expected binary. Docker mode compares the running container image ID with the local Compose image ID.
 
 ### `check-schema-docs.py`
-
-Generates and verifies the MCP action schema contract.
 
 ```bash
 python3 scripts/check-schema-docs.py --write
@@ -121,31 +151,18 @@ just schema-docs
 just schema-docs-check
 ```
 
-The checker treats `ACTION_SPECS` in `src/actions.rs` as canonical, then
-verifies the schema, `src/mcp/tools.rs` help text, `README.md`, and the shared
-skill mention every action. Generated output lives in
-`docs/MCP_SCHEMA.md`.
+Treats `src/actions.rs::ACTION_SPECS` as canonical and verifies schema docs, help text, README, and plugin skill mentions. Generated output lives in `docs/MCP_SCHEMA.md`.
 
----
-
-### `test-template-features.sh`
-
-Runs fast shell smoke tests for template invariants that are not worth modeling
-as full integration tests.
+### `check-version-sync.sh`
 
 ```bash
-bash scripts/test-template-features.sh
-just template-features
+scripts/check-version-sync.sh
+scripts/check-version-sync.sh /path/to/project
 ```
 
-Current checks cover `.env` commit blocking, `CLAUDE.md` sibling symlink
-creation, plugin layout validation, schema-doc validation, and ASCII hygiene.
-
----
+Validates that version-bearing files agree. Missing `CHANGELOG.md` entries are warnings; mismatched versions are failures.
 
 ### `pre-release-check.sh`
-
-Runs the release-readiness gate.
 
 ```bash
 scripts/pre-release-check.sh
@@ -154,30 +171,67 @@ scripts/pre-release-check.sh --mcporter
 just pre-release
 ```
 
-The default gate runs `cargo xtask patterns`, plugin validation, schema-doc
-validation, template feature smoke tests, version sync, blob-size check, ASCII
-hygiene, `just verify`, and `just build-plugin`. `--mcporter` adds the live MCP
-integration harness.
+Runs the release gate: pattern checks, plugin validation, schema docs, template feature smoke tests, version sync, blob size, ASCII hygiene, `just verify`, and `just build-plugin`. `--mcporter` also runs `just test-mcporter` and requires a running server.
 
----
-
-### `check-coupled-files.sh`
-
-CI-oriented guard for files that should usually change together.
+### `refresh-docs.sh`
 
 ```bash
-scripts/check-coupled-files.sh origin/main HEAD
-just coupled-files-check
+scripts/refresh-docs.sh
+scripts/refresh-docs.sh --dry-run
+scripts/refresh-docs.sh --skip-crawl
+scripts/refresh-docs.sh --skip-repomix
 ```
 
-Examples: `Justfile` with `lefthook.yml`, scripts with `scripts/README.md`, and
-schema changes with `docs/MCP_SCHEMA.md`.
+Refreshes ignored reference docs under `docs/references/`:
 
----
+```text
+docs/references/
+├── mcp/docs/          # crawled modelcontextprotocol.io
+├── mcp/repos/         # Repomix packs: rust-sdk, spec, registry
+├── claude-code/       # crawled code.claude.com
+├── mcporter/docs/     # sparse-cloned mcporter docs
+├── mcporter/repos/    # Repomix pack of mcporter source
+├── INDEX.md
+└── CHANGES.md
+```
+
+Environment:
+
+| Variable | Default | Description |
+|---|---|---|
+| `AXON_OUTPUT_DIR` | `~/.axon/output` | Axon host output directory. |
+| `REPOMIX_BIN` | auto-detected | Repomix executable, otherwise `npx --yes repomix`. |
+
+The MCP spec and registry packs ignore huge SVG/Excalidraw diagrams to keep text reference packs usable.
+
+### `sync-cargo.sh`
+
+```bash
+bash scripts/sync-cargo.sh
+```
+
+Copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to `CLAUDE_PLUGIN_DATA` when needed. Falls back to `cargo fetch` if the copy cannot be completed.
+
+### `test-mcp-auth.sh`
+
+```bash
+EXAMPLE_MCP_TOKEN=... scripts/test-mcp-auth.sh
+scripts/test-mcp-auth.sh --url http://localhost:3100/mcp --token ...
+scripts/test-mcp-auth.sh --check-x-api-key
+```
+
+Checks that `/health` is public, `/mcp` rejects missing/bad bearer tokens with `401`, and `/mcp` accepts a valid bearer token. `x-api-key` is optional because the template auth layer uses bearer tokens.
+
+### `test-template-features.sh`
+
+```bash
+bash scripts/test-template-features.sh
+just template-features
+```
+
+Fast shell smoke tests for invariants that are awkward as Rust tests: `.env` blocking, agent docs symlinks, plugin layout, schema docs, and ASCII hygiene.
 
 ### `validate-plugin-layout.sh`
-
-Validates the shipped plugin package.
 
 ```bash
 scripts/validate-plugin-layout.sh
@@ -185,140 +239,18 @@ PLUGIN_ROOT=plugins/example scripts/validate-plugin-layout.sh
 just validate-plugin
 ```
 
-Checks Claude, Codex, and Gemini manifests, shared MCP config, hook config, and
-skill frontmatter. It also enforces the template rule that plugin manifests do
-not carry a `version` field; Cargo/Git tags are the release version source.
+Validates Claude, Codex, and Gemini plugin manifests, shared MCP config, hook config, skills, sensitive fields, and the rule that plugin manifests do not contain `version`.
 
 ---
 
-### `refresh-docs.sh`
+## Hook integration
 
-Fetch and refresh local reference documentation from external sources. Crawls MCP protocol docs and Claude Code docs via Axon, packs GitHub repos via Repomix, and updates `docs/references/`.
+`block-env-commits.sh`, `check-version-sync.sh`, and `check-file-size.sh` are designed for `lefthook` pre-commit integration. Install hooks with:
 
 ```bash
-scripts/refresh-docs.sh              # full crawl + repomix packs
-scripts/refresh-docs.sh --dry-run    # print plan, write nothing
-scripts/refresh-docs.sh --skip-crawl # repomix packs only
-scripts/refresh-docs.sh --skip-repomix # axon crawls only
+just install-hooks
 ```
 
-**Produces:**
+## Maintenance rule
 
-```
-docs/references/
-├── mcp/
-│   ├── docs/          # Crawled modelcontextprotocol.io (markdown)
-│   └── repos/         # Repomix packs: rust-sdk, spec, registry
-├── claude-code/       # Crawled code.claude.com (markdown)
-├── mcporter/
-│   ├── docs/          # Sparse-cloned mcporter docs
-│   └── repos/         # Repomix pack of mcporter source
-├── INDEX.md           # File counts and key references
-└── CHANGES.md         # Before/after diff summary
-```
-
-**Environment variables:**
-
-| Variable | Default | Description |
-|---|---|---|
-| `AXON_OUTPUT_DIR` | `~/.axon/output` | Axon host output directory |
-| `REPOMIX_BIN` | auto-detected | Path to repomix (falls back to `npx --yes repomix`) |
-
-Uses atomic directory replacement (temp dir + `mv`) so an interrupted run never leaves a partial state.
-
-**TEMPLATE**: Add your service's crawl targets and repos in the clearly marked `TEMPLATE:` section near the bottom of the script.
-
----
-
-### `bump-version.sh`
-
-Atomically update the version number across all config files in the project.
-
-```bash
-scripts/bump-version.sh 1.3.5    # explicit version
-scripts/bump-version.sh patch    # 1.2.3 → 1.2.4
-scripts/bump-version.sh minor    # 1.2.3 → 1.3.0
-scripts/bump-version.sh major    # 1.2.3 → 2.0.0
-```
-
-Reads the current version from `Cargo.toml`, which is the canonical version
-source for this template, and updates:
-
-- `Cargo.toml`
-- `Cargo.lock` package entries, when present
-- `server.json`, when present
-
-Plugin manifests intentionally do not carry a `version` field; Git SHA and
-release tags identify plugin builds. The script skips files that do not exist,
-prints a summary, and reminds you to update `CHANGELOG.md`.
-
----
-
-### `check-version-sync.sh`
-
-Pre-commit hook that validates all version-bearing files agree and that
-`CHANGELOG.md` has an entry for the current version.
-
-```bash
-scripts/check-version-sync.sh           # check current directory
-scripts/check-version-sync.sh /path/to  # check specific directory
-```
-
-Checks `Cargo.toml`, `package.json`, `pyproject.toml`, root-level plugin
-manifests if they carry a version in an adapted repo, and `server.json`.
-Template plugin manifests under `plugins/example/` are expected to stay
-versionless. Exits non-zero if any versions differ. Missing `CHANGELOG.md`
-entry is a warning, not a failure.
-
----
-
-### `block-env-commits.sh`
-
-Pre-commit guard that rejects commits containing `.env*` files (except `.env.example`).
-
-```bash
-# Called automatically by lefthook; can also be run manually:
-bash scripts/block-env-commits.sh
-```
-
-Matches any `.env`, `.env.local`, `.env.prod`, `.env.staging`, etc. at any directory depth. Exits 0 (allow) or 1 (block) with a list of the offending files.
-
-No configuration needed — copy unchanged to any new server repo.
-
----
-
-### `sync-cargo.sh`
-
-Sync `Cargo.lock` from the repo root into a plugin data directory. Used for plugin isolation and containerized environments where the lockfile must live outside the source tree.
-
-```bash
-bash scripts/sync-cargo.sh
-```
-
-**Environment variables:**
-
-| Variable | Default | Description |
-|---|---|---|
-| `CLAUDE_PLUGIN_ROOT` | script's parent dir | Repository root |
-| `CLAUDE_PLUGIN_DATA` | `CLAUDE_PLUGIN_ROOT` | Destination data directory |
-
-Compares lockfiles with `diff` before copying to avoid unnecessary writes. Falls back to `cargo fetch` if the copy fails. Cleans up partial copies on error.
-
----
-
-## Hook integration (lefthook)
-
-`block-env-commits.sh`, `check-version-sync.sh`, and `check-file-size.sh` are
-designed as lefthook pre-commit hooks. Wire them in `lefthook.yml`:
-
-```yaml
-pre-commit:
-  commands:
-    env_guard:
-      run: bash scripts/block-env-commits.sh
-    version_sync:
-      run: bash scripts/check-version-sync.sh
-    file_size:
-      glob: "*.{rs,ts,tsx}"
-      run: bash scripts/check-file-size.sh
-```
+When adding, renaming, or changing a script, update this README and any Justfile recipe that calls it.

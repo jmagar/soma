@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# test-tools.sh — Integration smoke-test for the Example MCP server
+# test-mcp.sh — Integration smoke-test for the Example MCP server
 #
 # TEMPLATE: Replace all occurrences of "example"/"Example"/"EXAMPLE" with your
 #           service name when adapting this for a real service.
@@ -24,14 +24,14 @@
 #               - For a metrics MCP: verify timestamps are recent (within 5m)
 #               - For a database MCP: verify row counts are > 0
 #
-# Server is assumed to be running as HTTP on localhost:3000 (no stdio launch needed).
+# Server is assumed to be running as HTTP on localhost:40060 (the `just dev` port).
 # Credentials are sourced from ~/.claude-homelab/.env OR environment variables:
 #   EXAMPLE_MCP_HOST  (default: localhost)
-#   EXAMPLE_MCP_PORT  (default: 3000)
+#   EXAMPLE_MCP_PORT  (default: 40060)
 #   EXAMPLE_MCP_TOKEN (optional; omit for no-auth dev mode)
 #
 # Usage:
-#   ./tests/mcporter/test-tools.sh [--timeout-ms N] [--parallel] [--verbose]
+#   ./tests/mcporter/test-mcp.sh [--timeout-ms N] [--parallel] [--verbose]
 #
 # Options:
 #   --timeout-ms N   Per-call timeout in milliseconds (default: 15000)
@@ -125,7 +125,7 @@ load_env() {
   local host="${EXAMPLE_MCP_HOST:-localhost}"
   # Remap bind address 0.0.0.0 → localhost for outbound connections
   [[ "${host}" == "0.0.0.0" ]] && host="localhost"
-  local port="${EXAMPLE_MCP_PORT:-3000}"
+  local port="${EXAMPLE_MCP_PORT:-40060}"
   MCP_URL="http://${host}:${port}/mcp"
 
   # TEMPLATE: Replace EXAMPLE_MCP_TOKEN with your service's token env var.
@@ -170,7 +170,7 @@ smoke_test_server() {
     log_error "Health endpoint at ${base_url}/health did not return status=ok"
     # TEMPLATE: Replace "example" with your service name in the diagnostic messages.
     log_error "Is the example-mcp server running?  just dev   or   just docker-up"
-    log_error "Then retry:  ./tests/mcporter/test-tools.sh"
+    log_error "Then retry:  ./tests/mcporter/test-mcp.sh"
     return 2
   fi
   log_info "Health endpoint OK (status=ok)"
@@ -199,7 +199,7 @@ print(len(d.get('result', {}).get('tools', [])))
   return 0
 }
 
-# ── mcporter call wrapper ─────────────────────────────────────────────────────
+# ── mcporter wrappers ────────────────────────────────────────────────────────
 # Makes a single MCP tool call via mcporter and returns the JSON output.
 # TEMPLATE: Replace "example" tool name with your tool name.
 mcporter_call() {
@@ -215,6 +215,47 @@ mcporter_call() {
     --timeout "${CALL_TIMEOUT_MS}" \
     --output json \
     2>>"${LOG_FILE}"
+}
+
+# Reads an MCP resource. Newer mcporter builds can exercise resources directly;
+# keep a JSON-RPC fallback so this harness remains compatible with older local
+# versions while still preferring mcporter when the command is available.
+mcporter_read_resource() {
+  local resource_uri="${1:?resource URI required}"
+
+  if mcporter resource read --help >/dev/null 2>&1; then
+    mcporter resource read \
+      --http-url "${MCP_URL}" \
+      --allow-http \
+      ${MCPORTER_HEADER_ARGS[@]+"${MCPORTER_HEADER_ARGS[@]}"} \
+      --uri "${resource_uri}" \
+      --timeout "${CALL_TIMEOUT_MS}" \
+      --output json \
+      2>>"${LOG_FILE}"
+    return
+  fi
+
+  if mcporter resources read --help >/dev/null 2>&1; then
+    mcporter resources read \
+      --http-url "${MCP_URL}" \
+      --allow-http \
+      ${MCPORTER_HEADER_ARGS[@]+"${MCPORTER_HEADER_ARGS[@]}"} \
+      --uri "${resource_uri}" \
+      --timeout "${CALL_TIMEOUT_MS}" \
+      --output json \
+      2>>"${LOG_FILE}"
+    return
+  fi
+
+  printf "${C_YELLOW}[WARN]${C_RESET}  mcporter resource command unavailable; falling back to JSON-RPC resources/read\n" \
+    | tee -a "${LOG_FILE}" >&2
+  curl -sf --max-time 15 \
+    -X POST "${MCP_URL}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    ${MCPORTER_HEADER_ARGS[@]+"${MCPORTER_HEADER_ARGS[@]}"} \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/read\",\"params\":{\"uri\":\"${resource_uri}\"}}" \
+    2>/dev/null
 }
 
 # ── run_test: basic structural test ──────────────────────────────────────────
@@ -490,20 +531,13 @@ suite_core() {
 suite_schema_resource() {
   printf '\n%b== schema resource ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  # Fetch the schema resource via MCP resources/read
+  # Fetch the schema resource via mcporter when supported. The wrapper falls
+  # back to raw JSON-RPC for older mcporter versions.
   local resource_uri="example://schema/mcp-tool"
   local output t0 elapsed_ms
 
   t0="$(date +%s%N)"
-  output="$(
-    curl -sf --max-time 15 \
-      -X POST "${MCP_URL}" \
-      -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
-      ${MCPORTER_HEADER_ARGS[@]+"${MCPORTER_HEADER_ARGS[@]}"} \
-      -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/read\",\"params\":{\"uri\":\"${resource_uri}\"}}" \
-      2>/dev/null
-  )" || output=''
+  output="$(mcporter_read_resource "${resource_uri}")" || output=''
   elapsed_ms="$(( ( $(date +%s%N) - t0 ) / 1000000 ))"
 
   printf '%s\n' "${output}" >> "${LOG_FILE}"
@@ -521,12 +555,24 @@ suite_schema_resource() {
 import sys, json
 try:
     outer = json.load(sys.stdin)
-    # MCP resources/read returns result.contents[0].text (JSON-encoded schema)
-    text = outer.get('result', {}).get('contents', [{}])[0].get('text', '')
-    if not text:
-        print('error: empty text in resource content')
-        sys.exit(0)
-    schema = json.loads(text)
+    # mcporter resource commands may return the resource JSON directly, while
+    # JSON-RPC resources/read returns result.contents[0].text.
+    if isinstance(outer, dict) and 'name' in outer and 'inputSchema' in outer:
+        schema = outer
+    else:
+        contents = outer.get('result', {}).get('contents', []) if isinstance(outer, dict) else []
+        first = contents[0] if contents else {}
+        if isinstance(first, dict) and isinstance(first.get('json'), dict):
+            schema = first['json']
+        else:
+            text = first.get('text', '') if isinstance(first, dict) else ''
+            if not text:
+                print('error: empty text in resource content')
+                sys.exit(0)
+            schema = json.loads(text)
+
+    if isinstance(schema, list):
+        schema = schema[0] if schema else {}
 
     # TEMPLATE: Replace 'example' with your tool name in these checks.
     name = schema.get('name', '')
@@ -647,10 +693,10 @@ main() {
     log_error ""
     log_error "Server connectivity check failed. Aborting."
     log_error ""
-    # TEMPLATE: Replace port 3000 and service name in these diagnostic messages.
+    # TEMPLATE: Replace port 40060 and service name in these diagnostic messages.
     log_error "To diagnose:"
-    log_error "  just dev                           # start in no-auth dev mode"
-    log_error "  curl http://localhost:3000/health   # check health endpoint"
+    log_error "  just dev                            # start in no-auth dev mode"
+    log_error "  curl http://localhost:40060/health   # check health endpoint"
     log_error "  docker ps | grep example-mcp        # check Docker container"
     exit 2
   }
