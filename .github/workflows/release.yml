@@ -10,7 +10,7 @@
 # Triggers: push of v* tags (e.g. v1.2.3)
 #
 # What this does:
-#   1. Builds release binaries for linux/amd64 and linux/arm64
+#   1. Builds release binaries for linux/amd64, linux/arm64, and windows/amd64
 #   2. Copies binaries to bin/ and commits via Git LFS
 #   3. Creates a GitHub Release with binaries as downloadable assets
 #   4. The commit in step 2 updates the LFS pointer so plugin install.sh
@@ -36,17 +36,25 @@ jobs:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           # linux/amd64 — most common deployment target
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             arch: x86_64
+            ext: ""
           # linux/arm64 — Raspberry Pi, AWS Graviton, etc.
           # TEMPLATE: Remove this entry if you only need amd64.
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             arch: aarch64
+            ext: ""
+          # windows/amd64 — cross-compiled via MinGW
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            arch: windows-x86_64
+            ext: ".exe"
 
     steps:
       - uses: actions/checkout@v6
@@ -62,6 +70,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      # Cross-compilation toolchain for Windows on Linux runners.
+      - name: Install cross-compilation tools (windows only)
+        if: matrix.target == 'x86_64-pc-windows-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64
 
       # TEMPLATE: If you need OpenSSL, add it here:
       #   sudo apt-get install -y libssl-dev
@@ -95,6 +110,7 @@ jobs:
       - name: Build release binary
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
         run: |
           cargo build --release --locked --target ${{ matrix.target }}
 
@@ -102,16 +118,16 @@ jobs:
         run: |
           mkdir -p package artifacts
           # TEMPLATE: Replace "example" with your binary name.
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} \
-             package/${{ env.BINARY_NAME }}
-          chmod +x package/${{ env.BINARY_NAME }}
-          tar -C package -czf artifacts/${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}.tar.gz \
-            ${{ env.BINARY_NAME }}
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }} \
+             package/${{ env.BINARY_NAME }}${{ matrix.ext }}
+          chmod +x package/${{ env.BINARY_NAME }}${{ matrix.ext }}
+          tar -C package -czf artifacts/${{ env.BINARY_NAME }}-${{ matrix.arch }}.tar.gz \
+            ${{ env.BINARY_NAME }}${{ matrix.ext }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
+          name: ${{ env.BINARY_NAME }}-${{ matrix.arch }}
           path: artifacts/
 
   # ── Commit binaries to bin/ via Git LFS ──────────────────────────────────────
@@ -137,11 +153,22 @@ jobs:
 
       - name: Copy binaries to bin/
         run: |
+          set -euo pipefail
           mkdir -p bin
-          # TEMPLATE: Replace "example" with your binary name.
-          cp artifacts/${{ env.BINARY_NAME }}-linux-amd64  bin/${{ env.BINARY_NAME }}
-          cp artifacts/${{ env.BINARY_NAME }}-linux-arm64  bin/${{ env.BINARY_NAME }}-arm64
-          chmod +x bin/*
+          BIN=${{ env.BINARY_NAME }}
+
+          # Each artifact dir is named <binary>-<arch> and contains one tarball.
+          # merge-multiple flattens all artifact contents into artifacts/ directly.
+          tar -xz -C bin -f artifacts/${BIN}-x86_64.tar.gz
+          mv bin/${BIN} bin/${BIN}-linux-amd64
+
+          tar -xz -C bin -f artifacts/${BIN}-aarch64.tar.gz
+          mv bin/${BIN} bin/${BIN}-linux-arm64
+
+          tar -xz -C bin -f artifacts/${BIN}-windows-x86_64.tar.gz
+          mv bin/${BIN}.exe bin/${BIN}-windows-amd64.exe
+
+          chmod +x bin/${BIN}-linux-*
 
       - name: Configure Git
         run: |
