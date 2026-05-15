@@ -86,11 +86,14 @@ impl ExampleClient {
     }
 
     /// Return a status snapshot of the remote service.
+    ///
+    /// Note: this value is returned by the unauthenticated `/status` endpoint,
+    /// so it must not include secrets or sensitive topology (e.g. `api_url`).
+    /// TEMPLATE: Add non-sensitive runtime metrics (uptime, version, etc.).
     pub async fn status(&self) -> Result<Value> {
         Ok(json!({
             "status": "ok",
-            "api_url": self.api_url,
-            // In production: real uptime, version, health checks, etc.
+            // api_url intentionally omitted — topology leak on unauthenticated endpoint.
             "note": "stub — replace with real health endpoint",
         }))
     }

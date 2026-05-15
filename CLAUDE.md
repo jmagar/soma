@@ -20,6 +20,11 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 | `src/mcp/prompts.rs` | MCP prompts (`quick_start`) |
 | `src/config.rs` | `Config`, `ExampleConfig`, `McpConfig`, `AuthConfig`, env loading |
 | `src/cli.rs` | CLI shim: parse args → call service → print |
+| `src/cli/doctor.rs` | Pre-flight checks: env, connectivity, config validation |
+| `src/cli/setup.rs` | Interactive first-run / plugin setup wizard |
+| `src/cli/watch.rs` | Polls `/health` and emits state-change lines for plugin monitor |
+| `src/mcp/transport.rs` | Streamable HTTP transport wiring and session lifecycle |
+| `src/token_limit.rs` | Token budget enforcement for MCP response payloads |
 | `src/main.rs` | Mode dispatch: HTTP server / stdio / CLI |
 | `src/lib.rs` | Public API + `testing` helpers for integration tests |
 | `tests/cli_parse.rs` | CLI argument parsing tests |
@@ -49,6 +54,8 @@ If you find yourself computing, filtering, transforming, or validating data in `
 6. **`src/cli.rs`** — add a `Command` variant, a parse arm in `parse_args()`, and a dispatch arm in `run()`.
 
 7. **`tests/tool_dispatch.rs`** — add a test.
+
+8. **`CHANGELOG.md`** — add an entry under `[Unreleased]` describing the new action.
 
 For actions with parameters, extract them with `string_arg(&args, "param_name")` in `tools.rs`.
 
@@ -101,7 +108,7 @@ cargo test                # all tests
 cargo clippy -- -D warnings  # lint (must pass)
 cargo fmt                 # format
 
-just dev                  # cargo run -- serve mcp
+just dev                  # EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp (loopback only, no auth)
 just test                 # cargo test
 just lint                 # cargo clippy -- -D warnings
 just fmt                  # cargo fmt

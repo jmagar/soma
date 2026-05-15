@@ -53,7 +53,7 @@ impl ServerHandler for ExampleRmcpServer {
     ) -> Result<ListToolsResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
         let tools = rmcp_tool_definitions()?;
-        tracing::info!(tool_count = tools.len(), "MCP tools listed");
+        tracing::debug!(tool_count = tools.len(), "MCP tools listed");
         Ok(ListToolsResult {
             tools,
             ..Default::default()
@@ -76,7 +76,7 @@ impl ServerHandler for ExampleRmcpServer {
             .to_owned();
 
         let auth = require_auth_context(&self.state, &context)?;
-        if let (Some(auth), Some(required_scope)) = (auth, required_scope_for(&action)) {
+        if let (Some(auth), Some(required_scope)) = (auth, required_scope_for_action(&action)) {
             check_scope(auth, required_scope, &action)?;
         }
 
@@ -217,7 +217,8 @@ fn schema_resource() -> Resource {
 
 fn rmcp_tool_definitions() -> Result<Vec<Tool>, ErrorData> {
     tool_definitions()
-        .into_iter()
+        .iter()
+        .cloned()
         .map(rmcp_tool_from_json)
         .collect()
 }
@@ -244,7 +245,8 @@ fn rmcp_tool_from_json(value: Value) -> Result<Tool, ErrorData> {
 }
 
 fn tool_result_from_json(value: Value) -> Result<CallToolResult, ErrorData> {
-    let text = serde_json::to_string_pretty(&value)
+    // Compact JSON (not pretty) recovers ~30-40% of the 40 KB token budget.
+    let text = serde_json::to_string(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     let text = token_limit::truncate_if_needed(&text);
     Ok(CallToolResult::success(vec![Content::text(text)]))
@@ -293,16 +295,8 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
     ))
 }
 
-/// Returns true if `token_scopes` satisfy `required`.
-/// Write scope satisfies read (write ⊇ read).
 fn scope_satisfied(token_scopes: &[String], required: &str) -> bool {
-    token_scopes
-        .iter()
-        .any(|s| s == required || (required == READ_SCOPE && s == WRITE_SCOPE))
-}
-
-fn required_scope_for(action: &str) -> Option<&'static str> {
-    required_scope_for_action(action)
+    crate::actions::scopes_satisfy(token_scopes, required)
 }
 
 fn is_validation_error(error: &anyhow::Error) -> bool {

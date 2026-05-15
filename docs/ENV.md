@@ -29,7 +29,7 @@ The template uses `EXAMPLE_*` variables. Rename the prefix when adapting the tem
 | Variable | Default | Purpose |
 |---|---:|---|
 | `EXAMPLE_MCP_HOST` | `0.0.0.0` | Bind host for HTTP transport. |
-| `EXAMPLE_MCP_PORT` | `3100` | Bind port for HTTP transport. |
+| `EXAMPLE_MCP_PORT` | `40060` | Bind port for HTTP transport. |
 | `EXAMPLE_MCP_NO_AUTH` | `false` | Disable local auth for loopback development only. |
 | `EXAMPLE_NOAUTH` | `false` | Trusted-gateway no-auth mode for non-loopback deployments. |
 | `EXAMPLE_MCP_TOKEN` | unset | Static bearer token. Required for bearer-only mounted HTTP. |

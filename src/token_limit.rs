@@ -99,9 +99,9 @@ pub const MAX_RESPONSE_BYTES: usize = 40_000;
 /// tool_text_result(text)  // helper that wraps in CallToolResult
 /// ```
 #[must_use]
-pub fn truncate_if_needed(text: &str) -> String {
+pub fn truncate_if_needed(text: &str) -> std::borrow::Cow<'_, str> {
     if text.len() <= MAX_RESPONSE_BYTES {
-        return text.to_string();
+        return std::borrow::Cow::Borrowed(text);
     }
 
     let notice = format!(
@@ -110,6 +110,11 @@ pub fn truncate_if_needed(text: &str) -> String {
         Example: action=things, limit=20, offset=0]"
     );
     let content_budget = MAX_RESPONSE_BYTES.saturating_sub(notice.len());
+    debug_assert!(
+        notice.len() < MAX_RESPONSE_BYTES,
+        "truncation notice ({} bytes) must be smaller than MAX_RESPONSE_BYTES",
+        notice.len()
+    );
 
     // Find the last valid UTF-8 boundary within the content budget so the final
     // string including the notice does not exceed MAX_RESPONSE_BYTES.
@@ -117,7 +122,7 @@ pub fn truncate_if_needed(text: &str) -> String {
     let boundary = text.floor_char_boundary(content_budget);
     let truncated = &text[..boundary];
 
-    format!("{truncated}{notice}")
+    std::borrow::Cow::Owned(format!("{truncated}{notice}"))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

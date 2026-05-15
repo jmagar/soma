@@ -49,7 +49,7 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 {
   "status": "ok",
   "server": { "version": "0.1.0", "uptime_secs": 3600, "pid": 12345, "data_dir": "/home/user/.example" },
-  "config": { "host": "0.0.0.0", "port": 3000, "auth_mode": "bearer", "upstream_url": "https://example.com/api" },
+  "config": { "host": "0.0.0.0", "port": 40060, "auth_mode": "bearer", "upstream_url": "https://example.com/api" },
   "counters": { "requests_total": 1234, "errors_total": 5, "upstream_calls": 1200, "upstream_errors": 3 },
   "upstream": { "reachable": true, "last_check_ms_ago": 250, "consecutive_failures": 0 }
 }

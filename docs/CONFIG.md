@@ -49,7 +49,7 @@ site = "default"
 
 [mcp]
 host = "0.0.0.0"
-port = 3000
+port = 40060
 server_name = "example-mcp"
 
 [mcp.auth]
@@ -90,19 +90,38 @@ impl Config {
     pub fn load() -> anyhow::Result<Self> {
         let mut config = Config::default();
 
-        // 1. Load config.toml (non-secret settings)
-        match std::fs::read_to_string("config.toml") {
-            Ok(contents) => { config = toml::from_str(&contents)?; }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(anyhow::anyhow!("config.toml: {e}")),
+        // 1. Load config.toml — search two paths in order:
+        //    a) ~/.example/config.toml  (user home config)
+        //    b) ./config.toml           (working directory, e.g. Docker bind-mount)
+        let search_paths = [
+            dirs::home_dir().map(|h| h.join(".example/config.toml")),
+            Some(std::path::PathBuf::from("config.toml")),
+        ];
+        for path in search_paths.iter().flatten() {
+            match std::fs::read_to_string(path) {
+                Ok(contents) => { config = toml::from_str(&contents)?; break; }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(anyhow::anyhow!("{}: {e}", path.display())),
+            }
         }
 
         // 2. Env overrides (secrets + any setting the user wants to override)
-        env_str("EXAMPLE_MCP_HOST", &mut config.mcp.host);
-        env_parse("EXAMPLE_MCP_PORT", &mut config.mcp.port)?;
-        env_opt_str("EXAMPLE_MCP_TOKEN", &mut config.mcp.api_token);
-        env_str("EXAMPLE_API_URL", &mut config.example.url);
-        env_str("EXAMPLE_API_KEY", &mut config.example.api_key);
+        //    All EXAMPLE_* variables override the loaded config.
+        env_str("EXAMPLE_MCP_HOST",              &mut config.mcp.host);
+        env_parse("EXAMPLE_MCP_PORT",            &mut config.mcp.port)?;
+        env_opt_str("EXAMPLE_MCP_TOKEN",         &mut config.mcp.api_token);
+        env_bool("EXAMPLE_MCP_NO_AUTH",          &mut config.mcp.no_auth)?;
+        env_opt_str("EXAMPLE_MCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
+        env_opt_str("EXAMPLE_MCP_ALLOWED_ORIGINS",&mut config.mcp.allowed_origins);
+        env_opt_str("EXAMPLE_MCP_PUBLIC_URL",    &mut config.mcp.public_url);
+        env_str("EXAMPLE_MCP_AUTH_MODE",         &mut config.mcp.auth.mode);
+        env_opt_str("EXAMPLE_MCP_GOOGLE_CLIENT_ID",     &mut config.mcp.auth.google_client_id);
+        env_opt_str("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET", &mut config.mcp.auth.google_client_secret);
+        env_opt_str("EXAMPLE_MCP_AUTH_ADMIN_EMAIL",     &mut config.mcp.auth.admin_email);
+        env_bool("EXAMPLE_NOAUTH",               &mut config.mcp.noauth)?;
+        env_str("EXAMPLE_API_URL",               &mut config.example.url);
+        env_str("EXAMPLE_API_KEY",               &mut config.example.api_key);
+        env_opt_str("EXAMPLE_APPDATA",           &mut config.example.appdata);
         Ok(config)
     }
 }
@@ -132,7 +151,7 @@ pub enum AuthPolicy {
 ## Defaults
 
 - Host defaults to `0.0.0.0` for HTTP serving.
-- Port defaults to `3100` in config (some family services use `40060`).
+- Port defaults to `40060`.
 - Appdata defaults to `~/.<service>` locally, `/data` in Docker.
 
 ## Validation

@@ -71,9 +71,13 @@ impl McpConfig {
     /// as a canonical loopback hostname. Any other hostname or parse failure is
     /// treated as non-loopback — callers must not assume safety in that case.
     pub fn is_loopback(&self) -> bool {
-        self.host == "localhost"
-            || self
-                .host
+        let host = &self.host;
+        // Match "localhost" literal and numeric loopback addresses.
+        // Strip bracket notation ([::1]) before parsing so IPv6 loopback works.
+        host == "localhost"
+            || host
+                .trim_start_matches('[')
+                .trim_end_matches(']')
                 .parse::<std::net::IpAddr>()
                 .map(|ip| ip.is_loopback())
                 .unwrap_or(false)
@@ -97,7 +101,6 @@ pub struct AuthConfig {
     pub auth_code_ttl_secs: u64,
     pub register_rpm: u32,
     pub authorize_rpm: u32,
-    pub disable_static_token_with_oauth: bool,
     pub allowed_client_redirect_uris: Vec<String>,
 }
 
@@ -176,7 +179,6 @@ impl Default for AuthConfig {
             auth_code_ttl_secs: default_auth_code_ttl_secs(),
             register_rpm: default_register_rpm(),
             authorize_rpm: default_authorize_rpm(),
-            disable_static_token_with_oauth: true,
             allowed_client_redirect_uris: Vec::new(),
         }
     }

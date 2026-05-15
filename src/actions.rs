@@ -7,6 +7,15 @@ pub const READ_SCOPE: &str = "example:read";
 pub const WRITE_SCOPE: &str = "example:write";
 pub const DENY_SCOPE: &str = "example:__deny__";
 
+/// Returns true if `token_scopes` satisfy `required`.
+/// Write scope satisfies read (write ⊇ read).
+/// Single source of truth — called from both REST and MCP enforcement paths.
+pub fn scopes_satisfy(token_scopes: &[String], required: &str) -> bool {
+    token_scopes
+        .iter()
+        .any(|s| s == required || (required == READ_SCOPE && s == WRITE_SCOPE))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionTransport {
     Any,
@@ -118,7 +127,7 @@ impl ExampleAction {
     fn from_params(action: &str, params: &Value) -> Result<Self> {
         match action {
             "greet" => Ok(Self::Greet {
-                name: string_param(params, "name")?,
+                name: optional_string_param(params, "name")?,
             }),
             "echo" => {
                 let message = optional_string_param(params, "message")?
@@ -166,10 +175,6 @@ pub fn rest_help() -> Value {
             "status": {"action": "status", "params": {}},
         }
     })
-}
-
-fn string_param(params: &Value, name: &str) -> Result<Option<String>> {
-    optional_string_param(params, name)
 }
 
 fn optional_string_param(params: &Value, name: &str) -> Result<Option<String>> {

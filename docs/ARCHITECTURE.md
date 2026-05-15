@@ -46,7 +46,14 @@ src/
     schemas.rs      ← tool JSON schema + ACTIONS const
     rmcp_server.rs  ← ServerHandler impl (tools, resources, prompts, scopes)
     prompts.rs      ← MCP prompt definitions
+    transport.rs    ← Streamable HTTP transport wiring and session lifecycle
   cli.rs            ← thin shim: parse args → call service → format/print
+  cli/
+    doctor.rs       ← pre-flight checks: env, connectivity, config validation
+    setup.rs        ← interactive first-run / plugin setup wizard
+    watch.rs        ← polls /health and emits state-change lines for plugin monitor
+  token_limit.rs    ← token budget enforcement for MCP response payloads
+  web.rs            ← optional static web UI: asset serving and SPA fallback
   lib.rs            ← pub modules + test helpers (testing::*)
   main.rs           ← mode dispatch ONLY (serve_mcp / serve_stdio / run_cli)
 ```
@@ -84,7 +91,7 @@ pub struct AppState {
 All surfaces (MCP, REST API, web UI) share **one binary on one port**:
 
 ```
-Port 3000
+Port 40060
   ├── /mcp                  → Streamable HTTP MCP transport
   ├── /health               → Unauthenticated liveness probe
   ├── /status               → Runtime state (auth required)

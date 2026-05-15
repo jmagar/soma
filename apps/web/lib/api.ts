@@ -29,27 +29,19 @@ export interface StatusResult {
   status: string;
   api_url?: string;
   note?: string;
-  [key: string]: unknown;
 }
 
 export interface HealthResult {
   status: string;
 }
 
-/** POST /v1/example — dispatch an action */
-export async function callAction<T = unknown>(
-  action: string,
-  params: Record<string, unknown> = {},
-): Promise<ApiResponse<T>> {
+/** Shared fetch helper — handles JSON parsing and error normalisation. */
+async function apiFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
-    const res = await fetch(endpoint(WEB_APP_CONFIG.restEndpoint), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, params }),
-    });
+    const res = await fetch(url, options);
     const json = await res.json();
     if (!res.ok) {
-      return { error: json.error ?? `HTTP ${res.status}` };
+      return { error: (json as { error?: string }).error ?? `HTTP ${res.status}` };
     }
     return { data: json as T };
   } catch (e) {
@@ -57,28 +49,26 @@ export async function callAction<T = unknown>(
   }
 }
 
+/** POST /v1/example — dispatch an action */
+export function callAction<T = unknown>(
+  action: string,
+  params: Record<string, unknown> = {},
+): Promise<ApiResponse<T>> {
+  return apiFetch<T>(endpoint(WEB_APP_CONFIG.restEndpoint), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, params }),
+  });
+}
+
 /** GET /health */
-export async function getHealth(): Promise<ApiResponse<HealthResult>> {
-  try {
-    const res = await fetch(endpoint(WEB_APP_CONFIG.healthEndpoint));
-    const json = await res.json();
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-    return { data: json as HealthResult };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Network error" };
-  }
+export function getHealth(): Promise<ApiResponse<HealthResult>> {
+  return apiFetch<HealthResult>(endpoint(WEB_APP_CONFIG.healthEndpoint));
 }
 
 /** GET /status */
-export async function getStatus(): Promise<ApiResponse<StatusResult>> {
-  try {
-    const res = await fetch(endpoint(WEB_APP_CONFIG.statusEndpoint));
-    const json = await res.json();
-    if (!res.ok) return { error: `HTTP ${res.status}` };
-    return { data: json as StatusResult };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : "Network error" };
-  }
+export function getStatus(): Promise<ApiResponse<StatusResult>> {
+  return apiFetch<StatusResult>(endpoint(WEB_APP_CONFIG.statusEndpoint));
 }
 
 export const greet = (name?: string) => callAction<GreetResult>("greet", name ? { name } : {});

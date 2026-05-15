@@ -142,16 +142,10 @@ fn setup_repair(config: &Config) -> Result<SetupReport> {
     std::fs::create_dir_all(&data_dir)?;
     write_env(&data_dir, config)?;
 
+    // Re-run check after repair; `appdata_missing` is now resolved since
+    // `create_dir_all` succeeded above.
     let mut report = setup_check(config, false);
     report.ran_repair = true;
-    if report
-        .blocking_failures
-        .iter()
-        .any(|f| f.code == "appdata_missing")
-    {
-        report = setup_check(config, false);
-        report.ran_repair = true;
-    }
 
     Ok(report.finish())
 }

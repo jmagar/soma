@@ -14,6 +14,7 @@ default:
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
+# WARNING: EXAMPLE_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
 dev:
     EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
 

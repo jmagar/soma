@@ -6,10 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   msrv:
     name: Minimum Supported Rust Version (1.90)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -25,8 +29,11 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rmcp-template-msrv-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: rmcp-template-msrv-
+          key: ${{ github.repository }}-msrv-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ github.repository }}-msrv-
 
       - name: cargo check (MSRV)
         run: cargo check --all-targets --locked
+
+      - name: cargo test --no-run (MSRV)
+        run: cargo test --no-run --all-targets --locked

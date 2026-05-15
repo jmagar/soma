@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { echo, getHealth, getStatus, greet, type StatusResult, status } from "@/lib/api";
 import { WEB_APP_CONFIG } from "@/lib/template";
 import { Card } from "@/components/dashboard/card";
@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [health, setHealth] = useState<HealthState>("loading");
   const [serverStatus, setServerStatus] = useState<StatusResult | null>(null);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
-  const [nextId, setNextId] = useState(1);
+  const nextIdRef = useRef(1);
 
   const checkHealth = useCallback(async () => {
     const res = await getHealth();
@@ -39,11 +39,11 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [checkHealth, checkStatus]);
 
-  const addActivity = (action: string, result: string, ok: boolean) => {
-    const item: ActivityItem = { id: nextId, time: new Date().toLocaleTimeString(), action, result, ok };
-    setNextId((n) => n + 1);
+  const addActivity = useCallback((action: string, result: string, ok: boolean) => {
+    const id = nextIdRef.current++;
+    const item: ActivityItem = { id, time: new Date().toLocaleTimeString(), action, result, ok };
     setActivity((prev) => [item, ...prev].slice(0, 20));
-  };
+  }, []);
 
   const handleGreet = async () => {
     const res = await greet("Alice");

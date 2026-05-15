@@ -62,6 +62,14 @@ services:
       # Named-volume fallback is shown in the volumes: section below.
       - ${HOME}/.example:/data
 
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
     networks:
       - jakenet
 

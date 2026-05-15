@@ -268,7 +268,7 @@ cargo test            # run tests
 cargo clippy -- -D warnings  # lint
 cargo fmt             # format
 
-just dev              # cargo run -- serve mcp
+just dev              # EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp (loopback only, no auth)
 just test             # cargo test
 just lint             # cargo clippy -- -D warnings
 just fmt              # cargo fmt

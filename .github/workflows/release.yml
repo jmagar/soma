@@ -35,6 +35,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -93,8 +94,8 @@ jobs:
             ~/.cargo/git
             target
           # TEMPLATE: Change "rmcp-template" to your repo name.
-          key: rmcp-template-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: rmcp-template-release-${{ matrix.target }}-
+          key: ${{ github.repository }}-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ github.repository }}-release-${{ matrix.target }}-
 
       # Build the release binary.
       # TEMPLATE: Replace BINARY_NAME env references if you renamed the env var.
@@ -144,6 +145,7 @@ jobs:
     name: Commit binaries to bin/ (Git LFS)
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
 
@@ -196,6 +198,7 @@ jobs:
     name: Create GitHub Release
     needs: [build, lfs-commit]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
 

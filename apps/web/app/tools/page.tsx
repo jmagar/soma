@@ -4,6 +4,8 @@ import { useState } from "react";
 import { callAction } from "@/lib/api";
 import { DEFAULT_REST_ACTION, REST_ACTIONS, type RestActionId, WEB_APP_CONFIG } from "@/lib/template";
 import { ResponsePanel } from "@/components/tools/response-panel";
+import { ParamInput } from "@/components/tools/param-input";
+import { SubmitButton } from "@/components/tools/submit-button";
 
 export default function ToolsPage() {
   const [selectedAction, setSelectedAction] = useState<RestActionId>(DEFAULT_REST_ACTION.id);
@@ -66,6 +68,7 @@ export default function ToolsPage() {
           </p>
           <div className="space-y-1">
             {REST_ACTIONS.map((a) => (
+              // TEMPLATE: Replace with @aurora/aurora-button variant="ghost"
               <button
                 type="button"
                 key={a.id}
@@ -111,15 +114,13 @@ export default function ToolsPage() {
                       {param.label}
                       {param.required && <span style={{ color: "var(--aurora-error)", marginLeft: "0.25rem" }}>*</span>}
                     </label>
-                    <input
+                    <ParamInput
                       id={param.name}
                       type={param.type}
                       placeholder={param.placeholder}
                       value={paramValues[param.name] ?? ""}
-                      onChange={(e) => setParamValues((prev) => ({ ...prev, [param.name]: e.target.value }))}
-                      style={{ width: "100%", background: "var(--aurora-control-surface)", border: "1px solid var(--aurora-border-default)", borderRadius: "var(--radius-md)", padding: "0.5rem 0.75rem", color: "var(--aurora-text-primary)", fontSize: "0.875rem", fontFamily: "var(--aurora-font-sans)", outline: "none", boxSizing: "border-box" }}
-                      onFocus={(e) => { e.target.style.borderColor = "var(--aurora-accent-primary)"; }}
-                      onBlur={(e) => { e.target.style.borderColor = "var(--aurora-border-default)"; }}
+                      onChange={(value) => setParamValues((prev) => ({ ...prev, [param.name]: value }))}
+                      required={param.required}
                     />
                   </div>
                 ))}
@@ -130,13 +131,7 @@ export default function ToolsPage() {
               </p>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              style={{ background: loading ? "var(--aurora-panel-strong)" : "var(--aurora-accent-button)", color: loading ? "var(--aurora-text-muted)" : "var(--aurora-accent-foreground)", border: "none", borderRadius: "var(--radius-md)", padding: "0.5rem 1.25rem", fontWeight: 600, fontSize: "0.875rem", cursor: loading ? "not-allowed" : "pointer" }}
-            >
-              {loading ? "Running…" : "Run Action"}
-            </button>
+            <SubmitButton loading={loading} />
           </form>
 
           {response !== null && <ResponsePanel response={response} isError={isError} />}

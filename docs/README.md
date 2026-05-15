@@ -47,6 +47,16 @@ This directory contains focused guides for operating, adapting, testing, and rel
 | `MCP_SCHEMA.md` | Generated MCP tool schema/action contract. |
 | `MCP-REGISTRY-PUBLISH-GUIDE.md` | MCP registry publishing guidance. |
 
+## Directories
+
+| Directory | Contents |
+|---|---|
+| `generated/` | Machine-produced artefacts committed for CI/API compatibility (e.g. `openapi.json`). |
+| `contracts/` | Durable JSON Schema and example contracts (e.g. scaffold intent schema). |
+| `specs/` | Design specs and handoff documents for MCP-only wizard flows. |
+| `sessions/` | Saved session notes and agent handoff records. |
+| `references/` | Snapshots of external specifications and tooling docs (MCP spec, registry, etc.). |
+
 ## Keeping docs current
 
 - Update focused docs when changing commands, scripts, routes, deployment, or plugin behavior.

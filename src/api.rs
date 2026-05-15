@@ -90,9 +90,7 @@ fn enforce_rest_scope(
                 .into_response(),
         );
     };
-    let satisfied = auth.scopes.iter().any(|scope| {
-        scope == required_scope || (required_scope == READ_SCOPE && scope == WRITE_SCOPE)
-    });
+    let satisfied = crate::actions::scopes_satisfy(&auth.scopes, required_scope);
     if satisfied {
         return None;
     }

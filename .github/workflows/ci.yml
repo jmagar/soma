@@ -20,6 +20,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -29,6 +36,7 @@ jobs:
   fmt:
     name: Format
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -44,6 +52,7 @@ jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -61,8 +70,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rmcp-template-clippy-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: rmcp-template-clippy-
+          key: ${{ github.repository }}-clippy-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ github.repository }}-clippy-
 
       - name: cargo clippy -- -D warnings
         run: cargo clippy --all-targets -- -D warnings
@@ -71,6 +80,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -85,8 +95,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: rmcp-template-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: rmcp-template-test-
+          key: ${{ github.repository }}-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ github.repository }}-test-
 
       - name: Install cargo-nextest
         uses: taiki-e/install-action@95cc2373c3f00275e315c306e56fef1c7a8854c0 # cargo-nextest
@@ -98,6 +108,7 @@ jobs:
   web:
     name: Web
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/web
@@ -126,11 +137,14 @@ jobs:
   toml:
     name: TOML Format
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install taplo
-        run: cargo install taplo-cli --locked
+        uses: taiki-e/install-action@331d60e3cd3a5f0b2a2a3af0e98bace3c04e6a3b # v2.49.0
+        with:
+          tool: taplo-cli
 
       - name: taplo check
         run: taplo check
@@ -139,6 +153,7 @@ jobs:
   template:
     name: Template Contracts
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -178,6 +193,7 @@ jobs:
   audit:
     name: Cargo Deny
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -191,6 +207,7 @@ jobs:
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: read
