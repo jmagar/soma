@@ -84,7 +84,7 @@ A CLI equivalent may be added later if needed, but the current safety model inte
 
 ## Elicitation fields
 
-The current template asks for:
+The intent should stay lightweight. The wizard asks enough to choose the scaffold shape, runtime defaults, optional plugins, and documentation inputs; it does not try to inventory every action up front.
 
 | Field | Type | Purpose | Example |
 |---|---|---|---|
@@ -93,15 +93,37 @@ The current template asks for:
 | `binary_name` | string | CLI/MCP server binary name | `unraid` |
 | `server_category` | string | Surface category | `upstream-client` or `application-platform` |
 | `env_prefix` | string | Environment variable prefix | `UNRAID` |
-| `auth_kind` | string | Upstream auth type | `none`, `api-key`, `bearer`, `oauth`, `other` |
-| `resource_groups` | CSV string | Upstream/domain resource groups | `vms, shares, docker` |
-| `read_actions` | CSV string | Read-only business actions | `list_vms, get_status` |
-| `write_actions` | CSV string | Mutating/destructive business actions | `restart_vm` |
-| `mcp_only_actions` | CSV string | Actions that require MCP protocol features | `approve_change` |
+| `auth_kind` | string | Upstream auth type | `none`, `api-key`, `bearer`, `oauth`, `both`, `other` |
+| `host` | string | Default bind host | `127.0.0.1` |
+| `port` | integer | Default HTTP port | `3100` |
+| `mcp_transport` | string | MCP transport mode | `stdio`, `http`, or `dual` |
+| `mcp_primitives` | list | MCP primitives to scaffold | `tools`, `resources`, `prompts`, `elicitation` |
+| `deployment` | string | Deployment scaffolding to include | `none`, `systemd`, or `docker` |
+| `plugins` | list | Plugin surfaces to scaffold | `claude`, `codex`, `gemini`; accepts all, none, or any subset |
+| `publish_mcp` | boolean | Whether to scaffold MCP registry publishing via `server.json` | `true` |
+| `crawl_docs` | object | Optional docs/research inputs for Axon crawling | URLs, repos, or search topics |
 
 ## Returned JSON contract
 
 The action returns a JSON object with `kind = "rmcp_template_scaffold_intent"` and `schema_version = 1`.
+
+Machine-readable contract: [`docs/contracts/scaffold-intent.schema.json`](../contracts/scaffold-intent.schema.json).
+
+### Policy/runtime fields
+
+These fields are part of the core scaffold decision:
+
+| Field | Accepted values | Notes |
+|---|---|---|
+| `required_surfaces` | `mcp`, `cli`, `api`, `web` | Derived from `server_category`; upstream-client uses MCP + CLI, application-platform uses API + CLI + MCP + Web. |
+| `runtime.host` | string | Default bind host. |
+| `runtime.port` | integer | Default HTTP port. |
+| `runtime.mcp_transport` | `stdio`, `http`, `dual` | `dual` scaffolds both stdio and Streamable HTTP. |
+| `mcp_primitives` | `tools`, `resources`, `prompts`, `elicitation` | User-selected primitives to scaffold. |
+| `deployment` | `none`, `systemd`, `docker` | Deployment scaffolding to include. |
+| `plugins` | `claude`, `codex`, `gemini` | Accepts all, none, or any subset. |
+| `publish_mcp` | boolean | If true, scaffold/update `server.json` for MCP registry publishing. |
+| `crawl_docs` | object | Optional inputs for Axon crawling: `urls`, `repos`, and `search_topics`. |
 
 ### Example: upstream-client server
 
@@ -120,14 +142,21 @@ The action returns a JSON object with `kind = "rmcp_template_scaffold_intent"` a
   },
   "upstream": {
     "base_url_env": "UNRAID_API_URL",
-    "auth_kind": "api-key",
-    "resource_groups": ["vms", "shares", "docker"]
+    "auth_kind": "api-key"
   },
-  "actions": {
-    "read": ["list_vms", "get_status"],
-    "write": ["restart_vm"],
-    "mcp_only": [],
-    "cli_only_operational": ["serve", "mcp", "doctor", "watch", "setup"]
+  "runtime": {
+    "host": "127.0.0.1",
+    "port": 3100,
+    "mcp_transport": "dual"
+  },
+  "mcp_primitives": ["tools", "resources", "prompts", "elicitation"],
+  "deployment": "none",
+  "plugins": ["claude", "codex"],
+  "publish_mcp": true,
+  "crawl_docs": {
+    "urls": ["https://docs.unraid.net/"],
+    "repos": [],
+    "search_topics": ["Unraid API authentication"]
   },
   "handoff": {
     "recommended_skill": "scaffold-project",
@@ -158,14 +187,21 @@ The action returns a JSON object with `kind = "rmcp_template_scaffold_intent"` a
   },
   "upstream": {
     "base_url_env": "LAB_API_URL",
-    "auth_kind": "oauth",
-    "resource_groups": ["agents", "runs", "artifacts"]
+    "auth_kind": "both"
   },
-  "actions": {
-    "read": ["list_runs", "get_run"],
-    "write": ["start_run", "cancel_run"],
-    "mcp_only": ["approve_run"],
-    "cli_only_operational": ["serve", "mcp", "doctor", "watch", "setup"]
+  "runtime": {
+    "host": "0.0.0.0",
+    "port": 3100,
+    "mcp_transport": "http"
+  },
+  "mcp_primitives": ["tools", "resources", "prompts", "elicitation"],
+  "deployment": "docker",
+  "plugins": ["claude", "codex", "gemini"],
+  "publish_mcp": true,
+  "crawl_docs": {
+    "urls": [],
+    "repos": ["https://github.com/example/lab-sdk"],
+    "search_topics": ["Lab Gateway API runs artifacts"]
   },
   "handoff": {
     "recommended_skill": "scaffold-project",
@@ -210,7 +246,7 @@ The skill must:
    1. Summary
    2. Surface decision
    3. Rename map
-   4. Action parity matrix
+   4. Runtime/plugin/deployment choices
    5. Files to change
    6. Tests/validation
    7. Approval checkpoint
@@ -292,6 +328,5 @@ just schema-docs
 Possible additions that preserve the safety boundary:
 
 - Add a CLI command that reads scaffold intent JSON and prints the same approval-first plan.
-- Add JSON Schema for `rmcp_template_scaffold_intent` under `docs/contracts/`.
-- Add a dry-run planner command that validates intent JSON without editing files.
+- Add a dry-run planner command that validates intent JSON against `docs/contracts/scaffold-intent.schema.json` without editing files.
 - Add optional artifact export, for example writing intent JSON only after explicit user approval.
