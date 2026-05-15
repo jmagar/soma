@@ -22,9 +22,13 @@ plugins/example/
   hooks/
     hooks.json           # Claude lifecycle hook declarations
     plugin-setup.sh      # Thin adapter to the binary setup command
+  bin/
+    example             # Optional Git LFS-tracked plugin binary artifact
   skills/
     example/
       SKILL.md           # Shared action documentation
+    scaffold-project/
+      SKILL.md           # Approval-first template adaptation handoff skill
 ```
 
 When adapting the template, rename `example`, `Example`, and `EXAMPLE` consistently across the package, then update host-specific display text and credentials.
@@ -177,19 +181,49 @@ Gemini carries equivalent MCP config directly in `gemini-extension.json` because
 
 ## Skills
 
-`plugins/example/skills/example/SKILL.md` is shared documentation for agent behavior.
+`plugins/example/skills/example/SKILL.md` is shared across Claude, Codex, and Gemini. Every skill follows the three-tier fallback pattern — agents try each tier in order and stop when one works:
 
-The skill should include:
+```markdown
+# example — Claude Code Skill
 
-- quick action table
-- full action reference
-- parameter names and types
-- common workflows
-- response shapes
-- fallback CLI or HTTP examples
-- sensitive-value handling notes
+Use this skill whenever you need to query or manage the Example service.
 
-Do not let Claude, Codex, and Gemini drift into separate action documentation. Update the shared skill when the server action surface changes.
+## Tier 1: MCP tool (preferred)
+Use when the example MCP server is configured in your agent.
+
+example(action="things")
+example(action="thing", id="abc123")
+example(action="help")          # always available, no auth required
+
+## Tier 2: CLI binary
+Use when MCP is unavailable but the binary is installed in $PATH.
+
+example things [--json]
+example thing <id> [--json]
+example status
+
+Env required: EXAMPLE_API_URL, EXAMPLE_API_KEY
+
+## Tier 3: Direct API (last resort)
+Use when neither MCP nor CLI is available.
+
+curl -H "Authorization: Bearer $EXAMPLE_API_KEY" \
+     "$EXAMPLE_API_URL/things"
+
+## Gotchas
+- [service-specific pitfalls go here]
+- [e.g. pagination, required headers, rate limits]
+```
+
+The skill should also include:
+
+- quick action table (action → description → required params)
+- full parameter reference with types
+- common workflows (status check → list → inspect)
+- response shapes for key actions
+- sensitive-value handling notes (never log tokens, etc.)
+
+Do not maintain separate skill docs per host. Update the shared skill when the action surface changes; Claude, Codex, and Gemini all read the same file.
 
 ## Binary-Owned Hook Standard
 

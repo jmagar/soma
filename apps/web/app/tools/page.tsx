@@ -2,48 +2,23 @@
 
 import { useState } from "react";
 import { callAction } from "@/lib/api";
-
-const ACTIONS = [
-  {
-    id: "greet",
-    label: "greet",
-    description: "Return a personalised greeting",
-    params: [{ name: "name", label: "Name", type: "text", placeholder: "Alice", required: false }],
-  },
-  {
-    id: "echo",
-    label: "echo",
-    description: "Echo a message back unchanged",
-    params: [
-      { name: "message", label: "Message", type: "text", placeholder: "Hello!", required: true },
-    ],
-  },
-  {
-    id: "status",
-    label: "status",
-    description: "Return server status and configuration",
-    params: [],
-  },
-  {
-    id: "help",
-    label: "help",
-    description: "Show all available actions",
-    params: [],
-  },
-] as const;
-
-type ActionId = (typeof ACTIONS)[number]["id"];
+import {
+  DEFAULT_REST_ACTION,
+  REST_ACTIONS,
+  type RestActionId,
+  WEB_APP_CONFIG,
+} from "@/lib/template";
 
 export default function ToolsPage() {
-  const [selectedAction, setSelectedAction] = useState<ActionId>("greet");
+  const [selectedAction, setSelectedAction] = useState<RestActionId>(DEFAULT_REST_ACTION.id);
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
 
-  const action = ACTIONS.find((a) => a.id === selectedAction) ?? ACTIONS[0];
+  const action = REST_ACTIONS.find((a) => a.id === selectedAction) ?? DEFAULT_REST_ACTION;
 
-  const handleSelect = (id: ActionId) => {
+  const handleSelect = (id: RestActionId) => {
     setSelectedAction(id);
     setParamValues({});
     setResponse(null);
@@ -98,7 +73,7 @@ export default function ToolsPage() {
               fontSize: "0.8em",
             }}
           >
-            POST /v1/example
+            POST {WEB_APP_CONFIG.restEndpoint}
           </code>
         </p>
       </div>
@@ -126,7 +101,7 @@ export default function ToolsPage() {
             Actions
           </p>
           <div className="space-y-1">
-            {ACTIONS.map((a) => (
+            {REST_ACTIONS.map((a) => (
               <button
                 type="button"
                 key={a.id}
@@ -340,7 +315,7 @@ export default function ToolsPage() {
                 whiteSpace: "pre-wrap",
               }}
             >
-              {`POST /v1/example\nContent-Type: application/json\n\n${JSON.stringify(
+              {`POST ${WEB_APP_CONFIG.restEndpoint}\nContent-Type: application/json\n\n${JSON.stringify(
                 {
                   action: selectedAction,
                   params: Object.fromEntries(

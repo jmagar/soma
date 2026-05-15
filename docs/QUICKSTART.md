@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Rust 1.86+ (`rustup update stable`)
+- Rust 1.90+ (`rustup update stable`)
 - `just` command runner: `cargo install just` (optional but convenient)
 
 ## 1. Run the stub template
@@ -116,3 +116,37 @@ Or use Streamable HTTP (server must be running):
 - Read the [README](../README.md) for the step-by-step guide to adapting this template for your own API.
 - Read [CLAUDE.md](../CLAUDE.md) for the thin-shim rule and how to add actions.
 - For OAuth setup, set `EXAMPLE_MCP_AUTH_MODE=oauth` and the `EXAMPLE_MCP_GOOGLE_*` env vars — see the env var table in the README.
+
+## Checklist for adapting this template
+
+Use this when creating a real service from rmcp-template:
+
+- [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
+- [ ] Implement API client in `src/<service>.rs` (transport only — no logic)
+- [ ] Add service methods to `src/app.rs` (ALL logic here)
+- [ ] Add actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs` (thin shim only)
+- [ ] Add CLI commands to `src/cli.rs` (thin shim only)
+- [ ] Update `src/config.rs` with service-specific config fields
+- [ ] Add elicitation to destructive actions (or `confirm=true` flag fallback)
+- [ ] Set port in `config.toml`, `docker-compose.yml`, and Dockerfile `EXPOSE`
+- [ ] Implement central auth policy resolution in library code
+- [ ] Implement `default_data_dir()` with container detection
+- [ ] Write `entrypoint.sh` with permission setup and required-var validation
+- [ ] Set up xtask crate with `dist`, `ci`, `symlink-docs`, `check-env`
+- [ ] Configure nextest (`.config/nextest.toml`)
+- [ ] Configure taplo (`taplo.toml`)
+- [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
+- [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
+- [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
+- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
+- [ ] Write `install.sh` matching the GitHub release tarball names
+- [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
+- [ ] Write `CHANGELOG.md`
+- [ ] Run `just symlink-docs` to create `AGENTS.md` and `GEMINI.md` symlinks
+- [ ] Write `server.json` for MCP registry
+- [ ] Write `.codex-plugin/plugin.json` next to `.claude-plugin/plugin.json`
+- [ ] Add `.worktreeinclude` at the repo root with `.env` and `config.toml`
+- [ ] Run `cargo check` — must compile clean, zero warnings
+- [ ] Run `cargo nextest run` — all tests pass
+- [ ] Run `./tests/mcporter/test-mcp.sh` against a live server instance

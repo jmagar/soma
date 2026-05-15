@@ -7,6 +7,7 @@
 //!   ci           Run all CI checks: fmt, clippy, nextest, taplo, audit
 //!   symlink-docs Create AGENTS.md and GEMINI.md symlinks next to every CLAUDE.md
 //!   check-env    Validate required environment variables are set
+//!   patterns     Check static contracts from docs/PATTERNS.md
 //!
 //! TEMPLATE: Add your own commands by adding arms to the match block below.
 //!           Keep each command as a separate `fn` for readability.
@@ -19,6 +20,8 @@
 use anyhow::{bail, Context, Result};
 use std::process::{Command, Stdio};
 use walkdir::WalkDir;
+
+mod patterns;
 
 fn main() -> Result<()> {
     // Cargo sets CARGO_MANIFEST_DIR for the workspace root when invoked as
@@ -38,6 +41,7 @@ fn main() -> Result<()> {
         Some("ci") => ci(),
         Some("symlink-docs") => symlink_docs(),
         Some("check-env") => check_env(),
+        Some("patterns") => patterns_cmd(&args[1..]),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
             Ok(())
@@ -96,7 +100,9 @@ fn dist() -> Result<()> {
     }
 
     println!("==> Copied {src:?} → {dst:?}");
-    println!("==> Run `git add bin/{BINARY_NAME} && git commit -m 'chore: update binary'` to publish via LFS");
+    println!(
+        "==> Run `git add bin/{BINARY_NAME} && git commit -m 'chore: update binary'` to publish via LFS"
+    );
     Ok(())
 }
 
@@ -135,7 +141,11 @@ fn ci() -> Result<()> {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/5] cargo audit");
+    println!("==> [5/6] cargo xtask patterns");
+    patterns::run(patterns::PatternOptions::default())
+        .context("PATTERNS.md contract check failed")?;
+
+    println!("==> [6/6] cargo audit");
     // TEMPLATE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
@@ -147,6 +157,26 @@ fn ci() -> Result<()> {
 
     println!("==> All CI checks passed!");
     Ok(())
+}
+
+// =============================================================================
+// patterns — Check docs/PATTERNS.md contracts
+// =============================================================================
+
+fn patterns_cmd(args: &[String]) -> Result<()> {
+    let mut options = patterns::PatternOptions::default();
+    for arg in args {
+        match arg.as_str() {
+            "--strict" => options.strict = true,
+            "--json" => options.json = true,
+            "--help" | "-h" => {
+                println!("Usage: cargo xtask patterns [--strict] [--json]");
+                return Ok(());
+            }
+            unknown => bail!("Unknown patterns option: {unknown}"),
+        }
+    }
+    patterns::run(options)
 }
 
 // =============================================================================
@@ -323,6 +353,24 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+/// Run an arbitrary command and return stdout. Fails if exit code != 0.
+pub(crate) fn run_cmd_output(program: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .with_context(|| format!("Failed to spawn `{program}`"))?;
+    if !output.status.success() {
+        bail!(
+            "`{program} {}` exited with status {}",
+            args.join(" "),
+            output.status
+        );
+    }
+    String::from_utf8(output.stdout)
+        .with_context(|| format!("`{program}` emitted non-UTF-8 stdout"))
+}
+
 /// Check whether a cargo subcommand (or standalone binary) is installed.
 ///
 /// Checks for both `cargo-nextest` (cargo subcommand) and `nextest` in PATH.
@@ -349,6 +397,7 @@ COMMANDS:
   ci            Run all CI checks: fmt, clippy, nextest, taplo, audit
   symlink-docs  Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
   check-env     Validate required environment variables are set
+  patterns      Check static contracts from docs/PATTERNS.md (--strict, --json)
   help          Show this help
 
 TEMPLATE:

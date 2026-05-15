@@ -15,6 +15,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use crate::actions::{execute_service_action, ExampleAction};
+use crate::app::{ExampleService, ScaffoldIntent};
 use crate::server::AppState;
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
@@ -39,25 +41,13 @@ async fn dispatch_example(
     args: Value,
     peer: &Peer<RoleServer>,
 ) -> anyhow::Result<Value> {
-    let action =
-        string_arg(&args, "action").ok_or_else(|| anyhow::anyhow!("action is required"))?;
+    let action = ExampleAction::from_mcp_args(&args)?;
 
-    match action.as_str() {
-        "greet" => {
-            let name = string_arg(&args, "name");
-            state.service.greet(name.as_deref()).await
-        }
-        "echo" => {
-            let message = string_arg(&args, "message")
-                .ok_or_else(|| anyhow::anyhow!("`message` is required for action=echo"))?;
-            state.service.echo(&message).await
-        }
-        "status" => state.service.status().await,
-        "elicit_name" => elicit_name(peer).await,
-        "help" => Ok(json!({ "help": HELP_TEXT })),
-        other => Err(anyhow::anyhow!(
-            "unknown example action: {other}; use action=help for documentation"
-        )),
+    match action {
+        ExampleAction::ElicitName => elicit_name(peer).await,
+        ExampleAction::ScaffoldIntent => scaffold_intent(&state.service, peer).await,
+        ExampleAction::Help => Ok(json!({ "help": HELP_TEXT })),
+        other => execute_service_action(&state.service, &other).await,
     }
 }
 
@@ -79,7 +69,48 @@ struct NameInput {
 // Mark as safe for elicitation — proves this type generates an "object" JSON schema.
 rmcp::elicit_safe!(NameInput);
 
-/// Ask the MCP client to elicit the user's name, then return a personalised greeting.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+struct ScaffoldIntentInput {
+    /// Human-readable project name, e.g. "Unraid MCP" or "Lab Gateway"
+    display_name: String,
+    /// Cargo package name, e.g. "unraid-mcp"
+    crate_name: String,
+    /// Binary/tool name, e.g. "unraid"
+    binary_name: String,
+    /// Server category: "upstream-client" or "application-platform"
+    server_category: String,
+    /// Environment variable prefix, e.g. "UNRAID" or "LAB"
+    env_prefix: String,
+    /// Upstream auth kind: "none", "api-key", "bearer", "oauth", "both", or "other"
+    auth_kind: String,
+    /// Default bind host, e.g. "127.0.0.1" or "0.0.0.0"
+    host: String,
+    /// Default HTTP port, e.g. 3100
+    port: u16,
+    /// MCP transport mode: "stdio", "http", or "dual"
+    mcp_transport: String,
+    /// MCP primitives to scaffold, comma-separated: "tools, resources, prompts, elicitation"
+    mcp_primitives: String,
+    /// Deployment scaffolding: "none", "systemd", or "docker"
+    deployment: String,
+    /// Plugin surfaces to scaffold, comma-separated: "claude, codex, gemini". Leave blank for none.
+    plugins: String,
+    /// Whether to scaffold MCP registry publishing through server.json
+    publish_mcp: bool,
+    /// Documentation URLs to crawl via Axon, comma-separated. Leave blank if none.
+    crawl_urls: String,
+    /// Repository URLs to crawl via Axon, comma-separated. Leave blank if none.
+    crawl_repos: String,
+    /// Search topics to crawl via Axon, comma-separated. Leave blank if none.
+    crawl_search_topics: String,
+}
+
+rmcp::elicit_safe!(ScaffoldIntentInput);
+
+/// Ask the MCP client to collect scaffold requirements, then return JSON for a skill handoff.
+///
+/// This function intentionally does not mutate files. The returned JSON is consumed by
+/// the `scaffold-project` skill, which drafts an approval-first plan for the user.
 ///
 /// # How MCP elicitation works
 ///
@@ -99,6 +130,75 @@ rmcp::elicit_safe!(NameInput);
 /// Only clients that declared the `elicitation` capability during the MCP initialisation
 /// handshake will respond. If the client doesn't support it, this returns a graceful
 /// fallback message rather than an error.
+async fn scaffold_intent(
+    service: &ExampleService,
+    peer: &Peer<RoleServer>,
+) -> anyhow::Result<Value> {
+    match peer
+        .elicit::<ScaffoldIntentInput>(
+            "Tell me what kind of project you are scaffolding. I will return JSON only; the scaffold-project skill will turn it into an approval-first plan.",
+        )
+        .await
+    {
+        Ok(Some(input)) => Ok(service.scaffold_intent(input.into())),
+        Ok(None) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "no_input",
+            "message": "No scaffold intent was provided.",
+        })),
+        Err(ElicitationError::UserDeclined) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "declined",
+            "message": "User declined to provide scaffold intent.",
+        })),
+        Err(ElicitationError::UserCancelled) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "cancelled",
+            "message": "Scaffold intent elicitation was cancelled.",
+        })),
+        Err(ElicitationError::CapabilityNotSupported) => Ok(json!({
+            "kind": "rmcp_template_scaffold_intent",
+            "schema_version": 1,
+            "status": "elicitation_not_supported",
+            "message": "This MCP client does not support elicitation.",
+            "fallback": {
+                "recommended_skill": "scaffold-project",
+                "instructions": "Ask the user for the scaffold fields manually, then create the same JSON shape documented by the scaffold-project skill. Do not mutate files until the user approves the plan."
+            }
+        })),
+        Err(e) => {
+            tracing::error!(error = %e, "scaffold intent elicitation failed unexpectedly");
+            Err(anyhow::anyhow!("scaffold intent elicitation failed unexpectedly: {e}"))
+        }
+    }
+}
+
+impl From<ScaffoldIntentInput> for ScaffoldIntent {
+    fn from(input: ScaffoldIntentInput) -> Self {
+        Self {
+            display_name: input.display_name,
+            crate_name: input.crate_name,
+            binary_name: input.binary_name,
+            server_category: input.server_category,
+            env_prefix: input.env_prefix,
+            auth_kind: input.auth_kind,
+            host: input.host,
+            port: input.port,
+            mcp_transport: input.mcp_transport,
+            mcp_primitives: input.mcp_primitives,
+            deployment: input.deployment,
+            plugins: input.plugins,
+            publish_mcp: input.publish_mcp,
+            crawl_urls: input.crawl_urls,
+            crawl_repos: input.crawl_repos,
+            crawl_search_topics: input.crawl_search_topics,
+        }
+    }
+}
+
 async fn elicit_name(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
     match peer
         .elicit::<NameInput>("What is your name? I'll use it to give you a personalised greeting.")
@@ -138,21 +238,13 @@ async fn elicit_name(peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
             }))
         }
         Err(e) => {
-            tracing::warn!(error = %e, "elicitation failed");
-            Ok(json!({
-                "message": "Elicitation failed — see server logs for details.",
-                "error": e.to_string(),
-                "fallback_greeting": "Hello, World!",
-            }))
+            tracing::error!(error = %e, "elicitation failed unexpectedly");
+            Err(anyhow::anyhow!("elicitation failed unexpectedly: {e}"))
         }
     }
 }
 
 // ── arg helpers ───────────────────────────────────────────────────────────────
-
-fn string_arg(args: &Value, name: &str) -> Option<String> {
-    args.get(name).and_then(|v| v.as_str()).map(String::from)
-}
 
 // ── help text ─────────────────────────────────────────────────────────────────
 
@@ -168,7 +260,7 @@ Return a greeting. Optional `name` parameter (string).
 Example: `{ "action": "greet", "name": "Alice" }`
 
 ### echo
-Echo a message back unchanged. Required `message` parameter (string).
+Echo a message back unchanged. Required `message` parameter (non-empty string).
 Example: `{ "action": "echo", "message": "Hello!" }`
 
 ### status
@@ -181,17 +273,152 @@ via the MCP client UI, then returns a personalised greeting.
 Requires a client that supports the MCP elicitation capability (spec 2025-06-18).
 Example: `{ "action": "elicit_name" }`
 
+### scaffold_intent
+Uses MCP elicitation to collect project scaffold intent and returns JSON for the
+`scaffold-project` skill. This action does not mutate files; the skill creates an
+approval-first plan that the user can accept, edit, or reject.
+Example: `{ "action": "scaffold_intent" }`
+
 ### help
 Show this documentation.
 Example: `{ "action": "help" }`
 
 ## Adding a new action
 
-1. Add the action name to `EXAMPLE_ACTIONS` in `mcp/schemas.rs`.
+1. Add the action metadata to `ACTION_SPECS` in `actions.rs`.
 2. Add any new parameters to the `inputSchema` in `mcp/schemas.rs`.
 3. Add a method to `ExampleClient` in `example.rs` (transport).
 4. Add a method to `ExampleService` in `app.rs` (business logic).
 5. Add a match arm in `dispatch_example()` in `mcp/tools.rs`.
-6. Add the action to `READ_ONLY_ACTIONS` in `mcp/rmcp_server.rs`.
-7. Add a test in `tests/tool_dispatch.rs`.
+6. Add a test covering parser, schema, and dispatch behavior.
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{config::ExampleConfig, example::ExampleClient};
+
+    fn service() -> ExampleService {
+        let client = ExampleClient::new(&ExampleConfig {
+            api_url: "http://localhost:1/stub".to_owned(),
+            api_key: "test-key".to_owned(),
+        })
+        .expect("stub client should build");
+        ExampleService::new(client)
+    }
+
+    fn upstream_input() -> ScaffoldIntentInput {
+        ScaffoldIntentInput {
+            display_name: "Unraid MCP".to_owned(),
+            crate_name: "unraid-mcp".to_owned(),
+            binary_name: "unraid".to_owned(),
+            server_category: "upstream-client".to_owned(),
+            env_prefix: "unraid".to_owned(),
+            auth_kind: "api key".to_owned(),
+            host: "".to_owned(),
+            port: 3100,
+            mcp_transport: "dual".to_owned(),
+            mcp_primitives: "tools, resources, prompts, elicitation".to_owned(),
+            deployment: "none".to_owned(),
+            plugins: "claude, codex, claude".to_owned(),
+            publish_mcp: true,
+            crawl_urls: "https://docs.unraid.net/".to_owned(),
+            crawl_repos: "".to_owned(),
+            crawl_search_topics: "Unraid API authentication".to_owned(),
+        }
+    }
+
+    #[test]
+    fn scaffold_intent_json_matches_simplified_contract_shape() {
+        let value = service().scaffold_intent(upstream_input().into());
+
+        assert_eq!(value["kind"], "rmcp_template_scaffold_intent");
+        assert_eq!(value["schema_version"], 1);
+        assert_eq!(value["server_category"], "upstream-client");
+        assert_eq!(value["required_surfaces"], json!(["mcp", "cli"]));
+        assert_eq!(value["project"]["env_prefix"], "UNRAID");
+        assert_eq!(
+            value["upstream"],
+            json!({
+                "base_url_env": "UNRAID_API_URL",
+                "auth_kind": "api-key"
+            })
+        );
+        assert_eq!(
+            value["runtime"],
+            json!({
+                "host": "127.0.0.1",
+                "port": 3100,
+                "mcp_transport": "dual"
+            })
+        );
+        assert_eq!(
+            value["mcp_primitives"],
+            json!(["tools", "resources", "prompts", "elicitation"])
+        );
+        assert_eq!(value["plugins"], json!(["claude", "codex"]));
+        assert_eq!(value["publish_mcp"], true);
+        assert_eq!(
+            value["crawl_docs"]["urls"],
+            json!(["https://docs.unraid.net/"])
+        );
+        assert!(value.get("actions").is_none());
+        assert!(value["upstream"].get("resource_groups").is_none());
+    }
+
+    #[test]
+    fn application_platform_intent_requires_all_surfaces() {
+        let mut input = upstream_input();
+        input.server_category = "application platform".to_owned();
+        input.auth_kind = "both".to_owned();
+        input.host = "0.0.0.0".to_owned();
+        input.mcp_transport = "streamable-http".to_owned();
+        input.deployment = "container".to_owned();
+        input.plugins = "claude, codex, gemini".to_owned();
+        input.crawl_repos = "https://github.com/example/lab-sdk".to_owned();
+
+        let value = service().scaffold_intent(input.into());
+
+        assert_eq!(value["server_category"], "application-platform");
+        assert_eq!(
+            value["required_surfaces"],
+            json!(["api", "cli", "mcp", "web"])
+        );
+        assert_eq!(value["upstream"]["auth_kind"], "both");
+        assert_eq!(value["runtime"]["mcp_transport"], "http");
+        assert_eq!(value["deployment"], "docker");
+        assert_eq!(value["plugins"], json!(["claude", "codex", "gemini"]));
+        assert_eq!(
+            value["crawl_docs"]["repos"],
+            json!(["https://github.com/example/lab-sdk"])
+        );
+    }
+
+    #[test]
+    fn scaffold_intent_json_contains_contract_required_fields() {
+        let value = service().scaffold_intent(upstream_input().into());
+        let contract: Value = serde_json::from_str(include_str!(
+            "../../docs/contracts/scaffold-intent.schema.json"
+        ))
+        .expect("contract should be valid JSON");
+        let required = contract["required"]
+            .as_array()
+            .expect("contract should list root required fields");
+
+        for field in required {
+            let field = field.as_str().expect("required fields should be strings");
+            assert!(
+                value.get(field).is_some(),
+                "missing contract field: {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn primitive_defaults_to_tools_when_input_is_empty() {
+        let mut input = upstream_input();
+        input.mcp_primitives.clear();
+        let value = service().scaffold_intent(input.into());
+        assert_eq!(value["mcp_primitives"], json!(["tools"]));
+    }
+}

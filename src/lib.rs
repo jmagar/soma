@@ -11,12 +11,15 @@
 //!   [`server`]  — `AppState`, `AuthPolicy`, HTTP router
 //!   [`api`]     — REST API handlers (`POST /v1/example`, health, status)
 
+pub mod actions;
 pub mod api;
 pub mod app;
+pub mod cli;
 pub mod config;
 pub mod example;
 pub mod mcp;
 pub mod server;
+pub mod token_limit;
 pub mod web;
 
 /// Test helpers — available when `features = ["test-support"]` or in `cfg(test)`.
@@ -115,7 +118,10 @@ pub mod testing {
         let auth_config = lab_auth::config::AuthConfigBuilder::new()
             .env_prefix("EXAMPLE_MCP")
             .session_cookie_name("example_mcp_session")
-            .scopes_supported(vec!["example:read".into(), "example:admin".into()])
+            .scopes_supported(vec![
+                crate::actions::READ_SCOPE.into(),
+                crate::actions::WRITE_SCOPE.into(),
+            ])
             .default_scope("example:read")
             .resource_path("/mcp")
             .build_from_sources(vars)

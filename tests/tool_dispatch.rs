@@ -5,10 +5,10 @@
 //!
 //! **Template**: mirror this file for your service. Add one test per action.
 
-use rmcp_template::testing::loopback_state;
+use rmcp_template::{actions::ExampleAction, testing::loopback_state};
 use serde_json::json;
 
-/// Helper: call `execute_tool` with a loopback state and return the Value.
+/// Helper: call the service action with a loopback state and return the Value.
 ///
 /// We test at the service layer (via `AppState.service`) since `execute_tool`
 /// requires a `Peer<RoleServer>` for elicitation, which isn't available in unit tests.
@@ -105,6 +105,13 @@ async fn test_greet_target_defaults_to_world() {
 #[test]
 fn test_schemas_actions_list_is_non_empty() {
     // Verify the schema action list compiles and has the expected entries
-    use rmcp_template::mcp;
-    let _ = mcp::router(loopback_state()); // builds router — exercises schema code path
+    use rmcp_template::server;
+    let _ = server::router(loopback_state()); // builds router — exercises schema code path
+}
+
+#[test]
+fn test_scaffold_intent_action_parses_for_mcp_dispatch() {
+    let action = ExampleAction::from_mcp_args(&json!({ "action": "scaffold_intent" }))
+        .expect("scaffold_intent should parse for MCP dispatch");
+    assert_eq!(action, ExampleAction::ScaffoldIntent);
 }

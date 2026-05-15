@@ -4,6 +4,7 @@
 //!   `POST /mcp`         — MCP Streamable HTTP transport (tools, resources, prompts)
 //!   `GET  /health`      — Health check (unauthenticated)
 //!   `GET  /status`      — Runtime status (unauthenticated, redacts secrets)
+//!   `GET  /openapi.json` — Generated REST OpenAPI schema (unauthenticated)
 //!   `POST /v1/example`  — REST API action dispatch (see `crate::api`)
 //!   `/*`                — SPA fallback for embedded web UI (when web feature enabled)
 
@@ -18,7 +19,7 @@ use axum::{
 use serde_json::json;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
-use crate::api::{api_dispatch, health, status};
+use crate::api::{api_dispatch, health, openapi_json, status};
 use crate::mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use crate::server::{build_auth_layer, AppState, AuthPolicy};
 
@@ -34,7 +35,7 @@ pub fn router(state: AppState) -> Router {
             .public_url
             .as_deref()
             .map(|u| Arc::<str>::from(format!("{}/mcp", u.trim_end_matches('/')))),
-        AuthPolicy::LoopbackDev => None,
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => None,
     };
 
     // Auth layer applied to both /mcp and /v1/example.
@@ -83,6 +84,7 @@ pub fn router(state: AppState) -> Router {
     let public: Router<()> = Router::new()
         .route("/health", get(health))
         .route("/status", get(status))
+        .route("/openapi.json", get(openapi_json))
         .with_state(state.clone());
 
     let mut base: Router<()> = Router::new().merge(authenticated).merge(public);
@@ -120,4 +122,33 @@ fn cors_layer(config: &crate::config::McpConfig) -> CorsLayer {
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
         ])
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+
+    use super::router;
+
+    #[tokio::test]
+    async fn openapi_json_is_served_without_auth() {
+        let response = router(crate::testing::loopback_state())
+            .oneshot(
+                Request::builder()
+                    .uri("/openapi.json")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("router should respond");
+
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .expect("content-type should be set");
+        assert!(content_type.starts_with("application/json"));
+    }
 }

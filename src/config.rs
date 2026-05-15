@@ -20,7 +20,7 @@ pub struct Config {
 /// Config for the example remote service (the thing this MCP server wraps).
 ///
 /// **Template**: replace this with config for your actual upstream service.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ExampleConfig {
     /// Full endpoint URL of the remote service (EXAMPLE_API_URL).
@@ -28,15 +28,6 @@ pub struct ExampleConfig {
     pub api_url: String,
     /// API key or bearer token (EXAMPLE_API_KEY).
     pub api_key: String,
-}
-
-impl Default for ExampleConfig {
-    fn default() -> Self {
-        Self {
-            api_url: String::new(),
-            api_key: String::new(),
-        }
-    }
 }
 
 /// MCP HTTP server configuration.

@@ -10,7 +10,7 @@
 #   "example-cargo-*"      → your cache mount IDs (e.g. "myservice-cargo-*")
 #   "example-mcp"          → your systemd/Docker service name
 #   EXPOSE 40060            → your port (must match config.toml [mcp] port)
-#   HEALTHCHECK port 3000  → same as EXPOSE
+#   HEALTHCHECK port 40060  → same as EXPOSE
 #   CMD ["example", ...]   → your binary name
 #
 # Build stages:
@@ -18,7 +18,20 @@
 #   runtime  — Minimal Debian image with only the binary + curl for health checks
 # =============================================================================
 
-# ── Stage 1: Builder ──────────────────────────────────────────────────────────
+# ── Stage 1: Web assets ───────────────────────────────────────────────────────
+# Build the static Next.js export inside Docker so fresh clones do not need a
+# pre-existing ignored apps/web/out/ directory.
+FROM node:22-bookworm-slim AS web
+
+WORKDIR /app/apps/web
+
+COPY apps/web/package.json apps/web/pnpm-lock.yaml ./
+RUN corepack enable && pnpm install --frozen-lockfile
+
+COPY apps/web/ ./
+RUN pnpm build
+
+# ── Stage 2: Builder ──────────────────────────────────────────────────────────
 FROM rust:1.90-slim-bookworm AS builder
 
 WORKDIR /app
@@ -48,17 +61,15 @@ RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registr
 # The `touch src/main.rs` forces Cargo to re-link even when timestamps haven't
 # changed (Docker layer caching can confuse Cargo's incremental build detection).
 COPY src/ src/
-# Embed pre-built Next.js web UI (apps/web/out/ built before docker build).
-# apps/web/out/.gitkeep ensures this COPY always succeeds even on a fresh clone.
-# Populate with `just build-web` or `npm run build` inside apps/web/ first.
-COPY apps/web/out/ apps/web/out/
+# Embed the Next.js static export built in the web stage.
+COPY --from=web /app/apps/web/out/ apps/web/out/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
     touch src/main.rs && cargo build --release --locked -p rmcp-template && \
     cp target/release/example /usr/local/bin/example
 
-# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
+# ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Minimal Debian image — no Rust toolchain, no build tools.
 # Only ca-certificates (for TLS) and curl (for HEALTHCHECK).
 FROM debian:bookworm-slim

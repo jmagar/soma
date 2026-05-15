@@ -18,15 +18,17 @@ use std::sync::Arc;
 use rmcp::{transport::stdio, ServiceExt};
 use rmcp_template::{
     app::ExampleService,
-    config::{AuthMode, Config},
+    cli,
+    config::Config,
     example::ExampleClient,
     mcp,
-    server::{self, AppState, AuthPolicy},
+    server::{
+        self, resolve_auth_policy_kind, trusted_gateway_from_env, AppState, AuthPolicy,
+        AuthPolicyKind,
+    },
 };
 use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
-
-mod cli;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -79,9 +81,6 @@ async fn main() -> Result<()> {
 /// Start the MCP HTTP server (Streamable HTTP transport).
 async fn serve_mcp() -> Result<()> {
     let config = Config::load()?;
-    // Pattern §27: Refuse to bind to a non-loopback address without auth unless
-    // the operator explicitly opts out via EXAMPLE_NOAUTH=true.
-    validate_bind_security(&config)?;
     let state = build_state(config).await?;
 
     info!(
@@ -123,7 +122,7 @@ async fn serve_stdio_mcp() -> Result<()> {
 /// Dispatch CLI subcommands.
 async fn run_cli() -> Result<()> {
     let config = Config::load()?;
-    match cli::parse_args() {
+    match cli::parse_args()? {
         Some(cli::Command::Doctor { json }) => {
             // Doctor needs the full Config (not just ExampleConfig) to check
             // MCP port, auth mode, etc. — intercept here before service construction.
@@ -143,60 +142,6 @@ async fn run_cli() -> Result<()> {
     }
 }
 
-// ── security ──────────────────────────────────────────────────────────────────
-
-/// Refuse to bind to a non-loopback address without authentication.
-///
-/// Pattern §27: Binding MCP on 0.0.0.0 with no auth exposes the server to
-/// anyone on the network. This guard prevents accidental exposure.
-///
-/// Five ways to satisfy the guard:
-///   1. Bind to loopback:  EXAMPLE_MCP_HOST=127.0.0.1  (or ::1)
-///   2. Enable auth:       EXAMPLE_MCP_TOKEN=<token>   (bearer mode)
-///                         or EXAMPLE_MCP_AUTH_MODE=oauth
-///   3. Disable auth:      EXAMPLE_MCP_NO_AUTH=true    (local dev / testing)
-///   4. Gateway override:  EXAMPLE_NOAUTH=true          (upstream proxy handles auth)
-///
-/// TEMPLATE: The env var names use the EXAMPLE_ prefix — update if you change it.
-///
-/// Note: EXAMPLE_MCP_NO_AUTH removes the auth middleware entirely (LoopbackDev policy).
-///       EXAMPLE_NOAUTH is a separate acknowledgement for the gateway deployment case:
-///       the server mounts an auth layer with no credentials, trusting the upstream
-///       proxy to reject unauthenticated requests before they arrive.
-fn validate_bind_security(config: &Config) -> Result<()> {
-    let is_loopback = config.mcp.is_loopback();
-    // has_auth: auth middleware is active AND at least one mechanism is configured.
-    let has_auth = !config.mcp.no_auth
-        && (config.mcp.api_token.is_some() || config.mcp.auth.mode == AuthMode::OAuth);
-
-    // no_auth=true: operator explicitly opted out of auth (local dev / testing).
-    let no_auth_explicit = config.mcp.no_auth;
-
-    // TEMPLATE: The env var name is EXAMPLE_NOAUTH — update if you change the prefix.
-    let noauth_override = std::env::var("EXAMPLE_NOAUTH")
-        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
-        .unwrap_or(false);
-
-    if !is_loopback && !has_auth && !no_auth_explicit && !noauth_override {
-        anyhow::bail!(
-            "Refusing to bind MCP server to {} without authentication.\n\
-             \n\
-             Choose one of:\n\
-             1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1\n\
-             2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)\n\
-             3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth (+ OAuth credentials)\n\
-             4. Disable auth:        EXAMPLE_MCP_NO_AUTH=true  (local dev or testing)\n\
-             5. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)\n\
-             \n\
-             For local dev, run:  just dev   (sets EXAMPLE_MCP_NO_AUTH=true)\n\
-             \n\
-             TEMPLATE: Replace EXAMPLE_ prefix with your service's prefix throughout.",
-            config.mcp.host
-        );
-    }
-    Ok(())
-}
-
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 async fn build_state(config: Config) -> Result<AppState> {
@@ -210,27 +155,30 @@ async fn build_state(config: Config) -> Result<AppState> {
 }
 
 async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
-    if config.mcp.no_auth || config.mcp.is_loopback() {
-        return Ok(AuthPolicy::LoopbackDev);
-    }
-    if config.mcp.auth.mode == AuthMode::OAuth {
-        let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
-            .env_prefix("EXAMPLE_MCP")
-            .session_cookie_name("example_mcp_session")
-            .scopes_supported(vec!["example:read".into(), "example:write".into()])
-            .default_scope("example:read")
-            .resource_path("/mcp")
-            .enable_dynamic_registration(true)
-            .build_from_sources(vec![])
-            .map_err(|e| anyhow::anyhow!("OAuth config error: {e}"))?;
-        let auth_state = lab_auth::state::AuthState::new(auth_cfg)
-            .await
-            .map_err(|e| anyhow::anyhow!("OAuth state init error: {e}"))?;
-        Ok(AuthPolicy::Mounted {
-            auth_state: Some(Arc::new(auth_state)),
-        })
-    } else {
-        Ok(AuthPolicy::Mounted { auth_state: None })
+    match resolve_auth_policy_kind(config, trusted_gateway_from_env())? {
+        AuthPolicyKind::LoopbackDev => Ok(AuthPolicy::LoopbackDev),
+        AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
+        AuthPolicyKind::MountedBearer => Ok(AuthPolicy::Mounted { auth_state: None }),
+        AuthPolicyKind::MountedOAuth => {
+            let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
+                .env_prefix("EXAMPLE_MCP")
+                .session_cookie_name("example_mcp_session")
+                .scopes_supported(vec![
+                    rmcp_template::actions::READ_SCOPE.into(),
+                    rmcp_template::actions::WRITE_SCOPE.into(),
+                ])
+                .default_scope("example:read")
+                .resource_path("/mcp")
+                .enable_dynamic_registration(true)
+                .build_from_sources(vec![])
+                .map_err(|e| anyhow::anyhow!("OAuth config error: {e}"))?;
+            let auth_state = lab_auth::state::AuthState::new(auth_cfg)
+                .await
+                .map_err(|e| anyhow::anyhow!("OAuth state init error: {e}"))?;
+            Ok(AuthPolicy::Mounted {
+                auth_state: Some(Arc::new(auth_state)),
+            })
+        }
     }
 }
 

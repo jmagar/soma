@@ -10,6 +10,33 @@ architectural decision recorded in the repo.
 
 ---
 
+## 0. Surface Parity Policy
+
+Every business action MUST have MCP + CLI parity. MCP is the primary integration
+surface for agents; CLI is the mandatory scripting, debugging, and regression-test
+surface. If an operation is exposed to one of those surfaces, expose it to both unless
+there is a documented protocol constraint.
+
+REST API and Web UI are required only for application/platform servers that are more
+than a thin client over an upstream API.
+
+| Server category | Required surfaces | Examples | Guidance |
+|---|---|---|---|
+| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` | Do not duplicate the upstream HTTP API as a local REST API by default. Add REST/Web only when the server owns meaningful state, workflows, dashboards, or non-MCP consumers. |
+| Application/platform server | API + CLI + MCP + Web | `axon`, `lab`, `syslog` | Keep all four surfaces thin and backed by the same service layer. Web talks to the local API; API/MCP/CLI all delegate to `app/`. |
+
+Allowed exceptions:
+
+- MCP-only protocol interactions, such as elicitation, may omit CLI when there is no
+  equivalent non-interactive command. `scaffold_intent` is the template's explicit
+  example: it combines MCP elicitation with plugin skill handoff, which has no true
+  CLI equivalent inside the user's agent/editor permission model. Document the reason
+  in the action metadata/docs.
+- CLI-only operational commands, such as `serve`, `mcp`, `doctor`, `watch`, and
+  `setup`, are not business actions and do not need MCP equivalents.
+
+---
+
 ## 1. Module Architecture — Strict Layering
 
 ```
@@ -60,11 +87,13 @@ lives in `app.rs`.
 
 ---
 
-## 1a. Module Architecture — Advanced (MCP + REST API + Web UI)
+## 1a. Module Architecture — Advanced (API + CLI + MCP + Web)
 
-Use this layout when the server also exposes a REST/JSON API surface and/or a web UI
-in addition to MCP. The guiding constraints are the same as the base layout — thin
-shims, domain logic in `app/` — with two additions:
+Use this layout for application/platform servers that expose REST/JSON and/or Web UI
+surfaces in addition to the mandatory MCP + CLI pair. Do not use this layout merely
+because the upstream service has an HTTP API; upstream-client MCP servers should stay
+focused on MCP + CLI unless they own additional workflows/state. The guiding constraints
+are the same as the base layout — thin shims, domain logic in `app/` — with two additions:
 
 1. **Any surface that would exceed ~400 lines becomes a directory.**
    `api/`, `web/`, `app/`, and `mcp/` are all directories from the start.
@@ -478,10 +507,15 @@ async fn dispatch(state: &AppState, args: Value) -> anyhow::Result<Value> {
 }
 ```
 
-### JSON schema (mcp/schemas.rs)
+### Action metadata (actions.rs) and JSON schema (mcp/schemas.rs)
 
 ```rust
-pub(super) const EXAMPLE_ACTIONS: &[&str] = &["things", "thing", "delete_thing", "help"];
+pub const ACTION_SPECS: &[ActionSpec] = &[
+    ActionSpec { name: "things", required_scope: Some(READ_SCOPE), transport: ActionTransport::Any },
+    ActionSpec { name: "thing", required_scope: Some(READ_SCOPE), transport: ActionTransport::Any },
+    ActionSpec { name: "delete_thing", required_scope: Some(WRITE_SCOPE), transport: ActionTransport::Any },
+    ActionSpec { name: "help", required_scope: None, transport: ActionTransport::Any },
+];
 
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
@@ -490,7 +524,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
         "inputSchema": {
             "type": "object",
             "properties": {
-                "action": { "type": "string", "enum": EXAMPLE_ACTIONS },
+                "action": { "type": "string", "enum": action_names() },
                 "id":     { "type": "string", "description": "Item ID (thing, delete_thing)" },
                 "confirm":{ "type": "boolean", "description": "Required true for destructive ops" }
             },
@@ -507,14 +541,8 @@ const READ_SCOPE:  &str = "example:read";
 const WRITE_SCOPE: &str = "example:write";
 const DENY_SCOPE:  &str = "example:__deny__";  // sentinel — never granted
 
-const READ_ONLY_ACTIONS:  &[&str] = &["things", "thing"];
-const WRITE_ACTIONS:      &[&str] = &["delete_thing"];
-
 fn required_scope_for(action: &str) -> Option<&'static str> {
-    if action == "help" { None }  // auth required but no scope gate
-    else if READ_ONLY_ACTIONS.contains(&action) { Some(READ_SCOPE) }
-    else if WRITE_ACTIONS.contains(&action) { Some(WRITE_SCOPE) }
-    else { Some(DENY_SCOPE) }  // fail-closed: unknown → denied
+    required_scope_for_action(action)
 }
 ```
 
@@ -695,7 +723,7 @@ plugins/
     .mcp.json             ← MCP server connection (uses ${user_config.*})
     hooks/
       hooks.json          ← SessionStart + ConfigChange → plugin-setup.sh
-      plugin-setup.sh     ← deploys server (systemd or docker)
+      plugin-setup.sh     ← thin adapter into `<binary> setup plugin-hook`
     skills/
       <service>/
         SKILL.md          ← three-tier skill (MCP → CLI → curl)
@@ -715,7 +743,6 @@ Adding an explicit version creates drift and requires manual bumping on every re
     "api_token":     { "type": "string",  "title": "API token",          "sensitive": true },
     "no_auth":       { "type": "boolean", "title": "Disable auth",        "default": false },
     "auth_mode":     { "type": "string",  "title": "Auth mode",           "default": "bearer" },
-    "use_docker":    { "type": "boolean", "title": "Deploy with Docker",   "default": false },
     "public_url":    { "type": "string",  "title": "Public URL (OAuth)" },
     "google_client_id":     { "type": "string", "title": "Google client ID",     "sensitive": true },
     "google_client_secret": { "type": "string", "title": "Google client secret", "sensitive": true },
@@ -757,11 +784,13 @@ Adding an explicit version creates drift and requires manual bumping on every re
 ### plugin-setup.sh responsibilities
 
 1. Read `CLAUDE_PLUGIN_OPTION_*` env vars (set by plugin runtime from userConfig)
-2. Write `.env` to `$CLAUDE_PLUGIN_DATA/` with secrets/URLs only
-3. Copy `docker-compose.yml` from plugin root to data dir
-4. Deploy via systemd OR docker based on `use_docker` flag
-5. Handle cutover: if switching from systemd→docker or vice versa, cleanly stop the old deployment
-6. Link binary to `~/.local/bin/<service>` for CLI access
+2. Reject unsafe newline-bearing option values
+3. Export plugin options as runtime env vars
+4. Create the canonical appdata root with private permissions
+5. Ensure the binary is available on `PATH`
+6. Call `<binary> setup plugin-hook "$@"`
+
+The hook script must not own Docker/systemd orchestration, config file rewriting, smoke-test policy, or failure classification. Those behaviors live in the binary setup commands.
 
 ---
 
@@ -906,13 +935,13 @@ echo "  3. Or:  ${BINARY} mcp             (stdio mode for Claude Code)"
 
 ## 17. mcporter Integration Test Pattern
 
-Every server has `tests/mcporter/test-tools.sh` and `config/mcporter.json`.
+Every server has `tests/mcporter/test-mcp.sh` and, when useful for named server workflows, `config/mcporter.json`. The live harness covers MCP tools and MCP resources; add prompt coverage when mcporter exposes first-class prompt testing.
 
 ### Philosophy
 
 A test that checks `is_error: false` is not a good test — it only verifies the MCP
 protocol layer responded. A semantic test checks that the actual service data is present
-and structurally correct:
+and structurally correct. Resource tests follow the same rule: prove the resource content is the expected schema/document, not just that `resources/read` returned HTTP 200.
 
 ```bash
 # Bad test — only proves MCP responded
@@ -937,7 +966,7 @@ run_test "server info hostname non-empty" "example" '{"action":"server_info"}' \
 }
 ```
 
-### Semantic validation helpers in test-tools.sh
+### Tool validation helpers in test-mcp.sh
 
 ```bash
 # Validate that a JSON path exists and is non-empty
@@ -954,6 +983,22 @@ assert node is not None and node != '' and node != [] and node != {}
 " 2>/dev/null || { echo "[FAIL] ${label}: missing or empty .${key_path}"; return 1; }
 }
 ```
+
+### Resource validation
+
+MCP resources are public contract, not implementation detail. Test every stable resource URI exported by the server. The template validates `example://schema/mcp-tool` by asserting:
+
+- the resource URI resolves
+- the returned content parses as JSON
+- the tool name is `example`
+- `inputSchema.type` is `object`
+- `inputSchema.properties.action` exists
+
+Prefer mcporter's resource command when available. Keep a JSON-RPC `resources/read` fallback while older local mcporter versions are still common.
+
+### Prompt validation
+
+When mcporter supports prompts directly, add a prompt suite beside tool/resource suites. Until then, prompt coverage should live in Rust tests for `src/mcp/prompts.rs` and in plugin/skill docs that demonstrate the expected prompt workflow.
 
 ### Non-destructive actions only
 
@@ -1033,36 +1078,20 @@ Use this when creating a new server from rmcp-template:
 - [ ] Update `EXPOSE` in `config/Dockerfile`
 - [ ] Update `plugin.json` userConfig for your service's credentials
 - [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
+- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Update `install.sh` with correct binary/repo name
 - [ ] Run `cargo check` — must compile clean, zero warnings
 - [ ] Run `cargo nextest run` — all tests pass
-- [ ] Run `./tests/mcporter/test-tools.sh` against a live server instance
+- [ ] Run `./tests/mcporter/test-mcp.sh` against a live server instance
 
 ---
 
-## 21. Git LFS — Binary Distribution
+## 21. Release Artifact Distribution
 
-Every server repo uses Git LFS to store the pre-built binary that is bundled with the
-Claude Code plugin. Users who install the plugin get the binary without needing Rust.
-
-```bash
-# In each repo root
-git lfs install
-git lfs track "bin/*"
-git lfs track "*.tar.gz"
-git lfs track "*.zip"
-```
-
-`.gitattributes` must include:
-```
-bin/* filter=lfs diff=lfs merge=lfs -text
-*.tar.gz filter=lfs diff=lfs merge=lfs -text
-```
-
-CI builds the release binary and commits it to `bin/<service>` (linux/amd64 only for
-now — the plugin runtime fetches the right arch at install time via `install.sh`).
+Version tags build release binaries and attach them to the GitHub Release. The
+release workflow must not push generated binaries back to `main`. Local `dist`
+recipes are operator conveniences for preparing artifacts, not a CI write-back path.
 
 ---
 
@@ -1171,8 +1200,8 @@ xtask/
 ```
 
 Commands every xtask must implement:
-- `cargo xtask dist` — build release binary, copy to `bin/`, update Git LFS
-- `cargo xtask ci` — run all checks (fmt, clippy, test, audit)
+- `cargo xtask dist` — build release artifacts locally
+- `cargo xtask ci` — run all checks (fmt, clippy, test, deny)
 - `cargo xtask symlink-docs` — symlink CLAUDE.md → AGENTS.md, GEMINI.md everywhere
 - `cargo xtask check-env` — validate required env vars are set
 
@@ -1276,26 +1305,13 @@ CMD ["example", "serve", "mcp"]
 The server MUST refuse to bind to a non-loopback address without authentication
 configured, unless the operator explicitly opts out.
 
-```rust
-fn validate_bind_security(config: &Config) -> anyhow::Result<()> {
-    let is_loopback = config.mcp.host.starts_with("127.") || config.mcp.host == "::1";
-    let has_auth = config.mcp.no_auth == false && config.mcp.api_token.is_some()
-        || config.mcp.auth.mode == AuthMode::OAuth;
-    let noauth_override = std::env::var("EXAMPLE_NOAUTH")
-        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
-        .unwrap_or(false);
+Centralize this decision in library code, not the binary:
 
-    if !is_loopback && !has_auth && !noauth_override {
-        anyhow::bail!(
-            "Refusing to bind MCP server to {} without authentication.\n\
-             Set EXAMPLE_MCP_TOKEN, use auth_mode=oauth, or set EXAMPLE_NOAUTH=true \
-             if a upstream gateway handles auth.",
-            config.mcp.host
-        );
-    }
-    Ok(())
-}
-```
+- loopback bind with `EXAMPLE_MCP_NO_AUTH=true` → `LoopbackDev`
+- non-loopback with `EXAMPLE_NOAUTH=true` → `TrustedGatewayUnscoped`
+- non-loopback with bearer token → mounted bearer auth
+- non-loopback with OAuth mode → mounted OAuth auth
+- non-loopback with `EXAMPLE_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
 
 Called in `serve_mcp()` before binding the TCP listener.
 
@@ -1404,8 +1420,9 @@ Runs on push/PR to main:
 - `fmt`: `cargo fmt -- --check`
 - `clippy`: `cargo clippy -- -D warnings`  
 - `test`: `cargo nextest run --profile ci`
+- `web`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm build`
 - `toml`: `taplo check`
-- `audit`: `cargo audit`
+- `deny`: `cargo deny check`
 - `gitleaks`: secret scanning
 
 ### `.github/workflows/docker-publish.yml`
@@ -1419,7 +1436,6 @@ Runs on push to main + tags:
 ### `.github/workflows/release.yml`
 Runs on version tags (`v*`):
 - Build release binaries for linux/amd64 and linux/arm64
-- Copy to `bin/` and push via Git LFS
 - Create GitHub Release with binary assets
 - Update `install.sh` download URLs
 
@@ -1496,7 +1512,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI thin shim
 - Bearer token + Google OAuth authentication
 - Streamable HTTP + stdio transport
-- Docker + systemd deployment
+- Thin plugin setup hook plus binary-owned setup/repair
 - Claude Code plugin with userConfig
 ```
 
@@ -1507,24 +1523,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
 - [ ] Implement API client in `src/<service>.rs` (transport only)
 - [ ] Add service methods to `src/app.rs` (ALL logic here)
-- [ ] Add actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs` (thin shim ONLY)
+- [ ] Add actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs` (thin shim ONLY)
 - [ ] Add CLI commands to `src/cli.rs` (thin shim ONLY)
 - [ ] Update `src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
 - [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
-- [ ] Implement `validate_bind_security()` in `main.rs`
+- [ ] Implement central auth policy resolution in library code
 - [ ] Implement `default_data_dir()` with container detection
 - [ ] Write `entrypoint.sh` with permission setup
-- [ ] Configure Git LFS (`git lfs track "bin/*"`)
 - [ ] Set up xtask crate with `dist`, `ci`, `symlink-docs`, `check-env`
 - [ ] Configure nextest (`.config/nextest.toml`)
 - [ ] Configure taplo (`taplo.toml`)
 - [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
 - [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
 - [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-tools.sh` with semantic validation
+- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
-- [ ] Write `install.sh` with LFS binary download
+- [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
 - [ ] Write `CHANGELOG.md`
 - [ ] Run `just symlink-docs` to create AGENTS.md + GEMINI.md symlinks
@@ -1534,7 +1549,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Run `cargo check` — zero warnings
 - [ ] Run `cargo nextest run` — all pass
 - [ ] Run `taplo check` — all TOML valid
-- [ ] Run `./tests/mcporter/test-tools.sh` against live server
+- [ ] Run `./tests/mcporter/test-mcp.sh` against live server
 
 ---
 
@@ -1983,7 +1998,7 @@ Agents and operators should never have to guess what the server is doing.
 | Endpoint | Auth | Description |
 |---|---|---|
 | `GET /health` | none | Basic liveness + upstream connectivity |
-| `GET /status` | bearer | Full runtime state (counters, config, uptime) |
+| `GET /status` | none | Redacted runtime status from the service layer |
 | `GET /metrics` | bearer | Prometheus-compatible metrics (optional) |
 
 ### /health response (always fast, no auth)
@@ -2003,7 +2018,7 @@ Agents and operators should never have to guess what the server is doing.
 If upstream is unreachable, return HTTP 200 with `status: "degraded"` — the MCP
 server is up even if the upstream service is down.
 
-### /status response (full runtime state)
+### /status response (redacted runtime state)
 
 ```json
 {

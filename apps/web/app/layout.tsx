@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Manrope } from "next/font/google";
+import { WEB_APP_CONFIG } from "@/lib/template";
 import "./globals.css";
 
 const inter = Inter({
@@ -21,8 +22,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "rmcp-template — Operator Dashboard",
-  description: "MCP server operator dashboard",
+  title: `${WEB_APP_CONFIG.displayName} — ${WEB_APP_CONFIG.dashboardTitle}`,
+  description: WEB_APP_CONFIG.description,
 };
 
 export default function RootLayout({
@@ -52,7 +53,7 @@ export default function RootLayout({
               }}
               className="font-bold text-lg tracking-tight"
             >
-              rmcp-template
+              {WEB_APP_CONFIG.displayName}
             </span>
             <div className="flex gap-1">
               <NavLink href="/">Dashboard</NavLink>

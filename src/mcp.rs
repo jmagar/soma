@@ -7,8 +7,7 @@ mod prompts;
 pub mod rmcp_server;
 mod schemas;
 mod tools;
+mod transport;
 
-pub use rmcp_server::{
-    allowed_origins, rmcp_server, streamable_http_config, streamable_http_service,
-    ExampleRmcpServer,
-};
+pub use rmcp_server::{rmcp_server, ExampleRmcpServer};
+pub use transport::{allowed_origins, streamable_http_config, streamable_http_service};

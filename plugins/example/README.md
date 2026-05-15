@@ -59,11 +59,7 @@ The `${user_config.*}` / `${settings.*}` variables are populated from each platf
 
 `hooks/hooks.json` fires `plugin-setup.sh` on `SessionStart` and `ConfigChange`.
 
-The setup script runs in two modes:
-- **Server mode** (localhost URL) — writes `.env`, manages systemd or Docker deployment, symlinks the binary to `~/.local/bin/`
-- **Client mode** (remote URL) — validates `/health` reachability
-
-The script is idempotent; it only restarts the service when `.env` content actually changes.
+The setup script is a thin adapter. It maps plugin settings to environment variables, prepares appdata, ensures the bundled binary is available on `PATH`, and delegates setup checks or repair to `example setup plugin-hook "$@"`.
 
 ## Monitors
 

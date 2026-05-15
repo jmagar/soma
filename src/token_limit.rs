@@ -27,7 +27,7 @@
 //! Apply `truncate_if_needed()` in `mcp/tools.rs` AFTER the service call,
 //! BEFORE constructing the `CallToolResult`. Example:
 //!
-//! ```rust
+//! ```rust,ignore
 //! use rmcp_template::token_limit;
 //!
 //! let result = state.service.list_things(limit, offset).await?;
@@ -38,7 +38,7 @@
 //!
 //! Or for the whole serialized response:
 //!
-//! ```rust
+//! ```rust,ignore
 //! let json = serde_json::to_string(&result)?;
 //! let json = token_limit::truncate_if_needed(&json);
 //! ```
@@ -74,20 +74,16 @@ pub const MAX_RESPONSE_BYTES: usize = 40_000;
 ///
 /// # Truncation boundary
 ///
-/// Truncation splits at a byte boundary. For UTF-8 text this could split
-/// a multi-byte character. The truncated bytes are discarded (not the whole
-/// character), which may leave a partial Unicode sequence at the cut point.
-///
-/// In practice this is harmless: the truncation notice makes the partial
-/// character obvious, and JSON parsers will reject the partial value anyway,
-/// which is preferable to silently returning corrupted data.
+/// Truncation finds the last valid UTF-8 boundary within the content budget.
+/// The returned string, including the notice, never exceeds
+/// [`MAX_RESPONSE_BYTES`].
 ///
 /// # TEMPLATE: Returning the raw truncated string
 ///
 /// This function returns a `String`, not a `Value`. The caller wraps it
 /// as appropriate:
 ///
-/// ```rust
+/// ```rust,ignore
 /// // In tools.rs:
 /// let raw = serde_json::to_string(&result)?;
 /// let output = token_limit::truncate_if_needed(&raw);
@@ -97,7 +93,7 @@ pub const MAX_RESPONSE_BYTES: usize = 40_000;
 ///
 /// Or embed the truncation check inside the serialized JSON directly:
 ///
-/// ```rust
+/// ```rust,ignore
 /// let text = serde_json::to_string_pretty(&result)?;
 /// let text = token_limit::truncate_if_needed(&text);
 /// tool_text_result(text)  // helper that wraps in CallToolResult
@@ -108,17 +104,20 @@ pub fn truncate_if_needed(text: &str) -> String {
         return text.to_string();
     }
 
-    // Find the last valid UTF-8 boundary at or before MAX_RESPONSE_BYTES.
-    // `floor_char_boundary` is stable on Rust 1.86+ (our MSRV).
-    let boundary = floor_char_boundary(text, MAX_RESPONSE_BYTES);
-    let truncated = &text[..boundary];
-
-    format!(
-        "{truncated}\n\n\
-        [TRUNCATED: response exceeded {MAX_RESPONSE_BYTES} bytes (~10K tokens).\n\
+    let notice = format!(
+        "\n\n[TRUNCATED: response exceeded {MAX_RESPONSE_BYTES} bytes (~10K tokens).\n\
         Use limit/offset parameters or more specific filters to get a smaller result.\n\
         Example: action=things, limit=20, offset=0]"
-    )
+    );
+    let content_budget = MAX_RESPONSE_BYTES.saturating_sub(notice.len());
+
+    // Find the last valid UTF-8 boundary within the content budget so the final
+    // string including the notice does not exceed MAX_RESPONSE_BYTES.
+    // `floor_char_boundary` is stable on Rust 1.86+ (our MSRV).
+    let boundary = floor_char_boundary(text, content_budget);
+    let truncated = &text[..boundary];
+
+    format!("{truncated}{notice}")
 }
 
 /// Find the largest byte index `<= index` that is a valid UTF-8 char boundary.
@@ -170,6 +169,7 @@ mod tests {
         let result = truncate_if_needed(&text);
         assert!(result.contains("[TRUNCATED"));
         assert!(result.contains("limit/offset"));
+        assert!(result.len() <= MAX_RESPONSE_BYTES);
     }
 
     #[test]
@@ -181,13 +181,14 @@ mod tests {
 
     #[test]
     fn truncates_at_utf8_boundary() {
-        // Build a string where MAX_RESPONSE_BYTES falls inside a multi-byte char.
+        // Build a string where the truncation budget falls inside a multi-byte char.
         // Each '€' is 3 bytes (0xE2 0x82 0xAC). Fill just past the limit.
         let mut text = "a".repeat(MAX_RESPONSE_BYTES - 1);
         text.push('€'); // starts at byte MAX_RESPONSE_BYTES-1, ends at MAX_RESPONSE_BYTES+1
         let result = truncate_if_needed(&text);
-        // Result must be valid UTF-8 (String guarantees this)
-        assert!(result.starts_with(&"a".repeat(MAX_RESPONSE_BYTES - 1)));
+        let notice_start = result.find("[TRUNCATED").expect("notice should be present") - 2;
+        assert!(result[..notice_start].chars().all(|c| c == 'a'));
+        assert!(result.len() <= MAX_RESPONSE_BYTES);
         assert!(result.contains("[TRUNCATED"));
     }
 }

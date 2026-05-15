@@ -7,7 +7,12 @@ use std::sync::Arc;
 
 use lab_auth::AuthLayer;
 
-use crate::{app::ExampleService, config::McpConfig};
+use anyhow::Result;
+
+use crate::{
+    app::ExampleService,
+    config::{AuthMode, Config, McpConfig},
+};
 
 pub mod routes;
 
@@ -22,6 +27,9 @@ pub enum AuthPolicy {
     /// No authentication. Only legal when bound to a loopback address.
     /// Scope checks are bypassed — the bind itself is the trust boundary.
     LoopbackDev,
+    /// No local authentication or scope checks. The deployment must enforce
+    /// both authentication and authorization before traffic reaches this server.
+    TrustedGatewayUnscoped,
     /// Authentication middleware is mounted. Scope checks MUST run.
     /// - `Some(auth_state)`: OAuth mode (Google flow + JWKS issuance)
     /// - `None`: static bearer token only
@@ -34,6 +42,7 @@ impl std::fmt::Debug for AuthPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             AuthPolicy::LoopbackDev => f.write_str("AuthPolicy::LoopbackDev"),
+            AuthPolicy::TrustedGatewayUnscoped => f.write_str("AuthPolicy::TrustedGatewayUnscoped"),
             AuthPolicy::Mounted {
                 auth_state: Some(_),
             } => f.write_str("AuthPolicy::Mounted { auth_state: Some(<AuthState>) }"),
@@ -44,6 +53,86 @@ impl std::fmt::Debug for AuthPolicy {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthPolicyKind {
+    LoopbackDev,
+    TrustedGatewayUnscoped,
+    MountedBearer,
+    MountedOAuth,
+}
+
+pub fn trusted_gateway_from_env() -> bool {
+    std::env::var("EXAMPLE_NOAUTH")
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+        .unwrap_or(false)
+}
+
+pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Result<AuthPolicyKind> {
+    validate_public_url(config)?;
+
+    if config.mcp.is_loopback() {
+        return Ok(AuthPolicyKind::LoopbackDev);
+    }
+
+    let has_token = config
+        .mcp
+        .api_token
+        .as_deref()
+        .map(|token| !token.is_empty())
+        .unwrap_or(false);
+    let has_oauth = config.mcp.auth.mode == AuthMode::OAuth;
+
+    if config.mcp.no_auth {
+        if trusted_gateway {
+            return Ok(AuthPolicyKind::TrustedGatewayUnscoped);
+        }
+        anyhow::bail!(
+            "Refusing to bind MCP server to {} with EXAMPLE_MCP_NO_AUTH=true.\n\
+             \n\
+             EXAMPLE_MCP_NO_AUTH is only allowed on loopback binds. For a trusted \
+             upstream proxy deployment, also set EXAMPLE_NOAUTH=true.",
+            config.mcp.host
+        );
+    }
+
+    if has_oauth {
+        Ok(AuthPolicyKind::MountedOAuth)
+    } else if has_token {
+        Ok(AuthPolicyKind::MountedBearer)
+    } else if trusted_gateway {
+        Ok(AuthPolicyKind::TrustedGatewayUnscoped)
+    } else {
+        anyhow::bail!(
+            "Refusing to bind MCP server to {} without authentication.\n\
+             \n\
+             Choose one of:\n\
+             1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1\n\
+             2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)\n\
+             3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth (+ OAuth credentials)\n\
+             4. Local no-auth dev:   EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true\n\
+             5. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)\n\
+             \n\
+             TEMPLATE: Replace EXAMPLE_ prefix with your service's prefix throughout.",
+            config.mcp.host
+        );
+    }
+}
+
+fn validate_public_url(config: &Config) -> Result<()> {
+    let Some(public_url) = config.mcp.auth.public_url.as_deref() else {
+        return Ok(());
+    };
+    let parsed = url::Url::parse(public_url)
+        .map_err(|error| anyhow::anyhow!("EXAMPLE_MCP_PUBLIC_URL is invalid: {error}"))?;
+    let Some(host) = parsed.host_str() else {
+        anyhow::bail!("EXAMPLE_MCP_PUBLIC_URL must include a host");
+    };
+    if host.contains('*') {
+        anyhow::bail!("EXAMPLE_MCP_PUBLIC_URL must not contain wildcard hosts");
+    }
+    Ok(())
+}
+
 /// Shared application state injected into every request handler.
 #[derive(Clone)]
 pub struct AppState {
@@ -52,15 +141,15 @@ pub struct AppState {
     pub service: ExampleService,
 }
 
-/// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` for
-/// [`AuthPolicy::LoopbackDev`] (loopback bind is the trust boundary).
+/// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` when the trust
+/// boundary is outside the mounted HTTP auth layer.
 pub fn build_auth_layer(
     policy: &AuthPolicy,
     static_token: Option<Arc<str>>,
     resource_url: Option<Arc<str>>,
 ) -> Option<AuthLayer> {
     match policy {
-        AuthPolicy::LoopbackDev => None,
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => None,
         AuthPolicy::Mounted { auth_state } => {
             if static_token.is_none() && auth_state.is_none() {
                 tracing::warn!(
@@ -72,10 +161,112 @@ pub fn build_auth_layer(
                 AuthLayer::new()
                     .with_static_token(static_token)
                     .with_auth_state(auth_state.clone())
-                    .with_static_token_scopes(vec!["example:read".into(), "example:admin".into()])
+                    .with_static_token_scopes(vec![crate::actions::READ_SCOPE.into()])
                     .with_resource_url(resource_url)
                     .with_allow_session_cookie(false),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AuthConfig, ExampleConfig};
+
+    fn config(host: &str) -> Config {
+        Config {
+            mcp: McpConfig {
+                host: host.into(),
+                ..McpConfig::default()
+            },
+            example: ExampleConfig::default(),
+        }
+    }
+
+    #[test]
+    fn loopback_bind_is_loopback_dev_without_credentials() {
+        let config = config("127.0.0.1");
+        assert_eq!(
+            resolve_auth_policy_kind(&config, false).unwrap(),
+            AuthPolicyKind::LoopbackDev
+        );
+    }
+
+    #[test]
+    fn non_loopback_no_auth_without_gateway_is_rejected() {
+        let mut config = config("0.0.0.0");
+        config.mcp.no_auth = true;
+        let error = resolve_auth_policy_kind(&config, false).unwrap_err();
+        assert!(error.to_string().contains("EXAMPLE_MCP_NO_AUTH=true"));
+    }
+
+    #[test]
+    fn non_loopback_no_auth_with_gateway_is_trusted_gateway_unscoped() {
+        let mut config = config("0.0.0.0");
+        config.mcp.no_auth = true;
+        assert_eq!(
+            resolve_auth_policy_kind(&config, true).unwrap(),
+            AuthPolicyKind::TrustedGatewayUnscoped
+        );
+    }
+
+    #[test]
+    fn non_loopback_gateway_without_credentials_is_trusted_gateway_unscoped() {
+        let config = config("0.0.0.0");
+        assert_eq!(
+            resolve_auth_policy_kind(&config, true).unwrap(),
+            AuthPolicyKind::TrustedGatewayUnscoped
+        );
+    }
+
+    #[test]
+    fn non_loopback_bearer_token_mounts_bearer_policy() {
+        let mut config = config("0.0.0.0");
+        config.mcp.api_token = Some("secret".into());
+        assert_eq!(
+            resolve_auth_policy_kind(&config, false).unwrap(),
+            AuthPolicyKind::MountedBearer
+        );
+    }
+
+    #[test]
+    fn non_loopback_oauth_mounts_oauth_policy() {
+        let mut config = config("0.0.0.0");
+        config.mcp.auth = AuthConfig {
+            mode: AuthMode::OAuth,
+            ..AuthConfig::default()
+        };
+        assert_eq!(
+            resolve_auth_policy_kind(&config, false).unwrap(),
+            AuthPolicyKind::MountedOAuth
+        );
+    }
+
+    #[test]
+    fn non_loopback_without_auth_or_gateway_is_rejected() {
+        let config = config("0.0.0.0");
+        let error = resolve_auth_policy_kind(&config, false).unwrap_err();
+        assert!(error.to_string().contains("without authentication"));
+    }
+
+    #[test]
+    fn invalid_public_url_is_rejected() {
+        let mut config = config("0.0.0.0");
+        config.mcp.auth.public_url = Some("not a url".into());
+        let error = resolve_auth_policy_kind(&config, true).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("EXAMPLE_MCP_PUBLIC_URL is invalid"));
+    }
+
+    #[test]
+    fn wildcard_public_url_is_rejected() {
+        let mut config = config("0.0.0.0");
+        config.mcp.auth.public_url = Some("https://*.example.com".into());
+        let error = resolve_auth_policy_kind(&config, true).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("EXAMPLE_MCP_PUBLIC_URL must not contain wildcard hosts"));
     }
 }

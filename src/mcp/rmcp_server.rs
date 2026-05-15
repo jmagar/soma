@@ -5,10 +5,10 @@
 //!   - Enforces auth scopes on every call
 //!   - Delegates business logic to `tools.rs` → `app.rs` → `example.rs`
 //!
-//! **Template**: rename `ExampleRmcpServer`. Update `READ_SCOPE`, `DENY_SCOPE`,
-//! and `READ_ONLY_ACTIONS` to match your tool's actions.
+//! **Template**: rename `ExampleRmcpServer`. Update action metadata in
+//! `src/actions.rs` to keep schemas, scope rules, and dispatch in sync.
 
-use std::{borrow::Cow, net::Ipv6Addr, sync::Arc, time::Instant};
+use std::{borrow::Cow, sync::Arc, time::Instant};
 
 use lab_auth::AuthContext;
 use rmcp::{
@@ -19,33 +19,18 @@ use rmcp::{
         Resource, ResourceContents, ServerCapabilities, ServerInfo, Tool,
     },
     service::{Peer, RequestContext},
-    transport::streamable_http_server::{
-        session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
-    },
     ErrorData, RoleServer, ServerHandler,
 };
 use serde_json::{Map, Value};
 
-use crate::config::McpConfig;
+use crate::{
+    actions::{required_scope_for_action, READ_SCOPE, WRITE_SCOPE},
+    token_limit,
+};
 
 use crate::server::{AppState, AuthPolicy};
 
 use super::{prompts, schemas::tool_definitions, tools::execute_tool};
-
-// ── scopes ────────────────────────────────────────────────────────────────────
-
-/// OAuth scope required for read operations.
-/// **Template**: change to `"myservice:read"`.
-const READ_SCOPE: &str = "example:read";
-
-/// Sentinel scope for actions that should always be denied.
-/// Add admin-only actions here once you implement write operations.
-const DENY_SCOPE: &str = "example:__deny__";
-
-/// Actions allowed with `example:read` scope.
-/// `help` requires no scope (public docs).
-/// **Template**: keep this in sync with `EXAMPLE_ACTIONS` in `schemas.rs`.
-const READ_ONLY_ACTIONS: &[&str] = &["greet", "echo", "status", "elicit_name"];
 
 // ── server ────────────────────────────────────────────────────────────────────
 
@@ -131,9 +116,10 @@ impl ServerHandler for ExampleRmcpServer {
                     error = %error,
                     "MCP tool execution failed"
                 );
-                Ok(CallToolResult::error(vec![Content::text(format!(
-                    "Tool execution failed for action '{action}'. Check server logs for details."
-                ))]))
+                Err(ErrorData::internal_error(
+                    format!("tool execution failed for action '{action}'"),
+                    None,
+                ))
             }
         }
     }
@@ -211,31 +197,6 @@ impl ServerHandler for ExampleRmcpServer {
     }
 }
 
-// ── transport helpers ─────────────────────────────────────────────────────────
-
-pub fn streamable_http_config(config: &McpConfig) -> StreamableHttpServerConfig {
-    StreamableHttpServerConfig::default()
-        .with_stateful_mode(false)
-        .with_json_response(true)
-        .with_allowed_hosts(allowed_hosts(config))
-        .with_allowed_origins(allowed_origins(config))
-}
-
-pub fn streamable_http_service(
-    state: AppState,
-    config: StreamableHttpServerConfig,
-) -> StreamableHttpService<ExampleRmcpServer, LocalSessionManager> {
-    StreamableHttpService::new(
-        move || {
-            Ok(ExampleRmcpServer {
-                state: state.clone(),
-            })
-        },
-        Default::default(),
-        config,
-    )
-}
-
 // ── resource definitions ──────────────────────────────────────────────────────
 
 /// URI for the schema resource. **Template**: change `example` to your service name.
@@ -285,6 +246,7 @@ fn rmcp_tool_from_json(value: Value) -> Result<Tool, ErrorData> {
 fn tool_result_from_json(value: Value) -> Result<CallToolResult, ErrorData> {
     let text = serde_json::to_string_pretty(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
+    let text = token_limit::truncate_if_needed(&text);
     Ok(CallToolResult::success(vec![Content::text(text)]))
 }
 
@@ -295,7 +257,7 @@ fn require_auth_context<'a>(
     ctx: &'a RequestContext<RoleServer>,
 ) -> Result<Option<&'a AuthContext>, ErrorData> {
     match &state.auth_policy {
-        AuthPolicy::LoopbackDev => Ok(None),
+        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => Ok(None),
         AuthPolicy::Mounted { .. } => {
             let parts = ctx
                 .extensions
@@ -319,7 +281,7 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
     let satisfied = auth
         .scopes
         .iter()
-        .any(|s| s == required_scope || (required_scope == READ_SCOPE && s == "example:admin"));
+        .any(|s| s == required_scope || (required_scope == READ_SCOPE && s == WRITE_SCOPE));
     if satisfied {
         return Ok(());
     }
@@ -336,143 +298,33 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
 }
 
 fn required_scope_for(action: &str) -> Option<&'static str> {
-    if action == "help" {
-        None // help is always public
-    } else if READ_ONLY_ACTIONS.contains(&action) {
-        Some(READ_SCOPE)
-    } else {
-        Some(DENY_SCOPE)
-    }
+    required_scope_for_action(action)
 }
 
 fn is_validation_error(error: &anyhow::Error) -> bool {
-    let msg = error.to_string();
-    msg.contains(" is required") || msg.contains("unknown example action")
+    crate::actions::is_validation_error(error)
 }
 
-// ── allowed hosts / origins ───────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
 
-pub(super) fn allowed_hosts(config: &McpConfig) -> Vec<String> {
-    let mut hosts = vec!["localhost".to_string(), "127.0.0.1".to_string()];
-    push_host_variants(&mut hosts, &config.host, config.port);
-    push_host_variants(&mut hosts, "localhost", config.port);
-    push_host_variants(&mut hosts, "127.0.0.1", config.port);
-    push_host_variants(&mut hosts, "::1", config.port);
-    for host in &config.allowed_hosts {
-        push_host_variants(&mut hosts, host, config.port);
-    }
-    if let Some(public_url) = config.auth.public_url.as_deref() {
-        push_public_url_hosts(&mut hosts, public_url, config.port);
-    }
-    hosts.sort();
-    hosts.dedup();
-    hosts
-}
+    use crate::token_limit::MAX_RESPONSE_BYTES;
 
-pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
-    let mut origins = vec![
-        format!("http://localhost:{}", config.port),
-        format!("http://127.0.0.1:{}", config.port),
-    ];
-    origins.extend(config.allowed_origins.iter().cloned());
-    if let Some(public_url) = config.auth.public_url.as_deref() {
-        if let Some(origin) = extract_origin(public_url) {
-            origins.push(origin);
-        }
-    }
-    origins.sort();
-    origins.dedup();
-    origins
-}
+    use super::tool_result_from_json;
 
-fn push_host_variants(hosts: &mut Vec<String>, host: &str, port: u16) {
-    let host = host.trim();
-    if host.is_empty() {
-        return;
+    #[test]
+    fn tool_result_from_json_applies_response_cap() {
+        let result = tool_result_from_json(json!({
+            "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
+        }))
+        .expect("tool result should serialize");
+        let text = result.content[0]
+            .raw
+            .as_text()
+            .expect("tool result should contain text")
+            .text
+            .as_str();
+        assert!(text.contains("[TRUNCATED"));
     }
-    hosts.push(host.to_string());
-    if host.starts_with('[') && host.contains("]:") {
-        return;
-    }
-    if let Some(inner) = host.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
-        if !inner.is_empty() {
-            hosts.push(format!("[{inner}]:{port}"));
-        }
-    } else if host.parse::<Ipv6Addr>().is_ok() {
-        hosts.push(format!("[{host}]"));
-        hosts.push(format!("[{host}]:{port}"));
-    } else if !has_port(host) {
-        hosts.push(format!("{host}:{port}"));
-    }
-}
-
-fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
-    let Ok(parsed) = url::Url::parse(url) else {
-        tracing::warn!(
-            public_url = url,
-            "EXAMPLE_MCP_PUBLIC_URL is not a valid URL"
-        );
-        return;
-    };
-    let Some(host) = parsed.host_str() else {
-        return;
-    };
-    if host.contains('*') {
-        tracing::warn!(
-            host,
-            "EXAMPLE_MCP_PUBLIC_URL host contains wildcard; skipping"
-        );
-        return;
-    }
-    let explicit_port = parsed.port();
-    let scheme_default = match parsed.scheme() {
-        "https" => Some(443u16),
-        "http" => Some(80u16),
-        _ => None,
-    };
-    if let Some(p) = explicit_port {
-        push_host_variants(hosts, host, p);
-        let with_port = format!("{host}:{p}");
-        if !hosts.contains(&with_port) {
-            hosts.push(with_port);
-        }
-    } else if let Some(default_port) = scheme_default {
-        let bare = host.to_string();
-        if !hosts.contains(&bare) {
-            hosts.push(bare);
-        }
-        let with_default = format!("{host}:{default_port}");
-        if !hosts.contains(&with_default) {
-            hosts.push(with_default);
-        }
-    } else {
-        push_host_variants(hosts, host, listen_port);
-    }
-}
-
-fn has_port(host: &str) -> bool {
-    host.rsplit_once(':')
-        .and_then(|(_, p)| p.parse::<u16>().ok())
-        .is_some()
-}
-
-fn extract_origin(url: &str) -> Option<String> {
-    let parsed = url::Url::parse(url)
-        .map_err(|e| tracing::warn!(public_url = url, error = %e, "invalid EXAMPLE_MCP_PUBLIC_URL"))
-        .ok()?;
-    let scheme = parsed.scheme();
-    let host = parsed.host_str()?;
-    if host.contains('*') {
-        return None;
-    }
-    let default_port = match scheme {
-        "http" => Some(80u16),
-        "https" => Some(443u16),
-        _ => None,
-    };
-    let origin = match parsed.port() {
-        Some(port) if default_port != Some(port) => format!("{scheme}://{host}:{port}"),
-        _ => format!("{scheme}://{host}"),
-    };
-    Some(origin)
 }

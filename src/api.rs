@@ -1,24 +1,30 @@
-//! REST API handlers — `POST /v1/example`, `GET /health`, `GET /status`.
+//! REST API handlers — `POST /v1/example`, `GET /health`, `GET /status`, `GET /openapi.json`.
 //!
 //! All handlers are thin: parse the request, call the service, return JSON.
 //! Business logic lives in `app.rs`.
 
 use axum::{
-    extract::State,
-    http::StatusCode,
+    extract::{Extension, State},
+    http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
+use lab_auth::AuthContext;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::server::AppState;
+use crate::actions::{
+    execute_service_action, required_scope_for_action, ExampleAction, READ_SCOPE, WRITE_SCOPE,
+};
+use crate::server::{AppState, AuthPolicy};
 
 /// Request body for `POST /v1/example`.
 ///
-/// Same `action` + `params` shape as the MCP tool interface — all three surfaces
-/// (MCP, REST, CLI) call the same `ExampleService` methods.
+/// REST uses an explicit `{ action, params }` envelope. MCP uses a flat
+/// argument object such as `{ action, message }`. Both convert into the same
+/// typed `ExampleAction` before calling `ExampleService`.
 #[derive(Deserialize)]
 pub struct ActionRequest {
+    #[serde(default)]
     pub action: String,
     #[serde(default)]
     pub params: Value,
@@ -30,46 +36,79 @@ pub struct ActionRequest {
 /// Response: `{"greeting": "Hello, Alice!", ...}`
 pub async fn api_dispatch(
     State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
-    let result = match body.action.as_str() {
-        "greet" => {
-            let name = body.params["name"].as_str();
-            state.service.greet(name).await
-        }
-        "echo" => {
-            let msg = body.params["message"].as_str().unwrap_or("");
-            if msg.is_empty() {
-                Err(anyhow::anyhow!(
-                    "`message` param is required for action=echo"
-                ))
-            } else {
-                state.service.echo(msg).await
+    let result = match ExampleAction::from_rest(&body.action, &body.params) {
+        Ok(action) => {
+            if let Some(response) = enforce_rest_scope(
+                &state,
+                auth.as_ref().map(|Extension(auth)| auth),
+                &body.action,
+            ) {
+                return response;
             }
+            execute_service_action(&state.service, &action).await
         }
-        "status" => state.service.status().await,
-        "help" => Ok(json!({
-            "actions": ["greet", "echo", "status", "help"],
-            "usage": "POST /v1/example with {\"action\": \"<action>\", \"params\": {...}}",
-            "examples": {
-                "greet":  {"action": "greet",  "params": {"name": "Alice"}},
-                "echo":   {"action": "echo",   "params": {"message": "Hello!"}},
-                "status": {"action": "status", "params": {}},
-            }
-        })),
-        other => Err(anyhow::anyhow!(
-            "unknown action: {other}. POST {{\"action\":\"help\"}} for documentation."
-        )),
+        Err(error) => Err(error),
     };
 
     match result {
         Ok(value) => Json(value).into_response(),
-        Err(e) => (
+        Err(e) if crate::actions::is_validation_error(&e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),
         )
             .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, action = %body.action, "REST action execution failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            )
+                .into_response()
+        }
     }
+}
+
+fn enforce_rest_scope(
+    state: &AppState,
+    auth: Option<&AuthContext>,
+    action: &str,
+) -> Option<axum::response::Response> {
+    if !matches!(&state.auth_policy, AuthPolicy::Mounted { .. }) {
+        return None;
+    }
+    let required_scope = required_scope_for_action(action)?;
+    let Some(auth) = auth else {
+        tracing::warn!(action = %action, "REST action denied: missing auth context");
+        return Some(
+            (
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "forbidden: missing auth context"})),
+            )
+                .into_response(),
+        );
+    };
+    let satisfied = auth.scopes.iter().any(|scope| {
+        scope == required_scope || (required_scope == READ_SCOPE && scope == WRITE_SCOPE)
+    });
+    if satisfied {
+        return None;
+    }
+    tracing::warn!(
+        subject = %auth.sub,
+        action = %action,
+        required_scope = %required_scope,
+        "REST action denied: insufficient scope"
+    );
+    Some(
+        (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": format!("forbidden: requires scope: {required_scope}")})),
+        )
+            .into_response(),
+    )
 }
 
 /// `GET /health` — liveness probe (unauthenticated).
@@ -77,14 +116,32 @@ pub async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok" }))
 }
 
+/// `GET /openapi.json` — generated OpenAPI schema for the REST surface.
+pub async fn openapi_json() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        include_str!("../docs/generated/openapi.json"),
+    )
+}
+
 /// `GET /status` — runtime status (unauthenticated, redacts secrets).
 pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
     match state.service.status().await {
-        Ok(v) => Json(v).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Ok(mut value) => {
+            if let Some(object) = value.as_object_mut() {
+                object.insert("server".into(), json!(state.config.server_name));
+                object.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
+                object.insert("transport".into(), json!("http"));
+            }
+            Json(value).into_response()
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "runtime status check failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "status check failed"})),
+            )
+                .into_response()
+        }
     }
 }

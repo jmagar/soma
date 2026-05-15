@@ -34,7 +34,7 @@ Added a complete Dependabot + auto-merge pipeline and three new CI quality gates
 ## Key Findings
 
 - `deny.toml` already present at repo root — `cargo-deny.yml` workflow works without additional config.
-- `rust-version = "1.86"` declared in `Cargo.toml:21` — MSRV workflow pins to exactly this version.
+- `rust-version` declared in `Cargo.toml` — MSRV workflow pins to exactly this version.
 - Branch protection API (`repos/jmagar/rmcp-template/branches/main/protection`) returns HTTP 403 on GitHub Free with private repos; requires Pro or public repo.
 - `dependabot-auto-merge.yml` uses `pull_request` trigger with explicit `permissions: contents: write, pull-requests: write` — sufficient for Dependabot's first-party PR model in 2024+.
 
@@ -44,7 +44,7 @@ Added a complete Dependabot + auto-merge pipeline and three new CI quality gates
 - **Major version bump ignored in dependabot.yml** — prevents surprise breakage; user opts in manually.
 - **`--auto` merge flag** — delegates merge decision to GitHub's branch protection system rather than merging immediately; requires "Allow auto-merge" enabled in repo settings.
 - **CodeQL `security-extended` query suite** — broader than default; catches more vulnerability classes at the cost of slightly longer scan times.
-- **MSRV uses `cargo check` not `cargo test`** — faster; the goal is compilation correctness against 1.86, not full test coverage at MSRV.
+- **MSRV uses `cargo check` not `cargo test`** — faster; the goal is compilation correctness against the declared Rust version, not full test coverage at MSRV.
 - **Minor bump (0.3.0 → 0.4.0)** — three new CI workflows constitute new capabilities, not fixes.
 
 ## Files Modified
@@ -53,9 +53,9 @@ Added a complete Dependabot + auto-merge pipeline and three new CI quality gates
 |------|--------|
 | `.github/dependabot.yml` | Created — weekly Cargo + Actions updates with grouping |
 | `.github/workflows/dependabot-auto-merge.yml` | Created — auto-merge patch/minor Dependabot PRs |
-| `.github/workflows/codeql.yml` | Created — SAST on push/PR + weekly scheduled scan |
+| `.github/workflows/codeql.yml` | Created — SAST on push + weekly scheduled scan |
 | `.github/workflows/cargo-deny.yml` | Created — license, ban, advisory, source checks |
-| `.github/workflows/msrv.yml` | Created — compiles against Rust 1.86 |
+| `.github/workflows/msrv.yml` | Created — compiles against the declared Rust version |
 | `Cargo.toml` | Version bumped `0.3.0 → 0.4.0` |
 | `Cargo.lock` | Updated by `cargo check` |
 | `CHANGELOG.md` | Added `[0.4.0]` release section |
@@ -91,9 +91,9 @@ git push -u origin refactor/server-api-module-split
 | Area | Before | After |
 |------|--------|-------|
 | Dependency updates | Manual | Dependabot opens PRs weekly; patch/minor auto-merge after CI |
-| Security scanning | Trivy (Docker image only) | + CodeQL SAST on Rust source (push/PR + weekly) |
+| Security scanning | Trivy (Docker image only) | + CodeQL SAST on Rust source (push + weekly) |
 | License compliance | `cargo audit` (advisories only) | + `cargo-deny` (licenses, duplicates, sources) |
-| MSRV enforcement | Declared in `Cargo.toml` but not verified in CI | Actively compiled against Rust 1.86 on every PR |
+| MSRV enforcement | Declared in `Cargo.toml` but not verified in CI | Actively compiled against the declared Rust version on every PR |
 
 ## Risks and Rollback
 

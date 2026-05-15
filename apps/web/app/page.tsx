@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { echo, getHealth, getStatus, greet, type StatusResult, status } from "@/lib/api";
+import { WEB_APP_CONFIG } from "@/lib/template";
 
 type HealthState = "ok" | "error" | "loading";
 
@@ -88,10 +89,10 @@ export default function DashboardPage() {
             marginBottom: "0.25rem",
           }}
         >
-          Operator Dashboard
+          {WEB_APP_CONFIG.dashboardTitle}
         </h1>
         <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.875rem" }}>
-          rmcp-template MCP server — real-time status and quick actions
+          {WEB_APP_CONFIG.displayName} MCP server — real-time status and quick actions
         </p>
       </div>
 
@@ -121,7 +122,7 @@ export default function DashboardPage() {
           <p
             style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.5rem" }}
           >
-            Polls /health every 10s
+            Polls {WEB_APP_CONFIG.healthEndpoint} every 10s
           </p>
         </Card>
 

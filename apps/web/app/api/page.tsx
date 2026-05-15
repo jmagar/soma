@@ -1,35 +1,6 @@
 "use client";
 
-const ACTIONS = [
-  {
-    id: "greet",
-    description: "Return a personalised greeting for the given name (defaults to World).",
-    params: [{ name: "name", type: "string", required: false, description: "Name to greet" }],
-    example: { action: "greet", params: { name: "Alice" } },
-    response: { greeting: "Hello, Alice!", target: "Alice" },
-  },
-  {
-    id: "echo",
-    description: "Echo a message back unchanged.",
-    params: [{ name: "message", type: "string", required: true, description: "Message to echo" }],
-    example: { action: "echo", params: { message: "Hello!" } },
-    response: { echo: "Hello!" },
-  },
-  {
-    id: "status",
-    description: "Return the server status and configuration info.",
-    params: [],
-    example: { action: "status", params: {} },
-    response: { status: "ok", api_url: "http://...", note: "stub" },
-  },
-  {
-    id: "help",
-    description: "Show all available actions and usage documentation.",
-    params: [],
-    example: { action: "help", params: {} },
-    response: { actions: ["greet", "echo", "status", "help"], usage: "..." },
-  },
-];
+import { ACTIONS, WEB_APP_CONFIG } from "@/lib/template";
 
 export default function ApiPage() {
   return (
@@ -73,10 +44,31 @@ export default function ApiPage() {
           Endpoint
         </h2>
         <div className="space-y-2">
-          <EndpointRow method="POST" path="/v1/example" description="REST action dispatch" />
-          <EndpointRow method="GET" path="/health" description="Liveness probe (unauthenticated)" />
-          <EndpointRow method="GET" path="/status" description="Runtime status" />
-          <EndpointRow method="POST" path="/mcp" description="MCP Streamable HTTP transport" />
+          <EndpointRow
+            method="POST"
+            path={WEB_APP_CONFIG.restEndpoint}
+            description="REST action dispatch"
+          />
+          <EndpointRow
+            method="GET"
+            path={WEB_APP_CONFIG.healthEndpoint}
+            description="Liveness probe (unauthenticated)"
+          />
+          <EndpointRow
+            method="GET"
+            path={WEB_APP_CONFIG.statusEndpoint}
+            description="Runtime status"
+          />
+          <EndpointRow
+            method="POST"
+            path={WEB_APP_CONFIG.mcpEndpoint}
+            description="MCP Streamable HTTP transport"
+          />
+          <EndpointRow
+            method="GET"
+            path="/openapi.json"
+            description="Generated OpenAPI schema for the REST surface"
+          />
         </div>
       </div>
 
@@ -132,9 +124,12 @@ export default function ApiPage() {
             </thead>
             <tbody>
               {[
-                ["MCP", 'example(action="greet", name="Alice")'],
-                ["REST", 'POST /v1/example {"action":"greet","params":{"name":"Alice"}}'],
-                ["CLI", "example greet --name Alice"],
+                ["MCP", `${WEB_APP_CONFIG.serviceName}(action="greet", name="Alice")`],
+                [
+                  "REST",
+                  `POST ${WEB_APP_CONFIG.restEndpoint} {"action":"greet","params":{"name":"Alice"}}`,
+                ],
+                ["CLI", `${WEB_APP_CONFIG.serviceName} greet --name Alice`],
               ].map(([surface, pattern]) => (
                 <tr
                   key={surface}
@@ -227,7 +222,8 @@ function EndpointRow({
 }
 
 function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
-  const curlExample = `curl -X POST http://localhost:3000/v1/example \\
+  const isRestAction = action.transport === "rest";
+  const curlExample = `curl -X POST http://localhost:3100${WEB_APP_CONFIG.restEndpoint} \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(action.example)}'`;
 
@@ -256,6 +252,18 @@ function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
           }}
         >
           {action.id}
+        </span>
+        <span
+          style={{
+            color: isRestAction ? "var(--aurora-success)" : "var(--aurora-warn)",
+            fontFamily: "var(--aurora-font-mono)",
+            fontSize: "0.7rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          {isRestAction ? "REST + MCP + CLI" : "MCP only"}
         </span>
       </div>
       <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.85rem", marginBottom: "1rem" }}>
@@ -288,7 +296,7 @@ function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
               }}
             >
               <span style={{ color: "var(--aurora-accent-pink)" }}>{p.name}</span>
-              <span style={{ color: "var(--aurora-text-muted)" }}>{p.type}</span>
+              <span style={{ color: "var(--aurora-text-muted)" }}>string</span>
               {!p.required && (
                 <span style={{ color: "var(--aurora-warn)", fontSize: "0.7rem" }}>optional</span>
               )}
@@ -303,10 +311,19 @@ function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
       )}
 
       <div className="space-y-3">
-        <CodeBlock label="cURL" code={curlExample} />
+        {isRestAction ? (
+          <CodeBlock label="cURL" code={curlExample} />
+        ) : (
+          <CodeBlock
+            label="REST availability"
+            code={`${action.id} is MCP-only because it requires an interactive MCP peer.`}
+          />
+        )}
         <CodeBlock
           label="MCP equivalent"
-          code={`example(action="${action.id}"${action.params.map((p) => `, ${p.name}="..."`).join("")})`}
+          code={`${WEB_APP_CONFIG.serviceName}(action="${action.id}"${action.params
+            .map((p) => `, ${p.name}="..."`)
+            .join("")})`}
         />
         <CodeBlock label="Response" code={JSON.stringify(action.response, null, 2)} />
       </div>

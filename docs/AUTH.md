@@ -16,9 +16,9 @@ When both are configured, each request is accepted if it satisfies either mechan
 
 ## Scopes
 
-All non-trivial actions require at least `example:read`. Admin-level actions require `example:admin`. The `help` action is always public.
+All non-trivial actions require at least `example:read`. Mutating actions require `example:write`, which also satisfies read checks. The `help` action is always public.
 
-Static bearer tokens are issued the scopes `example:read` and `example:admin` automatically — they have full access. OAuth tokens carry whatever scopes the OAuth flow issued.
+Static bearer tokens default to `example:read` only. OAuth tokens carry whatever scopes the OAuth flow issued.
 
 ---
 
@@ -63,7 +63,7 @@ OAuth and bearer token can coexist: set both `EXAMPLE_MCP_TOKEN` and the OAuth v
 
 **The HTTP server will refuse to start if it is binding to a non-loopback address with no authentication configured.**
 
-This is enforced in `main.rs:validate_bind_security`. The exact error:
+This is enforced by `server::resolve_auth_policy_kind()`. The exact error:
 
 ```
 Refusing to bind MCP server to 0.0.0.0 without authentication.
@@ -72,7 +72,7 @@ Choose one of:
 1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1
 2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)
 3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth (+ OAuth credentials)
-4. Disable auth:        EXAMPLE_MCP_NO_AUTH=true  (local dev or testing)
+4. Disable auth:        EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true
 5. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)
 ```
 
@@ -83,7 +83,7 @@ The guard passes when any of the following is true:
 | Loopback bind | `EXAMPLE_MCP_HOST=127.0.0.1` | Trust boundary is the network address |
 | Bearer token set | `EXAMPLE_MCP_TOKEN=<token>` | Auth middleware enforces it |
 | OAuth enabled | `EXAMPLE_MCP_AUTH_MODE=oauth` | Auth middleware enforces it |
-| Auth disabled | `EXAMPLE_MCP_NO_AUTH=true` | Local dev — see below |
+| Auth disabled | `EXAMPLE_MCP_HOST=127.0.0.1` + `EXAMPLE_MCP_NO_AUTH=true` | Local dev — see below |
 | Gateway override | `EXAMPLE_NOAUTH=true` | Upstream handles auth — see below |
 
 ---
@@ -94,10 +94,10 @@ For local development, disable auth entirely:
 
 ```bash
 just dev
-# equivalent to: EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
+# equivalent to: EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
 ```
 
-`EXAMPLE_MCP_NO_AUTH=true` sets the auth policy to `LoopbackDev`, which removes the auth middleware entirely and bypasses the startup guard. No token is required to call any endpoint.
+`EXAMPLE_MCP_NO_AUTH=true` is accepted only on a loopback bind. It sets the auth policy to `LoopbackDev`, removes the auth middleware, and requires no token for local calls.
 
 **Do not use this in production.**
 
@@ -108,13 +108,10 @@ just dev
 If you deploy behind a gateway that handles authentication for all services (e.g. an MCP proxy that validates tokens before routing to this server), you can disable auth at the server level:
 
 ```bash
-EXAMPLE_MCP_NO_AUTH=true   # remove the auth middleware
-EXAMPLE_NOAUTH=true         # acknowledge the startup guard that this is intentional
+EXAMPLE_NOAUTH=true         # acknowledge the startup guard that an upstream gateway handles auth
 ```
 
-`EXAMPLE_NOAUTH=true` is a deliberate acknowledgment that authentication is handled upstream. Without it, the startup guard will refuse to bind on a non-loopback address with no auth configured, even when `EXAMPLE_MCP_NO_AUTH=true` is set.
-
-Both variables must be set together for the gateway case.
+`EXAMPLE_NOAUTH=true` selects the explicit `TrustedGatewayUnscoped` policy. It removes the local auth middleware and scope checks, so only use it when a trusted upstream gateway enforces both authentication and authorization before traffic reaches this server.
 
 ---
 
@@ -130,11 +127,12 @@ The `AuthPolicy` enum in `src/server.rs` controls what the router does:
 
 | Policy | When | Auth enforced? | Scope checks? |
 |---|---|---|---|
-| `LoopbackDev` | Loopback bind, `EXAMPLE_MCP_NO_AUTH=true`, or stdio mode | No | No |
+| `LoopbackDev` | Loopback bind, or stdio mode. `EXAMPLE_MCP_NO_AUTH=true` also enables this policy for loopback development. | No | No |
+| `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `EXAMPLE_NOAUTH=true` | No | No |
 | `Mounted { auth_state: None }` | Bearer-only mode | Yes (token) | Yes |
 | `Mounted { auth_state: Some(_) }` | OAuth mode (+ optional token) | Yes (OAuth / token) | Yes |
 
-Public endpoints (`/health`, `/status`) are never gated by auth, regardless of policy.
+Public endpoints (`/health`, `/status`) are never gated by auth, regardless of policy. `/status` returns only local redacted runtime metadata.
 
 ---
 

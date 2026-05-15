@@ -17,9 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `.github/workflows/codeql.yml` — CodeQL SAST analysis on push/PR and weekly scheduled scan; results surface in the GitHub Security tab.
+- `.github/workflows/codeql.yml` — CodeQL SAST analysis on push to main and weekly scheduled scan; results surface in the GitHub Security tab.
 - `.github/workflows/cargo-deny.yml` — license compliance, duplicate dependency, advisory, and source checks via `cargo-deny`.
-- `.github/workflows/msrv.yml` — compiles against the declared `rust-version` (1.86) to catch MSRV regressions early.
+- `.github/workflows/msrv.yml` — compiles against the declared `rust-version` to catch MSRV regressions early.
 
 ## [0.3.0] — 2026-05-14
 
@@ -83,7 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test helpers: `loopback_state()` and `bearer_state()` for credential-free integration tests
 - `AuthPolicy` enum making auth choice explicit at construction time
 - CORS, Host header validation, request body size limiting built-in
-- `validate_bind_security()` — refuses to bind `0.0.0.0` without auth (Pattern §27)
+- `resolve_auth_policy_kind()` — refuses to bind `0.0.0.0` without auth (Pattern §27)
 - `default_data_dir()` — detects container vs bare-metal, returns `/data` or `~/.example`
 - `entrypoint.sh` — Docker entrypoint with permission setup and privilege drop to UID 1000
 - `xtask` crate with `dist`, `ci`, `symlink-docs`, `check-env` commands

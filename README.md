@@ -22,6 +22,21 @@ This template is the reference point for the local Rust MCP/server family:
 
 The template ships Claude Code, Codex, and Gemini plugin surfaces from one shared `plugins/example/` package. See [docs/PLUGINS.md](docs/PLUGINS.md) for the manifest layout, shared MCP config, skills, hook setup contract, and per-host adaptation checklist.
 
+## Server surface policy
+
+Every scaffolded business action must have **MCP + CLI** parity. MCP is the agent-facing surface; CLI is the scripting/debugging/test surface.
+
+REST API and Web UI are required only for servers that are more than a thin client over another service API:
+
+| Server category | Required surfaces | Examples |
+|---|---|---|
+| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` |
+| Application/platform server | API + CLI + MCP + Web | `axon`, `lab`, `syslog` |
+
+For upstream-client servers, do not mirror the upstream HTTP API locally by default. Add REST/Web only when the server owns meaningful state, workflows, dashboards, or non-MCP consumers.
+
+`scaffold_intent` is the template's explicit MCP-only exception: it combines MCP elicitation with plugin skill handoff, so there is no true CLI equivalent inside the user's agent/editor permission model.
+
 ## What this template gives you
 
 - **Layered architecture** — transport client → service → MCP/CLI shims, enforced by convention
@@ -31,7 +46,7 @@ The template ships Claude Code, Codex, and Gemini plugin surfaces from one share
 - **MCP elicitation** — server-asks-user mid-call (spec 2025-06-18), with graceful fallback
 - **MCP resources** — exposes the tool schema as a readable resource
 - **MCP prompts** — pre-canned `quick_start` prompt for clients that support them
-- **CLI** — same service layer, human-readable output, no duplication
+- **CLI** — same service layer, human-readable output, mandatory MCP parity
 - **Test helpers** — `loopback_state()` and `bearer_state()` for tests without real credentials
 
 ## Architecture
@@ -47,7 +62,7 @@ ExampleService (src/app.rs)        ← all business logic lives here
   └──────────────────────────────────┘
 ```
 
-The rule: **zero business logic in `tools.rs` or `cli.rs`**. Both are pure shims. All logic belongs in `app.rs` (or `example.rs` for transport concerns).
+The rule: **zero business logic in `tools.rs` or `cli.rs`**. Both are pure shims. All logic belongs in `app.rs` (or `example.rs` for transport concerns). For business actions, MCP + CLI parity is mandatory; REST/Web are project-type dependent.
 
 ## Quickstart — run the stub
 
@@ -146,13 +161,17 @@ pub async fn get_things(&self) -> Result<Value> {
 
 For each new action:
 
-**a. `src/mcp/schemas.rs`** — add to `EXAMPLE_ACTIONS`:
+**a. `src/actions.rs`** — add one entry to `ACTION_SPECS`:
 
 ```rust
-pub(super) const EXAMPLE_ACTIONS: &[&str] = &["greet", "echo", "status", "get_things", "help"];
+ActionSpec {
+    name: "get_things",
+    required_scope: Some(READ_SCOPE),
+    transport: ActionTransport::Any,
+}
 ```
 
-Add any new parameters to `tool_definitions()`.
+Then add any new parameters to `tool_definitions()` in `src/mcp/schemas.rs`.
 
 **b. `src/mcp/tools.rs`** — add a match arm in `dispatch_example()`:
 
@@ -160,7 +179,7 @@ Add any new parameters to `tool_definitions()`.
 "get_things" => state.service.get_things().await,
 ```
 
-Also add the action to `READ_ONLY_ACTIONS` in `src/mcp/rmcp_server.rs`.
+Scope rules are derived from `ACTION_SPECS`.
 
 **c. `src/cli.rs`** — add a `Command` variant and dispatch arm:
 
@@ -202,6 +221,7 @@ The single `example` tool dispatches on the `action` parameter:
 | `echo` | Echo a message back | `message` (required string) |
 | `status` | Server status info | none |
 | `elicit_name` | Ask user for name via elicitation, return greeting | none |
+| `scaffold_intent` | Elicit scaffold requirements and return JSON for the `scaffold-project` skill | none |
 | `help` | Full action reference | none |
 
 ## Authentication
@@ -276,7 +296,9 @@ family and generalized for new MCP services:
 | `just validate-plugin` | Validate plugin manifests, shared MCP config, hook config, and skills |
 | `just runtime-current` | Detect whether Docker/systemd is running the current built artifact |
 | `just schema-docs` / `just schema-docs-check` | Generate or verify [docs/MCP_SCHEMA.md](docs/MCP_SCHEMA.md) from the MCP action schema |
-| `just template-check` | Run plugin layout, schema drift, and template feature checks |
+| `just openapi` / `just openapi-check` | Generate or verify [docs/generated/openapi.json](docs/generated/openapi.json) for the REST API surface |
+| `just scaffold-contract-check` | Validate scaffold intent JSON Schema and examples in `docs/contracts/` |
+| `just template-check` | Run plugin layout, schema drift, OpenAPI, scaffold contract, and template feature checks |
 | `just auth-smoke` | Smoke-test bearer-token MCP HTTP auth against a running server |
 | `just pre-release` | Run the release-readiness gate |
 | `just up` / `just down` | Short aliases for Docker Compose start/stop |
@@ -294,7 +316,9 @@ docs in the same change:
 | Just recipes and portable commands | This README's portable automation table |
 | Script options and environment variables | [scripts/README.md](scripts/README.md) |
 | MCP actions, scopes, and schema resource | [docs/MCP_SCHEMA.md](docs/MCP_SCHEMA.md), generated by `just schema-docs` |
-| Claude/Codex/Gemini plugin manifests and hook contract | [docs/PLUGINS.md](docs/PLUGINS.md) |
+| REST OpenAPI schema | [docs/generated/openapi.json](docs/generated/openapi.json), generated by `just openapi` |
+| Claude/Codex/Gemini plugin manifests, skills, and hook contract | [docs/PLUGINS.md](docs/PLUGINS.md) |
+| Scaffold setup wizard handoff | [docs/specs/scaffold-intent-handoff.md](docs/specs/scaffold-intent-handoff.md) and [docs/contracts/scaffold-intent.schema.json](docs/contracts/scaffold-intent.schema.json) |
 | Test layers and template checks | [tests/README.md](tests/README.md) |
 | MCP registry publishing | [docs/MCP-REGISTRY-PUBLISH-GUIDE.md](docs/MCP-REGISTRY-PUBLISH-GUIDE.md) |
 
@@ -365,9 +389,10 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
    Each public method on `ExampleService` corresponds to one MCP action. Business logic, caching, and retries go here — not in `tools.rs`.
 
-4. **Add MCP actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs`**
+4. **Add MCP actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs`**
 
-   - `schemas.rs`: add action names to `EXAMPLE_ACTIONS` slice
+   - `actions.rs`: add action metadata to `ACTION_SPECS`
+   - `schemas.rs`: add any new action parameters to the schema
    - `tools.rs`: add match arms in `dispatch_example()`
 
 5. **Add CLI commands to `src/cli.rs`**
@@ -403,13 +428,9 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 #### Infrastructure
 
-12. **Configure Git LFS** (if not already done)
+12. **Choose a binary distribution path**
 
-    ```bash
-    git lfs install    # one-time per machine
-    ```
-
-    `.gitattributes` already tracks `bin/*`, `*.tar.gz`, `*.zip`. Distribute your binary via `cargo xtask dist`.
+    GitHub release tags build Linux artifacts and attach them to the release. Local `just dist` is an operator convenience for preparing files under `dist/`; it does not push generated binaries back to `main`.
 
 13. **Run `just symlink-docs`** after any new CLAUDE.md
 
@@ -437,9 +458,9 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
     Replace `EXAMPLE_*` env var names, `example-mcp` service references, and add any service-specific credentials your binary needs.
 
-19. **Update `plugins/example/skills/example/SKILL.md`**
+19. **Update `plugins/example/skills/`**
 
-    Replace the action table with your actual actions and documented response shapes. Good skill docs drive better AI tool use.
+    Replace the action table in `plugins/example/skills/example/SKILL.md` with your actual actions and documented response shapes. Keep or adapt `plugins/example/skills/scaffold-project/SKILL.md` if you want the elicitation setup wizard to generate approval-first scaffold plans. Good skill docs drive better AI tool use.
 
 20. **Update `plugins/example/.codex-plugin/plugin.json`** for Codex plugin registry
 
@@ -466,7 +487,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 #### Tests
 
-22. **Update `tests/mcporter/test-tools.sh`**
+22. **Update `tests/mcporter/test-mcp.sh`**
 
     Add semantic checks for your actions. Validate actual field values, not just key existence.
 
@@ -493,6 +514,9 @@ cargo xtask check-env
 
 # Start the server in dev mode
 just dev       # no-auth mode on :40060
+
+# Start the static web UI after `pnpm build`
+cd apps/web && pnpm start
 
 # Symlink docs for all AI systems
 just symlink-docs

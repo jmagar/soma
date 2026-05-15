@@ -15,7 +15,7 @@ default:
 
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
 dev:
-    EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
+    EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp
 
 # Run in stdio MCP transport mode (for Claude Desktop or direct pipe)
 mcp:
@@ -42,43 +42,11 @@ build-release:
 # Build the Next.js web UI static export (required before cargo build embeds it)
 # Output lands in apps/web/out/ and is baked into the binary via the `web` feature
 build-web:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if [ ! -d apps/web ]; then
-        echo "No apps/web directory found — skipping web build"
-        exit 0
-    fi
-    cd apps/web
-    if [ ! -d node_modules ]; then
-        echo "Installing web dependencies..."
-        pnpm install
-    fi
-    pnpm build
-    echo "Web assets built → apps/web/out/"
+    bash scripts/build-web.sh
 
 # Watch apps/web for changes and rebuild on save (requires watchexec: cargo install watchexec-cli)
 web-watch:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v watchexec >/dev/null 2>&1; then
-        echo "error: watchexec is required for web-watch" >&2
-        echo "install: cargo install watchexec-cli" >&2
-        exit 1
-    fi
-    echo "Building apps/web once, then watching for changes..."
-    watchexec \
-        --project-origin . \
-        --watch apps/web \
-        --ignore 'apps/web/.next' \
-        --ignore 'apps/web/.next/**' \
-        --ignore 'apps/web/out' \
-        --ignore 'apps/web/out/**' \
-        --ignore 'apps/web/node_modules' \
-        --ignore 'apps/web/node_modules/**' \
-        --debounce 1000ms \
-        --on-busy-update queue \
-        --wrap-process=none \
-        'cd apps/web && pnpm build'
+    bash scripts/web-watch.sh
 
 # Build the full binary with embedded web assets (runs build-web first)
 build-full: build-web build-release
@@ -152,25 +120,11 @@ coupled-files-check:
 
 # Check tracked source/config/docs for non-ASCII characters
 ascii-check:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
-    if [[ "${#files[@]}" -eq 0 ]]; then
-        echo "No files to check"
-        exit 0
-    fi
-    python3 scripts/asciicheck.py "${files[@]}"
+    bash scripts/run-ascii-check.sh
 
 # Replace common smart punctuation with ASCII in tracked source/config/docs
 ascii-fix:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
-    if [[ "${#files[@]}" -eq 0 ]]; then
-        echo "No files to fix"
-        exit 0
-    fi
-    python3 scripts/asciicheck.py --fix "${files[@]}"
+    bash scripts/run-ascii-check.sh --fix
 
 # Check staged source files against line-count budgets
 file-size-check:
@@ -184,14 +138,41 @@ schema-docs:
 schema-docs-check:
     python3 scripts/check-schema-docs.py --check
 
+# Regenerate OpenAPI docs for the REST API surface
+openapi:
+    python3 scripts/check-openapi.py --write
+
+# Verify generated OpenAPI docs are current
+openapi-check:
+    python3 scripts/check-openapi.py --check
+
+# Validate scaffold intent JSON Schema and checked-in examples
+scaffold-contract-check:
+    python3 scripts/check-scaffold-intent-contract.py
+
+# Check static contracts from docs/PATTERNS.md
+patterns-check:
+    cargo xtask patterns
+
+# Check PATTERNS.md contracts and fail on warnings
+patterns-strict:
+    cargo xtask patterns --strict
+
+# Emit PATTERNS.md contract findings as JSON
+patterns-json:
+    cargo xtask patterns --json
+
 # Run shell/Rust-adjacent template invariant smoke tests
 template-features:
     bash scripts/test-template-features.sh
 
 # Run fast template-specific checks
 template-check:
+    just patterns-check
     just validate-plugin
     just schema-docs-check
+    just openapi-check
+    just scaffold-contract-check
     just template-features
 
 # Run all local quality checks in sequence: fmt-check → lint → check → test
@@ -213,8 +194,8 @@ clean:
 
 # ── xtask automation ─────────────────────────────────────────────────────────
 
-# Build release binary and copy to bin/ (Git LFS tracked)
-# After running, commit bin/<binary> and push to update the LFS pointer.
+# Local operator convenience: build the release binary and copy it to dist/.
+# GitHub releases publish binaries as artifacts; this recipe does not update main.
 dist:
     cargo xtask dist
 
@@ -355,36 +336,9 @@ status:
 
 # Repair: stop, rebuild, and restart via systemd user unit or Docker Compose
 repair:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "==> Stopping example-mcp..."
-    if systemctl --user is-active --quiet example-mcp.service 2>/dev/null; then
-        systemctl --user stop example-mcp.service
-        echo "    stopped systemd unit"
-    elif docker ps --filter 'name=^/example-mcp$' --quiet 2>/dev/null | grep -q .; then
-        docker stop example-mcp >/dev/null 2>&1 || true
-        echo "    stopped docker container"
-    else
-        echo "    no running instance found"
-    fi
-    echo "==> Rebuilding release binary..."
-    cargo build --release
-    echo "==> Restarting..."
-    if systemctl --user list-unit-files example-mcp.service 2>/dev/null | grep -q example-mcp; then
-        mkdir -p "${HOME}/.local/bin"
-        install -m 755 target/release/example "${HOME}/.local/bin/example"
-        systemctl --user start example-mcp.service
-        echo "    started systemd unit"
-    elif [ -f docker-compose.yml ]; then
-        docker compose build
-        docker compose up -d --force-recreate
-        echo "    started docker compose service"
-    else
-        echo "    no service manager detected; binary at target/release/example"
-    fi
-    echo "==> Done"
+    bash scripts/repair.sh
 
-# Copy the release binary into bin/ (for plugin distribution; Linux only; requires git lfs)
+# Copy the release binary into plugin bin/ for local plugin packaging.
 # TEMPLATE: Replace "example" with your binary name
 build-plugin: build-release
     #!/bin/sh
@@ -425,36 +379,16 @@ test-mcporter:
         echo "mcporter not found. Install it first."
         exit 1
     fi
-    bash tests/mcporter/test-tools.sh
+    bash tests/mcporter/test-mcp.sh
 
 # Run the release-readiness gate
 pre-release:
     bash scripts/pre-release-check.sh
 
 # Generate a standalone CLI for this server via mcporter (requires running server)
-# TEMPLATE: Update port and token env var name
+# TEMPLATE: Update port and token env var name in scripts/generate-cli.sh
 generate-cli:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Server must be running on port 40060 (run 'just dev' first)"
-    echo "Generated CLI embeds your token — do not commit or share"
-    mkdir -p dist dist/.cache
-    current_hash=$(timeout 10 curl -sf \
-        -H "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
-        -H "Accept: application/json, text/event-stream" \
-        http://localhost:40060/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
-    cache_file="dist/.cache/example-cli.schema_hash"
-    if [[ -f "$cache_file" ]] && [[ "$(cat "$cache_file")" == "$current_hash" ]] && [[ -f "dist/example-cli" ]]; then
-        echo "SKIP: tool schema unchanged — use existing dist/example-cli"
-        exit 0
-    fi
-    timeout 30 mcporter generate-cli \
-        --command http://localhost:40060/mcp \
-        --header "Authorization: Bearer ${EXAMPLE_MCP_TOKEN:-}" \
-        --name example-cli \
-        --output dist/example-cli
-    printf '%s' "$current_hash" > "$cache_file"
-    echo "Generated dist/example-cli (requires bun at runtime)"
+    bash scripts/generate-cli.sh
 
 # ── Publishing ────────────────────────────────────────────────────────────────
 

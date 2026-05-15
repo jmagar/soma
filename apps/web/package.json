@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "pnpm exec serve out",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "validate": "pnpm check && pnpm typecheck && pnpm build"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",
@@ -28,7 +30,8 @@
     "postcss": "^8.5.10",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.3.0"
+    "tailwind-merge": "^3.3.0",
+    "serve": "^14.2.5"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",

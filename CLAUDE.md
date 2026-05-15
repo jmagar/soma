@@ -15,7 +15,7 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 | `src/api.rs` | REST API handlers: `POST /v1/example`, `GET /health`, `GET /status` |
 | `src/mcp.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
 | `src/mcp/tools.rs` | MCP shim: parse JSON args → call service → return `Value` |
-| `src/mcp/schemas.rs` | Tool JSON schema (`EXAMPLE_ACTIONS`, `tool_definitions()`) |
+| `src/mcp/schemas.rs` | Tool JSON schema derived from `ACTION_SPECS` |
 | `src/mcp/rmcp_server.rs` | `ServerHandler` impl: tools, resources, prompts, scope checks |
 | `src/mcp/prompts.rs` | MCP prompts (`quick_start`) |
 | `src/config.rs` | `Config`, `ExampleConfig`, `McpConfig`, `AuthConfig`, env loading |
@@ -40,11 +40,11 @@ If you find yourself computing, filtering, transforming, or validating data in `
 
 2. **`src/app.rs`** — add a delegating method: `pub async fn your_action(&self, ...) -> Result<Value> { self.client.your_action(...).await }`.
 
-3. **`src/mcp/schemas.rs`** — add `"your_action"` to `EXAMPLE_ACTIONS` and any new parameters to `tool_definitions()`.
+3. **`src/actions.rs`** — add the action to `ACTION_SPECS`, including scope and transport.
 
-4. **`src/mcp/tools.rs`** — add a match arm in `dispatch_example()`: `"your_action" => { ... state.service.your_action(...).await }`. Also add to `HELP_TEXT`.
+4. **`src/mcp/schemas.rs`** — add any new parameters to `tool_definitions()`; the action enum comes from `ACTION_SPECS`.
 
-5. **`src/mcp/rmcp_server.rs`** — add to `READ_ONLY_ACTIONS` (or the appropriate scope list).
+5. **`src/mcp/tools.rs`** — add a match arm in `dispatch_example()`: `"your_action" => { ... state.service.your_action(...).await }`. Also add to `HELP_TEXT`.
 
 6. **`src/cli.rs`** — add a `Command` variant, a parse arm in `parse_args()`, and a dispatch arm in `run()`.
 
@@ -59,10 +59,11 @@ For actions with parameters, extract them with `string_arg(&args, "param_name")`
 | Variant | When | Effect |
 |---------|------|--------|
 | `AuthPolicy::LoopbackDev` | `no_auth=true` or host is loopback (`localhost`, `127.*`, `::1`) via `McpConfig::is_loopback()` | No auth middleware; scope checks bypassed |
+| `AuthPolicy::TrustedGatewayUnscoped` | `EXAMPLE_NOAUTH=true` on non-loopback behind an authz-enforcing gateway | No auth middleware; scope checks bypassed |
 | `AuthPolicy::Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
 | `AuthPolicy::Mounted { auth_state: Some(_) }` | `auth_mode = "oauth"` | Full Google OAuth + RS256 JWT issuance |
 
-Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `example:read` (read ops) and `example:admin` (satisfies read). `help` requires no scope. Unknown actions get `DENY_SCOPE`.
+Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `example:read` and `example:write` (write satisfies read). `help` requires no scope. Unknown actions get `DENY_SCOPE`.
 
 ## Environment variables
 

@@ -4,6 +4,8 @@
 
 A Next.js 16 frontend (static export) that serves the rmcp-template demo UI. It connects to the `example` MCP server's REST API and provides interactive tooling, an API explorer, and a dashboard.
 
+Use `apps/web` only for application/platform servers that intentionally expose API + CLI + MCP + Web (for example `axon`, `lab`, and `syslog`). Upstream-client MCP servers such as `unrust`, `rustifi`, `rustify`, `rustscale`, and `apprise` should keep MCP + CLI parity and omit REST/Web unless they own additional workflows, state, dashboards, or non-MCP consumers.
+
 The UI is built entirely on the **Aurora design system** — a shadcn-compatible component registry at `https://aurora.tootie.tv`. Aurora components are dark-first, operator-grade, and designed for AI/agent UIs.
 
 ---
@@ -158,6 +160,7 @@ apps/web/
 │       └── ...             # Others installed via pnpm dlx shadcn add
 ├── lib/
 │   ├── utils.ts            # cn() + devWarn()
+│   ├── template.ts         # Template knobs: branding, endpoints, action metadata
 │   └── api.ts              # Typed REST client for example server
 ├── components.json         # shadcn config — @aurora registry wired in
 ├── next.config.ts          # Static export (output: "export")
@@ -172,6 +175,8 @@ apps/web/
 pnpm dev             # Dev server (http://localhost:3001 or next available)
 pnpm build           # Static export to out/
 pnpm lint            # Biome lint
+pnpm typecheck       # TypeScript type check
+pnpm validate        # Biome check + typecheck + static build
 
 # Install Aurora components
 pnpm dlx shadcn@latest add @aurora/aurora-dialog
@@ -212,7 +217,8 @@ import { Button } from "@/components/ui/button"
 
 1. Create `app/{route}/page.tsx`
 2. Use Aurora layout primitives: `aurora-card` for content sections, `aurora-breadcrumb` for navigation, `aurora-stat-card` for metrics
-3. Keep data fetching in `lib/api.ts`, not in the component
+3. Keep service/action metadata in `lib/template.ts`
+4. Keep data fetching in `lib/api.ts`, not in the component
 
 ### Status/health display
 

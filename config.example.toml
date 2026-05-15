@@ -48,8 +48,9 @@
 # EXAMPLE_MCP_HOST env var overrides this.
 #   0.0.0.0   → accept connections from all interfaces (for Docker, reverse proxy)
 #   127.0.0.1 → loopback only (safest for local dev; no auth required)
-# TEMPLATE: Leave as 0.0.0.0 for Docker deployments. The entrypoint.sh and
-#            validate_bind_security() function enforce auth when binding 0.0.0.0.
+# TEMPLATE: Leave as 0.0.0.0 for Docker deployments. By default, non-loopback
+#            binds require bearer/OAuth auth; trusted gateways may explicitly opt
+#            into upstream-enforced auth with EXAMPLE_NOAUTH=true.
 host = "0.0.0.0"
 
 # Bind port for the MCP HTTP server.
