@@ -152,8 +152,11 @@ fn core_token_applies(file: &SurfaceFile, token: &str) -> bool {
 }
 
 fn check_operational_surface(file: &SurfaceFile, text: &str, warnings: &mut Vec<String>) {
+    // doctor/ and watch.rs use reqwest for health/connectivity pings — explicitly diagnostics-only.
+    let is_diagnostics =
+        file.path.starts_with("src/cli/doctor/") || file.path == "src/cli/watch.rs";
     for token in ["reqwest::", "sqlx::", "rusqlite::"] {
-        if text.contains(token) {
+        if text.contains(token) && !(token == "reqwest::" && is_diagnostics) {
             warnings.push(format!(
                 "{} operational surface contains `{token}`; confirm it is diagnostics-only",
                 file.path
@@ -174,15 +177,20 @@ fn check_web_surface(
         }
     }
 
-    let hardcoded_action_count = ["greet", "echo", "status", "scaffold_intent"]
-        .iter()
-        .filter(|action| text.contains(&format!("\"{action}\"")))
-        .count();
-    if hardcoded_action_count > 3 {
-        warnings.push(format!(
-            "{} hardcodes {hardcoded_action_count} action names",
-            file.path
-        ));
+    // template.ts is the canonical action metadata definition for the web UI — it is
+    // expected to list all action names and is explicitly excluded from this check.
+    let is_definition_file = file.path == "apps/web/lib/template.ts";
+    if !is_definition_file {
+        let hardcoded_action_count = ["greet", "echo", "status", "scaffold_intent"]
+            .iter()
+            .filter(|action| text.contains(&format!("\"{action}\"")))
+            .count();
+        if hardcoded_action_count > 3 {
+            warnings.push(format!(
+                "{} hardcodes {hardcoded_action_count} action names",
+                file.path
+            ));
+        }
     }
 }
 

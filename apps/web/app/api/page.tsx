@@ -1,6 +1,8 @@
 "use client";
 
 import { ACTIONS, WEB_APP_CONFIG } from "@/lib/template";
+import { ActionCard } from "@/components/api/action-card";
+import { EndpointRow } from "@/components/api/endpoint-row";
 
 export default function ApiPage() {
   return (
@@ -44,31 +46,11 @@ export default function ApiPage() {
           Endpoint
         </h2>
         <div className="space-y-2">
-          <EndpointRow
-            method="POST"
-            path={WEB_APP_CONFIG.restEndpoint}
-            description="REST action dispatch"
-          />
-          <EndpointRow
-            method="GET"
-            path={WEB_APP_CONFIG.healthEndpoint}
-            description="Liveness probe (unauthenticated)"
-          />
-          <EndpointRow
-            method="GET"
-            path={WEB_APP_CONFIG.statusEndpoint}
-            description="Runtime status"
-          />
-          <EndpointRow
-            method="POST"
-            path={WEB_APP_CONFIG.mcpEndpoint}
-            description="MCP Streamable HTTP transport"
-          />
-          <EndpointRow
-            method="GET"
-            path="/openapi.json"
-            description="Generated OpenAPI schema for the REST surface"
-          />
+          <EndpointRow method="POST" path={WEB_APP_CONFIG.restEndpoint} description="REST action dispatch" />
+          <EndpointRow method="GET" path={WEB_APP_CONFIG.healthEndpoint} description="Liveness probe (unauthenticated)" />
+          <EndpointRow method="GET" path={WEB_APP_CONFIG.statusEndpoint} description="Runtime status" />
+          <EndpointRow method="POST" path={WEB_APP_CONFIG.mcpEndpoint} description="MCP Streamable HTTP transport" />
+          <EndpointRow method="GET" path="/openapi.json" description="Generated OpenAPI schema for the REST surface" />
         </div>
       </div>
 
@@ -125,31 +107,14 @@ export default function ApiPage() {
             <tbody>
               {[
                 ["MCP", `${WEB_APP_CONFIG.serviceName}(action="greet", name="Alice")`],
-                [
-                  "REST",
-                  `POST ${WEB_APP_CONFIG.restEndpoint} {"action":"greet","params":{"name":"Alice"}}`,
-                ],
+                ["REST", `POST ${WEB_APP_CONFIG.restEndpoint} {"action":"greet","params":{"name":"Alice"}}`],
                 ["CLI", `${WEB_APP_CONFIG.serviceName} greet --name Alice`],
               ].map(([surface, pattern]) => (
-                <tr
-                  key={surface}
-                  style={{ borderBottom: "1px solid var(--aurora-border-default)" }}
-                >
-                  <td
-                    style={{
-                      padding: "0.5rem 0.75rem",
-                      color: "var(--aurora-accent-primary)",
-                    }}
-                  >
+                <tr key={surface} style={{ borderBottom: "1px solid var(--aurora-border-default)" }}>
+                  <td style={{ padding: "0.5rem 0.75rem", color: "var(--aurora-accent-primary)" }}>
                     {surface}
                   </td>
-                  <td
-                    style={{
-                      padding: "0.5rem 0.75rem",
-                      color: "var(--aurora-text-muted)",
-                      wordBreak: "break-all",
-                    }}
-                  >
+                  <td style={{ padding: "0.5rem 0.75rem", color: "var(--aurora-text-muted)", wordBreak: "break-all" }}>
                     {pattern}
                   </td>
                 </tr>
@@ -165,204 +130,6 @@ export default function ApiPage() {
           <ActionCard key={action.id} action={action} />
         ))}
       </div>
-    </div>
-  );
-}
-
-function EndpointRow({
-  method,
-  path,
-  description,
-}: {
-  method: string;
-  path: string;
-  description: string;
-}) {
-  const methodColors: Record<string, string> = {
-    GET: "var(--aurora-success)",
-    POST: "var(--aurora-accent-primary)",
-  };
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: "0.75rem",
-        alignItems: "center",
-        padding: "0.5rem 0.75rem",
-        background: "var(--aurora-control-surface)",
-        borderRadius: "var(--radius-md)",
-        border: "1px solid var(--aurora-border-default)",
-      }}
-    >
-      <span
-        style={{
-          color: methodColors[method] ?? "var(--aurora-text-muted)",
-          fontFamily: "var(--aurora-font-mono)",
-          fontSize: "0.7rem",
-          fontWeight: 700,
-          minWidth: "3rem",
-        }}
-      >
-        {method}
-      </span>
-      <span
-        style={{
-          color: "var(--aurora-text-primary)",
-          fontFamily: "var(--aurora-font-mono)",
-          fontSize: "0.8rem",
-          minWidth: "12rem",
-        }}
-      >
-        {path}
-      </span>
-      <span style={{ color: "var(--aurora-text-muted)", fontSize: "0.8rem" }}>{description}</span>
-    </div>
-  );
-}
-
-function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
-  const isRestAction = action.transport === "rest";
-  const curlExample = `curl -X POST http://localhost:3100${WEB_APP_CONFIG.restEndpoint} \\
-  -H "Content-Type: application/json" \\
-  -d '${JSON.stringify(action.example)}'`;
-
-  return (
-    <div
-      style={{
-        background: "var(--aurora-panel-medium)",
-        border: "1px solid var(--aurora-border-default)",
-        borderRadius: "var(--radius-lg)",
-        padding: "1.25rem",
-      }}
-    >
-      <div
-        style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.5rem" }}
-      >
-        <span
-          style={{
-            background: "var(--aurora-hover-bg)",
-            border: "1px solid var(--aurora-border-strong)",
-            color: "var(--aurora-accent-primary)",
-            fontFamily: "var(--aurora-font-mono)",
-            fontSize: "0.85rem",
-            fontWeight: 600,
-            padding: "0.15rem 0.6rem",
-            borderRadius: "var(--radius-sm)",
-          }}
-        >
-          {action.id}
-        </span>
-        <span
-          style={{
-            color: isRestAction ? "var(--aurora-success)" : "var(--aurora-warn)",
-            fontFamily: "var(--aurora-font-mono)",
-            fontSize: "0.7rem",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
-        >
-          {isRestAction ? "REST + MCP + CLI" : "MCP only"}
-        </span>
-      </div>
-      <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.85rem", marginBottom: "1rem" }}>
-        {action.description}
-      </p>
-
-      {action.params.length > 0 && (
-        <div style={{ marginBottom: "1rem" }}>
-          <p
-            style={{
-              color: "var(--aurora-text-muted)",
-              fontSize: "0.7rem",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginBottom: "0.5rem",
-            }}
-          >
-            Parameters
-          </p>
-          {action.params.map((p) => (
-            <div
-              key={p.name}
-              style={{
-                display: "flex",
-                gap: "0.5rem",
-                alignItems: "baseline",
-                fontSize: "0.8rem",
-                fontFamily: "var(--aurora-font-mono)",
-              }}
-            >
-              <span style={{ color: "var(--aurora-accent-pink)" }}>{p.name}</span>
-              <span style={{ color: "var(--aurora-text-muted)" }}>string</span>
-              {!p.required && (
-                <span style={{ color: "var(--aurora-warn)", fontSize: "0.7rem" }}>optional</span>
-              )}
-              <span
-                style={{ color: "var(--aurora-text-muted)", fontFamily: "var(--aurora-font-sans)" }}
-              >
-                — {p.description}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {isRestAction ? (
-          <CodeBlock label="cURL" code={curlExample} />
-        ) : (
-          <CodeBlock
-            label="REST availability"
-            code={`${action.id} is MCP-only because it requires an interactive MCP peer.`}
-          />
-        )}
-        <CodeBlock
-          label="MCP equivalent"
-          code={`${WEB_APP_CONFIG.serviceName}(action="${action.id}"${action.params
-            .map((p) => `, ${p.name}="..."`)
-            .join("")})`}
-        />
-        <CodeBlock label="Response" code={JSON.stringify(action.response, null, 2)} />
-      </div>
-    </div>
-  );
-}
-
-function CodeBlock({ label, code }: { label: string; code: string }) {
-  return (
-    <div>
-      <p
-        style={{
-          color: "var(--aurora-text-muted)",
-          fontSize: "0.7rem",
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          marginBottom: "0.25rem",
-        }}
-      >
-        {label}
-      </p>
-      <pre
-        style={{
-          background: "var(--aurora-control-surface)",
-          border: "1px solid var(--aurora-border-default)",
-          borderRadius: "var(--radius-md)",
-          padding: "0.75rem",
-          color: "var(--aurora-accent-strong)",
-          fontFamily: "var(--aurora-font-mono)",
-          fontSize: "0.75rem",
-          overflow: "auto",
-          margin: 0,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {code}
-      </pre>
     </div>
   );
 }

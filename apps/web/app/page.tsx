@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { echo, getHealth, getStatus, greet, type StatusResult, status } from "@/lib/api";
 import { WEB_APP_CONFIG } from "@/lib/template";
+import { Card } from "@/components/dashboard/card";
+import { ActionButton } from "@/components/dashboard/action-button";
 
 type HealthState = "ok" | "error" | "loading";
 
@@ -38,13 +40,7 @@ export default function DashboardPage() {
   }, [checkHealth, checkStatus]);
 
   const addActivity = (action: string, result: string, ok: boolean) => {
-    const item: ActivityItem = {
-      id: nextId,
-      time: new Date().toLocaleTimeString(),
-      action,
-      result,
-      ok,
-    };
+    const item: ActivityItem = { id: nextId, time: new Date().toLocaleTimeString(), action, result, ok };
     setNextId((n) => n + 1);
     setActivity((prev) => [item, ...prev].slice(0, 20));
   };
@@ -109,56 +105,27 @@ export default function DashboardPage() {
                 boxShadow: health === "ok" ? `0 0 6px var(--aurora-success)` : undefined,
               }}
             />
-            <span
-              style={{
-                color: statusColor[health],
-                fontWeight: 600,
-                fontSize: "1rem",
-              }}
-            >
+            <span style={{ color: statusColor[health], fontWeight: 600, fontSize: "1rem" }}>
               {statusLabel[health]}
             </span>
           </div>
-          <p
-            style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.5rem" }}
-          >
+          <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.5rem" }}>
             Polls {WEB_APP_CONFIG.healthEndpoint} every 10s
           </p>
         </Card>
 
         <Card title="API URL">
-          <p
-            style={{
-              color: "var(--aurora-accent-primary)",
-              fontFamily: "var(--aurora-font-mono)",
-              fontSize: "0.8rem",
-              wordBreak: "break-all",
-            }}
-          >
+          <p style={{ color: "var(--aurora-accent-primary)", fontFamily: "var(--aurora-font-mono)", fontSize: "0.8rem", wordBreak: "break-all" }}>
             {serverStatus?.api_url ?? "—"}
           </p>
         </Card>
 
         <Card title="Status">
-          <p
-            style={{
-              color:
-                serverStatus?.status === "ok"
-                  ? "var(--aurora-success)"
-                  : "var(--aurora-text-muted)",
-              fontWeight: 600,
-            }}
-          >
+          <p style={{ color: serverStatus?.status === "ok" ? "var(--aurora-success)" : "var(--aurora-text-muted)", fontWeight: 600 }}>
             {serverStatus?.status ?? "—"}
           </p>
           {serverStatus?.note && (
-            <p
-              style={{
-                color: "var(--aurora-text-muted)",
-                fontSize: "0.75rem",
-                marginTop: "0.25rem",
-              }}
-            >
+            <p style={{ color: "var(--aurora-text-muted)", fontSize: "0.75rem", marginTop: "0.25rem" }}>
               {serverStatus.note}
             </p>
           )}
@@ -174,16 +141,7 @@ export default function DashboardPage() {
           padding: "1.25rem",
         }}
       >
-        <h2
-          style={{
-            color: "var(--aurora-text-muted)",
-            fontWeight: 600,
-            marginBottom: "1rem",
-            fontSize: "0.9rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
-        >
+        <h2 style={{ color: "var(--aurora-text-muted)", fontWeight: 600, marginBottom: "1rem", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Quick Actions
         </h2>
         <div className="flex flex-wrap gap-3">
@@ -220,16 +178,7 @@ export default function DashboardPage() {
           padding: "1.25rem",
         }}
       >
-        <h2
-          style={{
-            color: "var(--aurora-text-muted)",
-            fontWeight: 600,
-            marginBottom: "1rem",
-            fontSize: "0.9rem",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
-        >
+        <h2 style={{ color: "var(--aurora-text-muted)", fontWeight: 600, marginBottom: "1rem", fontSize: "0.9rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
           Recent Activity
         </h2>
         {activity.length === 0 ? (
@@ -251,33 +200,13 @@ export default function DashboardPage() {
                   border: "1px solid var(--aurora-border-default)",
                 }}
               >
-                <span
-                  style={{
-                    color: item.ok ? "var(--aurora-success)" : "var(--aurora-error)",
-                    fontFamily: "var(--aurora-font-mono)",
-                    fontSize: "0.75rem",
-                    minWidth: "4rem",
-                  }}
-                >
+                <span style={{ color: item.ok ? "var(--aurora-success)" : "var(--aurora-error)", fontFamily: "var(--aurora-font-mono)", fontSize: "0.75rem", minWidth: "4rem" }}>
                   {item.time}
                 </span>
-                <span
-                  style={{
-                    color: "var(--aurora-accent-primary)",
-                    fontFamily: "var(--aurora-font-mono)",
-                    fontSize: "0.75rem",
-                    minWidth: "8rem",
-                  }}
-                >
+                <span style={{ color: "var(--aurora-accent-primary)", fontFamily: "var(--aurora-font-mono)", fontSize: "0.75rem", minWidth: "8rem" }}>
                   {item.action}
                 </span>
-                <span
-                  style={{
-                    color: "var(--aurora-text-primary)",
-                    fontSize: "0.8rem",
-                    flex: 1,
-                  }}
-                >
+                <span style={{ color: "var(--aurora-text-primary)", fontSize: "0.8rem", flex: 1 }}>
                   {item.result}
                 </span>
               </div>
@@ -286,59 +215,5 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
-  );
-}
-
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        background: "var(--aurora-panel-medium)",
-        border: "1px solid var(--aurora-border-default)",
-        borderRadius: "var(--radius-lg)",
-        padding: "1.25rem",
-      }}
-    >
-      <p
-        style={{
-          color: "var(--aurora-text-muted)",
-          fontSize: "0.75rem",
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-          marginBottom: "0.5rem",
-        }}
-      >
-        {title}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-function ActionButton({ onClick, label }: { onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        background: "var(--aurora-accent-button)",
-        color: "var(--aurora-accent-foreground)",
-        border: "none",
-        borderRadius: "var(--radius-md)",
-        padding: "0.5rem 1rem",
-        fontSize: "0.875rem",
-        fontWeight: 600,
-        cursor: "pointer",
-      }}
-      onMouseEnter={(e) => {
-        (e.target as HTMLElement).style.background = "var(--aurora-accent-primary)";
-      }}
-      onMouseLeave={(e) => {
-        (e.target as HTMLElement).style.background = "var(--aurora-accent-button)";
-      }}
-    >
-      {label}
-    </button>
   );
 }
