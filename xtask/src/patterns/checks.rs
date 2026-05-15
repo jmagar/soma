@@ -296,21 +296,25 @@ pub(super) fn config_and_auth(reporter: &mut PatternReporter) {
 }
 
 pub(super) fn tooling(reporter: &mut PatternReporter) {
-    let justfile = read_file("Justfile");
     let lefthook = read_file("lefthook.yml");
     let taplo = read_file("taplo.toml");
     let mut missing = Vec::new();
 
-    for token in [
-        "fmt-toml",
-        "check-toml",
-        "schema-docs-check",
-        "template-check",
+    // Check that the scripts CI relies on for enforcement actually exist.
+    // Checking scripts rather than Justfile targets means this passes even when
+    // the Justfile is restructured, and fails when a script is accidentally deleted.
+    for script in [
+        "scripts/check-schema-docs.py",
+        "scripts/check-openapi.py",
+        "scripts/check-scaffold-intent-contract.py",
+        "scripts/validate-plugin-layout.sh",
+        "scripts/test-template-features.sh",
     ] {
-        if !justfile.contains(token) {
-            missing.push(format!("Justfile:{token}"));
+        if !Path::new(script).is_file() {
+            missing.push(script.to_string());
         }
     }
+
     if !lefthook.contains("taplo check") {
         missing.push("lefthook.yml:taplo check".to_string());
     }
@@ -321,12 +325,15 @@ pub(super) fn tooling(reporter: &mut PatternReporter) {
     if missing.is_empty() {
         reporter.ok(
             "tooling",
-            "Justfile, lefthook, and taplo pattern hooks are present",
+            "CI enforcement scripts, lefthook, and taplo config are present",
         );
     } else {
         reporter.fail(
             "tooling",
-            format!("missing expected tooling hook(s): {}", missing.join(", ")),
+            format!(
+                "missing expected tooling component(s): {}",
+                missing.join(", ")
+            ),
         );
     }
 }

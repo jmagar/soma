@@ -172,9 +172,7 @@ jobs:
         run: bash scripts/check-coupled-files.sh origin/main HEAD
 
       - name: ASCII hygiene
-        run: |
-          mapfile -t files < <(git ls-files '*.md' '*.rs' '*.toml' '*.json' '*.yml' '*.yaml' '*.sh' '*.py' ':!:docs/references/**' ':!:docs/sessions/**')
-          python3 scripts/asciicheck.py "${files[@]}"
+        run: bash scripts/run-ascii-check.sh
 
   # ── deny: dependency advisories, licenses, bans, sources ─────────────────────
   audit:
