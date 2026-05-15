@@ -1,4 +1,4 @@
-//! REST API handlers — `POST /v1/example`, `GET /health`, `GET /status`.
+//! REST API handlers — `POST /v1/example`, `GET /health`, `GET /status`, `GET /openapi.json`.
 //!
 //! All handlers are thin: parse the request, call the service, return JSON.
 //! Business logic lives in `app.rs`.
