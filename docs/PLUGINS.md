@@ -22,9 +22,13 @@ plugins/example/
   hooks/
     hooks.json           # Claude lifecycle hook declarations
     plugin-setup.sh      # Thin adapter to the binary setup command
+  bin/
+    example             # Optional Git LFS-tracked plugin binary artifact
   skills/
     example/
       SKILL.md           # Shared action documentation
+    scaffold-project/
+      SKILL.md           # Approval-first template adaptation handoff skill
 ```
 
 When adapting the template, rename `example`, `Example`, and `EXAMPLE` consistently across the package, then update host-specific display text and credentials.
