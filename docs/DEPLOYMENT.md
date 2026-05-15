@@ -123,4 +123,41 @@ The binary must be in `$PATH`. The plugin's `plugin-setup.sh` symlinks it to `~/
 - `/mcp` is the Streamable HTTP MCP endpoint.
 - `/v1/example` is the REST action endpoint.
 
-See `docs/DOCKER.md`, `docs/SYSTEMD.md`, `docs/ENV.md`, and `docs/CONFIG.md` for deployment-specific details. See `docs/PATTERNS.md` §27, §28, §46, §47 for security, environment awareness, and binary installation patterns.
+## Port assignments
+
+Each service in the rmcp family uses a fixed port to avoid collisions:
+
+| Service | MCP Port | Binary name |
+|---|---|---|
+| lab | 8765 | `labby` |
+| axon_rust | 8001 | `axon` |
+| syslog-mcp | 3100 | `syslog` |
+| unraid-mcp (unrust) | 6970 | `unraid` |
+| gotify-mcp (rustify) | 9158 | `gotify` |
+| unifi-mcp (rustifi) | 7474 | `unifi` |
+| tailscale-mcp (rustscale) | 7575 | `tailscale` |
+| apprise-mcp | 8765 | `apprise` |
+| rmcp-template | 40060 | `example` |
+
+Set the port via `EXAMPLE_MCP_PORT` or in `config.toml`. Update `EXPOSE` in the Dockerfile and the port mapping in `docker-compose.yml` to match.
+
+## Worktree file propagation
+
+Claude Code worktrees are fresh checkouts — gitignored files like `.env` and `config.toml` are absent by default. The `.worktreeinclude` file at the repo root tells Claude Code which gitignored files to copy into each new worktree automatically:
+
+```
+# .worktreeinclude
+.env
+config.toml
+```
+
+This ensures the server can start in a worktree without manual setup. Both files are one-way copied (main → worktree) at worktree creation time only.
+
+`.gitignore` additions required alongside `.worktreeinclude`:
+
+```gitignore
+config.toml
+.beagle/
+```
+
+See `docs/DOCKER.md`, `docs/SYSTEMD.md`, `docs/ENV.md`, and `docs/CONFIG.md` for deployment-specific details. See `docs/PATTERNS.md` §19, §27, §28, §46, §47, §A6 for port assignments, security, environment awareness, binary installation, and worktree patterns.

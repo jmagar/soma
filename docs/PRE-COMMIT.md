@@ -106,4 +106,22 @@ taplo check
 
 Full release confidence comes from `scripts/pre-release-check.sh`, not from blocking every commit with long builds.
 
-See `docs/PATTERNS.md` §29 and §30 for the taplo and lefthook patterns.
+## .gitignore rules
+
+Use the canonical `.gitignore` from syslog-mcp as the base:
+
+- `.env` and `.env.*` ignored, `.env.example` committed
+- `target/` ignored
+- `*.db`, `*.db-shm`, `*.db-wal` ignored
+- AI tooling dirs ignored (`.claude/`, `.omc/`, `.lavra/`, etc.)
+- `bin/` **NOT** ignored — LFS-tracked plugin binaries are committed
+
+## .dockerignore rules
+
+- `target/` excluded (built inside the container)
+- `tests/`, `docs/`, `scripts/`, `*.md` excluded (not needed at runtime)
+- `.env`, `.env.*` excluded (injected at runtime via `env_file`)
+- `Justfile`, `lefthook.yml` excluded
+- Never exclude: `src/`, `Cargo.toml`, `Cargo.lock`, `config/`
+
+See `docs/PATTERNS.md` §29, §30, §33 for the taplo, lefthook, and ignore file patterns.

@@ -115,4 +115,38 @@ allowed_blank_lines = 1
 
 Large artifacts are blocked unless allowlisted in `scripts/blob-size-allowlist.txt`. Plugin binaries are expected artifacts and are allowlisted.
 
-See `docs/PATTERNS.md` §24, §29, §31 for nextest, taplo, and GitHub workflow patterns.
+## Release artifact distribution
+
+Version tags (`v*`) trigger the release workflow, which builds release binaries and attaches them to the GitHub Release. The release workflow must **not** push generated binaries back to `main`. Local `just dist` / `cargo xtask dist` recipes are operator conveniences for preparing artifacts — they are not a CI write-back path.
+
+Binary naming convention: `<service>-<version>-<arch>-unknown-linux-musl.tar.gz` (e.g. `example-v0.2.0-x86_64-unknown-linux-musl.tar.gz`).
+
+## CHANGELOG.md
+
+Every repo keeps a `CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/):
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] — 2026-05-13
+
+### Added
+- Initial release
+- MCP server with action-based tool dispatch
+- CLI thin shim
+- Bearer token + Google OAuth authentication
+- Streamable HTTP + stdio transport
+- Thin plugin setup hook plus binary-owned setup/repair
+- Claude Code plugin with userConfig
+```
+
+Update `[Unreleased]` with every meaningful change. The release workflow promotes it to a versioned section on tag.
+
+See `docs/PATTERNS.md` §21, §24, §29, §31, §34 for release artifacts, nextest, taplo, GitHub workflow, and changelog patterns.
