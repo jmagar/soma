@@ -17,6 +17,12 @@ OUT = ROOT / "docs/generated/openapi.json"
 
 REST_ENDPOINT = "/v1/example"
 
+# Action-specific param examples. Actions not listed here get an empty params object.
+_PARAM_EXAMPLES: dict[str, dict] = {
+    "greet": {"name": "Alice"},
+    "echo": {"message": "Hello!"},
+}
+
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
@@ -165,10 +171,13 @@ def render() -> dict[str, Any]:
                             "application/json": {
                                 "schema": schema_ref("ActionRequest"),
                                 "examples": {
-                                    "greet": {"value": {"action": "greet", "params": {"name": "Alice"}}},
-                                    "echo": {"value": {"action": "echo", "params": {"message": "Hello!"}}},
-                                    "status": {"value": {"action": "status", "params": {}}},
-                                    "help": {"value": {"action": "help", "params": {}}},
+                                    action["name"]: {
+                                        "value": {
+                                            "action": action["name"],
+                                            "params": _PARAM_EXAMPLES.get(action["name"], {}),
+                                        }
+                                    }
+                                    for action in actions
                                 },
                             }
                         },
@@ -323,10 +332,10 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     expected = [action["name"] for action in rest_actions()]
     if action_enum != expected:
         failures.append(f"ActionName enum drifted: expected {expected}, got {action_enum}")
-    if "scaffold_intent" in (action_enum or []):
-        failures.append("MCP-only scaffold_intent must not appear in REST ActionName enum")
-    if "elicit_name" in (action_enum or []):
-        failures.append("MCP-only elicit_name must not appear in REST ActionName enum")
+    mcp_only = {a["name"] for a in action_entries() if a["transport"] == "McpOnly"}
+    for name in sorted(mcp_only):
+        if name in (action_enum or []):
+            failures.append(f"MCP-only action {name!r} must not appear in REST ActionName enum")
     return failures
 
 

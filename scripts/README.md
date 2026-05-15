@@ -8,6 +8,7 @@ Maintenance and automation scripts for the template. Shell scripts are written f
 |---|---|
 | `asciicheck.py` | Check/fix unexpected non-ASCII characters. |
 | `block-env-commits.sh` | Prevent `.env*` secrets from being committed. |
+| `build-web.sh` | Build the Next.js web UI static export (`apps/web/out/`). |
 | `bump-version.sh` | Update version-bearing files from the `Cargo.toml` version. |
 | `check-blob-size.py` | Block unexpectedly large changed blobs. |
 | `check-coupled-files.sh` | Warn when files that normally change together drift. |
@@ -19,12 +20,16 @@ Maintenance and automation scripts for the template. Shell scripts are written f
 | `check-schema-docs.py` | Generate/check `docs/MCP_SCHEMA.md` and action docs. |
 | `check-scaffold-intent-contract.py` | Validate scaffold intent schema and examples without third-party dependencies. |
 | `check-version-sync.sh` | Check version consistency. |
+| `generate-cli.sh` | Generate a standalone CLI for this server via mcporter (requires running server). |
 | `pre-release-check.sh` | Full release-readiness gate, including schema/OpenAPI/scaffold contract drift checks. |
 | `refresh-docs.sh` | Refresh ignored reference docs with Axon/Repomix. |
+| `repair.sh` | Stop, rebuild, and restart the service via systemd or Docker Compose. |
+| `run-ascii-check.sh` | Collect tracked files and run `asciicheck.py`; pass `--fix` to rewrite in place. |
 | `sync-cargo.sh` | Sync `Cargo.lock` into plugin data directories. |
 | `test-mcp-auth.sh` | Smoke-test HTTP MCP bearer auth. |
 | `test-template-features.sh` | Fast template invariant smoke tests. |
 | `validate-plugin-layout.sh` | Validate Claude/Codex/Gemini plugin package layout. |
+| `web-watch.sh` | Watch `apps/web` for changes and rebuild on save (requires watchexec). |
 
 `blob-size-allowlist.txt` is data for `check-blob-size.py`, not an executable script.
 
@@ -153,6 +158,15 @@ just schema-docs-check
 
 Treats `src/actions.rs::ACTION_SPECS` as canonical and verifies schema docs, help text, README, and plugin skill mentions. Generated output lives in `docs/MCP_SCHEMA.md`.
 
+### `build-web.sh`
+
+```bash
+bash scripts/build-web.sh
+just build-web
+```
+
+Builds the Next.js web UI static export from `apps/web/`. Installs `node_modules` if absent, then runs `pnpm build`. Output lands in `apps/web/out/` and is embedded into the binary via the `web` feature. No-ops silently when `apps/web/` does not exist.
+
 ### `check-version-sync.sh`
 
 ```bash
@@ -161,6 +175,17 @@ scripts/check-version-sync.sh /path/to/project
 ```
 
 Validates that version-bearing files agree. Missing `CHANGELOG.md` entries are warnings; mismatched versions are failures.
+
+### `generate-cli.sh`
+
+```bash
+EXAMPLE_MCP_TOKEN=... bash scripts/generate-cli.sh
+just generate-cli
+```
+
+Generates a standalone CLI binary for this server via `mcporter generate-cli`. Requires a running server on port 40060 and `mcporter` in PATH. Caches a schema hash under `dist/.cache/` and skips regeneration when the tool schema is unchanged. The generated binary embeds the token — do not commit or share it.
+
+**TEMPLATE:** Update the port and token env var name in this script when adapting.
 
 ### `pre-release-check.sh`
 
@@ -204,6 +229,26 @@ Environment:
 
 The MCP spec and registry packs ignore huge SVG/Excalidraw diagrams to keep text reference packs usable.
 
+### `repair.sh`
+
+```bash
+bash scripts/repair.sh
+just repair
+```
+
+Stops, rebuilds, and restarts the `example-mcp` service. Detects the active service manager automatically: prefers a systemd user unit (`example-mcp.service`), falls back to Docker Compose. Useful after an in-place binary update without a full `docker compose build`.
+
+### `run-ascii-check.sh`
+
+```bash
+bash scripts/run-ascii-check.sh          # check mode
+bash scripts/run-ascii-check.sh --fix    # rewrite smart punctuation to ASCII
+just ascii-check
+just ascii-fix
+```
+
+Collects all tracked `*.md`, `*.rs`, `*.toml`, `*.json`, `*.yml`, `*.yaml`, `*.sh`, and `*.py` files (excluding `docs/references/` and `docs/sessions/`) and passes them to `scripts/asciicheck.py`. Used in CI via `bash scripts/run-ascii-check.sh` and locally via the Justfile aliases.
+
 ### `sync-cargo.sh`
 
 ```bash
@@ -230,6 +275,15 @@ just template-features
 ```
 
 Fast shell smoke tests for invariants that are awkward as Rust tests: `.env` blocking, agent docs symlinks, plugin layout, schema docs, and ASCII hygiene.
+
+### `web-watch.sh`
+
+```bash
+bash scripts/web-watch.sh
+just web-watch
+```
+
+Watches `apps/web/` for changes and rebuilds on save using `watchexec`. Ignores `.next/`, `out/`, and `node_modules/`. Requires `watchexec`: `cargo install watchexec-cli`.
 
 ### `validate-plugin-layout.sh`
 
