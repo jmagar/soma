@@ -116,6 +116,52 @@ pub fn router(state: AppState) -> Router {
 }
 ```
 
+## CLI thin shim pattern
+
+`src/cli.rs` follows the same shim discipline as `mcp/tools.rs`. The canonical shape:
+
+```rust
+// cli.rs — binary module (uses `example_mcp::` not `crate::`)
+use example_mcp::app::ExampleService;
+
+pub enum CliCommand {
+    Things,
+    Thing { id: String },
+    DeleteThing { id: String, confirm: bool },
+}
+
+impl CliCommand {
+    pub fn parse(args: &[String]) -> Result<(Self, bool)> {
+        let json    = args.iter().any(|a| a == "--json");
+        let confirm = args.iter().any(|a| a == "--confirm");
+        let rest: Vec<&str> = args.iter()
+            .filter(|a| a.as_str() != "--json" && a.as_str() != "--confirm")
+            .map(String::as_str).collect();
+
+        let cmd = match rest.as_slice() {
+            ["things"]         => Self::Things,
+            ["thing", id, ..]  => Self::Thing { id: id.to_string() },
+            ["delete", id, ..] => Self::DeleteThing { id: id.to_string(), confirm },
+            other => bail!("unknown command: {}\n\nRun `example --help`", other.join(" ")),
+        };
+        Ok((cmd, json))
+    }
+}
+
+pub async fn run(service: &ExampleService, cmd: CliCommand, json: bool) -> Result<()> {
+    let (label, data) = match cmd {
+        CliCommand::Things                            => ("things", service.list_things().await?),
+        CliCommand::Thing { ref id }                  => ("thing",  service.get_thing(id).await?),
+        CliCommand::DeleteThing { ref id, confirm }   => ("delete", service.delete_thing(id, confirm).await?),
+    };
+    if json { println!("{}", serde_json::to_string_pretty(&data)?); }
+    else    { print_human(label, &data); }
+    Ok(())
+}
+```
+
+`parse()` extracts flags and dispatches to variants — no defaults, no validation, no domain logic. `run()` calls the service and formats output. That's it.
+
 ## What "thin shim" means
 
 `mcp/tools.rs` does exactly three things per action:
