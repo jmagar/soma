@@ -8,6 +8,10 @@
 //! Add new `check_*` functions here, then call them from `run_doctor` in the
 //! parent module. See the existing functions for the expected signature shape.
 
+#[cfg(test)]
+#[path = "checks_tests.rs"]
+mod tests;
+
 use std::net::TcpListener;
 use std::path::Path;
 use std::time::Instant;

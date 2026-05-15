@@ -4,6 +4,10 @@
 //! protocol concerns. Everything in this file is about wiring the HTTP transport
 //! layer: how connections are accepted and which origins are allowed.
 
+#[cfg(test)]
+#[path = "transport_tests.rs"]
+mod tests;
+
 use std::net::Ipv6Addr;
 
 use rmcp::transport::streamable_http_server::{
