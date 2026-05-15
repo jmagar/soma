@@ -334,6 +334,10 @@ If generated MCP schema docs drift, run:
 just schema-docs
 ```
 
+## OpenAPI serving decision
+
+For application/platform servers that scaffold the API surface, expose the generated REST schema at `GET /openapi.json` and keep `docs/generated/openapi.json` current with `just openapi`. For upstream-client MCP + CLI servers, keeping the generated file in docs is sufficient unless the user explicitly selects an API/Web surface.
+
 ## Future extensions
 
 Possible additions that preserve the safety boundary:

@@ -111,6 +111,24 @@ def render() -> dict[str, Any]:
                     },
                 }
             },
+            "/openapi.json": {
+                "get": {
+                    "tags": ["health"],
+                    "summary": "OpenAPI schema",
+                    "operationId": "getOpenApiSchema",
+                    "security": [],
+                    "responses": {
+                        "200": {
+                            "description": "Generated OpenAPI schema for the REST surface",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object", "additionalProperties": True}
+                                }
+                            },
+                        }
+                    },
+                }
+            },
             "/status": {
                 "get": {
                     "tags": ["health"],
@@ -289,7 +307,7 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     if value.get("openapi") != "3.1.0":
         failures.append("OpenAPI version must be 3.1.0")
-    for path in ["/health", "/status", REST_ENDPOINT]:
+    for path in ["/health", "/openapi.json", "/status", REST_ENDPOINT]:
         if path not in value.get("paths", {}):
             failures.append(f"missing path {path}")
     for path, methods in value.get("paths", {}).items():

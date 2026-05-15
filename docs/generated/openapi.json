@@ -51,6 +51,29 @@
         }
       }
     },
+    "/openapi.json": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "OpenAPI schema",
+        "operationId": "getOpenApiSchema",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Generated OpenAPI schema for the REST surface",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/status": {
       "get": {
         "tags": [
