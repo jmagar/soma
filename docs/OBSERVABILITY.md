@@ -1,3 +1,18 @@
+---
+title: "Observability"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # Observability
 
 The template exposes fast, redacted status surfaces for humans, agents, and deployment automation. Design principle: glass house, not black box.

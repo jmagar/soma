@@ -1,3 +1,16 @@
+---
+title: "Deployment"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # Deployment
 
 This template supports three deployment modes:

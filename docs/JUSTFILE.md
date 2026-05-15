@@ -1,3 +1,16 @@
+---
+title: "Justfile"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # Justfile
 
 `Justfile` is the operator command surface for local development, CI parity, Docker, plugin packaging, and diagnostics. Run `just --list` for the complete current list.

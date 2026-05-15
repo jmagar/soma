@@ -1,3 +1,18 @@
+---
+title: "Testing"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # Testing
 
 The test strategy is layered: parse at the CLI layer, test business/service behavior without a server, then smoke-test live MCP HTTP with mcporter.

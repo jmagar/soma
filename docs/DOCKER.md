@@ -1,3 +1,18 @@
+---
+title: "Docker"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # Docker
 
 Docker support lives in `config/Dockerfile` and `docker-compose.yml`.

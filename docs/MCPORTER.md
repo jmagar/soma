@@ -1,3 +1,18 @@
+---
+title: "mcporter Integration Testing"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # mcporter
 
 `mcporter` is used for live MCP integration testing and CLI generation.

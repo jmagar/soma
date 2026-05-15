@@ -1,3 +1,18 @@
+---
+title: "MCP Schema Contract"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: true
+upstream_refs:
+  - "src/actions.rs"
+last_reviewed: "2026-05-15"
+---
+
 # MCP Schema Contract
 
 Generated from `src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.

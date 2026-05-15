@@ -1,3 +1,16 @@
+---
+title: "Agents-First Design"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # Agents-first design
 
 This template is optimized for AI agents as primary operators and consumers. Design rule: if an agent can't use it cleanly, fix the output, not the agent.

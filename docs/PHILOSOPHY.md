@@ -1,3 +1,16 @@
+---
+title: "Philosophy"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # Philosophy
 
 `rmcp-template` exists to make new MCP servers safe, boring, and easy for agents to operate.

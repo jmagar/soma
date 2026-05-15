@@ -1,3 +1,18 @@
+---
+title: "Scripts"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "scripts/README.md"
+last_reviewed: "2026-05-15"
+---
+
 # Scripts
 
 Maintenance scripts live in `scripts/`. The authoritative per-script usage reference is `scripts/README.md`.

@@ -1,3 +1,16 @@
+---
+title: "CI"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # CI
 
 CI mirrors local quality gates so failures are reproducible before pushing.

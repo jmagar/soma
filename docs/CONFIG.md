@@ -1,3 +1,18 @@
+---
+title: "Configuration"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # Configuration
 
 Configuration is split between non-secret settings (`config.toml`) and secrets (`  .env`). Env vars always override `config.toml`.

@@ -1,3 +1,16 @@
+---
+title: "systemd Deployment"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # systemd
 
 The template supports user-level systemd deployments when a unit named `example-mcp.service` is installed by the derived service.

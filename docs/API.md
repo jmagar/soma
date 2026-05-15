@@ -1,3 +1,18 @@
+---
+title: "API Reference"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # API
 
 The server exposes HTTP endpoints alongside MCP. All surfaces (MCP, REST, CLI) call the same `ExampleService` methods — no logic is duplicated.

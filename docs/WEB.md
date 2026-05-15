@@ -1,3 +1,18 @@
+---
+title: "Web UI"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/PATTERNS.md"
+last_reviewed: "2026-05-15"
+---
+
 # Web UI
 
 The optional web UI lives under `apps/web/` and is built as a static Next.js export embedded into the Rust binary at compile time using `include_dir!`. No separate file-serving process.

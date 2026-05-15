@@ -1,3 +1,16 @@
+---
+title: "Pre-commit Hooks"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+last_reviewed: "2026-05-15"
+---
+
 # Pre-commit
 
 The repo uses `lefthook` for lightweight pre-commit checks. Install hooks with:

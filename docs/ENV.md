@@ -1,3 +1,18 @@
+---
+title: "Environment Variables"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "src/config.rs"
+last_reviewed: "2026-05-15"
+---
+
 # Environment variables
 
 The template uses `EXAMPLE_*` variables. Rename the prefix when adapting the template.
