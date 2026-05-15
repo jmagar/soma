@@ -5,7 +5,7 @@
 
 use axum::{
     extract::State,
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
 use serde::Deserialize;
@@ -61,6 +61,14 @@ pub async fn api_dispatch(
 /// `GET /health` — liveness probe (unauthenticated).
 pub async fn health() -> impl IntoResponse {
     Json(json!({ "status": "ok" }))
+}
+
+/// `GET /openapi.json` — generated OpenAPI schema for the REST surface.
+pub async fn openapi_json() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        include_str!("../docs/generated/openapi.json"),
+    )
 }
 
 /// `GET /status` — runtime status (unauthenticated, redacts secrets).

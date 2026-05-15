@@ -395,6 +395,26 @@ mod tests {
     }
 
     #[test]
+    fn scaffold_intent_json_contains_contract_required_fields() {
+        let value = service().scaffold_intent(upstream_input().into());
+        let contract: Value = serde_json::from_str(include_str!(
+            "../../docs/contracts/scaffold-intent.schema.json"
+        ))
+        .expect("contract should be valid JSON");
+        let required = contract["required"]
+            .as_array()
+            .expect("contract should list root required fields");
+
+        for field in required {
+            let field = field.as_str().expect("required fields should be strings");
+            assert!(
+                value.get(field).is_some(),
+                "missing contract field: {field}"
+            );
+        }
+    }
+
+    #[test]
     fn primitive_defaults_to_tools_when_input_is_empty() {
         let mut input = upstream_input();
         input.mcp_primitives.clear();

@@ -292,12 +292,18 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     for path in ["/health", "/status", REST_ENDPOINT]:
         if path not in value.get("paths", {}):
             failures.append(f"missing path {path}")
+    for path, methods in value.get("paths", {}).items():
+        for method, operation in methods.items():
+            if not operation.get("operationId"):
+                failures.append(f"{method.upper()} {path} is missing operationId")
     action_enum = value.get("components", {}).get("schemas", {}).get("ActionName", {}).get("enum")
     expected = [action["name"] for action in rest_actions()]
     if action_enum != expected:
         failures.append(f"ActionName enum drifted: expected {expected}, got {action_enum}")
     if "scaffold_intent" in (action_enum or []):
         failures.append("MCP-only scaffold_intent must not appear in REST ActionName enum")
+    if "elicit_name" in (action_enum or []):
+        failures.append("MCP-only elicit_name must not appear in REST ActionName enum")
     return failures
 
 
