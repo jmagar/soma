@@ -9,6 +9,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// TEMPLATE: Replace with your service name (e.g. ".unraid", ".gotify").
+const SERVICE_HOME_DIRNAME: &str = ".example";
+
 /// Top-level config (maps to `config.toml` sections).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -210,11 +213,10 @@ pub fn default_data_dir() -> anyhow::Result<std::path::PathBuf> {
     }
 
     // Bare-metal or local dev — use ~/.<service>/
-    // TEMPLATE: Replace ".example" with your service name.
     let home = dirs::home_dir().ok_or_else(|| {
         anyhow::anyhow!("cannot determine home directory — set HOME or RUNNING_IN_CONTAINER=1")
     })?;
-    Ok(home.join(".example"))
+    Ok(home.join(SERVICE_HOME_DIRNAME))
 }
 
 // ── Config loading ────────────────────────────────────────────────────────────
@@ -224,16 +226,14 @@ impl Config {
         let mut config = Config::default();
 
         // Search for config.toml in priority order (§25: appdata convention):
-        //   1. ~/.example/config.toml  — user's persistent config (primary)
-        //   2. ./config.toml           — local dev / Docker mount fallback
-        //
-        // TEMPLATE: Replace ".example" with your service name.
+        //   1. ~/<SERVICE_HOME_DIRNAME>/config.toml  — user's persistent config (primary)
+        //   2. ./config.toml                         — local dev / Docker mount fallback
         let candidate_paths = {
             let mut paths = vec![];
             if let Some(home) = std::env::var_os("HOME") {
                 paths.push(
                     std::path::PathBuf::from(home)
-                        .join(".example")
+                        .join(SERVICE_HOME_DIRNAME)
                         .join("config.toml"),
                 );
             }
@@ -353,3 +353,7 @@ fn env_list(key: &str, target: &mut Vec<String>) {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "config_tests.rs"]
+mod tests;

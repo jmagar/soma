@@ -243,3 +243,185 @@ fn assert_env_file_mode(path: &std::path::Path) {
         0o600
     );
 }
+
+// ── OAuth setup validation (H12) ─────────────────────────────────────────────
+//
+// These helpers build a Command with OAuth mode enabled and all four OAuth
+// credentials present, then selectively omit one field per test to confirm
+// the expected blocking-failure code is reported by `setup plugin-hook
+// --no-repair`.
+//
+// Notes:
+//   - `setup_command` sets EXAMPLE_MCP_TOKEN, which normally selects bearer
+//     mode.  We override that by adding EXAMPLE_MCP_AUTH_MODE=oauth.
+//   - We omit EXAMPLE_MCP_TOKEN here so the setup logic enters the OAuth
+//     credential-check branch (token takes precedence in bearer mode).
+//   - Port is kept at 0 (from setup_command) to avoid mcp_port_in_use noise.
+
+fn oauth_setup_command(data_dir: &std::path::Path) -> Command {
+    let mut cmd = Command::new(example_bin());
+    cmd.env_clear()
+        .env("HOME", data_dir)
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("CLAUDE_PLUGIN_DATA", data_dir)
+        .env("EXAMPLE_API_URL", "https://api.example.test")
+        .env("EXAMPLE_API_KEY", "example-secret")
+        .env("EXAMPLE_MCP_PORT", "0")
+        .env("EXAMPLE_MCP_AUTH_MODE", "oauth")
+        .env("EXAMPLE_MCP_PUBLIC_URL", "https://mcp.example.test")
+        .env("EXAMPLE_MCP_GOOGLE_CLIENT_ID", "test-client-id")
+        .env("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET", "test-client-secret")
+        .env("EXAMPLE_MCP_AUTH_ADMIN_EMAIL", "admin@example.test");
+    cmd
+}
+
+fn blocking_failure_codes(output: &std::process::Output) -> Vec<String> {
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+        panic!(
+            "stdout not JSON: {e}\nstdout: {}",
+            String::from_utf8_lossy(&output.stdout)
+        )
+    });
+    json["blocking_failures"]
+        .as_array()
+        .expect("blocking_failures should be an array")
+        .iter()
+        .map(|f| f["code"].as_str().unwrap_or("").to_string())
+        .collect()
+}
+
+#[test]
+fn oauth_missing_public_url_produces_blocking_failure() {
+    let dir = tempdir().unwrap();
+    let mut cmd = oauth_setup_command(dir.path());
+    // Remove the public URL so the check fires.
+    cmd.env_remove("EXAMPLE_MCP_PUBLIC_URL");
+    let output = cmd
+        .args(["setup", "plugin-hook", "--no-repair"])
+        .output()
+        .unwrap();
+
+    // setup exits non-zero when there are blocking failures.
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit for blocking failure; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let codes = blocking_failure_codes(&output);
+    assert!(
+        codes.contains(&"missing_oauth_public_url".to_string()),
+        "expected missing_oauth_public_url in blocking_failures, got: {codes:?}"
+    );
+}
+
+#[test]
+fn oauth_missing_client_id_produces_blocking_failure() {
+    let dir = tempdir().unwrap();
+    let mut cmd = oauth_setup_command(dir.path());
+    cmd.env_remove("EXAMPLE_MCP_GOOGLE_CLIENT_ID");
+    let output = cmd
+        .args(["setup", "plugin-hook", "--no-repair"])
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit for blocking failure; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let codes = blocking_failure_codes(&output);
+    assert!(
+        codes.contains(&"missing_oauth_client_id".to_string()),
+        "expected missing_oauth_client_id in blocking_failures, got: {codes:?}"
+    );
+}
+
+#[test]
+fn oauth_missing_client_secret_produces_blocking_failure() {
+    let dir = tempdir().unwrap();
+    let mut cmd = oauth_setup_command(dir.path());
+    cmd.env_remove("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET");
+    let output = cmd
+        .args(["setup", "plugin-hook", "--no-repair"])
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit for blocking failure; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let codes = blocking_failure_codes(&output);
+    assert!(
+        codes.contains(&"missing_oauth_client_secret".to_string()),
+        "expected missing_oauth_client_secret in blocking_failures, got: {codes:?}"
+    );
+}
+
+#[test]
+fn oauth_missing_admin_email_produces_blocking_failure() {
+    let dir = tempdir().unwrap();
+    let mut cmd = oauth_setup_command(dir.path());
+    cmd.env_remove("EXAMPLE_MCP_AUTH_ADMIN_EMAIL");
+    let output = cmd
+        .args(["setup", "plugin-hook", "--no-repair"])
+        .output()
+        .unwrap();
+
+    assert!(
+        !output.status.success(),
+        "expected non-zero exit for blocking failure; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let codes = blocking_failure_codes(&output);
+    assert!(
+        codes.contains(&"missing_oauth_admin_email".to_string()),
+        "expected missing_oauth_admin_email in blocking_failures, got: {codes:?}"
+    );
+}
+
+// ── write_env OAuth branch (L28) ──────────────────────────────────────────────
+//
+// When `auth_mode = OAuth` with all OAuth fields set, `setup repair` must
+// write a .env that includes EXAMPLE_MCP_AUTH_MODE=oauth and all four OAuth
+// credential lines.
+
+#[test]
+fn setup_repair_oauth_writes_oauth_env_lines() {
+    let dir = tempdir().unwrap();
+    let data_dir = dir.path().join("appdata");
+    let mut cmd = oauth_setup_command(&data_dir);
+    let output = cmd.args(["setup", "repair"]).output().unwrap();
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["exit_policy"], "success");
+    assert_eq!(json["ran_repair"], true);
+
+    let env_file = fs::read_to_string(data_dir.join(".env")).unwrap();
+    assert!(
+        env_file.contains("EXAMPLE_MCP_AUTH_MODE=oauth"),
+        ".env should contain EXAMPLE_MCP_AUTH_MODE=oauth"
+    );
+    assert!(
+        env_file.contains("EXAMPLE_MCP_PUBLIC_URL=https://mcp.example.test"),
+        ".env should contain EXAMPLE_MCP_PUBLIC_URL"
+    );
+    assert!(
+        env_file.contains("EXAMPLE_MCP_GOOGLE_CLIENT_ID=test-client-id"),
+        ".env should contain EXAMPLE_MCP_GOOGLE_CLIENT_ID"
+    );
+    assert!(
+        env_file.contains("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=test-client-secret"),
+        ".env should contain EXAMPLE_MCP_GOOGLE_CLIENT_SECRET"
+    );
+    assert!(
+        env_file.contains("EXAMPLE_MCP_AUTH_ADMIN_EMAIL=admin@example.test"),
+        ".env should contain EXAMPLE_MCP_AUTH_ADMIN_EMAIL"
+    );
+    assert_env_file_mode(&data_dir.join(".env"));
+}

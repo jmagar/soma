@@ -96,6 +96,10 @@ async fn probe(client: &reqwest::Client, url: &str) -> ServerState {
     }
 }
 
+#[cfg(test)]
+#[path = "watch_tests.rs"]
+mod tests;
+
 /// Format a state-change event line for the monitor stream.
 fn format_event(
     base_url: &str,

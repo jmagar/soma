@@ -393,6 +393,12 @@ generate-cli:
 
 # ── Publishing ────────────────────────────────────────────────────────────────
 
+# Bump the crate version using cargo-edit and regenerate Cargo.lock.
+# Requires cargo-edit: cargo install cargo-edit
+bump-version version:
+    cargo set-version {{version}}
+    cargo generate-lockfile
+
 # Bump version, tag, and push (triggers CI publish workflow)
 # Updates Cargo.toml + Cargo.lock only — plugin manifests have no version field
 # (GitHub SHA is the version for plugins; every push is a new release automatically)
@@ -413,8 +419,7 @@ publish bump="patch":
     esac
     NEW="${major}.${minor}.${patch}"
     echo "Version: ${CURRENT} → ${NEW}"
-    sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
-    cargo check 2>/dev/null || true
+    just bump-version "${NEW}"
     git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"
 

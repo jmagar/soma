@@ -80,11 +80,16 @@ fn binary_in_path_fails_for_nonexistent() {
 
 #[test]
 fn port_available_passes_for_free_port() {
-    // Bind a listener so we know which port is free, release it, then check.
-    // We just pick an ephemeral port and verify the check agrees.
-    let check = check_port_available(0); // port 0 is not valid for TcpListener::bind
-                                         // Port 0 fails to bind — that's expected; just confirm the category.
+    use std::net::TcpListener;
+    // Bind to port 0 to get an OS-assigned ephemeral port, then drop the
+    // listener so the port is free before calling check_port_available.
+    let listener = TcpListener::bind("127.0.0.1:0").expect("should bind to an ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // release the port before the check
+
+    let check = check_port_available(port);
     assert_eq!(check.category, "server");
+    assert!(check.ok, "a free port should pass the availability check");
 }
 
 #[test]

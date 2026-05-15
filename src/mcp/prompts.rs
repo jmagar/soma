@@ -36,3 +36,7 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> anyhow::Result<GetP
         other => Err(anyhow::anyhow!("unknown prompt: {other}")),
     }
 }
+
+#[cfg(test)]
+#[path = "prompts_tests.rs"]
+mod tests;

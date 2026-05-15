@@ -138,6 +138,9 @@ fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
 }
 
 fn setup_repair(config: &Config) -> Result<SetupReport> {
+    // L8: Two concurrent `setup repair` invocations can clobber each other's
+    // .env.tmp → .env rename. For a plugin hook triggered by a single Claude
+    // session this is benign, but a proper fix would use flock(2) on the data dir.
     let data_dir = setup_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
     write_env(&data_dir, config)?;
@@ -148,6 +151,20 @@ fn setup_repair(config: &Config) -> Result<SetupReport> {
     report.ran_repair = true;
 
     Ok(report.finish())
+}
+
+fn require_oauth_field(
+    report: &mut SetupReport,
+    value: &Option<String>,
+    code: &'static str,
+    message: &str,
+) {
+    if value.as_deref().unwrap_or("").is_empty() {
+        report.blocking_failures.push(SetupFailure {
+            code,
+            message: message.into(),
+        });
+    }
 }
 
 fn check_auth(config: &Config, report: &mut SetupReport) {
@@ -164,51 +181,30 @@ fn check_auth(config: &Config, report: &mut SetupReport) {
     }
 
     if config.mcp.auth.mode == AuthMode::OAuth {
-        if config
-            .mcp
-            .auth
-            .public_url
-            .as_deref()
-            .unwrap_or("")
-            .is_empty()
-        {
-            report.blocking_failures.push(SetupFailure {
-                code: "missing_oauth_public_url",
-                message: "EXAMPLE_MCP_PUBLIC_URL is required for OAuth mode".into(),
-            });
-        }
-        if config
-            .mcp
-            .auth
-            .google_client_id
-            .as_deref()
-            .unwrap_or("")
-            .is_empty()
-        {
-            report.blocking_failures.push(SetupFailure {
-                code: "missing_oauth_client_id",
-                message: "EXAMPLE_MCP_GOOGLE_CLIENT_ID is required for OAuth mode".into(),
-            });
-        }
-        if config
-            .mcp
-            .auth
-            .google_client_secret
-            .as_deref()
-            .unwrap_or("")
-            .is_empty()
-        {
-            report.blocking_failures.push(SetupFailure {
-                code: "missing_oauth_client_secret",
-                message: "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode".into(),
-            });
-        }
-        if config.mcp.auth.admin_email.is_empty() {
-            report.blocking_failures.push(SetupFailure {
-                code: "missing_oauth_admin_email",
-                message: "EXAMPLE_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode".into(),
-            });
-        }
+        require_oauth_field(
+            report,
+            &config.mcp.auth.public_url,
+            "missing_oauth_public_url",
+            "EXAMPLE_MCP_PUBLIC_URL is required for OAuth mode",
+        );
+        require_oauth_field(
+            report,
+            &config.mcp.auth.google_client_id,
+            "missing_oauth_client_id",
+            "EXAMPLE_MCP_GOOGLE_CLIENT_ID is required for OAuth mode",
+        );
+        require_oauth_field(
+            report,
+            &config.mcp.auth.google_client_secret,
+            "missing_oauth_client_secret",
+            "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode",
+        );
+        require_oauth_field(
+            report,
+            &Some(config.mcp.auth.admin_email.clone()),
+            "missing_oauth_admin_email",
+            "EXAMPLE_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode",
+        );
     } else if config.mcp.api_token.as_deref().unwrap_or("").is_empty() {
         report.blocking_failures.push(SetupFailure {
             code: "missing_mcp_token",
@@ -227,6 +223,10 @@ fn check_port(port: u16, report: &mut SetupReport) {
 }
 
 fn setup_data_dir() -> anyhow::Result<PathBuf> {
+    // L11: setup_data_dir uses CLAUDE_PLUGIN_DATA/EXAMPLE_HOME while Config::load
+    // searches ~/.example/config.toml first. In the plugin context CLAUDE_PLUGIN_DATA
+    // and the config search path should coincide, but they can diverge in non-standard
+    // deployments. TEMPLATE: align these when adapting the template.
     if let Some(val) =
         std::env::var_os("CLAUDE_PLUGIN_DATA").or_else(|| std::env::var_os("EXAMPLE_HOME"))
     {

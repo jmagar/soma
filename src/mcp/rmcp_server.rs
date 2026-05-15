@@ -67,18 +67,25 @@ impl ServerHandler for ExampleRmcpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let tool_name = request.name.to_string();
 
-        let action: String = request
+        // Extract action before scope check so a missing action returns the
+        // more useful "action is required" validation error, not DENY_SCOPE.
+        let action_opt: Option<String> = request
             .arguments
             .as_ref()
             .and_then(|m| m.get("action"))
             .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_owned();
+            .map(ToOwned::to_owned);
 
         let auth = require_auth_context(&self.state, &context)?;
-        if let (Some(auth), Some(required_scope)) = (auth, required_scope_for_action(&action)) {
-            check_scope(auth, required_scope, &action)?;
+        // Only scope-check when an action is present; dispatch_example will
+        // return the validation error for a missing action below.
+        if let (Some(auth), Some(action_str)) = (auth, action_opt.as_deref()) {
+            if let Some(required_scope) = required_scope_for_action(action_str) {
+                check_scope(auth, required_scope, action_str)?;
+            }
         }
+
+        let action: String = action_opt.unwrap_or_default();
 
         let arguments = request
             .arguments

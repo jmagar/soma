@@ -111,6 +111,7 @@ fn enforce_rest_scope(
 
 /// `GET /health` — liveness probe (unauthenticated).
 pub async fn health() -> impl IntoResponse {
+    tracing::debug!("health probe");
     Json(json!({ "status": "ok" }))
 }
 
@@ -130,6 +131,10 @@ pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
                 object.insert("server".into(), json!(state.config.server_name));
                 object.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
                 object.insert("transport".into(), json!("http"));
+            } else {
+                tracing::warn!(
+                    "status() returned a non-object value; metadata fields not injected"
+                );
             }
             Json(value).into_response()
         }

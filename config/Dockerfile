@@ -32,6 +32,9 @@ COPY apps/web/ ./
 RUN pnpm build
 
 # ── Stage 2: Builder ──────────────────────────────────────────────────────────
+# TEMPLATE: Pin to a digest for reproducible builds:
+#   docker pull rust:1.90-slim-bookworm
+#   docker inspect --format '{{index .RepoDigests 0}}' rust:1.90-slim-bookworm
 FROM rust:1.90-slim-bookworm AS builder
 
 WORKDIR /app
@@ -72,6 +75,9 @@ RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registr
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Minimal Debian image — no Rust toolchain, no build tools.
 # Only ca-certificates (for TLS) and curl (for HEALTHCHECK).
+# Pinned to bookworm-slim 2026-05-15 — update quarterly with:
+#   docker pull debian:bookworm-slim
+#   docker inspect --format '{{index .RepoDigests 0}}' debian:bookworm-slim
 FROM debian:bookworm-slim
 
 # Install runtime dependencies:

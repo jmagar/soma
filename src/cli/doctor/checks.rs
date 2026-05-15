@@ -223,6 +223,9 @@ fn redact(s: &str) -> String {
 /// If your upstream is not HTTP (e.g. GraphQL, gRPC), adapt this check.
 /// If the upstream requires auth, add the API key header:
 ///   `.header("x-api-key", api_key)`
+// L22: A new reqwest::Client is built per invocation. Acceptable here (doctor
+// is a one-shot CLI, not a request handler). Do NOT copy this pattern into
+// hot paths — use a shared Client on AppState instead.
 pub async fn check_upstream(base_url: &str) -> DoctorCheck {
     // TEMPLATE: Change "/health" to your upstream's actual probe path.
     let health_url = format!("{}/health", base_url.trim_end_matches('/'));

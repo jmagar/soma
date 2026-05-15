@@ -2546,7 +2546,7 @@ example-mcp v0.1.0 — environment check
 
   MCP server
   ──────────────────────────────────────────────
-  ✓ MCP port 3000:     available
+  ✓ MCP port 40060:    available  # TEMPLATE: canonical rmcp-template port is 40060 (EXAMPLE_MCP_PORT)
   ✓ Auth mode:         no-auth (EXAMPLE_NOAUTH=true)
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2685,7 +2685,8 @@ preflight() {
         || echo "⚠  EXAMPLE_API_KEY: not set (required before running the server)"
 
     # 7. Port availability (warn only)
-    local port="${EXAMPLE_MCP_PORT:-3000}"
+    # TEMPLATE: canonical rmcp-template port is 40060; update this default when adapting
+    local port="${EXAMPLE_MCP_PORT:-40060}"
     if ss -tlnp "sport = :${port}" 2>/dev/null | awk 'NR>1' | grep -q .; then
         echo "⚠  Port ${port}: already in use (change EXAMPLE_MCP_PORT if needed)"
     else

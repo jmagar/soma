@@ -176,3 +176,21 @@ async fn trusted_gateway_unscoped_bypasses_local_auth() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ok");
 }
+
+#[tokio::test]
+async fn oversized_body_returns_413() {
+    // The router mounts RequestBodyLimitLayer at 65_536 bytes (64 KiB).
+    // A body one byte over the limit must be rejected with HTTP 413.
+    let app = server::router(loopback_state());
+    let oversized_body = vec![b'x'; 65_537];
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/v1/example")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(oversized_body))
+        .expect("request should build");
+
+    let response = app.oneshot(request).await.expect("route should respond");
+
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
