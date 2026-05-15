@@ -51,6 +51,7 @@ docs/
   ├── PRE-COMMIT.md                   ← lefthook hooks, taplo, env guard
   ├── TESTING.md                      ← test strategy, sidecars, mcporter
   ├── MCPORTER.md                     ← live MCP integration testing
+  ├── RUST.md                         ← Rust build setup: system tools, global config, per-repo rules
   ├── XTASKS.md                       ← cargo xtask commands
   ├── JUSTFILE.md                     ← just recipes reference
   ├── SCRIPTS.md                      ← scripts/ directory reference

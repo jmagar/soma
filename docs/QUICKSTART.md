@@ -3,7 +3,11 @@
 ## Prerequisites
 
 - Rust 1.90+ (`rustup update stable`)
+- `clang` and `mold` for fast Linux builds: `apt install clang mold`
 - `just` command runner: `cargo install just` (optional but convenient)
+
+> See [docs/RUST.md](RUST.md) for the full system setup including the expected
+> `~/.cargo/config.toml`, the mold linker rationale, and Windows cross-compilation.
 
 ## 1. Run the stub template
 

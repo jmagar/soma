@@ -1,11 +1,16 @@
 # =============================================================================
-# .cargo/config.toml — Cargo configuration for rmcp-template workspace
+# .cargo/config.toml — Cargo workspace configuration for rmcp-template
 #
-# TEMPLATE: Copy this file unchanged to any new server repo.
-#           The [alias] section wires `cargo xtask` so it runs the xtask crate.
+# TEMPLATE: Copy this file unchanged to any new server repo derived from this
+#           template. The [alias] section wires `cargo xtask` so it runs the
+#           xtask crate.
 #
-# Without this alias, `cargo xtask <cmd>` fails with "no such command: xtask".
-# With it, cargo delegates to the xtask binary in the workspace.
+# Most build settings (linker, profile tuning, jobs) live in the developer's
+# ~/.cargo/config.toml. This file only adds workspace-local settings that the
+# global config cannot provide.
+#
+# See docs/RUST.md for the expected global config, system tool requirements,
+# and the rules for what belongs here vs. the global config.
 # =============================================================================
 
 [alias]
