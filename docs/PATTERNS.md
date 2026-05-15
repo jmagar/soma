@@ -935,13 +935,13 @@ echo "  3. Or:  ${BINARY} mcp             (stdio mode for Claude Code)"
 
 ## 17. mcporter Integration Test Pattern
 
-Every server has `tests/mcporter/test-mcp.sh` and `config/mcporter.json`.
+Every server has `tests/mcporter/test-mcp.sh` and, when useful for named server workflows, `config/mcporter.json`. The live harness covers MCP tools and MCP resources; add prompt coverage when mcporter exposes first-class prompt testing.
 
 ### Philosophy
 
 A test that checks `is_error: false` is not a good test — it only verifies the MCP
 protocol layer responded. A semantic test checks that the actual service data is present
-and structurally correct:
+and structurally correct. Resource tests follow the same rule: prove the resource content is the expected schema/document, not just that `resources/read` returned HTTP 200.
 
 ```bash
 # Bad test — only proves MCP responded
@@ -966,7 +966,7 @@ run_test "server info hostname non-empty" "example" '{"action":"server_info"}' \
 }
 ```
 
-### Semantic validation helpers in test-mcp.sh
+### Tool validation helpers in test-mcp.sh
 
 ```bash
 # Validate that a JSON path exists and is non-empty
@@ -983,6 +983,22 @@ assert node is not None and node != '' and node != [] and node != {}
 " 2>/dev/null || { echo "[FAIL] ${label}: missing or empty .${key_path}"; return 1; }
 }
 ```
+
+### Resource validation
+
+MCP resources are public contract, not implementation detail. Test every stable resource URI exported by the server. The template validates `example://schema/mcp-tool` by asserting:
+
+- the resource URI resolves
+- the returned content parses as JSON
+- the tool name is `example`
+- `inputSchema.type` is `object`
+- `inputSchema.properties.action` exists
+
+Prefer mcporter's resource command when available. Keep a JSON-RPC `resources/read` fallback while older local mcporter versions are still common.
+
+### Prompt validation
+
+When mcporter supports prompts directly, add a prompt suite beside tool/resource suites. Until then, prompt coverage should live in Rust tests for `src/mcp/prompts.rs` and in plugin/skill docs that demonstrate the expected prompt workflow.
 
 ### Non-destructive actions only
 

@@ -4,15 +4,18 @@
 //! Business logic lives in `app.rs`.
 
 use axum::{
-    extract::State,
+    extract::{Extension, State},
     http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
+use lab_auth::AuthContext;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::actions::{execute_service_action, ExampleAction};
-use crate::server::AppState;
+use crate::actions::{
+    execute_service_action, required_scope_for_action, ExampleAction, READ_SCOPE, WRITE_SCOPE,
+};
+use crate::server::{AppState, AuthPolicy};
 
 /// Request body for `POST /v1/example`.
 ///
@@ -33,10 +36,20 @@ pub struct ActionRequest {
 /// Response: `{"greeting": "Hello, Alice!", ...}`
 pub async fn api_dispatch(
     State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
     let result = match ExampleAction::from_rest(&body.action, &body.params) {
-        Ok(action) => execute_service_action(&state.service, &action).await,
+        Ok(action) => {
+            if let Some(response) = enforce_rest_scope(
+                &state,
+                auth.as_ref().map(|Extension(auth)| auth),
+                &body.action,
+            ) {
+                return response;
+            }
+            execute_service_action(&state.service, &action).await
+        }
         Err(error) => Err(error),
     };
 
@@ -56,6 +69,46 @@ pub async fn api_dispatch(
                 .into_response()
         }
     }
+}
+
+fn enforce_rest_scope(
+    state: &AppState,
+    auth: Option<&AuthContext>,
+    action: &str,
+) -> Option<axum::response::Response> {
+    if !matches!(&state.auth_policy, AuthPolicy::Mounted { .. }) {
+        return None;
+    }
+    let required_scope = required_scope_for_action(action)?;
+    let Some(auth) = auth else {
+        tracing::warn!(action = %action, "REST action denied: missing auth context");
+        return Some(
+            (
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "forbidden: missing auth context"})),
+            )
+                .into_response(),
+        );
+    };
+    let satisfied = auth.scopes.iter().any(|scope| {
+        scope == required_scope || (required_scope == READ_SCOPE && scope == WRITE_SCOPE)
+    });
+    if satisfied {
+        return None;
+    }
+    tracing::warn!(
+        subject = %auth.sub,
+        action = %action,
+        required_scope = %required_scope,
+        "REST action denied: insufficient scope"
+    );
+    Some(
+        (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": format!("forbidden: requires scope: {required_scope}")})),
+        )
+            .into_response(),
+    )
 }
 
 /// `GET /health` — liveness probe (unauthenticated).

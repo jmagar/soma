@@ -71,6 +71,28 @@ def validate_schema() -> None:
     require(isinstance(schema, dict), f"{SCHEMA}: schema root must be an object")
     require(schema.get("$schema") == "https://json-schema.org/draft/2020-12/schema", f"{SCHEMA}: expected JSON Schema draft 2020-12")
     require(schema.get("properties", {}).get("kind", {}).get("const") == "rmcp_template_scaffold_intent", f"{SCHEMA}: kind const drifted")
+    required = set(schema.get("required", []))
+    expected_required = {
+        "kind",
+        "schema_version",
+        "server_category",
+        "required_surfaces",
+        "project",
+        "upstream",
+        "runtime",
+        "mcp_primitives",
+        "deployment",
+        "plugins",
+        "publish_mcp",
+        "crawl_docs",
+        "handoff",
+        "policy",
+    }
+    require(required == expected_required, f"{SCHEMA}: root required fields drifted: {sorted(required)}")
+    properties = set(schema.get("properties", {}))
+    require(expected_required <= properties, f"{SCHEMA}: root properties missing required fields")
+    require("actions" not in properties, f"{SCHEMA}: legacy actions property must not exist")
+    require("resource_groups" not in json.dumps(schema), f"{SCHEMA}: legacy resource_groups field must not exist")
     auth_enum = set(schema.get("properties", {}).get("upstream", {}).get("properties", {}).get("auth_kind", {}).get("enum", []))
     require(auth_enum == AUTH_KINDS, f"{SCHEMA}: auth_kind enum mismatch: {sorted(auth_enum)}")
 
@@ -108,7 +130,9 @@ def validate_payload(payload: object, source: Path) -> None:
 
     project = payload["project"]
     require(isinstance(project, dict), f"{source}: project must be object")
-    require_keys(project, f"{source}: project", {"display_name", "crate_name", "binary_name", "service_name", "env_prefix"})
+    project_keys = {"display_name", "crate_name", "binary_name", "service_name", "env_prefix"}
+    require_keys(project, f"{source}: project", project_keys)
+    require_no_extra(project, f"{source}: project", project_keys)
     require(project["display_name"], f"{source}: project.display_name required")
     require(CRATE_RE.match(project["crate_name"]), f"{source}: invalid crate_name")
     require(CRATE_RE.match(project["binary_name"]), f"{source}: invalid binary_name")
@@ -143,10 +167,18 @@ def validate_payload(payload: object, source: Path) -> None:
         require(all(is_uri(item) for item in crawl[key]), f"{source}: crawl_docs.{key} entries must be URIs")
 
     handoff = payload["handoff"]
+    require(isinstance(handoff, dict), f"{source}: handoff must be object")
+    handoff_keys = {"recommended_skill", "instructions"}
+    require_keys(handoff, f"{source}: handoff", handoff_keys)
+    require_no_extra(handoff, f"{source}: handoff", handoff_keys)
     require(handoff.get("recommended_skill") == "scaffold-project", f"{source}: handoff.recommended_skill must be scaffold-project")
     require("approve" in handoff.get("instructions", "").lower(), f"{source}: handoff instructions must mention approval")
 
     policy = payload["policy"]
+    require(isinstance(policy, dict), f"{source}: policy must be object")
+    policy_keys = {"business_action_minimum_surfaces", "upstream_client_surfaces", "application_platform_surfaces"}
+    require_keys(policy, f"{source}: policy", policy_keys)
+    require_no_extra(policy, f"{source}: policy", policy_keys)
     require(policy.get("business_action_minimum_surfaces") == ["mcp", "cli"], f"{source}: business action minimum must be ['mcp', 'cli']")
     require(policy.get("upstream_client_surfaces") == ["mcp", "cli"], f"{source}: upstream policy mismatch")
     require(set(policy.get("application_platform_surfaces", [])) == {"api", "cli", "mcp", "web"}, f"{source}: application policy mismatch")

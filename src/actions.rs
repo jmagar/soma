@@ -65,6 +65,12 @@ pub fn rest_action_names() -> Vec<&'static str> {
         .collect()
 }
 
+pub fn is_rest_action(action: &str) -> bool {
+    ACTION_SPECS
+        .iter()
+        .any(|spec| spec.name == action && spec.transport == ActionTransport::Any)
+}
+
 pub fn mcp_only_action_names() -> Vec<&'static str> {
     ACTION_SPECS
         .iter()
@@ -101,6 +107,11 @@ impl ExampleAction {
     }
 
     pub fn from_rest(action: &str, params: &Value) -> Result<Self> {
+        if !is_rest_action(action) {
+            return Err(anyhow!(
+                "action={action} is not available over REST; use MCP or action=help for documentation"
+            ));
+        }
         Self::from_params(action, params)
     }
 
@@ -176,6 +187,7 @@ pub fn is_validation_error(error: &anyhow::Error) -> bool {
     message.contains(" is required")
         || message.contains(" must be a string")
         || message.contains("unknown example action")
+        || message.contains("not available over REST")
 }
 
 #[cfg(test)]
@@ -202,6 +214,8 @@ mod tests {
             mcp_only_action_names(),
             vec!["elicit_name", "scaffold_intent"]
         );
+        assert!(is_rest_action("greet"));
+        assert!(!is_rest_action("scaffold_intent"));
         assert_eq!(required_scope_for_action("help"), None);
         assert_eq!(required_scope_for_action("greet"), Some(READ_SCOPE));
         assert_eq!(required_scope_for_action("unknown"), Some(DENY_SCOPE));
@@ -267,6 +281,15 @@ mod tests {
         let action = ExampleAction::from_mcp_args(&json!({ "action": "scaffold_intent" }))
             .expect("scaffold_intent should parse");
         assert_eq!(action, ExampleAction::ScaffoldIntent);
+    }
+
+    #[test]
+    fn rest_rejects_mcp_only_actions() {
+        let error = ExampleAction::from_rest("scaffold_intent", &json!({})).unwrap_err();
+        assert!(error.to_string().contains("not available over REST"));
+
+        let error = ExampleAction::from_rest("elicit_name", &json!({})).unwrap_err();
+        assert!(error.to_string().contains("not available over REST"));
     }
 
     #[test]

@@ -202,9 +202,63 @@ print(len(d.get('result', {}).get('tools', [])))
 # ── mcporter wrappers ────────────────────────────────────────────────────────
 # Makes a single MCP tool call via mcporter and returns the JSON output.
 # TEMPLATE: Replace "example" tool name with your tool name.
+mcporter_supports_headers() {
+  mcporter call --help 2>/dev/null | grep -q -- '--header'
+}
+
+jsonrpc_tool_call() {
+  local tool="${1:?tool required}"
+  local args_json="${2:?args_json required}"
+  local payload
+  payload="$(python3 -c '
+import json, sys
+print(json.dumps({
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {"name": sys.argv[1], "arguments": json.loads(sys.argv[2])},
+}))
+' "${tool}" "${args_json}")"
+
+  curl -sf --max-time "$(( (CALL_TIMEOUT_MS + 999) / 1000 ))" \
+    -X POST "${MCP_URL}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    ${MCPORTER_HEADER_ARGS[@]+"${MCPORTER_HEADER_ARGS[@]}"} \
+    -d "${payload}" 2>>"${LOG_FILE}" \
+    | python3 -c '
+import json, sys
+try:
+    outer = json.load(sys.stdin)
+    if "error" in outer:
+        print(json.dumps({"error": outer["error"]}, indent=2))
+        sys.exit(0)
+    content = outer.get("result", {}).get("content", [])
+    first = content[0] if content else {}
+    if isinstance(first, dict) and isinstance(first.get("json"), dict):
+        print(json.dumps(first["json"], indent=2))
+        sys.exit(0)
+    text = first.get("text", "") if isinstance(first, dict) else ""
+    if text:
+        parsed = json.loads(text)
+        print(json.dumps(parsed, indent=2))
+        sys.exit(0)
+    print(json.dumps({"error": "empty tool result"}, indent=2))
+except Exception as exc:
+    print(json.dumps({"error": str(exc)}, indent=2))
+'
+}
+
 mcporter_call() {
   local tool="${1:?tool required}"
   local args_json="${2:?args_json required}"
+
+  if [[ ${#MCPORTER_HEADER_ARGS[@]} -gt 0 ]] && ! mcporter_supports_headers; then
+    printf "${C_YELLOW}[WARN]${C_RESET}  mcporter call lacks --header support; falling back to JSON-RPC tools/call\n" \
+      | tee -a "${LOG_FILE}" >&2
+    jsonrpc_tool_call "${tool}" "${args_json}"
+    return
+  fi
 
   mcporter call \
     --http-url "${MCP_URL}" \

@@ -23,7 +23,7 @@ It validates:
 - tool semantic behavior for `greet`, `echo`, `status`, and `help`
 - MCP resource behavior for `example://schema/mcp-tool`
 
-The resource suite prefers mcporter resource commands when available and falls back to JSON-RPC `resources/read` for older mcporter versions.
+The resource suite prefers mcporter resource commands when available and falls back to JSON-RPC `resources/read` for older mcporter versions. Likewise, bearer-auth tool calls fall back to JSON-RPC `tools/call` when the installed mcporter does not yet support HTTP headers on `mcporter call`.
 
 ## Configuration
 

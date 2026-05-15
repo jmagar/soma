@@ -23,7 +23,7 @@ Use this skill when the user says they want to:
 
 Do **not** use this skill for normal runtime interactions with a completed service. Use the service-specific skill/tool documentation for that.
 
-`scaffold_intent` is intentionally MCP-only. It is an exception to the normal MCP + CLI parity rule because it depends on MCP elicitation and plugin skill handoff; there is no true CLI equivalent for that user-permission flow.
+`scaffold_intent` is intentionally MCP-only. It is an exception to the normal MCP + CLI parity rule because it depends on MCP elicitation and plugin skill handoff; there is no true CLI equivalent for that user-permission flow. It is not treated as a business action for MCP + CLI parity; a future CLI planner, if added, would be separately scoped and not required for parity.
 
 ## Primary workflow
 
@@ -86,6 +86,19 @@ The tool returns an object like:
   }
 }
 ```
+
+## Fallback responses
+
+Only full success payloads should be validated against `docs/contracts/scaffold-intent.schema.json`.
+
+Expected non-planning responses:
+
+| `status` | Instruction |
+|---|---|
+| `no_input` | Stop and tell the user no scaffold intent was provided. |
+| `declined` | Stop and tell the user no plan will be generated. |
+| `cancelled` | Stop and offer to restart the wizard later. |
+| `elicitation_not_supported` | Ask the user to provide or confirm the same intent fields manually, then draft a plan from those answers. |
 
 ## Contract notes
 
@@ -166,7 +179,7 @@ If `publish_mcp` is `true`, include `server.json` in the plan and map the projec
 
 ### Docs crawling
 
-If `crawl_docs` contains `urls`, `repos`, or `search_topics`, add a research step to crawl or inspect those inputs via Axon before finalizing implementation details. Do not invent API shapes from the crawl request alone.
+If `crawl_docs` contains `urls`, `repos`, or `search_topics`, include a proposed research/crawl step in the plan. Do not crawl external URLs/repos before the user approves the plan or explicitly authorizes research. Do not invent API shapes from the crawl request alone.
 
 ## Surface policy
 
@@ -217,6 +230,8 @@ Use this approval wording:
 | `ExampleService` | `<ServiceName>Service` |
 | `EXAMPLE_*` | `<ENV_PREFIX>_*` |
 | `example:read` | `<service_name>:read` |
+
+Keep `scaffold_intent` MCP-only in scaffolded projects and rename its scope from `example:read` to `<service_name>:read`.
 
 ### 4. Runtime / Plugins / Deployment
 - Host/port: `<host>:<port>`

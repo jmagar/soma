@@ -78,7 +78,10 @@ def render() -> dict[str, Any]:
             "version": version,
             "description": (
                 "Generated OpenAPI schema for rmcp-template's REST surface. "
-                "TEMPLATE: rename Example identifiers and action schemas when adapting."
+                "TEMPLATE: rename Example identifiers and action schemas when adapting. "
+                "Auth modes: loopback/trusted-gateway deployments may have no local auth; "
+                "mounted bearer mode uses EXAMPLE_MCP_TOKEN; OAuth mode uses bearer JWTs. "
+                "REST actions require their action-specific scopes when auth is mounted."
             ),
         },
         "servers": [
@@ -150,7 +153,9 @@ def render() -> dict[str, Any]:
                     "summary": "Dispatch a REST action",
                     "description": (
                         "Thin REST shim over the shared service layer. MCP-only actions are "
-                        "not exposed here. Current REST actions: " + ", ".join(action_names) + "."
+                        "not exposed here. Current REST actions: " + ", ".join(action_names) + ". "
+                        "When auth is mounted, each action requires its declared scope; "
+                        "example:write satisfies example:read."
                     ),
                     "operationId": "dispatchExampleAction",
                     "security": [{"BearerAuth": []}],
@@ -187,7 +192,7 @@ def render() -> dict[str, Any]:
                     "type": "http",
                     "scheme": "bearer",
                     "bearerFormat": "opaque",
-                    "description": "Static bearer token unless OAuth mode is enabled.",
+                    "description": "Static bearer token in bearer mode; OAuth mode also uses bearer JWTs. Loopback and trusted-gateway modes may not require local auth.",
                 }
             },
             "schemas": {
