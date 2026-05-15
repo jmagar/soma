@@ -161,9 +161,25 @@ mcp__example__example(action="scaffold_intent")
     "service_name": "unraid",
     "env_prefix": "UNRAID"
   },
+  "upstream": {
+    "base_url_env": "UNRAID_API_URL",
+    "auth_kind": "api-key",
+    "resource_groups": ["vms", "shares", "docker"]
+  },
+  "actions": {
+    "read": ["list_vms", "get_status"],
+    "write": ["restart_vm"],
+    "mcp_only": [],
+    "cli_only_operational": ["serve", "mcp", "doctor", "watch", "setup"]
+  },
   "handoff": {
     "recommended_skill": "scaffold-project",
     "instructions": "Create an approval-first scaffold plan from this JSON. Do not mutate files until the user approves the plan."
+  },
+  "policy": {
+    "business_action_minimum_surfaces": ["mcp", "cli"],
+    "upstream_client_surfaces": ["mcp", "cli"],
+    "application_platform_surfaces": ["api", "cli", "mcp", "web"]
   }
 }
 ```

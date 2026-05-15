@@ -168,8 +168,9 @@ fn patterns_cmd(args: &[String]) -> Result<()> {
     for arg in args {
         match arg.as_str() {
             "--strict" => options.strict = true,
+            "--json" => options.json = true,
             "--help" | "-h" => {
-                println!("Usage: cargo xtask patterns [--strict]");
+                println!("Usage: cargo xtask patterns [--strict] [--json]");
                 return Ok(());
             }
             unknown => bail!("Unknown patterns option: {unknown}"),
@@ -396,7 +397,7 @@ COMMANDS:
   ci            Run all CI checks: fmt, clippy, nextest, taplo, audit
   symlink-docs  Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
   check-env     Validate required environment variables are set
-  patterns      Check static contracts from docs/PATTERNS.md (--strict fails on warnings)
+  patterns      Check static contracts from docs/PATTERNS.md (--strict, --json)
   help          Show this help
 
 TEMPLATE:

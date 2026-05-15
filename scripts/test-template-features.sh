@@ -87,7 +87,11 @@ fi
 
 expect_ok "plugin layout validator passes" bash scripts/validate-plugin-layout.sh
 expect_ok "schema docs checker passes" python3 scripts/check-schema-docs.py --check
-expect_ok "ascii checker catches allowed repo glyphs cleanly" just ascii-check
+expect_ok "ascii checker catches allowed repo glyphs cleanly" bash -c '
+  set -euo pipefail
+  mapfile -t files < <(git ls-files "*.md" "*.rs" "*.toml" "*.json" "*.yml" "*.yaml" "*.sh" "*.py" ":!:docs/references/**" ":!:docs/sessions/**")
+  python3 scripts/asciicheck.py "${files[@]}"
+'
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]

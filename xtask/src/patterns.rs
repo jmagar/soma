@@ -12,6 +12,7 @@ use reporter::PatternReporter;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PatternOptions {
     pub strict: bool,
+    pub json: bool,
 }
 
 pub fn run(options: PatternOptions) -> Result<()> {
@@ -27,7 +28,11 @@ pub fn run(options: PatternOptions) -> Result<()> {
     checks::config_and_auth(&mut reporter);
     checks::tooling(&mut reporter);
 
-    reporter.print();
+    if options.json {
+        reporter.print_json();
+    } else {
+        reporter.print();
+    }
     if reporter.has_failures() || (options.strict && reporter.has_warnings()) {
         if options.strict && reporter.has_warnings() {
             bail!("PATTERNS.md contract check failed in strict mode");

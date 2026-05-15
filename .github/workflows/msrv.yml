@@ -8,13 +8,15 @@ on:
 
 jobs:
   msrv:
-    name: Minimum Supported Rust Version (1.86)
+    name: Minimum Supported Rust Version (1.90)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Install Rust 1.86
-        uses: dtolnay/rust-toolchain@dd44c20b1206a46e25fba8503d5d7c9a33bd355a # 1.86
+      - name: Install Rust 1.90
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          rustup default 1.90.0
 
       - name: Cache Cargo
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

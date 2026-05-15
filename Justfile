@@ -188,6 +188,14 @@ schema-docs-check:
 patterns-check:
     cargo xtask patterns
 
+# Check PATTERNS.md contracts and fail on warnings
+patterns-strict:
+    cargo xtask patterns --strict
+
+# Emit PATTERNS.md contract findings as JSON
+patterns-json:
+    cargo xtask patterns --json
+
 # Run shell/Rust-adjacent template invariant smoke tests
 template-features:
     bash scripts/test-template-features.sh

@@ -21,6 +21,7 @@
 # TEMPLATE: bin/* covers all binaries — your renamed binary (e.g. bin/myservice)
 #           is automatically included. No need to list individual filenames.
 bin/* filter=lfs diff=lfs merge=lfs -text
+plugins/*/bin/* filter=lfs diff=lfs merge=lfs -text
 
 # ── Release archives ──────────────────────────────────────────────────────────
 # TEMPLATE: If your release workflow produces tarballs or zips (e.g. for GitHub

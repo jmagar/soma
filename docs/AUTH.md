@@ -127,7 +127,7 @@ The `AuthPolicy` enum in `src/server.rs` controls what the router does:
 
 | Policy | When | Auth enforced? | Scope checks? |
 |---|---|---|---|
-| `LoopbackDev` | Loopback bind with `EXAMPLE_MCP_NO_AUTH=true`, or stdio mode | No | No |
+| `LoopbackDev` | Loopback bind, or stdio mode. `EXAMPLE_MCP_NO_AUTH=true` also enables this policy for loopback development. | No | No |
 | `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `EXAMPLE_NOAUTH=true` | No | No |
 | `Mounted { auth_state: None }` | Bearer-only mode | Yes (token) | Yes |
 | `Mounted { auth_state: Some(_) }` | OAuth mode (+ optional token) | Yes (OAuth / token) | Yes |

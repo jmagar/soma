@@ -167,7 +167,7 @@ CLAUDE.md.local
 # The .gitkeep file is tracked so COPY apps/web/out/ in the Dockerfile always succeeds.
 apps/web/node_modules/
 apps/web/.next/
-apps/web/out/
 !apps/web/out/
+apps/web/out/*
 !apps/web/out/.gitkeep
 apps/web/.env*.local

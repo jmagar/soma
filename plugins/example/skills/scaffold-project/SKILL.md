@@ -7,6 +7,8 @@ description: Use this skill when the user wants to adapt rmcp-template for a new
 
 Use this skill to turn scaffold intent JSON into a concrete, user-approved plan for adapting `rmcp-template` into a real server.
 
+Canonical spec: `docs/specs/scaffold-intent-handoff.md`.
+
 ## Primary workflow
 
 1. Ask the MCP server to collect scaffold intent with elicitation:

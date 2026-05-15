@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Rust 1.86+ (`rustup update stable`)
+- Rust 1.90+ (`rustup update stable`)
 - `just` command runner: `cargo install just` (optional but convenient)
 
 ## 1. Run the stub template
