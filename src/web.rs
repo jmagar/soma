@@ -131,3 +131,7 @@ fn guess_mime(path: &str) -> &'static str {
         "application/octet-stream"
     }
 }
+
+#[cfg(test)]
+#[path = "web_tests.rs"]
+mod tests;

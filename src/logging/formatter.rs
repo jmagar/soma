@@ -238,7 +238,7 @@ pub(crate) fn should_skip_field(key: &str, value: &str) -> bool {
 ///
 /// If your service has additional domain-specific fields with semantic meaning,
 /// add them here. Example for a Gotify server:
-/// ```rust
+/// ```rust,ignore
 /// "app_id" | "app_token" => ansi256(aurora::ACCENT_PRIMARY, value),
 /// "priority" if value == "10" => ansi256(aurora::ERROR, value),
 /// "priority" if value >= "7" => ansi256(aurora::WARN, value),
@@ -324,7 +324,7 @@ fn write_level(writer: &mut Writer<'_>, level: tracing::Level, ansi: bool) -> st
 /// Implements tracing_subscriber's [`FormatEvent`] trait so it can be used
 /// as a drop-in replacement for the default formatter:
 ///
-/// ```rust
+/// ```rust,ignore
 /// use tracing_subscriber::fmt;
 /// use crate::logging::formatter::AuroraFormatter;
 ///
@@ -496,51 +496,6 @@ where
     }
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_field_value_quotes_whitespace() {
-        assert_eq!(format_field_value("hello world"), r#""hello world""#);
-        assert_eq!(format_field_value("nospace"), "nospace");
-    }
-
-    #[test]
-    fn should_skip_suppresses_false_flags() {
-        assert!(should_skip_field("subject_scoped", "false"));
-        assert!(should_skip_field("destructive", "false"));
-        assert!(!should_skip_field("subject_scoped", "true"));
-        assert!(!should_skip_field("error", "false"));
-    }
-
-    #[test]
-    fn sanitize_strips_c0_controls() {
-        let injected = "tool\x1b[31mFAKE";
-        let sanitized = sanitize_field_value(injected);
-        assert!(!sanitized.contains('\x1b'), "ESC should be replaced");
-        assert!(
-            sanitized.contains('\u{FFFD}'),
-            "should contain replacement char"
-        );
-    }
-
-    #[test]
-    fn sanitize_preserves_tab_and_newline() {
-        let value = "hello\tworld\nline2";
-        let sanitized = sanitize_field_value(value);
-        assert_eq!(sanitized, value, "tab and newline must not be replaced");
-    }
-
-    #[test]
-    fn sanitize_is_noop_for_clean_values() {
-        let value = "upstream-name/tool.call";
-        let sanitized = sanitize_field_value(value);
-        assert!(
-            matches!(sanitized, std::borrow::Cow::Borrowed(_)),
-            "clean values should borrow (zero allocation)"
-        );
-    }
-}
+#[path = "formatter_tests.rs"]
+mod tests;

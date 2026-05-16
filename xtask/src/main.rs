@@ -42,6 +42,7 @@ fn main() -> Result<()> {
         Some("symlink-docs") => symlink_docs(),
         Some("check-env") => check_env(),
         Some("patterns") => patterns_cmd(&args[1..]),
+        Some("check-test-siblings") => check_test_siblings(),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
             Ok(())
@@ -117,13 +118,13 @@ fn dist() -> Result<()> {
 ///
 /// TEMPLATE: Add or remove steps to match your CI pipeline.
 fn ci() -> Result<()> {
-    println!("==> [1/5] cargo fmt --check");
+    println!("==> [1/7] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/5] cargo clippy");
+    println!("==> [2/7] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [3/5] cargo nextest run --profile ci");
+    println!("==> [3/7] cargo nextest run --profile ci");
     // Falls back to cargo test if nextest isn't installed.
     // TEMPLATE: Remove the fallback once nextest is in your CI environment.
     if command_exists("cargo-nextest") {
@@ -133,7 +134,7 @@ fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [4/5] taplo check");
+    println!("==> [4/7] taplo check");
     // TEMPLATE: Remove this step if you don't use taplo.
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
@@ -141,11 +142,14 @@ fn ci() -> Result<()> {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/6] cargo xtask patterns");
+    println!("==> [5/7] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [6/6] cargo audit");
+    println!("==> [6/7] cargo xtask check-test-siblings");
+    check_test_siblings().context("test sibling check failed")?;
+
+    println!("==> [7/7] cargo audit");
     // TEMPLATE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
@@ -157,6 +161,96 @@ fn ci() -> Result<()> {
 
     println!("==> All CI checks passed!");
     Ok(())
+}
+
+// =============================================================================
+// check-test-siblings — Verify every src/*.rs has a sibling *_tests.rs
+// =============================================================================
+
+/// Walk `src/` and report any `.rs` file missing a sibling `{stem}_tests.rs`.
+///
+/// Files excluded from the check:
+///   - Files whose name already ends in `_tests.rs` (they ARE the test sibling)
+///   - `main.rs` and `lib.rs` (entry points with no business logic to unit-test)
+///
+/// Exits non-zero if any sibling is missing, so it can gate CI.
+fn check_test_siblings() -> Result<()> {
+    const EXEMPT: &[&str] = &["main.rs", "lib.rs"];
+
+    let mut missing: Vec<std::path::PathBuf> = Vec::new();
+
+    for entry in WalkDir::new("src")
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+
+        if !name.ends_with(".rs") || name.ends_with("_tests.rs") || EXEMPT.contains(&name) {
+            continue;
+        }
+
+        let stem = name.strip_suffix(".rs").unwrap();
+        let sibling = path
+            .parent()
+            .unwrap()
+            .join(format!("{stem}_tests.rs"));
+
+        if !sibling.exists() {
+            missing.push(path.to_owned());
+        }
+    }
+
+    // Reverse check: _tests.rs files with no corresponding source are orphans.
+    let mut orphans: Vec<std::path::PathBuf> = Vec::new();
+    for entry in WalkDir::new("src")
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+    {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if !name.ends_with("_tests.rs") {
+            continue;
+        }
+        let stem = name.strip_suffix("_tests.rs").unwrap();
+        let source = path.parent().unwrap().join(format!("{stem}.rs"));
+        if !source.exists() {
+            orphans.push(path.to_owned());
+        }
+    }
+
+    let ok = missing.is_empty() && orphans.is_empty();
+
+    if !missing.is_empty() {
+        println!("==> check-test-siblings: missing _tests.rs siblings ({}):", missing.len());
+        for path in &missing {
+            let stem = path.file_stem().unwrap().to_string_lossy();
+            println!("  MISSING  {}  (expected {}_tests.rs)", path.display(), stem);
+        }
+    }
+    if !orphans.is_empty() {
+        println!("==> check-test-siblings: orphaned _tests.rs files ({}):", orphans.len());
+        for path in &orphans {
+            println!("  ORPHAN   {}  (no matching source file)", path.display());
+        }
+    }
+    if ok {
+        println!("==> check-test-siblings: all source files have a _tests.rs sibling");
+        return Ok(());
+    }
+    bail!(
+        "{} missing, {} orphaned",
+        missing.len(),
+        orphans.len()
+    );
 }
 
 // =============================================================================
@@ -393,12 +487,13 @@ USAGE:
   cargo xtask <command>
 
 COMMANDS:
-  dist          Build release binary and copy to bin/ (Git LFS)
-  ci            Run all CI checks: fmt, clippy, nextest, taplo, audit
-  symlink-docs  Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
-  check-env     Validate required environment variables are set
-  patterns      Check static contracts from docs/PATTERNS.md (--strict, --json)
-  help          Show this help
+  dist                  Build release binary and copy to bin/ (Git LFS)
+  ci                    Run all CI checks: fmt, clippy, nextest, taplo, audit
+  symlink-docs          Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
+  check-env             Validate required environment variables are set
+  check-test-siblings   Verify every src/*.rs has a sibling *_tests.rs
+  patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
+  help                  Show this help
 
 TEMPLATE:
   Add commands by extending the match block in xtask/src/main.rs.

@@ -116,66 +116,20 @@ pub fn truncate_if_needed(text: &str) -> std::borrow::Cow<'_, str> {
         notice.len()
     );
 
-    // Find the last valid UTF-8 boundary within the content budget so the final
-    // string including the notice does not exceed MAX_RESPONSE_BYTES.
-    // `str::floor_char_boundary` is stable since Rust 1.86 (MSRV is 1.90).
-    let boundary = text.floor_char_boundary(content_budget);
+    // Find the last valid UTF-8 char boundary at or before content_budget.
+    // Walks back at most 3 bytes (max UTF-8 char width is 4).
+    let boundary = {
+        let mut b = content_budget;
+        while !text.is_char_boundary(b) {
+            b -= 1;
+        }
+        b
+    };
     let truncated = &text[..boundary];
 
     std::borrow::Cow::Owned(format!("{truncated}{notice}"))
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn short_text_passes_through_unchanged() {
-        let text = "hello world";
-        assert_eq!(truncate_if_needed(text), text);
-    }
-
-    #[test]
-    fn empty_string_passes_through() {
-        assert_eq!(truncate_if_needed(""), "");
-    }
-
-    #[test]
-    fn text_at_exact_limit_passes_through() {
-        let text = "x".repeat(MAX_RESPONSE_BYTES);
-        let result = truncate_if_needed(&text);
-        assert!(!result.contains("[TRUNCATED"));
-        assert_eq!(result.len(), MAX_RESPONSE_BYTES);
-    }
-
-    #[test]
-    fn text_over_limit_is_truncated() {
-        let text = "x".repeat(MAX_RESPONSE_BYTES + 100);
-        let result = truncate_if_needed(&text);
-        assert!(result.contains("[TRUNCATED"));
-        assert!(result.contains("limit/offset"));
-        assert!(result.len() <= MAX_RESPONSE_BYTES);
-    }
-
-    #[test]
-    fn truncation_notice_mentions_token_limit() {
-        let text = "y".repeat(MAX_RESPONSE_BYTES + 1);
-        let result = truncate_if_needed(&text);
-        assert!(result.contains("10K tokens"));
-    }
-
-    #[test]
-    fn truncates_at_utf8_boundary() {
-        // Build a string where the truncation budget falls inside a multi-byte char.
-        // Each '€' is 3 bytes (0xE2 0x82 0xAC). Fill just past the limit.
-        let mut text = "a".repeat(MAX_RESPONSE_BYTES - 1);
-        text.push('€'); // starts at byte MAX_RESPONSE_BYTES-1, ends at MAX_RESPONSE_BYTES+1
-        let result = truncate_if_needed(&text);
-        let notice_start = result.find("[TRUNCATED").expect("notice should be present") - 2;
-        assert!(result[..notice_start].chars().all(|c| c == 'a'));
-        assert!(result.len() <= MAX_RESPONSE_BYTES);
-        assert!(result.contains("[TRUNCATED"));
-    }
-}
+#[path = "token_limit_tests.rs"]
+mod tests;

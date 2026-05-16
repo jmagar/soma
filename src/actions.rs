@@ -3,6 +3,39 @@ use serde_json::{json, Value};
 
 use crate::app::ExampleService;
 
+// ── Validation error type ─────────────────────────────────────────────────────
+
+#[derive(Debug)]
+pub enum ValidationError {
+    MissingAction,
+    MissingField { field: String },
+    WrongType { field: String },
+    NotAvailableOverRest { action: String },
+    UnknownAction { action: String },
+}
+
+impl std::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingAction => write!(f, "action is required"),
+            Self::MissingField { field } => {
+                write!(f, "`{field}` is required and must not be empty")
+            }
+            Self::WrongType { field } => write!(f, "`{field}` must be a string"),
+            Self::NotAvailableOverRest { action } => write!(
+                f,
+                "action={action} is not available over REST; use MCP or action=help for documentation"
+            ),
+            Self::UnknownAction { action } => write!(
+                f,
+                "unknown example action: {action}; use action=help for documentation"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
 pub const READ_SCOPE: &str = "example:read";
 pub const WRITE_SCOPE: &str = "example:write";
 pub const DENY_SCOPE: &str = "example:__deny__";
@@ -111,15 +144,16 @@ impl ExampleAction {
         let action = args
             .get("action")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("action is required"))?;
+            .ok_or(ValidationError::MissingAction)?;
         Self::from_params(action, args)
     }
 
     pub fn from_rest(action: &str, params: &Value) -> Result<Self> {
         if !is_rest_action(action) {
-            return Err(anyhow!(
-                "action={action} is not available over REST; use MCP or action=help for documentation"
-            ));
+            return Err(ValidationError::NotAvailableOverRest {
+                action: action.to_owned(),
+            }
+            .into());
         }
         Self::from_params(action, params)
     }
@@ -131,17 +165,20 @@ impl ExampleAction {
             }),
             "echo" => {
                 let message = optional_string_param(params, "message")?
-                    .filter(|message| !message.is_empty())
-                    .ok_or_else(|| anyhow!("`message` is required for action=echo"))?;
+                    .filter(|m| !m.is_empty())
+                    .ok_or_else(|| ValidationError::MissingField {
+                        field: "message".into(),
+                    })?;
                 Ok(Self::Echo { message })
             }
             "status" => Ok(Self::Status),
             "help" => Ok(Self::Help),
             "elicit_name" => Ok(Self::ElicitName),
             "scaffold_intent" => Ok(Self::ScaffoldIntent),
-            other => Err(anyhow!(
-                "unknown example action: {other}; use action=help for documentation"
-            )),
+            other => Err(ValidationError::UnknownAction {
+                action: other.to_owned(),
+            }
+            .into()),
         }
     }
 }
@@ -182,17 +219,13 @@ fn optional_string_param(params: &Value, name: &str) -> Result<Option<String>> {
         None => Ok(None),
         Some(value) => value
             .as_str()
-            .map(|value| Some(value.to_owned()))
-            .ok_or_else(|| anyhow!("`{name}` must be a string")),
+            .map(|s| Some(s.to_owned()))
+            .ok_or_else(|| ValidationError::WrongType { field: name.into() }.into()),
     }
 }
 
 pub fn is_validation_error(error: &anyhow::Error) -> bool {
-    let message = error.to_string();
-    message.contains(" is required")
-        || message.contains(" must be a string")
-        || message.contains("unknown example action")
-        || message.contains("not available over REST")
+    error.downcast_ref::<ValidationError>().is_some()
 }
 
 #[cfg(test)]

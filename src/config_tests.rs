@@ -78,35 +78,32 @@ fn call_env_bool(key: &str, raw: &str) -> anyhow::Result<bool> {
 
 #[test]
 fn env_bool_accepts_1() {
-    assert_eq!(call_env_bool("TEST_ENV_BOOL_1", "1").unwrap(), true);
+    assert!(call_env_bool("TEST_ENV_BOOL_1", "1").unwrap());
 }
 
 #[test]
 fn env_bool_accepts_true() {
-    assert_eq!(call_env_bool("TEST_ENV_BOOL_TRUE", "true").unwrap(), true);
+    assert!(call_env_bool("TEST_ENV_BOOL_TRUE", "true").unwrap());
 }
 
 #[test]
 fn env_bool_accepts_yes() {
-    assert_eq!(call_env_bool("TEST_ENV_BOOL_YES", "yes").unwrap(), true);
+    assert!(call_env_bool("TEST_ENV_BOOL_YES", "yes").unwrap());
 }
 
 #[test]
 fn env_bool_accepts_0() {
-    assert_eq!(call_env_bool("TEST_ENV_BOOL_0", "0").unwrap(), false);
+    assert!(!call_env_bool("TEST_ENV_BOOL_0", "0").unwrap());
 }
 
 #[test]
 fn env_bool_accepts_false() {
-    assert_eq!(
-        call_env_bool("TEST_ENV_BOOL_FALSE", "false").unwrap(),
-        false
-    );
+    assert!(!call_env_bool("TEST_ENV_BOOL_FALSE", "false").unwrap());
 }
 
 #[test]
 fn env_bool_accepts_no() {
-    assert_eq!(call_env_bool("TEST_ENV_BOOL_NO", "no").unwrap(), false);
+    assert!(!call_env_bool("TEST_ENV_BOOL_NO", "no").unwrap());
 }
 
 #[test]

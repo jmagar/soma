@@ -154,3 +154,7 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
     let pos = args.iter().position(|a| a == flag)?;
     args.get(pos + 1).cloned()
 }
+
+#[cfg(test)]
+#[path = "cli_tests.rs"]
+mod tests;

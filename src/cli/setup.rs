@@ -292,3 +292,7 @@ fn write_env(data_dir: &Path, config: &Config) -> Result<()> {
     })?;
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "setup_tests.rs"]
+mod tests;

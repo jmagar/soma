@@ -17,6 +17,7 @@ pub mod app;
 pub mod cli;
 pub mod config;
 pub mod example;
+pub mod logging;
 pub mod mcp;
 pub mod server;
 pub mod token_limit;
@@ -107,11 +108,11 @@ pub mod testing {
             ),
             (
                 "EXAMPLE_MCP_AUTH_SQLITE_PATH".into(),
-                data_dir.join("auth.db").to_str().unwrap().into(),
+                data_dir.join("auth.db").display().to_string(),
             ),
             (
                 "EXAMPLE_MCP_AUTH_KEY_PATH".into(),
-                data_dir.join("auth-jwt.pem").to_str().unwrap().into(),
+                data_dir.join("auth-jwt.pem").display().to_string(),
             ),
         ];
 

@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::actions::{
-    execute_service_action, required_scope_for_action, ExampleAction, READ_SCOPE, WRITE_SCOPE,
+    execute_service_action, required_scope_for_action, ExampleAction,
 };
 use crate::server::{AppState, AuthPolicy};
 
@@ -148,3 +148,7 @@ pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "api_tests.rs"]
+mod tests;

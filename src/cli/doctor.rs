@@ -369,3 +369,7 @@ fn print_doctor_report(checks: &[DoctorCheck]) {
     }
     println!();
 }
+
+#[cfg(test)]
+#[path = "doctor_tests.rs"]
+mod tests;

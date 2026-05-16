@@ -105,3 +105,7 @@ pub const WARN: u8 = 180;
 /// Aurora uses muted red (ANSI 174) for better readability while still
 /// clearly indicating error state. It's noticeable without being alarming.
 pub const ERROR: u8 = 174;
+
+#[cfg(test)]
+#[path = "aurora_tests.rs"]
+mod tests;
