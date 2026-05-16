@@ -165,6 +165,9 @@ jobs:
       - name: Check PATTERNS.md contracts
         run: cargo xtask patterns
 
+      - name: Check test sibling coverage
+        run: cargo xtask check-test-siblings
+
       - name: Validate plugin layout
         run: bash scripts/validate-plugin-layout.sh
 

@@ -102,6 +102,33 @@ fn unknown_action_mentions_help() {
 }
 
 #[test]
+fn all_parse_errors_are_classified_as_validation_errors() {
+    let cases: &[anyhow::Error] = &[
+        ExampleAction::from_mcp_args(&json!({})).unwrap_err(),
+        ExampleAction::from_mcp_args(&json!({ "action": "echo" })).unwrap_err(),
+        ExampleAction::from_rest("echo", &json!({ "message": "" })).unwrap_err(),
+        ExampleAction::from_rest("greet", &json!({ "name": 42 })).unwrap_err(),
+        ExampleAction::from_rest("scaffold_intent", &json!({})).unwrap_err(),
+        ExampleAction::from_rest("missing", &json!({})).unwrap_err(),
+    ];
+    for (i, err) in cases.iter().enumerate() {
+        assert!(
+            is_validation_error(err),
+            "case {i}: expected validation error, got: {err}"
+        );
+    }
+}
+
+#[test]
+fn non_validation_errors_are_not_classified_as_validation_errors() {
+    let err = anyhow::anyhow!("something unexpected went wrong");
+    assert!(
+        !is_validation_error(&err),
+        "plain anyhow errors must not be classified as validation errors"
+    );
+}
+
+#[test]
 fn scopes_satisfy_write_implies_read() {
     let write = vec![WRITE_SCOPE.to_string()];
     assert!(scopes_satisfy(&write, READ_SCOPE));

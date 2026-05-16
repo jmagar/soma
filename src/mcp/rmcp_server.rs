@@ -108,7 +108,7 @@ impl ServerHandler for ExampleRmcpServer {
                 );
                 tool_result_from_json(result)
             }
-            Err(error) if is_validation_error(&error) => {
+            Err(error) if crate::actions::is_validation_error(&error) => {
                 tracing::warn!(
                     tool = %tool_name,
                     elapsed_ms = started.elapsed().as_millis(),
@@ -304,10 +304,6 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
 
 fn scope_satisfied(token_scopes: &[String], required: &str) -> bool {
     crate::actions::scopes_satisfy(token_scopes, required)
-}
-
-fn is_validation_error(error: &anyhow::Error) -> bool {
-    crate::actions::is_validation_error(error)
 }
 
 #[cfg(test)]
