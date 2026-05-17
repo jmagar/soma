@@ -1,9 +1,9 @@
-use crate::actions::action_names;
+use crate::actions::mcp_action_names;
 
 use super::tool_definitions;
 
 #[test]
-fn schema_action_enum_comes_from_action_metadata() {
+fn schema_action_enum_comes_from_mcp_action_metadata() {
     let tools = tool_definitions();
     let enum_values = tools[0]["inputSchema"]["properties"]["action"]["enum"]
         .as_array()
@@ -12,7 +12,8 @@ fn schema_action_enum_comes_from_action_metadata() {
         .map(|value| value.as_str().expect("action enum values are strings"))
         .collect::<Vec<_>>();
 
-    assert_eq!(enum_values, action_names());
+    // Only MCP-enabled actions appear in the tool schema.
+    assert_eq!(enum_values, mcp_action_names());
 }
 
 #[test]

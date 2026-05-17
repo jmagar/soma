@@ -115,3 +115,52 @@ fn test_scaffold_intent_action_parses_for_mcp_dispatch() {
         .expect("scaffold_intent should parse for MCP dispatch");
     assert_eq!(action, ExampleAction::ScaffoldIntent);
 }
+
+#[test]
+fn test_config_actions_rejected_for_mcp_dispatch() {
+    // config_* live in the service layer and are reachable from CLI + REST,
+    // but MCP exposure is off by default — see ACTION_SPECS.mcp_enabled.
+    let err = ExampleAction::from_mcp_args(
+        &json!({ "action": "config_set", "key": "mcp.host", "value": "0.0.0.0" }),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("not available over MCP"));
+
+    let err = ExampleAction::from_mcp_args(&json!({ "action": "config_list" })).unwrap_err();
+    assert!(err.to_string().contains("not available over MCP"));
+}
+
+#[test]
+fn test_config_actions_parse_for_rest_dispatch() {
+    let action = ExampleAction::from_rest(
+        "config_set",
+        &json!({ "key": "mcp.host", "value": "0.0.0.0" }),
+    )
+    .expect("config_set should parse over REST");
+    assert_eq!(
+        action,
+        ExampleAction::ConfigSet {
+            key: "mcp.host".into(),
+            value: "0.0.0.0".into()
+        }
+    );
+
+    // The other config_* actions parse the same way; just smoke-test names so
+    // the action-parity xtask sees them referenced.
+    assert!(matches!(
+        ExampleAction::from_rest("config_list", &json!({})).unwrap(),
+        ExampleAction::ConfigList
+    ));
+    assert!(matches!(
+        ExampleAction::from_rest("config_path", &json!({})).unwrap(),
+        ExampleAction::ConfigPath
+    ));
+    assert!(matches!(
+        ExampleAction::from_rest("config_get", &json!({ "key": "mcp.host" })).unwrap(),
+        ExampleAction::ConfigGet { .. }
+    ));
+    assert!(matches!(
+        ExampleAction::from_rest("config_unset", &json!({ "key": "mcp.host" })).unwrap(),
+        ExampleAction::ConfigUnset { .. }
+    ));
+}

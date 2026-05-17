@@ -12,18 +12,43 @@ fn action_metadata_is_the_action_source_of_truth() {
             "status",
             "elicit_name",
             "scaffold_intent",
-            "help"
+            "help",
+            "config_list",
+            "config_get",
+            "config_set",
+            "config_unset",
+            "config_path",
         ]
     );
-    assert_eq!(rest_action_names(), vec!["greet", "echo", "status", "help"]);
+    // REST gets the business actions plus the config_* family.
     assert_eq!(
-        mcp_only_action_names(),
-        vec!["elicit_name", "scaffold_intent"]
+        rest_action_names(),
+        vec![
+            "greet",
+            "echo",
+            "status",
+            "help",
+            "config_list",
+            "config_get",
+            "config_set",
+            "config_unset",
+            "config_path",
+        ]
+    );
+    // MCP gets the business actions plus elicitation, but NOT config_*.
+    assert_eq!(
+        mcp_action_names(),
+        vec!["greet", "echo", "status", "elicit_name", "scaffold_intent", "help"]
     );
     assert!(is_rest_action("greet"));
     assert!(!is_rest_action("scaffold_intent"));
+    assert!(is_rest_action("config_set"));
+    assert!(!is_mcp_action("config_set"));
+    assert!(is_mcp_action("elicit_name"));
     assert_eq!(required_scope_for_action("help"), None);
     assert_eq!(required_scope_for_action("greet"), Some(READ_SCOPE));
+    assert_eq!(required_scope_for_action("config_set"), Some(WRITE_SCOPE));
+    assert_eq!(required_scope_for_action("config_list"), Some(READ_SCOPE));
     assert_eq!(required_scope_for_action("unknown"), Some(DENY_SCOPE));
 }
 
@@ -93,6 +118,34 @@ fn rest_rejects_mcp_only_actions() {
 
     let error = ExampleAction::from_rest("elicit_name", &json!({})).unwrap_err();
     assert!(error.to_string().contains("not available over REST"));
+}
+
+#[test]
+fn mcp_rejects_rest_only_actions() {
+    let error =
+        ExampleAction::from_mcp_args(&json!({ "action": "config_set", "key": "k", "value": "v" }))
+            .unwrap_err();
+    assert!(error.to_string().contains("not available over MCP"));
+
+    let error = ExampleAction::from_mcp_args(&json!({ "action": "config_list" })).unwrap_err();
+    assert!(error.to_string().contains("not available over MCP"));
+}
+
+#[test]
+fn config_get_requires_key() {
+    let error = ExampleAction::from_rest("config_get", &json!({})).unwrap_err();
+    assert!(error.to_string().contains("`key` is required"));
+}
+
+#[test]
+fn config_set_requires_key_and_value() {
+    let missing_value =
+        ExampleAction::from_rest("config_set", &json!({ "key": "mcp.host" })).unwrap_err();
+    assert!(missing_value.to_string().contains("`value` is required"));
+
+    let missing_key =
+        ExampleAction::from_rest("config_set", &json!({ "value": "0.0.0.0" })).unwrap_err();
+    assert!(missing_key.to_string().contains("`key` is required"));
 }
 
 #[test]

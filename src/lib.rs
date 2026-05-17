@@ -16,6 +16,7 @@ pub mod api;
 pub mod app;
 pub mod cli;
 pub mod config;
+pub mod config_store;
 pub mod example;
 pub mod logging;
 pub mod mcp;

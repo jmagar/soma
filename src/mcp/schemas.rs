@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-use crate::actions::action_names;
+use crate::actions::mcp_action_names;
 
 /// Cached JSON schema definitions (static data, built once at first call).
 static TOOL_DEFINITIONS: OnceLock<Vec<Value>> = OnceLock::new();
@@ -35,7 +35,7 @@ fn build_tool_definitions() -> Vec<Value> {
                 "action": {
                     "type": "string",
                     "description": "The operation to perform.",
-                    "enum": action_names()
+                    "enum": mcp_action_names()
                 },
                 "name": {
                     "type": "string",

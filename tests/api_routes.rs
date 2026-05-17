@@ -94,7 +94,7 @@ async fn rest_rejects_mcp_only_actions_as_bad_requests() {
 }
 
 #[tokio::test]
-async fn rest_help_excludes_mcp_only_actions_from_rest_actions() {
+async fn rest_help_lists_rest_and_mcp_actions_separately() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(
         app,
@@ -106,10 +106,32 @@ async fn rest_help_excludes_mcp_only_actions_from_rest_actions() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["actions"], json!(["greet", "echo", "status", "help"]));
+    // REST gets business actions plus the config_* family.
     assert_eq!(
-        body["mcp_only_actions"],
-        json!(["elicit_name", "scaffold_intent"])
+        body["actions"],
+        json!([
+            "greet",
+            "echo",
+            "status",
+            "help",
+            "config_list",
+            "config_get",
+            "config_set",
+            "config_unset",
+            "config_path",
+        ])
+    );
+    // MCP gets the business actions plus elicitation, but no config_*.
+    assert_eq!(
+        body["mcp_actions"],
+        json!([
+            "greet",
+            "echo",
+            "status",
+            "elicit_name",
+            "scaffold_intent",
+            "help"
+        ])
     );
 }
 
@@ -122,7 +144,17 @@ async fn openapi_json_is_public_and_excludes_mcp_only_actions() {
     assert_eq!(body["openapi"], "3.1.0");
     assert_eq!(
         body["components"]["schemas"]["ActionName"]["enum"],
-        json!(["greet", "echo", "status", "help"])
+        json!([
+            "greet",
+            "echo",
+            "status",
+            "help",
+            "config_list",
+            "config_get",
+            "config_set",
+            "config_unset",
+            "config_path",
+        ])
     );
 }
 

@@ -134,6 +134,7 @@ async fn run_cli() -> Result<()> {
             cli::watch::run_watch(&base, interval).await
         }
         Some(cli::Command::Setup(command)) => cli::run_setup(&config, command).await,
+        Some(cli::Command::Config(command)) => cli::run_config(&config.example, command),
         Some(cmd) => cli::run(cmd, &config.example).await,
         None => {
             eprintln!("Unknown command. Run `example --help` for usage.");
@@ -195,6 +196,12 @@ fn print_usage() {
   example setup check               Check plugin setup without mutating appdata
   example setup repair              Create missing appdata/env setup files
   example setup plugin-hook [--no-repair]  Plugin hook JSON contract
+
+  example config [list]             List all configurable keys + values
+  example config get KEY            Print the current resolved value
+  example config set KEY VALUE      Persist KEY=VALUE to .env or config.toml
+  example config unset KEY          Remove KEY from .env or config.toml
+  example config path               Print resolved .env and config.toml paths
 
   example --help                    Show this help
   example --version                 Show version

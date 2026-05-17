@@ -283,6 +283,16 @@ Example: `{ "action": "scaffold_intent" }`
 Show this documentation.
 Example: `{ "action": "help" }`
 
+## Config actions (REST + CLI only)
+
+`config_list`, `config_get`, `config_set`, `config_unset`, and `config_path`
+read and write the server's persistent config (`.env` and `config.toml`).
+These are **not** exposed over MCP by default — `mcp_enabled: false` in
+`ACTION_SPECS` — to keep config writes off the wire from arbitrary MCP
+clients. Use the CLI (`example config set KEY VALUE`) or POST to
+`/v1/example` instead. Flip the flag in `src/actions.rs` if you want MCP
+access in your deployment.
+
 ## Adding a new action
 
 1. Add the action metadata to `ACTION_SPECS` in `actions.rs`.

@@ -105,7 +105,7 @@
           "actions"
         ],
         "summary": "Dispatch a REST action",
-        "description": "Thin REST shim over the shared service layer. MCP-only actions are not exposed here. Current REST actions: greet, echo, status, help. When auth is mounted, each action requires its declared scope; example:write satisfies example:read.",
+        "description": "Thin REST shim over the shared service layer. MCP-only actions are not exposed here. Current REST actions: greet, echo, status, help, config_list, config_get, config_set, config_unset, config_path. When auth is mounted, each action requires its declared scope; example:write satisfies example:read.",
         "operationId": "dispatchExampleAction",
         "security": [
           {
@@ -145,6 +145,43 @@
                 "help": {
                   "value": {
                     "action": "help",
+                    "params": {}
+                  }
+                },
+                "config_list": {
+                  "value": {
+                    "action": "config_list",
+                    "params": {}
+                  }
+                },
+                "config_get": {
+                  "value": {
+                    "action": "config_get",
+                    "params": {
+                      "key": "mcp.host"
+                    }
+                  }
+                },
+                "config_set": {
+                  "value": {
+                    "action": "config_set",
+                    "params": {
+                      "key": "mcp.host",
+                      "value": "0.0.0.0"
+                    }
+                  }
+                },
+                "config_unset": {
+                  "value": {
+                    "action": "config_unset",
+                    "params": {
+                      "key": "mcp.host"
+                    }
+                  }
+                },
+                "config_path": {
+                  "value": {
+                    "action": "config_path",
                     "params": {}
                   }
                 }
@@ -195,7 +232,12 @@
           "greet",
           "echo",
           "status",
-          "help"
+          "help",
+          "config_list",
+          "config_get",
+          "config_set",
+          "config_unset",
+          "config_path"
         ],
         "description": "REST-capable action names from src/actions.rs."
       },
@@ -308,7 +350,7 @@
         "type": "object",
         "required": [
           "actions",
-          "mcp_only_actions",
+          "mcp_actions",
           "usage",
           "examples"
         ],
@@ -319,7 +361,7 @@
               "$ref": "#/components/schemas/ActionName"
             }
           },
-          "mcp_only_actions": {
+          "mcp_actions": {
             "type": "array",
             "items": {
               "type": "string"
@@ -398,7 +440,27 @@
       "greet",
       "echo",
       "status",
+      "help",
+      "config_list",
+      "config_get",
+      "config_set",
+      "config_unset",
+      "config_path"
+    ],
+    "mcp_actions": [
+      "greet",
+      "echo",
+      "status",
+      "elicit_name",
+      "scaffold_intent",
       "help"
+    ],
+    "rest_only_actions": [
+      "config_list",
+      "config_get",
+      "config_set",
+      "config_unset",
+      "config_path"
     ],
     "mcp_only_actions": [
       "elicit_name",

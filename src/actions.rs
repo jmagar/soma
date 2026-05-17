@@ -11,6 +11,7 @@ pub enum ValidationError {
     MissingField { field: String },
     WrongType { field: String },
     NotAvailableOverRest { action: String },
+    NotAvailableOverMcp { action: String },
     UnknownAction { action: String },
 }
 
@@ -25,6 +26,10 @@ impl std::fmt::Display for ValidationError {
             Self::NotAvailableOverRest { action } => write!(
                 f,
                 "action={action} is not available over REST; use MCP or action=help for documentation"
+            ),
+            Self::NotAvailableOverMcp { action } => write!(
+                f,
+                "action={action} is not available over MCP; use the CLI or REST API instead"
             ),
             Self::UnknownAction { action } => write!(
                 f,
@@ -49,49 +54,107 @@ pub fn scopes_satisfy(token_scopes: &[String], required: &str) -> bool {
         .any(|s| s == required || (required == READ_SCOPE && s == WRITE_SCOPE))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ActionTransport {
-    Any,
-    McpOnly,
-}
-
+/// Per-transport availability for an action.
+///
+/// Each transport is gated by a boolean so an action can be exposed to any
+/// combination of CLI / REST / MCP. The CLI calls service methods directly,
+/// so its flag exists for documentation and `help` output only — there is no
+/// runtime check against it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActionSpec {
     pub name: &'static str,
     pub required_scope: Option<&'static str>,
-    pub transport: ActionTransport,
+    pub cli_enabled: bool,
+    pub rest_enabled: bool,
+    pub mcp_enabled: bool,
 }
 
 pub const ACTION_SPECS: &[ActionSpec] = &[
     ActionSpec {
         name: "greet",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::Any,
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: true,
     },
     ActionSpec {
         name: "echo",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::Any,
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: true,
     },
     ActionSpec {
         name: "status",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::Any,
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: true,
     },
     ActionSpec {
         name: "elicit_name",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::McpOnly,
+        cli_enabled: false,
+        rest_enabled: false,
+        mcp_enabled: true,
     },
     ActionSpec {
         name: "scaffold_intent",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::McpOnly,
+        cli_enabled: false,
+        rest_enabled: false,
+        mcp_enabled: true,
     },
     ActionSpec {
         name: "help",
         required_scope: None,
-        transport: ActionTransport::Any,
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: true,
+    },
+    // ── config_* actions ─────────────────────────────────────────────────────
+    //
+    // Disabled in MCP by default: a leaked bearer token with example:write
+    // scope would otherwise let an MCP client overwrite secrets / auth flags
+    // in `.env` and `config.toml`. CLI operators have local shell access
+    // anyway, and REST is intended for human/script administrators authed
+    // against the static bearer or OAuth — both higher-trust than an
+    // arbitrary MCP client. Flip `mcp_enabled: true` here if your deployment
+    // accepts the tradeoff.
+    ActionSpec {
+        name: "config_list",
+        required_scope: Some(READ_SCOPE),
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: false,
+    },
+    ActionSpec {
+        name: "config_get",
+        required_scope: Some(READ_SCOPE),
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: false,
+    },
+    ActionSpec {
+        name: "config_set",
+        required_scope: Some(WRITE_SCOPE),
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: false,
+    },
+    ActionSpec {
+        name: "config_unset",
+        required_scope: Some(WRITE_SCOPE),
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: false,
+    },
+    ActionSpec {
+        name: "config_path",
+        required_scope: Some(READ_SCOPE),
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: false,
     },
 ];
 
@@ -102,7 +165,15 @@ pub fn action_names() -> Vec<&'static str> {
 pub fn rest_action_names() -> Vec<&'static str> {
     ACTION_SPECS
         .iter()
-        .filter(|spec| spec.transport == ActionTransport::Any)
+        .filter(|spec| spec.rest_enabled)
+        .map(|spec| spec.name)
+        .collect()
+}
+
+pub fn mcp_action_names() -> Vec<&'static str> {
+    ACTION_SPECS
+        .iter()
+        .filter(|spec| spec.mcp_enabled)
         .map(|spec| spec.name)
         .collect()
 }
@@ -110,15 +181,13 @@ pub fn rest_action_names() -> Vec<&'static str> {
 pub fn is_rest_action(action: &str) -> bool {
     ACTION_SPECS
         .iter()
-        .any(|spec| spec.name == action && spec.transport == ActionTransport::Any)
+        .any(|spec| spec.name == action && spec.rest_enabled)
 }
 
-pub fn mcp_only_action_names() -> Vec<&'static str> {
+pub fn is_mcp_action(action: &str) -> bool {
     ACTION_SPECS
         .iter()
-        .filter(|spec| spec.transport == ActionTransport::McpOnly)
-        .map(|spec| spec.name)
-        .collect()
+        .any(|spec| spec.name == action && spec.mcp_enabled)
 }
 
 pub fn required_scope_for_action(action: &str) -> Option<&'static str> {
@@ -137,6 +206,11 @@ pub enum ExampleAction {
     Help,
     ElicitName,
     ScaffoldIntent,
+    ConfigList,
+    ConfigGet { key: String },
+    ConfigSet { key: String, value: String },
+    ConfigUnset { key: String },
+    ConfigPath,
 }
 
 impl ExampleAction {
@@ -145,6 +219,12 @@ impl ExampleAction {
             .get("action")
             .and_then(Value::as_str)
             .ok_or(ValidationError::MissingAction)?;
+        if !is_mcp_action(action) && action_exists(action) {
+            return Err(ValidationError::NotAvailableOverMcp {
+                action: action.to_owned(),
+            }
+            .into());
+        }
         Self::from_params(action, args)
     }
 
@@ -175,12 +255,28 @@ impl ExampleAction {
             "help" => Ok(Self::Help),
             "elicit_name" => Ok(Self::ElicitName),
             "scaffold_intent" => Ok(Self::ScaffoldIntent),
+            "config_list" => Ok(Self::ConfigList),
+            "config_path" => Ok(Self::ConfigPath),
+            "config_get" => Ok(Self::ConfigGet {
+                key: required_string_param(params, "key")?,
+            }),
+            "config_set" => Ok(Self::ConfigSet {
+                key: required_string_param(params, "key")?,
+                value: required_string_param(params, "value")?,
+            }),
+            "config_unset" => Ok(Self::ConfigUnset {
+                key: required_string_param(params, "key")?,
+            }),
             other => Err(ValidationError::UnknownAction {
                 action: other.to_owned(),
             }
             .into()),
         }
     }
+}
+
+fn action_exists(action: &str) -> bool {
+    ACTION_SPECS.iter().any(|spec| spec.name == action)
 }
 
 pub async fn execute_service_action(
@@ -198,18 +294,25 @@ pub async fn execute_service_action(
         ExampleAction::ScaffoldIntent => Err(anyhow!(
             "action=scaffold_intent is only available over MCP because it requires elicitation"
         )),
+        ExampleAction::ConfigList => service.config_list(),
+        ExampleAction::ConfigGet { key } => service.config_get(key),
+        ExampleAction::ConfigSet { key, value } => service.config_set(key, value),
+        ExampleAction::ConfigUnset { key } => service.config_unset(key),
+        ExampleAction::ConfigPath => service.config_paths(),
     }
 }
 
 pub fn rest_help() -> Value {
     json!({
         "actions": rest_action_names(),
-        "mcp_only_actions": mcp_only_action_names(),
+        "mcp_actions": mcp_action_names(),
         "usage": "POST /v1/example with {\"action\": \"<action>\", \"params\": {...}}",
         "examples": {
             "greet":  {"action": "greet",  "params": {"name": "Alice"}},
             "echo":   {"action": "echo",   "params": {"message": "Hello!"}},
             "status": {"action": "status", "params": {}},
+            "config_set":  {"action": "config_set",  "params": {"key": "mcp.host", "value": "0.0.0.0"}},
+            "config_get":  {"action": "config_get",  "params": {"key": "mcp.host"}},
         }
     })
 }
@@ -222,6 +325,12 @@ fn optional_string_param(params: &Value, name: &str) -> Result<Option<String>> {
             .map(|s| Some(s.to_owned()))
             .ok_or_else(|| ValidationError::WrongType { field: name.into() }.into()),
     }
+}
+
+fn required_string_param(params: &Value, name: &str) -> Result<String> {
+    optional_string_param(params, name)?
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| ValidationError::MissingField { field: name.into() }.into())
 }
 
 pub fn is_validation_error(error: &anyhow::Error) -> bool {

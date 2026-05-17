@@ -65,6 +65,31 @@ impl ExampleService {
         self.client.status().await
     }
 
+    /// List every configurable key with its current value and target file.
+    pub fn config_list(&self) -> Result<Value> {
+        crate::config_store::list()
+    }
+
+    /// Return the resolved value of a single config key.
+    pub fn config_get(&self, key: &str) -> Result<Value> {
+        crate::config_store::get(key)
+    }
+
+    /// Persist a config value to `.env` or `config.toml` (chosen per key).
+    pub fn config_set(&self, key: &str, value: &str) -> Result<Value> {
+        crate::config_store::set(key, value)
+    }
+
+    /// Remove a config key from its target file.
+    pub fn config_unset(&self, key: &str) -> Result<Value> {
+        crate::config_store::unset(key)
+    }
+
+    /// Return the resolved paths of `.env` and `config.toml`.
+    pub fn config_paths(&self) -> Result<Value> {
+        crate::config_store::paths()
+    }
+
     /// Convert elicited scaffold requirements into the handoff contract consumed by the skill.
     pub fn scaffold_intent(&self, input: ScaffoldIntent) -> Value {
         let category = normalize_category(&input.server_category);

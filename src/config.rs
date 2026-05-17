@@ -226,10 +226,18 @@ impl Config {
         let mut config = Config::default();
 
         // Search for config.toml in priority order (§25: appdata convention):
-        //   1. ~/<SERVICE_HOME_DIRNAME>/config.toml  — user's persistent config (primary)
-        //   2. ./config.toml                         — local dev / Docker mount fallback
+        //   1. $CLAUDE_PLUGIN_DATA/config.toml  — explicit plugin override
+        //   2. $EXAMPLE_HOME/config.toml         — explicit appdata override
+        //      (matches the path `setup repair` and `config set` write to)
+        //   3. ~/<SERVICE_HOME_DIRNAME>/config.toml — user's persistent config
+        //   4. ./config.toml                        — local dev / Docker mount fallback
         let candidate_paths = {
             let mut paths = vec![];
+            for var in ["CLAUDE_PLUGIN_DATA", "EXAMPLE_HOME"] {
+                if let Some(dir) = std::env::var_os(var) {
+                    paths.push(std::path::PathBuf::from(dir).join("config.toml"));
+                }
+            }
             if let Some(home) = std::env::var_os("HOME") {
                 paths.push(
                     std::path::PathBuf::from(home)

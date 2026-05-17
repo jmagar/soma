@@ -132,6 +132,12 @@ the user for input mid-call via `peer.elicit()`); that interaction model does no
 translate to a one-shot CLI call. Resources and prompts are MCP protocol concepts
 with no CLI analogue.
 
+**Exception — REST + CLI only:** The `config_*` action family is intentionally
+off-limits on MCP (see `mcp_enabled: false` in `ACTION_SPECS`). Config writes
+touch `.env` and `config.toml` on the server's filesystem; allowing an
+arbitrary MCP client to invoke them with a single leaked bearer token would
+let it overwrite secrets and auth flags. Use the CLI or REST API instead.
+
 | Service Method | MCP Action | CLI Command | Notes |
 |---|---|---|---|
 | `service.greet(name)` | `example(action="greet", name="...")` | `example greet [--name N]` | `name` optional in both |
@@ -139,6 +145,11 @@ with no CLI analogue.
 | `service.status()` | `example(action="status")` | `example status` | |
 | _(MCP client interaction)_ | `example(action="elicit_name")` | _(MCP-only — no CLI equivalent)_ | Requires elicitation-capable client |
 | _(MCP elicitation wizard)_ | `example(action="scaffold_intent")` | _(MCP-only — no CLI equivalent)_ | Combines elicitation + skill handoff; no one-shot CLI equivalent |
+| `service.config_list()` | _(REST/CLI only — `mcp_enabled: false`)_ | `example config list` | Resolves env > toml > default |
+| `service.config_get(key)` | _(REST/CLI only)_ | `example config get KEY` | Same resolution as the server sees |
+| `service.config_set(key, value)` | _(REST/CLI only)_ | `example config set KEY VALUE` | Writes to `.env` (secrets/URLs) or `config.toml` (knobs) |
+| `service.config_unset(key)` | _(REST/CLI only)_ | `example config unset KEY` | Removes the entry from its target file |
+| `service.config_paths()` | _(REST/CLI only)_ | `example config path` | Prints resolved `.env` + `config.toml` paths |
 | _(built-in)_ | `example(action="help")` | `example --help` | MCP returns structured JSON; CLI prints usage |
 
 **TEMPLATE:** Replace this table with your service's actual actions when you adapt

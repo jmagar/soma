@@ -13,6 +13,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- TEMPLATE: Add changes here as you work. They move to a version section on release. -->
 
+### Added
+
+- `src/config_store.rs` — shared config read/write layer behind the new
+  `config_list`, `config_get`, `config_set`, `config_unset`, and `config_path`
+  actions. Each key is routed to the appropriate file (`.env` for secrets/URLs,
+  `config.toml` for tuning knobs) and `config.toml` writes preserve comments
+  and key order via `toml_edit`.
+- `example config [list|get|set|unset|path]` CLI subcommand — thin shim over
+  `ExampleService::config_*`.
+
+### Changed
+
+- `ActionSpec` replaces the single `ActionTransport` enum with three explicit
+  flags (`cli_enabled`, `rest_enabled`, `mcp_enabled`) so actions can be
+  exposed to any combination of transports. The new `config_*` actions are
+  enabled on CLI + REST and disabled on MCP by default to keep config writes
+  off the wire from arbitrary MCP clients; flip the flag in `ACTION_SPECS` to
+  opt in.
+- `Config::load()` now also searches `$CLAUDE_PLUGIN_DATA/config.toml` and
+  `$EXAMPLE_HOME/config.toml` before the user appdata dir, so `config set`
+  writes round-trip correctly under plugin and `EXAMPLE_HOME` deployments.
+
 ## [0.4.0] — 2026-05-14
 
 ### Added

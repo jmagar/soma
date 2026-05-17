@@ -5,11 +5,28 @@ const ACTION_TEST_COVERAGE_EXCEPTIONS: &[&str] = &[
     "elicit_name",
 ];
 
+/// Actions reachable from the CLI under a sub-command rather than as a
+/// top-level `Command` variant. The xtask parity check would otherwise flag
+/// them as missing.
+const CLI_SUBCOMMAND_ACTIONS: &[&str] = &[
+    // `config list`, `config get`, etc. — see `src/cli/config.rs`.
+    "config_list",
+    "config_get",
+    "config_set",
+    "config_unset",
+    "config_path",
+];
+
 pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
     let actions_text = read_file("src/actions.rs");
     let action_specs = action_specs_body(&actions_text).unwrap_or(&actions_text);
     let action_names = extract_action_names(action_specs);
-    let mcp_only = extract_mcp_only_actions(action_specs);
+    let mcp_only = extract_actions_with(action_specs, |block| {
+        block.contains("mcp_enabled: true") && block.contains("rest_enabled: false")
+    });
+    let rest_only = extract_actions_with(action_specs, |block| {
+        block.contains("rest_enabled: true") && block.contains("mcp_enabled: false")
+    });
 
     if action_names.is_empty() {
         reporter.fail(
@@ -24,7 +41,8 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
     let tests = read_file("tests/tool_dispatch.rs");
     let cli = read_file("src/cli.rs");
 
-    let schema_uses_metadata = schema.contains("action_names()");
+    let schema_uses_metadata =
+        schema.contains("action_names()") || schema.contains("mcp_action_names()");
     let missing_schema = if schema_uses_metadata {
         Vec::new()
     } else {
@@ -36,6 +54,9 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
     };
     let missing_help = action_names
         .iter()
+        // REST-only actions are not in the MCP HELP_TEXT — they're not
+        // exposed over MCP at all.
+        .filter(|action| !rest_only.contains(action))
         .filter(|action| {
             !tools.contains(&format!("### {action}")) && !tools.contains(&format!("`{action}`"))
         })
@@ -53,6 +74,7 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
     let missing_cli = action_names
         .iter()
         .filter(|action| action.as_str() != "help" && !mcp_only.contains(action))
+        .filter(|action| !CLI_SUBCOMMAND_ACTIONS.contains(&action.as_str()))
         .filter(|action| {
             !cli.contains(&format!("\"{action}\"")) && !cli.contains(&variant_name(action))
         })
@@ -129,14 +151,14 @@ fn extract_action_names(text: &str) -> Vec<String> {
         .collect()
 }
 
-fn extract_mcp_only_actions(text: &str) -> Vec<String> {
+fn extract_actions_with(text: &str, predicate: impl Fn(&str) -> bool) -> Vec<String> {
     let mut actions = Vec::new();
     for block in text.split("ActionSpec").skip(1) {
         let Some(end) = block.find('}') else {
             continue;
         };
         let block = &block[..end];
-        if !block.contains("ActionTransport::McpOnly") {
+        if !predicate(block) {
             continue;
         }
         if let Some(name) = extract_action_names(block).into_iter().next() {
@@ -169,12 +191,23 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
     ActionSpec {
         name: "greet",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::Any,
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: true,
     },
     ActionSpec {
         name: "elicit_name",
         required_scope: Some(READ_SCOPE),
-        transport: ActionTransport::McpOnly,
+        cli_enabled: false,
+        rest_enabled: false,
+        mcp_enabled: true,
+    },
+    ActionSpec {
+        name: "config_set",
+        required_scope: Some(WRITE_SCOPE),
+        cli_enabled: true,
+        rest_enabled: true,
+        mcp_enabled: false,
     },
 ];
 
@@ -193,13 +226,28 @@ pub fn rest_help() {
     #[test]
     fn action_name_parser_ignores_non_metadata_names() {
         let body = action_specs_body(ACTIONS).unwrap();
-        assert_eq!(extract_action_names(body), vec!["greet", "elicit_name"]);
+        assert_eq!(
+            extract_action_names(body),
+            vec!["greet", "elicit_name", "config_set"]
+        );
     }
 
     #[test]
-    fn mcp_only_parser_detects_transport_restriction() {
+    fn mcp_only_parser_detects_mcp_only_actions() {
         let body = action_specs_body(ACTIONS).unwrap();
-        assert_eq!(extract_mcp_only_actions(body), vec!["elicit_name"]);
+        let mcp_only = extract_actions_with(body, |b| {
+            b.contains("mcp_enabled: true") && b.contains("rest_enabled: false")
+        });
+        assert_eq!(mcp_only, vec!["elicit_name"]);
+    }
+
+    #[test]
+    fn rest_only_parser_detects_rest_only_actions() {
+        let body = action_specs_body(ACTIONS).unwrap();
+        let rest_only = extract_actions_with(body, |b| {
+            b.contains("rest_enabled: true") && b.contains("mcp_enabled: false")
+        });
+        assert_eq!(rest_only, vec!["config_set"]);
     }
 
     #[test]

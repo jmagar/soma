@@ -18,10 +18,12 @@ use anyhow::{anyhow, Result};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
+pub mod config;
 pub mod doctor;
 pub mod setup;
 pub mod watch;
 
+pub use config::{run_config, ConfigCommand};
 pub use setup::{run_setup, SetupCommand};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -52,6 +54,8 @@ pub enum Command {
         interval: u64,
     },
     Setup(SetupCommand),
+    /// Read or write persistent config values in `.env` and `config.toml`.
+    Config(ConfigCommand),
 }
 
 /// Parse CLI arguments from `std::env::args()`.
@@ -117,6 +121,7 @@ where
                 }
                 _ => None,
             },
+            "config" => parse_config_args(rest)?.map(Command::Config),
             _ => None,
         },
     };
@@ -137,9 +142,12 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
         Command::Greet { name } => service.greet(name.as_deref()).await?,
         Command::Echo { message } => service.echo(message).await?,
         Command::Status => service.status().await?,
-        // Doctor, Watch, and Setup are never dispatched via this function — main.rs
-        // handles them directly because they need config.mcp fields.
-        Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => {
+        // Doctor, Watch, Setup, and Config are never dispatched via this function —
+        // main.rs handles them directly because they need the full Config.
+        Command::Doctor { .. }
+        | Command::Watch { .. }
+        | Command::Setup(_)
+        | Command::Config(_) => {
             unreachable!("dispatched directly in main.rs::run_cli")
         }
     };
@@ -153,6 +161,24 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
     let pos = args.iter().position(|a| a == flag)?;
     args.get(pos + 1).cloned()
+}
+
+fn parse_config_args(rest: &[String]) -> Result<Option<ConfigCommand>> {
+    match rest {
+        [] => Ok(Some(ConfigCommand::List)),
+        [sub] if sub == "list" => Ok(Some(ConfigCommand::List)),
+        [sub] if sub == "path" => Ok(Some(ConfigCommand::Path)),
+        [sub, key] if sub == "get" => Ok(Some(ConfigCommand::Get { key: key.clone() })),
+        [sub, ..] if sub == "get" => Err(anyhow!("config get requires a <key> argument")),
+        [sub, key, value] if sub == "set" => Ok(Some(ConfigCommand::Set {
+            key: key.clone(),
+            value: value.clone(),
+        })),
+        [sub, ..] if sub == "set" => Err(anyhow!("config set requires <key> <value> arguments")),
+        [sub, key] if sub == "unset" => Ok(Some(ConfigCommand::Unset { key: key.clone() })),
+        [sub, ..] if sub == "unset" => Err(anyhow!("config unset requires a <key> argument")),
+        _ => Ok(None),
+    }
 }
 
 #[cfg(test)]

@@ -21,6 +21,9 @@ REST_ENDPOINT = "/v1/example"
 _PARAM_EXAMPLES: dict[str, dict] = {
     "greet": {"name": "Alice"},
     "echo": {"message": "Hello!"},
+    "config_get": {"key": "mcp.host"},
+    "config_set": {"key": "mcp.host", "value": "0.0.0.0"},
+    "config_unset": {"key": "mcp.host"},
 }
 
 
@@ -36,15 +39,16 @@ def package_version() -> str:
     return match.group(1)
 
 
-def action_entries() -> list[dict[str, str]]:
+def action_entries() -> list[dict[str, Any]]:
     text = read(ACTIONS)
     entries = re.findall(r"ActionSpec\s*\{(.*?)\}", text, re.S)
-    actions: list[dict[str, str]] = []
+    actions: list[dict[str, Any]] = []
     for entry in entries:
         name_match = re.search(r'name:\s*"([^"]+)"', entry)
         scope_match = re.search(r"required_scope:\s*([^,\n]+)", entry)
-        transport_match = re.search(r"transport:\s*ActionTransport::(\w+)", entry)
-        if not name_match or not scope_match or not transport_match:
+        rest_match = re.search(r"rest_enabled:\s*(true|false)", entry)
+        mcp_match = re.search(r"mcp_enabled:\s*(true|false)", entry)
+        if not name_match or not scope_match or not rest_match or not mcp_match:
             continue
         scope_expr = scope_match.group(1).strip()
         if scope_expr == "None":
@@ -59,14 +63,15 @@ def action_entries() -> list[dict[str, str]]:
             {
                 "name": name_match.group(1),
                 "scope": scope,
-                "transport": transport_match.group(1),
+                "rest_enabled": rest_match.group(1) == "true",
+                "mcp_enabled": mcp_match.group(1) == "true",
             }
         )
     return actions
 
 
-def rest_actions() -> list[dict[str, str]]:
-    return [action for action in action_entries() if action["transport"] == "Any"]
+def rest_actions() -> list[dict[str, Any]]:
+    return [action for action in action_entries() if action["rest_enabled"]]
 
 
 def schema_ref(name: str) -> dict[str, str]:
@@ -269,10 +274,10 @@ def render() -> dict[str, Any]:
                 },
                 "HelpResponse": {
                     "type": "object",
-                    "required": ["actions", "mcp_only_actions", "usage", "examples"],
+                    "required": ["actions", "mcp_actions", "usage", "examples"],
                     "properties": {
                         "actions": {"type": "array", "items": schema_ref("ActionName")},
-                        "mcp_only_actions": {"type": "array", "items": {"type": "string"}},
+                        "mcp_actions": {"type": "array", "items": {"type": "string"}},
                         "usage": {"type": "string"},
                         "examples": {"type": "object", "additionalProperties": True},
                     },
@@ -308,7 +313,19 @@ def render() -> dict[str, Any]:
             "source": "scripts/check-openapi.py",
             "action_metadata": "src/actions.rs",
             "rest_actions": action_names,
-            "mcp_only_actions": [action["name"] for action in action_entries() if action["transport"] == "McpOnly"],
+            "mcp_actions": [
+                action["name"] for action in action_entries() if action["mcp_enabled"]
+            ],
+            "rest_only_actions": [
+                action["name"]
+                for action in action_entries()
+                if action["rest_enabled"] and not action["mcp_enabled"]
+            ],
+            "mcp_only_actions": [
+                action["name"]
+                for action in action_entries()
+                if action["mcp_enabled"] and not action["rest_enabled"]
+            ],
         },
     }
 
@@ -332,7 +349,11 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     expected = [action["name"] for action in rest_actions()]
     if action_enum != expected:
         failures.append(f"ActionName enum drifted: expected {expected}, got {action_enum}")
-    mcp_only = {a["name"] for a in action_entries() if a["transport"] == "McpOnly"}
+    mcp_only = {
+        a["name"]
+        for a in action_entries()
+        if a["mcp_enabled"] and not a["rest_enabled"]
+    }
     for name in sorted(mcp_only):
         if name in (action_enum or []):
             failures.append(f"MCP-only action {name!r} must not appear in REST ActionName enum")
