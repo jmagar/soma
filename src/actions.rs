@@ -46,7 +46,7 @@ pub const WRITE_SCOPE: &str = "example:write";
 pub const DENY_SCOPE: &str = "example:__deny__";
 
 /// Returns true if `token_scopes` satisfy `required`.
-/// Write scope satisfies read (write ⊇ read).
+/// Write scope satisfies read (write implies read).
 /// Single source of truth — called from both REST and MCP enforcement paths.
 pub fn scopes_satisfy(token_scopes: &[String], required: &str) -> bool {
     token_scopes
@@ -121,16 +121,23 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
     // against the static bearer or OAuth — both higher-trust than an
     // arbitrary MCP client. Flip `mcp_enabled: true` here if your deployment
     // accepts the tradeoff.
+    //
+    // All five actions require `example:write` even the read-only ones:
+    // `config_list` and `config_get` return values for keys like
+    // `example.api_key`, `mcp.api_token`, `mcp.auth.google_client_secret`.
+    // Treating them as `example:read` would let any read-scope token
+    // exfiltrate secrets via POST /v1/example. The read/write boundary is
+    // about administrative state, not request semantics — config is admin.
     ActionSpec {
         name: "config_list",
-        required_scope: Some(READ_SCOPE),
+        required_scope: Some(WRITE_SCOPE),
         cli_enabled: true,
         rest_enabled: true,
         mcp_enabled: false,
     },
     ActionSpec {
         name: "config_get",
-        required_scope: Some(READ_SCOPE),
+        required_scope: Some(WRITE_SCOPE),
         cli_enabled: true,
         rest_enabled: true,
         mcp_enabled: false,
@@ -151,7 +158,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
     },
     ActionSpec {
         name: "config_path",
-        required_scope: Some(READ_SCOPE),
+        required_scope: Some(WRITE_SCOPE),
         cli_enabled: true,
         rest_enabled: true,
         mcp_enabled: false,

@@ -38,7 +38,14 @@ fn action_metadata_is_the_action_source_of_truth() {
     // MCP gets the business actions plus elicitation, but NOT config_*.
     assert_eq!(
         mcp_action_names(),
-        vec!["greet", "echo", "status", "elicit_name", "scaffold_intent", "help"]
+        vec![
+            "greet",
+            "echo",
+            "status",
+            "elicit_name",
+            "scaffold_intent",
+            "help"
+        ]
     );
     assert!(is_rest_action("greet"));
     assert!(!is_rest_action("scaffold_intent"));
@@ -47,8 +54,13 @@ fn action_metadata_is_the_action_source_of_truth() {
     assert!(is_mcp_action("elicit_name"));
     assert_eq!(required_scope_for_action("help"), None);
     assert_eq!(required_scope_for_action("greet"), Some(READ_SCOPE));
+    // All config_* require write scope — config_list/config_get return
+    // values for secret keys (api_key, mcp.api_token, oauth secrets) and
+    // would leak under a read-scope token.
     assert_eq!(required_scope_for_action("config_set"), Some(WRITE_SCOPE));
-    assert_eq!(required_scope_for_action("config_list"), Some(READ_SCOPE));
+    assert_eq!(required_scope_for_action("config_list"), Some(WRITE_SCOPE));
+    assert_eq!(required_scope_for_action("config_get"), Some(WRITE_SCOPE));
+    assert_eq!(required_scope_for_action("config_path"), Some(WRITE_SCOPE));
     assert_eq!(required_scope_for_action("unknown"), Some(DENY_SCOPE));
 }
 

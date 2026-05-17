@@ -78,6 +78,23 @@ fn parse_value_u16_rejects_overflow() {
 }
 
 #[test]
+fn parse_value_u64_rejects_values_above_toml_max() {
+    // TOML integers are i64 — values above i64::MAX would silently wrap to a
+    // negative when serialized and round-trip into a different value at the
+    // next Config::load(). Reject them at parse time.
+    let above_max = (i64::MAX as u64 + 1).to_string();
+    let err = parse_value(spec_for("mcp.auth.access_token_ttl_secs"), &above_max).unwrap_err();
+    assert!(
+        err.to_string().contains("exceeds TOML integer max"),
+        "expected overflow rejection, got: {err}"
+    );
+
+    // i64::MAX is the boundary — must still be accepted.
+    let at_max = (i64::MAX as u64).to_string();
+    assert!(parse_value(spec_for("mcp.auth.access_token_ttl_secs"), &at_max).is_ok());
+}
+
+#[test]
 fn parse_value_auth_mode_normalises_case() {
     match parse_value(spec_for("mcp.auth.mode"), "OAUTH").unwrap() {
         ParsedValue::String(v) => assert_eq!(v, "oauth"),

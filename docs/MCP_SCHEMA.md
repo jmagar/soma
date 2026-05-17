@@ -27,6 +27,11 @@ python3 scripts/check-schema-docs.py --check
 | `elicit_name` | `example:read` | Ask the MCP client to elicit a name and return a personalized greeting. |
 | `scaffold_intent` | `example:read` | Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files. |
 | `help` | public | Return the in-tool action reference. Public; no scope required. |
+| `config_list` | `example:write` | TEMPLATE: document this action. |
+| `config_get` | `example:write` | TEMPLATE: document this action. |
+| `config_set` | `example:write` | TEMPLATE: document this action. |
+| `config_unset` | `example:write` | TEMPLATE: document this action. |
+| `config_path` | `example:write` | TEMPLATE: document this action. |
 
 ## Drift Rules
 

@@ -293,7 +293,8 @@ pub fn list() -> Result<Value> {
         })
         .collect();
     let mut paths = paths_inner()?;
-    paths.as_object_mut()
+    paths
+        .as_object_mut()
         .expect("paths_inner returns object")
         .insert("keys".into(), Value::Array(entries));
     Ok(paths)
@@ -468,10 +469,23 @@ fn parse_value(spec: &KeySpec, raw: &str) -> Result<ParsedValue> {
             .parse::<u32>()
             .map(ParsedValue::U32)
             .map_err(|_| anyhow!("expected u32 for {}, got {raw:?}", spec.name)),
-        Kind::U64 => raw
-            .parse::<u64>()
-            .map(ParsedValue::U64)
-            .map_err(|_| anyhow!("expected u64 for {}, got {raw:?}", spec.name)),
+        Kind::U64 => {
+            let n: u64 = raw
+                .parse()
+                .map_err(|_| anyhow!("expected u64 for {}, got {raw:?}", spec.name))?;
+            // TOML integers are i64. Reject values that would overflow rather
+            // than silently wrap to a negative when we cast for `toml_value`,
+            // which would then round-trip into a different value at the next
+            // `Config::load()`.
+            if n > i64::MAX as u64 {
+                bail!(
+                    "{} value {n} exceeds TOML integer max ({})",
+                    spec.name,
+                    i64::MAX
+                );
+            }
+            Ok(ParsedValue::U64(n))
+        }
         Kind::StringList => Ok(ParsedValue::List(parse_list(raw))),
         Kind::AuthMode => match raw.to_lowercase().as_str() {
             "bearer" => Ok(ParsedValue::String("bearer".into())),
@@ -601,7 +615,8 @@ fn quote_env_value(value: &str) -> String {
 
 fn write_env_file(path: &Path, lines: &[String]) -> Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
     }
     let body = if lines.is_empty() {
         String::new()
@@ -698,7 +713,8 @@ fn load_or_init_toml(path: &Path) -> Result<DocumentMut> {
 
 fn save_toml(path: &Path, doc: &DocumentMut) -> Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating {}", parent.display()))?;
     }
     let body = doc.to_string();
     let tmp = path.with_extension("toml.tmp");
@@ -709,10 +725,7 @@ fn save_toml(path: &Path, doc: &DocumentMut) -> Result<()> {
     Ok(())
 }
 
-fn ensure_table<'a>(
-    doc: &'a mut DocumentMut,
-    keys: &[&str],
-) -> Result<&'a mut toml_edit::Table> {
+fn ensure_table<'a>(doc: &'a mut DocumentMut, keys: &[&str]) -> Result<&'a mut toml_edit::Table> {
     let mut current: &mut toml_edit::Table = doc.as_table_mut();
     for key in keys {
         let entry = current
@@ -732,10 +745,7 @@ fn ensure_table<'a>(
     Ok(current)
 }
 
-fn navigate_table<'a>(
-    doc: &'a mut DocumentMut,
-    keys: &[&str],
-) -> Option<&'a mut toml_edit::Table> {
+fn navigate_table<'a>(doc: &'a mut DocumentMut, keys: &[&str]) -> Option<&'a mut toml_edit::Table> {
     let mut current: &mut toml_edit::Table = doc.as_table_mut();
     for key in keys {
         current = current.get_mut(key)?.as_table_mut()?;

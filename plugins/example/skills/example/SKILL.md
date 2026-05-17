@@ -43,8 +43,20 @@ A single MCP tool, `mcp__example__example`, dispatches on a required `action` ar
 | `elicit_name` | Ask the MCP client to collect a name, then return a greeting |
 | `scaffold_intent` | Elicit scaffold requirements and return JSON for the scaffold-project skill |
 | `help` | Full in-tree action reference |
+| `config_list` | (REST/CLI only — disabled on MCP) List every configurable key |
+| `config_get` | (REST/CLI only) Read the current value of a single key |
+| `config_set` | (REST/CLI only) Persist a value to `.env` or `config.toml` |
+| `config_unset` | (REST/CLI only) Remove a key from its target file |
+| `config_path` | (REST/CLI only) Print the resolved `.env` and `config.toml` paths |
 
 **Always prefer the MCP tool**. Fall back to HTTP curl only when MCP is unavailable.
+
+**Note on `config_*`**: these actions are off-limits on MCP by default
+(`mcp_enabled: false` in `ACTION_SPECS`). They touch `.env` and `config.toml`
+on the server's filesystem; allowing an MCP client to invoke them with a
+single leaked bearer token would let it overwrite secrets and auth flags.
+Use the CLI (`example config set KEY VALUE`) or the REST API
+(`POST /v1/example` with `action="config_set"`) instead.
 
 ---
 

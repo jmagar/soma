@@ -12,9 +12,7 @@ use lab_auth::AuthContext;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::actions::{
-    execute_service_action, required_scope_for_action, ExampleAction,
-};
+use crate::actions::{execute_service_action, required_scope_for_action, ExampleAction};
 use crate::server::{AppState, AuthPolicy};
 
 /// Request body for `POST /v1/example`.

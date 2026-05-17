@@ -23,10 +23,7 @@ use rmcp::{
 };
 use serde_json::{Map, Value};
 
-use crate::{
-    actions::required_scope_for_action,
-    token_limit,
-};
+use crate::{actions::required_scope_for_action, token_limit};
 
 use crate::server::{AppState, AuthPolicy};
 

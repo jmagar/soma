@@ -202,13 +202,18 @@ Edit `src/config.rs` to rename `ExampleConfig` fields and env var names. Edit `c
 ## Command modes
 
 ```
-example [serve]          Start Streamable HTTP MCP server (default)
-example mcp              Start stdio MCP transport
-example greet [--name]   CLI: greet
-example echo --message   CLI: echo
-example status           CLI: server status
-example --help           Usage
-example --version        Version
+example [serve]            Start Streamable HTTP MCP server (default)
+example mcp                Start stdio MCP transport
+example greet [--name]     CLI: greet
+example echo --message     CLI: echo
+example status             CLI: server status
+example config list        CLI: list every configurable key + value
+example config get KEY     CLI: read a single key
+example config set K V     CLI: persist K=V to .env or config.toml
+example config unset KEY   CLI: remove a key
+example config path        CLI: print resolved .env and config.toml paths
+example --help             Usage
+example --version          Version
 ```
 
 ## MCP tool actions
@@ -223,6 +228,23 @@ The single `example` tool dispatches on the `action` parameter:
 | `elicit_name` | Ask user for name via elicitation, return greeting | none |
 | `scaffold_intent` | Elicit scaffold requirements and return JSON for the `scaffold-project` skill | none |
 | `help` | Full action reference | none |
+
+### REST + CLI only (disabled on MCP by default)
+
+These actions touch `.env` and `config.toml` and are off-limits on MCP to keep
+config writes off the wire from arbitrary MCP clients. Flip `mcp_enabled: true`
+in `src/actions.rs` to opt in. All five require the `example:write` scope —
+`config_list` and `config_get` return values for keys that hold secrets
+(`example.api_key`, `mcp.api_token`, OAuth credentials), so allowing them at
+`example:read` would let any read token exfiltrate them.
+
+| Action | Description | Parameters |
+|--------|-------------|------------|
+| `config_list` | List every configurable key with its current value + target file | none |
+| `config_get` | Read the resolved value of a single key | `key` (required string) |
+| `config_set` | Persist a value to `.env` (secrets/URLs) or `config.toml` (knobs) | `key`, `value` (both required) |
+| `config_unset` | Remove a key from its target file | `key` (required string) |
+| `config_path` | Print resolved `.env` and `config.toml` paths | none |
 
 ## Authentication
 

@@ -144,10 +144,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
         Command::Status => service.status().await?,
         // Doctor, Watch, Setup, and Config are never dispatched via this function —
         // main.rs handles them directly because they need the full Config.
-        Command::Doctor { .. }
-        | Command::Watch { .. }
-        | Command::Setup(_)
-        | Command::Config(_) => {
+        Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) | Command::Config(_) => {
             unreachable!("dispatched directly in main.rs::run_cli")
         }
     };
