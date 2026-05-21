@@ -58,7 +58,10 @@ data
 # ── Documentation (not needed at runtime) ────────────────────────────────────
 # TEMPLATE: Keep README.md here so it's excluded. Only runtime files belong
 #           in the image.
-docs
+docs/*
+!docs/generated/
+docs/generated/*
+!docs/generated/openapi.json
 scripts
 specs
 *.md

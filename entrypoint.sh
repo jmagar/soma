@@ -41,14 +41,20 @@ DATA_DIR="${DATA_DIR:-/data}"
 # This is idempotent — running twice is safe.
 mkdir -p "${DATA_DIR}"
 
-# Fix ownership so the service user (UID 1000) can write files.
-# The container starts as root so chown works; we drop privileges at the end.
-chown -R 1000:1000 "${DATA_DIR}"
+# Fix ownership so the service user (UID 1000) can write files when the mount
+# permits it. Some host bind mounts reject recursive chown even when UID 1000
+# already owns the directory, so keep startup tolerant and let the app's own
+# write checks surface real permission problems.
+if ! chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null; then
+    echo "WARN: could not chown ${DATA_DIR} to 1000:1000; continuing" >&2
+fi
 
-# Restrict directory permissions:
+# Restrict directory permissions when supported by the mount:
 #   750 = owner rwx, group rx, others nothing
 # This prevents other processes in the container from reading the data dir.
-chmod 750 "${DATA_DIR}"
+if ! chmod 750 "${DATA_DIR}" 2>/dev/null; then
+    echo "WARN: could not chmod ${DATA_DIR} to 750; continuing" >&2
+fi
 
 # ── Harden sensitive files ────────────────────────────────────────────────────
 # If config.toml exists, make it group-readable but not world-readable.
@@ -109,9 +115,15 @@ fi
 # exec it directly under gosu without prepending the binary.
 case "${1:-}" in
   serve|mcp|greet|echo|status|watch|doctor|setup|help|--help|-h|--version|"")
-    exec gosu 1000:1000 "${BINARY}" "$@"
+    if [ "$(id -u)" = "0" ]; then
+      exec gosu 1000:1000 "${BINARY}" "$@"
+    fi
+    exec "${BINARY}" "$@"
     ;;
   *)
-    exec gosu 1000:1000 "$@"
+    if [ "$(id -u)" = "0" ]; then
+      exec gosu 1000:1000 "$@"
+    fi
+    exec "$@"
     ;;
 esac

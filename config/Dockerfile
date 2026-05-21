@@ -64,6 +64,7 @@ RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registr
 # The `touch src/main.rs` forces Cargo to re-link even when timestamps haven't
 # changed (Docker layer caching can confuse Cargo's incremental build detection).
 COPY src/ src/
+COPY docs/generated/openapi.json docs/generated/openapi.json
 # Embed the Next.js static export built in the web stage.
 COPY --from=web /app/apps/web/out/ apps/web/out/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
