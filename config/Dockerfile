@@ -21,7 +21,7 @@
 # ── Stage 1: Web assets ───────────────────────────────────────────────────────
 # Build the static Next.js export inside Docker so fresh clones do not need a
 # pre-existing ignored apps/web/out/ directory.
-FROM node:22-bookworm-slim AS web
+FROM node:26-bookworm-slim AS web
 
 WORKDIR /app/apps/web
 
