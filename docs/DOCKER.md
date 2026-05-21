@@ -83,7 +83,7 @@ services:
     volumes:
       - ${HOME}/.example:/data
     networks:
-      - jakenet
+      - mcp
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:40060/health || exit 1"]
       interval: 30s
@@ -97,21 +97,21 @@ services:
           cpus: '0.5'
 
 networks:
-  jakenet:
+  mcp:
     name: ${DOCKER_NETWORK:-example-mcp}
     external: true
 ```
 
 Key requirements:
 - `container_name` must be unique across your stack.
-- Always use the `jakenet` external network.
+- Use the `${DOCKER_NETWORK:-mcp}` external network.
 - `env_file.required: false` so the container starts without `.env` (relies on `config.toml` defaults).
 - Resource limits to prevent runaway memory on homelab.
 
 Create the network if it doesn't exist:
 
 ```bash
-docker network create jakenet
+docker network create mcp
 ```
 
 ## Appdata convention

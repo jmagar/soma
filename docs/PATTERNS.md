@@ -320,7 +320,7 @@ EXAMPLE_MCP_TOKEN=your_bearer_token_here
 # Docker runtime
 PUID=1000
 PGID=1000
-DOCKER_NETWORK=jakenet
+DOCKER_NETWORK=mcp
 RUST_LOG=info
 ```
 
@@ -851,7 +851,7 @@ services:
     volumes:
       - ${EXAMPLE_DATA_VOLUME:-example-mcp-data}:/data
     networks:
-      - jakenet
+      - mcp
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
       interval: 30s
@@ -868,14 +868,14 @@ volumes:
   example-mcp-data:
 
 networks:
-  jakenet:
+  mcp:
     name: ${DOCKER_NETWORK:-example-mcp}
     external: true
 ```
 
 **Key requirements:**
 - `container_name` must be unique across your stack
-- Always use the `jakenet` external network
+- Use the `${DOCKER_NETWORK:-mcp}` external network
 - `env_file.required: false` so the container starts even without .env (relies on config.toml defaults)
 - Resource limits to prevent runaway memory on homelab
 
@@ -916,7 +916,7 @@ EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)
 # Docker
 PUID=1000
 PGID=1000
-DOCKER_NETWORK=jakenet
+DOCKER_NETWORK=mcp
 RUST_LOG=info
 ENV
   echo "Starter .env written — edit it with your credentials"
