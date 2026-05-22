@@ -15,20 +15,17 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use rmcp::{ServiceExt, transport::stdio};
+use rmcp::{transport::stdio, ServiceExt};
 use rmcp_template::{
     app::ExampleService,
     cli,
     config::Config,
     example::ExampleClient,
     mcp,
-    server::{
-        self, AppState, AuthPolicy, AuthPolicyKind, resolve_auth_policy_kind,
-        trusted_gateway_from_env,
-    },
+    server::{self, resolve_auth_policy_kind, AppState, AuthPolicy, AuthPolicyKind},
 };
 use tracing::info;
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -37,7 +34,7 @@ async fn main() -> Result<()> {
     // Handle meta-flags before initialising logging (they print and exit)
     match args.as_slice() {
         [f] if matches!(f.as_str(), "--help" | "-h") => {
-            print_usage();
+            eprintln!("{}", cli::usage());
             return Ok(());
         }
         [f] if matches!(f.as_str(), "--version" | "-V" | "version") => {
@@ -155,7 +152,7 @@ async fn build_state(config: Config) -> Result<AppState> {
 }
 
 async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
-    match resolve_auth_policy_kind(config, trusted_gateway_from_env())? {
+    match resolve_auth_policy_kind(config, config.mcp.trusted_gateway)? {
         AuthPolicyKind::LoopbackDev => Ok(AuthPolicy::LoopbackDev),
         AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
         AuthPolicyKind::MountedBearer => Ok(AuthPolicy::Mounted { auth_state: None }),
@@ -180,35 +177,6 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
             })
         }
     }
-}
-
-fn print_usage() {
-    eprintln!(
-        "Usage:
-  example [serve]          Start MCP HTTP server (default)
-  example mcp              Start MCP stdio transport
-
-  example greet [--name NAME]       Greet NAME (or the world)
-  example echo --message MSG        Echo MSG back
-  example status                    Show server status
-  example help                      Show JSON action reference
-  example watch [--url URL] [--interval N]  Poll /health and emit on state change
-  example setup check               Check plugin setup without mutating appdata
-  example setup repair              Create missing appdata/env setup files
-  example setup plugin-hook [--no-repair]  Plugin hook JSON contract
-
-  example --help                    Show this help
-  example --version                 Show version
-
-Environment:
-  EXAMPLE_API_URL          Upstream service URL
-  EXAMPLE_API_KEY          Upstream service API key
-  EXAMPLE_MCP_HOST         Bind host (default 0.0.0.0)
-  EXAMPLE_MCP_PORT         Bind port (default 40060)
-  EXAMPLE_MCP_NO_AUTH      Disable auth (loopback only)
-  EXAMPLE_MCP_TOKEN        Static bearer token
-  RUST_LOG                 Log filter (e.g. info,rmcp=warn)"
-    );
 }
 
 async fn shutdown_signal() {

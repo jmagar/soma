@@ -2,7 +2,7 @@
 //!
 //! **Template**: extend these tests when you add new CLI subcommands.
 
-use rmcp_template::cli::{Command, SetupCommand, parse_args_from};
+use rmcp_template::cli::{parse_args_from, Command, SetupCommand};
 
 #[test]
 fn test_greet_no_name_parsed() {
@@ -97,4 +97,22 @@ fn test_doctor_no_json_parsed() {
         parse_args_from(["doctor"]).unwrap(),
         Some(Command::Doctor { json: false })
     );
+}
+
+#[test]
+fn test_unknown_trailing_args_are_rejected() {
+    for args in [
+        &["status", "--bogus"][..],
+        &["help", "--bogus"],
+        &["greet", "--unknown"],
+        &["echo", "--message", "hello", "--extra"],
+        &["doctor", "--json", "--json"],
+        &["watch", "--interval", "0"],
+        &["setup", "plugin-hook", "--no-reapir"],
+    ] {
+        assert!(
+            parse_args_from(args.iter().copied()).is_err(),
+            "{args:?} should be rejected"
+        );
+    }
 }

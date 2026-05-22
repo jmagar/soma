@@ -18,7 +18,7 @@ use std::time::Instant;
 
 use crate::{
     config::Config,
-    server::{AuthPolicyKind, resolve_auth_policy_kind},
+    server::{resolve_auth_policy_kind, AuthPolicyKind},
 };
 
 use super::DoctorCheck;
@@ -270,16 +270,17 @@ pub async fn check_upstream(base_url: &str) -> DoctorCheck {
 /// # TEMPLATE
 /// Port 3000 is the template default. Your service's port is in config.toml
 /// `[mcp] port` (e.g. 6970 for unrust, 9158 for rustify).
-pub fn check_port_available(port: u16) -> DoctorCheck {
-    match TcpListener::bind(("127.0.0.1", port)) {
-        Ok(_) => DoctorCheck::pass("server", format!("MCP port {port}"), "available"),
+pub fn check_port_available(host: &str, port: u16) -> DoctorCheck {
+    let bind = format!("{host}:{port}");
+    match TcpListener::bind((host, port)) {
+        Ok(_) => DoctorCheck::pass("server", format!("MCP bind {bind}"), "available"),
         Err(e) => DoctorCheck::fail(
             "server",
-            format!("MCP port {port}"),
+            format!("MCP bind {bind}"),
             format!(
-                "Port {port} is already in use: {e}\n    \
+                "Bind address {bind} is unavailable: {e}\n    \
                  → Set EXAMPLE_MCP_PORT to a different port.\n    \
-                 → Or stop the process using port {port}: ss -tlnp | grep :{port}\n    \
+                 → Or stop the process using this address: ss -tlnp | grep :{port}\n    \
                  TEMPLATE: Replace EXAMPLE_MCP_PORT with your service prefix."
             ),
         ),
@@ -300,13 +301,7 @@ pub fn check_port_available(port: u16) -> DoctorCheck {
 /// report instead of aborting. No logic changes needed unless you add a new
 /// auth mode.
 pub fn check_auth_config(config: &Config) -> DoctorCheck {
-    let noauth_override = std::env::var("EXAMPLE_NOAUTH")
-        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
-        .unwrap_or(false);
-
-    // TEMPLATE: Replace "EXAMPLE_NOAUTH" with your service prefix.
-
-    match resolve_auth_policy_kind(config, noauth_override) {
+    match resolve_auth_policy_kind(config, config.mcp.trusted_gateway) {
         Ok(AuthPolicyKind::LoopbackDev) => {
             DoctorCheck::pass("auth", "Auth mode", "no-auth (loopback bind)")
         }
