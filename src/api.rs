@@ -5,15 +5,16 @@
 
 use axum::{
     extract::{Extension, State},
-    http::{StatusCode, header},
+    http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
 use lab_auth::AuthContext;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::actions::{execute_service_action, required_scope_for_action, ExampleAction};
 use crate::server::{AppState, AuthPolicy};
+use crate::token_limit::MAX_RESPONSE_BYTES;
 
 /// Request body for `POST /v1/example`.
 ///
@@ -52,7 +53,7 @@ pub async fn api_dispatch(
     };
 
     match result {
-        Ok(value) => Json(value).into_response(),
+        Ok(value) => Json(cap_rest_response(value)).into_response(),
         Err(e) if crate::actions::is_validation_error(&e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),
@@ -67,6 +68,23 @@ pub async fn api_dispatch(
                 .into_response()
         }
     }
+}
+
+fn cap_rest_response(value: Value) -> Value {
+    let Ok(serialized) = serde_json::to_vec(&value) else {
+        return json!({
+            "error": "internal server error",
+        });
+    };
+    if serialized.len() <= MAX_RESPONSE_BYTES {
+        return value;
+    }
+    json!({
+        "truncated": true,
+        "error": "response exceeded REST response size limit",
+        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "hint": "Use limit/offset parameters or more specific filters to get a smaller result.",
+    })
 }
 
 fn enforce_rest_scope(

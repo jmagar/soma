@@ -65,6 +65,10 @@ def action_entries() -> list[dict[str, str]]:
     return actions
 
 
+def action_spec_count() -> int:
+    return len(re.findall(r"ActionSpec\s*\{\s*name:", read(ACTIONS)))
+
+
 def rest_actions() -> list[dict[str, str]]:
     return [action for action in action_entries() if action["transport"] == "Any"]
 
@@ -164,7 +168,7 @@ def render() -> dict[str, Any]:
                         "example:write satisfies example:read."
                     ),
                     "operationId": "dispatchExampleAction",
-                    "security": [{"BearerAuth": []}],
+                    "security": [{"BearerAuth": []}, {}],
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -328,13 +332,41 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
             if not operation.get("operationId"):
                 failures.append(f"{method.upper()} {path} is missing operationId")
     action_enum = value.get("components", {}).get("schemas", {}).get("ActionName", {}).get("enum")
-    expected = [action["name"] for action in rest_actions()]
+    entries = action_entries()
+    if len(entries) != action_spec_count():
+        failures.append(
+            f"ActionSpec parser drifted: parsed {len(entries)} entries from {action_spec_count()} specs"
+        )
+    expected = [action["name"] for action in entries if action["transport"] == "Any"]
     if action_enum != expected:
         failures.append(f"ActionName enum drifted: expected {expected}, got {action_enum}")
-    mcp_only = {a["name"] for a in action_entries() if a["transport"] == "McpOnly"}
+    mcp_only = {a["name"] for a in entries if a["transport"] == "McpOnly"}
     for name in sorted(mcp_only):
         if name in (action_enum or []):
             failures.append(f"MCP-only action {name!r} must not appear in REST ActionName enum")
+    x_template = value.get("x-template", {})
+    if x_template.get("rest_actions") != expected:
+        failures.append(
+            f"x-template rest_actions drifted: expected {expected}, got {x_template.get('rest_actions')}"
+        )
+    expected_mcp_only = [
+        action["name"] for action in entries if action["transport"] == "McpOnly"
+    ]
+    if x_template.get("mcp_only_actions") != expected_mcp_only:
+        failures.append("x-template mcp_only_actions drifted")
+    rest_security = value.get("paths", {}).get(REST_ENDPOINT, {}).get("post", {}).get("security")
+    if rest_security != [{"BearerAuth": []}, {}]:
+        failures.append(
+            f"{REST_ENDPOINT} security must document bearer auth and no-local-auth modes"
+        )
+    status_props = (
+        value.get("components", {})
+        .get("schemas", {})
+        .get("StatusResponse", {})
+        .get("properties", {})
+    )
+    if "api_url" in status_props:
+        failures.append("StatusResponse must not advertise api_url on the public status schema")
     return failures
 
 

@@ -110,7 +110,8 @@
         "security": [
           {
             "BearerAuth": []
-          }
+          },
+          {}
         ],
         "requestBody": {
           "required": true,

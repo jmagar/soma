@@ -108,9 +108,9 @@ pub fn rest_action_names() -> Vec<&'static str> {
 }
 
 pub fn is_rest_action(action: &str) -> bool {
-    ACTION_SPECS
-        .iter()
-        .any(|spec| spec.name == action && spec.transport == ActionTransport::Any)
+    action_spec(action)
+        .map(|spec| spec.transport == ActionTransport::Any)
+        .unwrap_or(false)
 }
 
 pub fn mcp_only_action_names() -> Vec<&'static str> {
@@ -122,11 +122,13 @@ pub fn mcp_only_action_names() -> Vec<&'static str> {
 }
 
 pub fn required_scope_for_action(action: &str) -> Option<&'static str> {
-    ACTION_SPECS
-        .iter()
-        .find(|spec| spec.name == action)
+    action_spec(action)
         .map(|spec| spec.required_scope)
         .unwrap_or(Some(DENY_SCOPE))
+}
+
+fn action_spec(action: &str) -> Option<&'static ActionSpec> {
+    ACTION_SPECS.iter().find(|spec| spec.name == action)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -149,7 +151,13 @@ impl ExampleAction {
     }
 
     pub fn from_rest(action: &str, params: &Value) -> Result<Self> {
-        if !is_rest_action(action) {
+        if action.is_empty() {
+            return Err(ValidationError::MissingAction.into());
+        }
+        if action_spec(action)
+            .map(|spec| spec.transport == ActionTransport::McpOnly)
+            .unwrap_or(false)
+        {
             return Err(ValidationError::NotAvailableOverRest {
                 action: action.to_owned(),
             }

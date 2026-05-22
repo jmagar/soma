@@ -1,14 +1,14 @@
 //! Route-level tests for REST dispatch, status, and mounted auth behavior.
 
 use axum::{
-    body::{Body, to_bytes},
-    http::{Method, Request, StatusCode, header},
+    body::{to_bytes, Body},
+    http::{header, Method, Request, StatusCode},
 };
 use rmcp_template::{
     server::{self, AuthPolicy},
     testing::{bearer_state, loopback_state},
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tower::ServiceExt;
 
 async fn request_json(
@@ -59,17 +59,29 @@ async fn rest_echo_accepts_nested_params() {
 #[tokio::test]
 async fn rest_validation_errors_are_bad_requests() {
     let app = server::router(loopback_state());
-    for body in [
+    for (body, expected_error) in [
         json!({"action": "echo", "params": {}}),
         json!({"action": "echo", "params": {"message": ""}}),
         json!({"action": "echo", "params": {"message": 42}}),
         json!({"action": "missing", "params": {}}),
         json!({"params": {}}),
-    ] {
+    ]
+    .into_iter()
+    .map(|body| {
+        let expected_error = if body.get("action").is_none() {
+            Some("action is required")
+        } else {
+            None
+        };
+        (body, expected_error)
+    }) {
         let (status, response) =
             request_json(app.clone(), Method::POST, "/v1/example", None, Some(body)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
         assert!(response.get("error").is_some(), "{response}");
+        if let Some(expected_error) = expected_error {
+            assert_eq!(response["error"], expected_error);
+        }
     }
 }
 
@@ -86,12 +98,10 @@ async fn rest_rejects_mcp_only_actions_as_bad_requests() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
-        assert!(
-            response["error"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("not available over REST")
-        );
+        assert!(response["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not available over REST"));
     }
 }
 
@@ -125,6 +135,16 @@ async fn openapi_json_is_public_and_excludes_mcp_only_actions() {
     assert_eq!(
         body["components"]["schemas"]["ActionName"]["enum"],
         json!(["greet", "echo", "status", "help"])
+    );
+    assert_eq!(
+        body["paths"]["/v1/example"]["post"]["security"],
+        json!([{"BearerAuth": []}, {}])
+    );
+    assert!(
+        body["components"]["schemas"]["StatusResponse"]["properties"]
+            .get("api_url")
+            .is_none(),
+        "{body}"
     );
 }
 

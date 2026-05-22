@@ -23,6 +23,7 @@ The server exposes HTTP endpoints alongside MCP. All surfaces (MCP, REST, CLI) c
 |---|---|---|---|
 | `/health` | GET | Public | Fast liveness. Returns minimal status. |
 | `/status` | GET | Public | Redacted runtime status. |
+| `/openapi.json` | GET | Public | Generated REST OpenAPI schema. |
 | `/mcp` | POST/stream | Auth policy | Streamable HTTP MCP endpoint. |
 | `/v1/example` | POST | Auth policy | REST action dispatch. |
 
@@ -45,38 +46,38 @@ The REST API uses the same `action` + `params` pattern as MCP tools:
 
 ```rust
 // src/api.rs
-#[derive(Deserialize)]
-pub struct ActionRequest {
-    pub action: String,
-    #[serde(default)]
-    pub params: serde_json::Value,
-}
-
 async fn api_dispatch(
     State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
-    let result = match body.action.as_str() {
-        "greet" => {
-            let name = body.params["name"].as_str();
-            state.service.greet(name).await
+    let result = match ExampleAction::from_rest(&body.action, &body.params) {
+        Ok(action) => {
+            if let Some(response) = enforce_rest_scope(
+                &state,
+                auth.as_ref().map(|Extension(auth)| auth),
+                &body.action,
+            ) {
+                return response;
+            }
+            execute_service_action(&state.service, &action).await
         }
-        "echo" => {
-            let msg = body.params["message"].as_str().unwrap_or("");
-            state.service.echo(msg).await
-        }
-        "status" => state.service.status().await,
-        other => Err(anyhow::anyhow!(
-            "unknown action: {other}. POST to /v1/example with action=help"
-        )),
+        Err(error) => Err(error),
     };
 
     match result {
-        Ok(value) => Json(value).into_response(),
-        Err(e) => (
+        Ok(value) => Json(cap_rest_response(value)).into_response(),
+        Err(e) if crate::actions::is_validation_error(&e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),
         ).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, action = %body.action, "REST action execution failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal server error"})),
+            ).into_response()
+        }
     }
 }
 ```
@@ -102,6 +103,8 @@ All three call `state.service.greet(Some("Alice"))`.
 ```
 
 Responses are JSON values produced by `ExampleService` via `src/actions.rs`.
+If a REST action result exceeds the response cap, the route returns a valid JSON
+truncation envelope instead of raw truncated JSON.
 
 ## MCP-only actions
 
@@ -109,7 +112,7 @@ Some actions require MCP client capabilities and are excluded from REST action l
 
 ## Agent-first output rules
 
-- No single response may return more than ~10,000 tokens (~40 KB). Truncate with a clear message.
+- No single response may return more than ~10,000 tokens (~40 KB). REST returns a JSON truncation envelope; MCP truncates the serialized tool text.
 - List actions MUST support `limit` and `offset` (or `cursor`).
 - List actions that return heterogeneous data MUST support `filter` and `state` parameters.
 - Every CLI command that outputs data MUST support `--json`.
