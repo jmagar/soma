@@ -77,7 +77,8 @@ pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
 }
 
 fn push_configured_origin(origins: &mut Vec<String>, origin: &str) {
-    let Some(origin) = extract_origin_with_label(origin, "EXAMPLE_MCP_ALLOWED_ORIGINS") else {
+    let Some(origin) = extract_configured_origin_with_label(origin, "EXAMPLE_MCP_ALLOWED_ORIGINS")
+    else {
         return;
     };
     origins.push(origin);
@@ -163,11 +164,12 @@ fn extract_origin_with_label(url: &str, label: &'static str) -> Option<String> {
         .map_err(|e| tracing::warn!(setting = label, url, error = %e, "invalid MCP origin URL"))
         .ok()?;
     let scheme = parsed.scheme();
-    let host = parsed.host_str()?;
-    if host.contains('*') {
+    let host = parsed.host()?;
+    let host_text = format_origin_host(host);
+    if host_text.contains('*') {
         tracing::warn!(
             setting = label,
-            host,
+            host = %host_text,
             "MCP origin host contains wildcard; skipping"
         );
         return None;
@@ -185,8 +187,29 @@ fn extract_origin_with_label(url: &str, label: &'static str) -> Option<String> {
         }
     };
     let origin = match parsed.port() {
-        Some(port) if default_port != Some(port) => format!("{scheme}://{host}:{port}"),
-        _ => format!("{scheme}://{host}"),
+        Some(port) if default_port != Some(port) => format!("{scheme}://{host_text}:{port}"),
+        _ => format!("{scheme}://{host_text}"),
     };
     Some(origin)
+}
+
+fn extract_configured_origin_with_label(url: &str, label: &'static str) -> Option<String> {
+    match extract_origin_with_label(url, label) {
+        Some(origin) => Some(origin),
+        None => {
+            let parsed = url::Url::parse(url).ok()?;
+            if matches!(parsed.scheme(), "http" | "https") {
+                return None;
+            }
+            Some(url.trim().to_string())
+        }
+    }
+}
+
+fn format_origin_host(host: url::Host<&str>) -> String {
+    match host {
+        url::Host::Domain(domain) => domain.to_string(),
+        url::Host::Ipv4(addr) => addr.to_string(),
+        url::Host::Ipv6(addr) => format!("[{addr}]"),
+    }
 }

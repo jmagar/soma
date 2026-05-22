@@ -111,21 +111,41 @@ fn allowed_origins_normalizes_extra_allowed_origins() {
 }
 
 #[test]
-fn allowed_origins_skips_invalid_wildcard_and_non_http_origins() {
+fn allowed_origins_skips_invalid_and_wildcard_origins() {
     let cfg = McpConfig {
         host: "0.0.0.0".to_string(),
         port: 3000,
-        allowed_origins: vec![
-            "not-a-url".to_string(),
-            "https://*.example.com".to_string(),
-            "file://app.example.com".to_string(),
-        ],
+        allowed_origins: vec!["not-a-url".to_string(), "https://*.example.com".to_string()],
         ..Default::default()
     };
     let origins = allowed_origins(&cfg);
     assert!(!origins.contains(&"not-a-url".to_string()));
     assert!(!origins.contains(&"https://*.example.com".to_string()));
-    assert!(!origins.iter().any(|origin| origin.starts_with("file://")));
+}
+
+#[test]
+fn allowed_origins_preserves_non_http_configured_origins() {
+    let cfg = McpConfig {
+        host: "0.0.0.0".to_string(),
+        port: 3000,
+        allowed_origins: vec!["vscode-webview://extension.example".to_string()],
+        ..Default::default()
+    };
+    let origins = allowed_origins(&cfg);
+    assert!(origins.contains(&"vscode-webview://extension.example".to_string()));
+}
+
+#[test]
+fn allowed_origins_brackets_ipv6_literals() {
+    let cfg = McpConfig {
+        host: "0.0.0.0".to_string(),
+        port: 3000,
+        allowed_origins: vec!["http://[::1]:3000/path?ignored=true".to_string()],
+        ..Default::default()
+    };
+    let origins = allowed_origins(&cfg);
+    assert!(origins.contains(&"http://[::1]:3000".to_string()));
+    assert!(!origins.contains(&"http://::1:3000".to_string()));
 }
 
 #[test]
