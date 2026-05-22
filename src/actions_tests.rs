@@ -96,6 +96,12 @@ fn rest_rejects_mcp_only_actions() {
 }
 
 #[test]
+fn rest_missing_action_preserves_missing_action_error() {
+    let error = ExampleAction::from_rest("", &json!({})).unwrap_err();
+    assert_eq!(error.to_string(), "action is required");
+}
+
+#[test]
 fn unknown_action_mentions_help() {
     let error = ExampleAction::from_rest("missing", &json!({})).unwrap_err();
     assert!(error.to_string().contains("action=help"));

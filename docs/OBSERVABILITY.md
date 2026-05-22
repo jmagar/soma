@@ -22,7 +22,7 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 | Endpoint | Auth | Purpose |
 |---|---|---|
 | `GET /health` | Public | Fast liveness + upstream connectivity. |
-| `GET /status` | Public | Redacted runtime/config metadata. |
+| `GET /status` | Public | Local redacted runtime metadata. |
 | `GET /metrics` | Bearer | Prometheus-compatible metrics (optional). |
 | `/mcp` | Auth policy | MCP Streamable HTTP endpoint. |
 | `/v1/example` | Auth policy | REST action dispatch. |
@@ -48,18 +48,17 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 ```json
 {
   "status": "ok",
-  "server": { "version": "0.1.0", "uptime_secs": 3600, "pid": 12345, "data_dir": "/home/user/.example" },
-  "config": { "host": "0.0.0.0", "port": 40060, "auth_mode": "bearer", "upstream_url": "https://example.com/api" },
-  "counters": { "requests_total": 1234, "errors_total": 5, "upstream_calls": 1200, "upstream_errors": 3 },
-  "upstream": { "reachable": true, "last_check_ms_ago": 250, "consecutive_failures": 0 }
+  "server": "example-mcp",
+  "version": "0.1.0",
+  "transport": "http"
 }
 ```
 
-Omit secrets and credentials. Counters live on `AppState` as `AtomicU64` fields and are incremented in the MCP dispatcher and API client.
+Omit secrets, credentials, upstream URLs, and upstream health details from the public route.
 
 ## MCP status action
 
-`action="status"` exposes the same data as `/status` for MCP clients that cannot call HTTP endpoints directly. It must succeed even when the upstream service is down.
+`action="status"` is a read-scoped business action and may expose service status data appropriate for authenticated MCP/REST action callers. Keep it redacted, but do not assume it has the same contract as the public `/status` route.
 
 ## Logging
 
