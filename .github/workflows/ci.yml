@@ -64,7 +64,7 @@ jobs:
       # Cache Cargo registry and build artifacts between runs.
       # TEMPLATE: Change the cache key prefix from "rmcp-template" to your repo name.
       - name: Cache Cargo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cargo/registry
@@ -89,7 +89,7 @@ jobs:
 
       # TEMPLATE: Change cache key prefix from "rmcp-template" to your repo name.
       - name: Cache Cargo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cargo/registry
