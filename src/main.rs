@@ -15,7 +15,7 @@
 use anyhow::Result;
 use std::sync::Arc;
 
-use rmcp::{transport::stdio, ServiceExt};
+use rmcp::{ServiceExt, transport::stdio};
 use rmcp_template::{
     app::ExampleService,
     cli,
@@ -23,12 +23,12 @@ use rmcp_template::{
     example::ExampleClient,
     mcp,
     server::{
-        self, resolve_auth_policy_kind, trusted_gateway_from_env, AppState, AuthPolicy,
-        AuthPolicyKind,
+        self, AppState, AuthPolicy, AuthPolicyKind, resolve_auth_policy_kind,
+        trusted_gateway_from_env,
     },
 };
 use tracing::info;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
 
     // Handle meta-flags before initialising logging (they print and exit)
     match args.as_slice() {
-        [f] if matches!(f.as_str(), "--help" | "-h" | "help") => {
+        [f] if matches!(f.as_str(), "--help" | "-h") => {
             print_usage();
             return Ok(());
         }
@@ -191,6 +191,7 @@ fn print_usage() {
   example greet [--name NAME]       Greet NAME (or the world)
   example echo --message MSG        Echo MSG back
   example status                    Show server status
+  example help                      Show JSON action reference
   example watch [--url URL] [--interval N]  Poll /health and emit on state change
   example setup check               Check plugin setup without mutating appdata
   example setup repair              Create missing appdata/env setup files

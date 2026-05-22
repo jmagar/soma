@@ -2,7 +2,7 @@
 //!
 //! **Template**: extend these tests when you add new CLI subcommands.
 
-use rmcp_template::cli::{parse_args_from, Command, SetupCommand};
+use rmcp_template::cli::{Command, SetupCommand, parse_args_from};
 
 #[test]
 fn test_greet_no_name_parsed() {
@@ -36,6 +36,11 @@ fn test_echo_message_parsed() {
 fn test_echo_no_message_is_rejected() {
     let error = parse_args_from(["echo"]).unwrap_err();
     assert!(error.to_string().contains("requires non-empty --message"));
+}
+
+#[test]
+fn test_help_parsed() {
+    assert_eq!(parse_args_from(["help"]).unwrap(), Some(Command::Help));
 }
 
 #[test]

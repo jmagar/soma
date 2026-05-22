@@ -13,8 +13,10 @@
 //! example doctor [--json]
 //! ```
 
-use crate::{app::ExampleService, config::ExampleConfig, example::ExampleClient};
-use anyhow::{anyhow, Result};
+use crate::{
+    actions::rest_help, app::ExampleService, config::ExampleConfig, example::ExampleClient,
+};
+use anyhow::{Result, anyhow};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
@@ -22,7 +24,7 @@ pub mod doctor;
 pub mod setup;
 pub mod watch;
 
-pub use setup::{run_setup, SetupCommand};
+pub use setup::{SetupCommand, run_setup};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
@@ -33,6 +35,7 @@ pub enum Command {
         message: String,
     },
     Status,
+    Help,
     /// Pre-flight environment validation (§48).
     ///
     /// TEMPLATE: Always keep this command. It is the operator's first stop
@@ -90,6 +93,7 @@ where
                 Some(Command::Echo { message })
             }
             "status" => Some(Command::Status),
+            "help" => Some(Command::Help),
             // §48: doctor is always parsed here, dispatched via run_cli in main.rs.
             // TEMPLATE: Keep this arm. It routes to doctor::run_doctor() which needs
             //           the full Config (not just ExampleConfig), so main.rs handles it.
@@ -137,6 +141,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
         Command::Greet { name } => service.greet(name.as_deref()).await?,
         Command::Echo { message } => service.echo(message).await?,
         Command::Status => service.status().await?,
+        Command::Help => rest_help(),
         // Doctor, Watch, and Setup are never dispatched via this function — main.rs
         // handles them directly because they need config.mcp fields.
         Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => {

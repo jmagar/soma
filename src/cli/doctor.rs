@@ -35,7 +35,7 @@ use checks::{
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::config::{default_data_dir, Config};
+use crate::config::{Config, default_data_dir};
 
 // ── Public entry point ────────────────────────────────────────────────────────
 

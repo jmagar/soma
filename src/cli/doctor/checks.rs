@@ -16,11 +16,9 @@ use std::net::TcpListener;
 use std::path::Path;
 use std::time::Instant;
 
-use anyhow::Result;
-
 use crate::{
     config::Config,
-    server::{resolve_auth_policy_kind, AuthPolicyKind},
+    server::{AuthPolicyKind, resolve_auth_policy_kind},
 };
 
 use super::DoctorCheck;
@@ -96,9 +94,7 @@ pub fn check_dir_writable(label: &str, dir: &Path) -> DoctorCheck {
                 );
             }
 
-            let size_label =
-                dir_size_label(dir).unwrap_or_else(|error| format!("; size unavailable: {error}"));
-            DoctorCheck::pass("config", name, format!("writable{size_label}"))
+            DoctorCheck::pass("config", name, "writable")
         }
         Err(e) => DoctorCheck::fail(
             "config",
@@ -106,34 +102,6 @@ pub fn check_dir_writable(label: &str, dir: &Path) -> DoctorCheck {
             format!("Not writable: {e}\n    → Run: chmod u+w {}", dir.display()),
         ),
     }
-}
-
-fn dir_size_label(dir: &Path) -> Result<String> {
-    fn du(dir: &Path) -> Result<u64> {
-        let mut total = 0u64;
-        let entries = std::fs::read_dir(dir)?;
-        for entry in entries {
-            let entry = entry?;
-            let meta = entry.metadata()?;
-            if meta.is_file() {
-                total += meta.len();
-            } else if meta.is_dir() {
-                total += du(&entry.path())?;
-            }
-        }
-        Ok(total)
-    }
-
-    let bytes = du(dir)?;
-    Ok(if bytes == 0 {
-        String::new()
-    } else if bytes < 1024 {
-        format!(", {} B", bytes)
-    } else if bytes < 1024 * 1024 {
-        format!(", {:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!(", {:.1} MB", bytes as f64 / (1024.0 * 1024.0))
-    })
 }
 
 // ── Binary in PATH ────────────────────────────────────────────────────────────
@@ -247,7 +215,7 @@ pub async fn check_upstream(base_url: &str) -> DoctorCheck {
                 "connectivity",
                 "Upstream reachable",
                 format!("Could not build HTTP client: {e}"),
-            )
+            );
         }
     };
 

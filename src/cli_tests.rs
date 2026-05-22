@@ -1,4 +1,4 @@
-use super::{parse_args_from, Command, SetupCommand};
+use super::{Command, SetupCommand, parse_args_from};
 
 #[test]
 fn empty_args_returns_none() {
@@ -54,6 +54,12 @@ fn echo_missing_message_is_error() {
 fn status_subcommand() {
     let cmd = parse_args_from(["status"]).unwrap().unwrap();
     assert_eq!(cmd, Command::Status);
+}
+
+#[test]
+fn help_subcommand() {
+    let cmd = parse_args_from(["help"]).unwrap().unwrap();
+    assert_eq!(cmd, Command::Help);
 }
 
 #[test]
