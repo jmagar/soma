@@ -10,7 +10,10 @@ if ! command -v watchexec >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Building apps/web once, then watching for changes..."
+echo "Building apps/web once..."
+bash scripts/build-web.sh
+
+echo "Watching apps/web for changes..."
 watchexec \
     --project-origin . \
     --watch apps/web \
@@ -23,4 +26,4 @@ watchexec \
     --debounce 1000ms \
     --on-busy-update queue \
     --wrap-process=none \
-    'cd apps/web && pnpm build'
+    'bash scripts/build-web.sh'

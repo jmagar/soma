@@ -149,6 +149,10 @@ export type RestActionId = RestAction["id"];
 export const REST_ACTIONS = ACTIONS.filter((action) => action.transport === "rest") as RestAction[];
 export const DEFAULT_REST_ACTION = REST_ACTIONS[0];
 
+export function normalizeApiBaseUrl(apiBaseUrl: string): string {
+  return apiBaseUrl.replace(/\/+$/, "");
+}
+
 export function endpoint(path: string): string {
-  return `${WEB_APP_CONFIG.apiBaseUrl}${path}`;
+  return `${normalizeApiBaseUrl(WEB_APP_CONFIG.apiBaseUrl)}${path}`;
 }

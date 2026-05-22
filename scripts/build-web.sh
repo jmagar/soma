@@ -13,7 +13,7 @@ cd apps/web
 
 if [ ! -d node_modules ]; then
     echo "Installing web dependencies..."
-    pnpm install
+    pnpm install --frozen-lockfile
 fi
 
 pnpm build

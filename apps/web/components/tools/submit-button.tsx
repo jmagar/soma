@@ -1,11 +1,12 @@
 /**
  * SubmitButton — a styled form submit button for the tool runner.
  *
- * TEMPLATE: Replace with @aurora/aurora-button once installed:
- *   pnpm dlx shadcn@latest add @aurora/aurora-button
+ * Uses the shared Aurora-compatible Button wrapper for consistent states.
  */
 
 "use client";
+
+import { Button } from "@/components/ui/button";
 
 interface SubmitButtonProps {
   loading: boolean;
@@ -19,25 +20,8 @@ export function SubmitButton({
   loadingLabel = "Running…",
 }: SubmitButtonProps) {
   return (
-    <button
-      type="submit"
-      disabled={loading}
-      style={{
-        background: loading
-          ? "var(--aurora-panel-strong)"
-          : "var(--aurora-accent-button)",
-        color: loading
-          ? "var(--aurora-text-muted)"
-          : "var(--aurora-accent-foreground)",
-        border: "none",
-        borderRadius: "var(--radius-md)",
-        padding: "0.5rem 1.25rem",
-        fontWeight: 600,
-        fontSize: "0.875rem",
-        cursor: loading ? "not-allowed" : "pointer",
-      }}
-    >
+    <Button type="submit" disabled={loading} variant={loading ? "neutral" : "aurora"}>
       {loading ? loadingLabel : label}
-    </button>
+    </Button>
   );
 }

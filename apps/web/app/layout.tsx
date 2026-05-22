@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Inter, JetBrains_Mono, Manrope } from "next/font/google";
+import Link from "next/link";
 import { WEB_APP_CONFIG } from "@/lib/template";
 import "./globals.css";
 
