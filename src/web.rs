@@ -47,18 +47,14 @@ pub fn web_assets_available() -> bool {
 pub async fn serve_web_assets(request: Request<Body>) -> Response {
     #[cfg(feature = "web")]
     {
-        let path = request.uri().path().trim_start_matches('/');
+        let path = normalize_asset_path(request.uri().path());
 
         // Ordered candidate list — first match wins.
-        let candidates: &[String] = &[
-            path.to_string(),
-            format!("{path}.html"),
-            format!("{path}/index.html"),
-        ];
+        let candidates = asset_candidates(path);
 
         for candidate in candidates {
             if let Some(file) = WEB_ASSETS.get_file(candidate.as_str()) {
-                let content_type = guess_mime(candidate);
+                let content_type = guess_mime(candidate.as_str());
                 let cache_control =
                     if candidate.ends_with("index.html") || candidate == "index.html" {
                         "no-store"
@@ -98,6 +94,18 @@ pub async fn serve_web_assets(request: Request<Body>) -> Response {
         let _ = request;
         StatusCode::NOT_FOUND.into_response()
     }
+}
+
+fn normalize_asset_path(path: &str) -> &str {
+    path.trim_start_matches('/').trim_end_matches('/')
+}
+
+fn asset_candidates(path: &str) -> [String; 3] {
+    [
+        path.to_string(),
+        format!("{path}.html"),
+        format!("{path}/index.html"),
+    ]
 }
 
 fn guess_mime(path: &str) -> &'static str {

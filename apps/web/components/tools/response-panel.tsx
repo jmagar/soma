@@ -1,10 +1,4 @@
-export function ResponsePanel({
-  response,
-  isError,
-}: {
-  response: string;
-  isError: boolean;
-}) {
+export function ResponsePanel({ response, isError }: { response: string; isError: boolean }) {
   return (
     <div
       style={{

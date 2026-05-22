@@ -6,6 +6,33 @@ fn web_assets_available_is_callable() {
 }
 
 #[test]
+fn normalize_asset_path_removes_leading_and_trailing_slashes() {
+    assert_eq!(normalize_asset_path("/tools/"), "tools");
+    assert_eq!(normalize_asset_path("/api"), "api");
+    assert_eq!(normalize_asset_path("/"), "");
+}
+
+#[test]
+fn asset_candidates_match_next_static_export_paths() {
+    assert_eq!(
+        asset_candidates("tools"),
+        [
+            "tools".to_string(),
+            "tools.html".to_string(),
+            "tools/index.html".to_string(),
+        ],
+    );
+}
+
+#[test]
+fn trailing_slash_candidates_do_not_include_double_slashes() {
+    let path = normalize_asset_path("/tools/");
+    let candidates = asset_candidates(path);
+    assert_eq!(candidates[2], "tools/index.html");
+    assert!(!candidates.iter().any(|candidate| candidate.contains("//")));
+}
+
+#[test]
 fn guess_mime_html() {
     assert_eq!(guess_mime("index.html"), "text/html; charset=utf-8");
 }
