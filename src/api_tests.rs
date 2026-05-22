@@ -31,13 +31,13 @@ fn action_request_params_defaults_to_null_when_omitted() {
 #[test]
 fn cap_rest_response_leaves_small_json_unchanged() {
     let value = json!({"echo": "hello"});
-    assert_eq!(cap_rest_response(value.clone()), value);
+    assert_eq!(cap_rest_response(value.clone()).unwrap(), value);
 }
 
 #[test]
 fn cap_rest_response_returns_json_safe_truncation_envelope() {
     let value = json!({"payload": "x".repeat(MAX_RESPONSE_BYTES + 1)});
-    let capped = cap_rest_response(value);
+    let capped = cap_rest_response(value).unwrap();
 
     assert_eq!(capped["truncated"], true);
     assert_eq!(

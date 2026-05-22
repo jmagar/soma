@@ -234,6 +234,7 @@ def render() -> dict[str, Any]:
                         schema_ref("EchoResponse"),
                         schema_ref("StatusResponse"),
                         schema_ref("HelpResponse"),
+                        schema_ref("RestTruncationResponse"),
                     ]
                 },
                 "GreetResponse": {
@@ -285,6 +286,20 @@ def render() -> dict[str, Any]:
                     "type": "object",
                     "required": ["error"],
                     "properties": {"error": {"type": "string"}},
+                    "additionalProperties": False,
+                },
+                "RestTruncationResponse": {
+                    "type": "object",
+                    "required": ["truncated", "error", "max_response_bytes", "hint"],
+                    "properties": {
+                        "truncated": {"type": "boolean", "const": True},
+                        "error": {
+                            "type": "string",
+                            "const": "response exceeded REST response size limit",
+                        },
+                        "max_response_bytes": {"type": "integer", "minimum": 1},
+                        "hint": {"type": "string"},
+                    },
                     "additionalProperties": False,
                 },
             },

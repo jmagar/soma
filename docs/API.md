@@ -22,7 +22,7 @@ The server exposes HTTP endpoints alongside MCP. All surfaces (MCP, REST, CLI) c
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
 | `/health` | GET | Public | Fast liveness. Returns minimal status. |
-| `/status` | GET | Public | Redacted runtime status. |
+| `/status` | GET | Public | Local-only redacted runtime status; see `docs/OBSERVABILITY.md`. |
 | `/openapi.json` | GET | Public | Generated REST OpenAPI schema. |
 | `/mcp` | POST/stream | Auth policy | Streamable HTTP MCP endpoint. |
 | `/v1/example` | POST | Auth policy | REST action dispatch. |
@@ -124,7 +124,13 @@ fn truncate_response(text: &str) -> String {
     if text.len() <= MAX_RESPONSE_BYTES {
         return text.to_string();
     }
-    let truncated = &text[..MAX_RESPONSE_BYTES];
+    let boundary = text
+        .char_indices()
+        .map(|(index, _)| index)
+        .take_while(|index| *index <= MAX_RESPONSE_BYTES)
+        .last()
+        .unwrap_or(0);
+    let truncated = &text[..boundary];
     format!("{truncated}\n\n[TRUNCATED: response exceeded 10K token limit. Use limit/offset or more specific filters.]")
 }
 ```
