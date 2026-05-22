@@ -253,7 +253,6 @@ def render() -> dict[str, Any]:
                     "required": ["status"],
                     "properties": {
                         "status": {"type": "string"},
-                        "api_url": {"type": "string"},
                         "note": {"type": "string"},
                         "server": {"type": "string"},
                         "version": {"type": "string"},

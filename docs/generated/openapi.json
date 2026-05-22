@@ -273,9 +273,6 @@
           "status": {
             "type": "string"
           },
-          "api_url": {
-            "type": "string"
-          },
           "note": {
             "type": "string"
           },

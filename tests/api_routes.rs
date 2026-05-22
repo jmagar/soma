@@ -1,14 +1,14 @@
 //! Route-level tests for REST dispatch, status, and mounted auth behavior.
 
 use axum::{
-    body::{to_bytes, Body},
-    http::{header, Method, Request, StatusCode},
+    body::{Body, to_bytes},
+    http::{Method, Request, StatusCode, header},
 };
 use rmcp_template::{
     server::{self, AuthPolicy},
     testing::{bearer_state, loopback_state},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tower::ServiceExt;
 
 async fn request_json(
@@ -86,10 +86,12 @@ async fn rest_rejects_mcp_only_actions_as_bad_requests() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
-        assert!(response["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("not available over REST"));
+        assert!(
+            response["error"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("not available over REST")
+        );
     }
 }
 
@@ -127,7 +129,7 @@ async fn openapi_json_is_public_and_excludes_mcp_only_actions() {
 }
 
 #[tokio::test]
-async fn status_uses_service_status_and_local_metadata() {
+async fn status_returns_only_local_redacted_metadata() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(app, Method::GET, "/status", None, None).await;
 
@@ -136,6 +138,9 @@ async fn status_uses_service_status_and_local_metadata() {
     assert_eq!(body["server"], "example-mcp");
     assert_eq!(body["transport"], "http");
     assert!(body.get("version").is_some());
+    assert!(body.get("api_url").is_none(), "{body}");
+    assert!(body.get("api_key").is_none(), "{body}");
+    assert!(body.get("upstream").is_none(), "{body}");
 }
 
 #[tokio::test]

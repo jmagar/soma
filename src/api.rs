@@ -5,12 +5,12 @@
 
 use axum::{
     extract::{Extension, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Json},
 };
 use lab_auth::AuthContext;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::actions::{execute_service_action, required_scope_for_action, ExampleAction};
 use crate::server::{AppState, AuthPolicy};
@@ -121,30 +121,15 @@ pub async fn openapi_json() -> impl IntoResponse {
     )
 }
 
-/// `GET /status` — runtime status (unauthenticated, redacts secrets).
+/// `GET /status` — local runtime status (unauthenticated, redacts secrets).
 pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
-    match state.service.status().await {
-        Ok(mut value) => {
-            if let Some(object) = value.as_object_mut() {
-                object.insert("server".into(), json!(state.config.server_name));
-                object.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
-                object.insert("transport".into(), json!("http"));
-            } else {
-                tracing::warn!(
-                    "status() returned a non-object value; metadata fields not injected"
-                );
-            }
-            Json(value).into_response()
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "runtime status check failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "status check failed"})),
-            )
-                .into_response()
-        }
-    }
+    Json(json!({
+        "status": "ok",
+        "server": state.config.server_name,
+        "version": env!("CARGO_PKG_VERSION"),
+        "transport": "http",
+    }))
+    .into_response()
 }
 
 #[cfg(test)]
