@@ -1,8 +1,8 @@
 "use client";
 
-import { ACTIONS, WEB_APP_CONFIG } from "@/lib/template";
 import { ActionCard } from "@/components/api/action-card";
 import { EndpointRow } from "@/components/api/endpoint-row";
+import { ACTIONS, WEB_APP_CONFIG } from "@/lib/template";
 
 export default function ApiPage() {
   return (
@@ -46,11 +46,31 @@ export default function ApiPage() {
           Endpoint
         </h2>
         <div className="space-y-2">
-          <EndpointRow method="POST" path={WEB_APP_CONFIG.restEndpoint} description="REST action dispatch" />
-          <EndpointRow method="GET" path={WEB_APP_CONFIG.healthEndpoint} description="Liveness probe (unauthenticated)" />
-          <EndpointRow method="GET" path={WEB_APP_CONFIG.statusEndpoint} description="Runtime status" />
-          <EndpointRow method="POST" path={WEB_APP_CONFIG.mcpEndpoint} description="MCP Streamable HTTP transport" />
-          <EndpointRow method="GET" path="/openapi.json" description="Generated OpenAPI schema for the REST surface" />
+          <EndpointRow
+            method="POST"
+            path={WEB_APP_CONFIG.restEndpoint}
+            description="REST action dispatch"
+          />
+          <EndpointRow
+            method="GET"
+            path={WEB_APP_CONFIG.healthEndpoint}
+            description="Liveness probe (unauthenticated)"
+          />
+          <EndpointRow
+            method="GET"
+            path={WEB_APP_CONFIG.statusEndpoint}
+            description="Runtime status"
+          />
+          <EndpointRow
+            method="POST"
+            path={WEB_APP_CONFIG.mcpEndpoint}
+            description="MCP Streamable HTTP transport"
+          />
+          <EndpointRow
+            method="GET"
+            path="/openapi.json"
+            description="Generated OpenAPI schema for the REST surface"
+          />
         </div>
       </div>
 
@@ -107,14 +127,26 @@ export default function ApiPage() {
             <tbody>
               {[
                 ["MCP", `${WEB_APP_CONFIG.serviceName}(action="greet", name="Alice")`],
-                ["REST", `POST ${WEB_APP_CONFIG.restEndpoint} {"action":"greet","params":{"name":"Alice"}}`],
+                [
+                  "REST",
+                  `POST ${WEB_APP_CONFIG.restEndpoint} {"action":"greet","params":{"name":"Alice"}}`,
+                ],
                 ["CLI", `${WEB_APP_CONFIG.serviceName} greet --name Alice`],
               ].map(([surface, pattern]) => (
-                <tr key={surface} style={{ borderBottom: "1px solid var(--aurora-border-default)" }}>
+                <tr
+                  key={surface}
+                  style={{ borderBottom: "1px solid var(--aurora-border-default)" }}
+                >
                   <td style={{ padding: "0.5rem 0.75rem", color: "var(--aurora-accent-primary)" }}>
                     {surface}
                   </td>
-                  <td style={{ padding: "0.5rem 0.75rem", color: "var(--aurora-text-muted)", wordBreak: "break-all" }}>
+                  <td
+                    style={{
+                      padding: "0.5rem 0.75rem",
+                      color: "var(--aurora-text-muted)",
+                      wordBreak: "break-all",
+                    }}
+                  >
                     {pattern}
                   </td>
                 </tr>

@@ -18,10 +18,10 @@ Three pages:
 |---|---|
 | Framework | Next.js 16 (App Router, static export) |
 | Runtime | React 19 |
-| Language | TypeScript 5 (strict) |
+| Language | TypeScript 6 (strict) |
 | Styles | Tailwind CSS 4 + Aurora design tokens |
 | Components | shadcn/ui scaffolding over Radix UI primitives |
-| Icons | lucide-react |
+| Icons | shadcn configured for lucide; add lucide-react when introducing icons |
 | Fonts | Manrope (display), Inter (sans), JetBrains Mono (mono) |
 
 ## Dev commands
@@ -33,7 +33,8 @@ pnpm start      # serve the built out/ directory
 pnpm lint       # Biome lint
 pnpm check      # Biome lint + format check
 pnpm typecheck  # TypeScript type check
-pnpm validate   # Biome check + typecheck + static build
+pnpm test       # Vitest contract tests
+pnpm validate   # Biome check + typecheck + tests + static build
 ```
 
 ## How it connects to the backend

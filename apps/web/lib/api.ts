@@ -36,17 +36,33 @@ export interface HealthResult {
 }
 
 /** Shared fetch helper — handles JSON parsing and error normalisation. */
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
+export async function apiFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(url, options);
-    const json = await res.json();
+    const text = await res.text();
+    const json = parseJsonBody(text);
     if (!res.ok) {
-      return { error: (json as { error?: string }).error ?? `HTTP ${res.status}` };
+      const error =
+        isRecord(json) && typeof json.error === "string" ? json.error : `HTTP ${res.status}`;
+      return { error };
     }
     return { data: json as T };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Network error" };
   }
+}
+
+export function parseJsonBody(text: string): unknown {
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** POST /v1/example — dispatch an action */

@@ -1,4 +1,4 @@
-import { ACTIONS, WEB_APP_CONFIG } from "@/lib/template";
+import { type ACTIONS, WEB_APP_CONFIG } from "@/lib/template";
 import { CodeBlock } from "./code-block";
 
 export function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
