@@ -13,7 +13,10 @@ fn server_info_advertises_tools_resources_prompts() {
     let server = super::rmcp_server(loopback_state());
     let info = server.get_info();
     let caps = &info.capabilities;
-    assert!(caps.tools.is_some(), "server must advertise tools capability");
+    assert!(
+        caps.tools.is_some(),
+        "server must advertise tools capability"
+    );
     assert!(
         caps.resources.is_some(),
         "server must advertise resources capability"

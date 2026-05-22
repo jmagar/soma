@@ -47,8 +47,14 @@ fn formats_message_and_structured_fields() {
         tracing::info!(action = "greet", elapsed_ms = 12u64, "tool call");
     });
     assert!(output.contains("tool call"), "message missing:\n{output}");
-    assert!(output.contains("action=greet"), "action field missing:\n{output}");
-    assert!(output.contains("elapsed_ms=12"), "elapsed_ms field missing:\n{output}");
+    assert!(
+        output.contains("action=greet"),
+        "action field missing:\n{output}"
+    );
+    assert!(
+        output.contains("elapsed_ms=12"),
+        "elapsed_ms field missing:\n{output}"
+    );
 }
 
 #[test]
@@ -57,8 +63,14 @@ fn formats_warn_level() {
         tracing::warn!(error = "timeout", "upstream slow");
     });
     assert!(output.contains("WARN"), "WARN level missing:\n{output}");
-    assert!(output.contains("upstream slow"), "message missing:\n{output}");
-    assert!(output.contains("error=timeout"), "error field missing:\n{output}");
+    assert!(
+        output.contains("upstream slow"),
+        "message missing:\n{output}"
+    );
+    assert!(
+        output.contains("error=timeout"),
+        "error field missing:\n{output}"
+    );
 }
 
 #[test]
@@ -67,7 +79,10 @@ fn formats_error_level() {
         tracing::error!(status = 500u32, "request failed");
     });
     assert!(output.contains("ERROR"), "ERROR level missing:\n{output}");
-    assert!(output.contains("request failed"), "message missing:\n{output}");
+    assert!(
+        output.contains("request failed"),
+        "message missing:\n{output}"
+    );
 }
 
 #[test]
@@ -126,7 +141,11 @@ fn sanitize_strips_c0_controls() {
 fn sanitize_preserves_tab_and_newline() {
     use super::sanitize_field_value;
     let value = "hello\tworld\nline2";
-    assert_eq!(sanitize_field_value(value), value, "tab and newline must not be replaced");
+    assert_eq!(
+        sanitize_field_value(value),
+        value,
+        "tab and newline must not be replaced"
+    );
 }
 
 #[test]
