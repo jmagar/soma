@@ -71,14 +71,26 @@ fn doctor_json_flag() {
 #[test]
 fn watch_defaults() {
     let cmd = parse_args_from(["watch"]).unwrap().unwrap();
-    assert_eq!(cmd, Command::Watch { url: None, interval: 10 });
+    assert_eq!(
+        cmd,
+        Command::Watch {
+            url: None,
+            interval: 10
+        }
+    );
 }
 
 #[test]
 fn watch_with_url_and_interval() {
-    let cmd = parse_args_from(["watch", "--url", "http://localhost:40060", "--interval", "5"])
-        .unwrap()
-        .unwrap();
+    let cmd = parse_args_from([
+        "watch",
+        "--url",
+        "http://localhost:40060",
+        "--interval",
+        "5",
+    ])
+    .unwrap()
+    .unwrap();
     assert_eq!(
         cmd,
         Command::Watch {

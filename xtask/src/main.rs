@@ -195,10 +195,7 @@ fn check_test_siblings() -> Result<()> {
         }
 
         let stem = name.strip_suffix(".rs").unwrap();
-        let sibling = path
-            .parent()
-            .unwrap()
-            .join(format!("{stem}_tests.rs"));
+        let sibling = path.parent().unwrap().join(format!("{stem}_tests.rs"));
 
         if !sibling.exists() {
             missing.push(path.to_owned());
@@ -230,14 +227,24 @@ fn check_test_siblings() -> Result<()> {
     let ok = missing.is_empty() && orphans.is_empty();
 
     if !missing.is_empty() {
-        println!("==> check-test-siblings: missing _tests.rs siblings ({}):", missing.len());
+        println!(
+            "==> check-test-siblings: missing _tests.rs siblings ({}):",
+            missing.len()
+        );
         for path in &missing {
             let stem = path.file_stem().unwrap().to_string_lossy();
-            println!("  MISSING  {}  (expected {}_tests.rs)", path.display(), stem);
+            println!(
+                "  MISSING  {}  (expected {}_tests.rs)",
+                path.display(),
+                stem
+            );
         }
     }
     if !orphans.is_empty() {
-        println!("==> check-test-siblings: orphaned _tests.rs files ({}):", orphans.len());
+        println!(
+            "==> check-test-siblings: orphaned _tests.rs files ({}):",
+            orphans.len()
+        );
         for path in &orphans {
             println!("  ORPHAN   {}  (no matching source file)", path.display());
         }
@@ -246,11 +253,7 @@ fn check_test_siblings() -> Result<()> {
         println!("==> check-test-siblings: all source files have a _tests.rs sibling");
         return Ok(());
     }
-    bail!(
-        "{} missing, {} orphaned",
-        missing.len(),
-        orphans.len()
-    );
+    bail!("{} missing, {} orphaned", missing.len(), orphans.len());
 }
 
 // =============================================================================

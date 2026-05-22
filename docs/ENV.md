@@ -54,7 +54,7 @@ Only required when `EXAMPLE_MCP_AUTH_MODE=oauth`:
 |---|---|
 | `PUID` | UID to run the container as (default: 1000). |
 | `PGID` | GID to run the container as (default: 1000). |
-| `DOCKER_NETWORK` | Docker network name (default: `jakenet`). |
+| `DOCKER_NETWORK` | Docker network name (default: `mcp`). |
 | `VERSION` | Image tag to pull (default: `latest`). |
 
 ## Logging
@@ -82,7 +82,7 @@ EXAMPLE_MCP_TOKEN=your_bearer_token_here
 # Docker runtime
 PUID=1000
 PGID=1000
-DOCKER_NETWORK=jakenet
+DOCKER_NETWORK=mcp
 RUST_LOG=info
 ```
 

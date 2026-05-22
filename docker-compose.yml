@@ -25,6 +25,6 @@ services:
       dockerfile: config/Dockerfile
 
 networks:
-  jakenet:
-    name: ${DOCKER_NETWORK:-jakenet}
+  mcp:
+    name: ${DOCKER_NETWORK:-mcp}
     external: true

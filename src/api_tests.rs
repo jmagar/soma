@@ -22,8 +22,7 @@ fn action_request_parses_action_and_params() {
 
 #[test]
 fn action_request_params_defaults_to_null_when_omitted() {
-    let req: ActionRequest =
-        serde_json::from_value(json!({ "action": "status" })).unwrap();
+    let req: ActionRequest = serde_json::from_value(json!({ "action": "status" })).unwrap();
     assert_eq!(req.action, "status");
     assert!(req.params.is_null());
 }

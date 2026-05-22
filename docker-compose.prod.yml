@@ -16,7 +16,7 @@ name: rmcp-template
 
 x-common-service: &common-service
   networks:
-    - jakenet
+    - mcp
   restart: unless-stopped
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -71,6 +71,6 @@ volumes:
   example-mcp-data:
 
 networks:
-  jakenet:
-    name: ${DOCKER_NETWORK:-jakenet}
+  mcp:
+    name: ${DOCKER_NETWORK:-mcp}
     external: true
