@@ -59,17 +59,29 @@ async fn rest_echo_accepts_nested_params() {
 #[tokio::test]
 async fn rest_validation_errors_are_bad_requests() {
     let app = server::router(loopback_state());
-    for body in [
+    for (body, expected_error) in [
         json!({"action": "echo", "params": {}}),
         json!({"action": "echo", "params": {"message": ""}}),
         json!({"action": "echo", "params": {"message": 42}}),
         json!({"action": "missing", "params": {}}),
         json!({"params": {}}),
-    ] {
+    ]
+    .into_iter()
+    .map(|body| {
+        let expected_error = if body.get("action").is_none() {
+            Some("action is required")
+        } else {
+            None
+        };
+        (body, expected_error)
+    }) {
         let (status, response) =
             request_json(app.clone(), Method::POST, "/v1/example", None, Some(body)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
         assert!(response.get("error").is_some(), "{response}");
+        if let Some(expected_error) = expected_error {
+            assert_eq!(response["error"], expected_error);
+        }
     }
 }
 
@@ -124,10 +136,20 @@ async fn openapi_json_is_public_and_excludes_mcp_only_actions() {
         body["components"]["schemas"]["ActionName"]["enum"],
         json!(["greet", "echo", "status", "help"])
     );
+    assert_eq!(
+        body["paths"]["/v1/example"]["post"]["security"],
+        json!([{"BearerAuth": []}, {}])
+    );
+    assert!(
+        body["components"]["schemas"]["StatusResponse"]["properties"]
+            .get("api_url")
+            .is_none(),
+        "{body}"
+    );
 }
 
 #[tokio::test]
-async fn status_uses_service_status_and_local_metadata() {
+async fn status_returns_only_local_redacted_metadata() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(app, Method::GET, "/status", None, None).await;
 
@@ -136,6 +158,9 @@ async fn status_uses_service_status_and_local_metadata() {
     assert_eq!(body["server"], "example-mcp");
     assert_eq!(body["transport"], "http");
     assert!(body.get("version").is_some());
+    assert!(body.get("api_url").is_none(), "{body}");
+    assert!(body.get("api_key").is_none(), "{body}");
+    assert!(body.get("upstream").is_none(), "{body}");
 }
 
 #[tokio::test]

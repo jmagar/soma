@@ -110,7 +110,8 @@
         "security": [
           {
             "BearerAuth": []
-          }
+          },
+          {}
         ],
         "requestBody": {
           "required": true,
@@ -230,6 +231,9 @@
           },
           {
             "$ref": "#/components/schemas/HelpResponse"
+          },
+          {
+            "$ref": "#/components/schemas/RestTruncationResponse"
           }
         ]
       },
@@ -271,9 +275,6 @@
         ],
         "properties": {
           "status": {
-            "type": "string"
-          },
-          "api_url": {
             "type": "string"
           },
           "note": {
@@ -342,6 +343,33 @@
         ],
         "properties": {
           "error": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RestTruncationResponse": {
+        "type": "object",
+        "required": [
+          "truncated",
+          "error",
+          "max_response_bytes",
+          "hint"
+        ],
+        "properties": {
+          "truncated": {
+            "type": "boolean",
+            "const": true
+          },
+          "error": {
+            "type": "string",
+            "const": "response exceeded REST response size limit"
+          },
+          "max_response_bytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "hint": {
             "type": "string"
           }
         },

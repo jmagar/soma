@@ -3,6 +3,7 @@
 //! All handlers are thin: parse the request, call the service, return JSON.
 //! Business logic lives in `app.rs`.
 
+use anyhow::Result;
 use axum::{
     extract::{Extension, State},
     http::{header, StatusCode},
@@ -14,6 +15,7 @@ use serde_json::{json, Value};
 
 use crate::actions::{execute_service_action, required_scope_for_action, ExampleAction};
 use crate::server::{AppState, AuthPolicy};
+use crate::token_limit::MAX_RESPONSE_BYTES;
 
 /// Request body for `POST /v1/example`.
 ///
@@ -52,7 +54,17 @@ pub async fn api_dispatch(
     };
 
     match result {
-        Ok(value) => Json(value).into_response(),
+        Ok(value) => match cap_rest_response(value) {
+            Ok(value) => Json(value).into_response(),
+            Err(e) => {
+                tracing::error!(error = %e, action = %body.action, "REST response serialization failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "internal server error"})),
+                )
+                    .into_response()
+            }
+        },
         Err(e) if crate::actions::is_validation_error(&e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),
@@ -67,6 +79,19 @@ pub async fn api_dispatch(
                 .into_response()
         }
     }
+}
+
+fn cap_rest_response(value: Value) -> Result<Value> {
+    let serialized = serde_json::to_vec(&value)?;
+    if serialized.len() <= MAX_RESPONSE_BYTES {
+        return Ok(value);
+    }
+    Ok(json!({
+        "truncated": true,
+        "error": "response exceeded REST response size limit",
+        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "hint": "Use limit/offset parameters or more specific filters to get a smaller result.",
+    }))
 }
 
 fn enforce_rest_scope(
@@ -121,30 +146,15 @@ pub async fn openapi_json() -> impl IntoResponse {
     )
 }
 
-/// `GET /status` — runtime status (unauthenticated, redacts secrets).
+/// `GET /status` — local runtime status (unauthenticated, redacts secrets).
 pub async fn status(State(state): State<AppState>) -> impl IntoResponse {
-    match state.service.status().await {
-        Ok(mut value) => {
-            if let Some(object) = value.as_object_mut() {
-                object.insert("server".into(), json!(state.config.server_name));
-                object.insert("version".into(), json!(env!("CARGO_PKG_VERSION")));
-                object.insert("transport".into(), json!("http"));
-            } else {
-                tracing::warn!(
-                    "status() returned a non-object value; metadata fields not injected"
-                );
-            }
-            Json(value).into_response()
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "runtime status check failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "status check failed"})),
-            )
-                .into_response()
-        }
-    }
+    Json(json!({
+        "status": "ok",
+        "server": state.config.server_name,
+        "version": env!("CARGO_PKG_VERSION"),
+        "transport": "http",
+    }))
+    .into_response()
 }
 
 #[cfg(test)]
