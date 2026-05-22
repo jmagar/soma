@@ -36,7 +36,7 @@ export interface HealthResult {
 }
 
 /** Shared fetch helper — handles JSON parsing and error normalisation. */
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
+export async function apiFetch<T>(url: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
     const res = await fetch(url, options);
     const text = await res.text();
@@ -52,7 +52,7 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<ApiRespo
   }
 }
 
-function parseJsonBody(text: string): unknown {
+export function parseJsonBody(text: string): unknown {
   if (!text.trim()) return {};
   try {
     return JSON.parse(text);
@@ -61,7 +61,7 @@ function parseJsonBody(text: string): unknown {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 

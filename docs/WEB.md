@@ -10,7 +10,7 @@ scope: "template"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-05-22"
 ---
 
 # Web UI
@@ -35,6 +35,7 @@ just web-watch       # rebuild on changes
 just build-full      # build web then release binary (CI)
 pnpm -C apps/web check
 pnpm -C apps/web typecheck
+pnpm -C apps/web test
 pnpm -C apps/web build
 ```
 
@@ -51,24 +52,15 @@ pub fn web_assets_available() -> bool {
 }
 
 pub async fn serve_web_assets(request: Request<Body>) -> Response {
-    let path = request.uri().path().trim_start_matches('/');
+    let path = normalize_asset_path(request.uri().path());
 
-    // Try exact path, then with .html, then index.html (SPA fallback)
-    let candidates = [
-        path.to_string(),
-        format!("{path}.html"),
-        format!("{path}/index.html"),
-        "index.html".to_string(),
-    ];
+    // Try exact path, then with .html, then route index.html.
+    let candidates = asset_candidates(path);
 
-    for candidate in &candidates {
-        if let Some(file) = WEB_ASSETS.get_file(candidate) {
-            let content_type = guess_mime(candidate);
-            let cache_control = if candidate == "index.html" {
-                "no-store"  // SPA shell must not be cached
-            } else {
-                "public, max-age=31536000, immutable"  // hashed assets = forever
-            };
+    for candidate in candidates {
+        if let Some(file) = WEB_ASSETS.get_file(candidate.as_str()) {
+            let content_type = guess_mime(candidate.as_str());
+            let cache_control = cache_control_for(candidate.as_str());
             return (
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, content_type),
@@ -83,25 +75,24 @@ pub async fn serve_web_assets(request: Request<Body>) -> Response {
 }
 ```
 
-## Build script (build.rs)
+## Build orchestration
 
-```rust
-fn main() {
-    println!("cargo:rerun-if-changed=apps/web/src");
-    println!("cargo:rerun-if-changed=apps/web/package.json");
+There is no `build.rs` web build step. Cargo embeds whatever is present in
+`apps/web/out/` at compile time.
 
-    let out_dir = std::path::Path::new("apps/web/out");
-    if !out_dir.exists() {
-        let status = std::process::Command::new("pnpm")
-            .args(["--dir", "apps/web", "build"])
-            .status();
-        if let Err(e) = status {
-            // Don't fail the Rust build — web UI will be unavailable
-            println!("cargo:warning=Web build failed: {e}.");
-        }
-    }
-}
+Local builds:
+
+```bash
+just build-web   # scripts/build-web.sh: frozen pnpm install if needed, then pnpm build
+just build-full  # build web assets, then cargo build --release
 ```
+
+Docker builds use the `web` stage in `config/Dockerfile`, run
+`pnpm install --frozen-lockfile`, build the static export, and copy `apps/web/out`
+into the Rust builder stage before compiling the binary.
+
+`just web-watch` performs one initial `scripts/build-web.sh` run, then rebuilds
+the static export when files under `apps/web/` change.
 
 ## Feature gate
 

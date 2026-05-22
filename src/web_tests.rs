@@ -16,7 +16,7 @@ fn normalize_asset_path_removes_leading_and_trailing_slashes() {
 fn asset_candidates_match_next_static_export_paths() {
     assert_eq!(
         asset_candidates("tools"),
-        [
+        vec![
             "tools".to_string(),
             "tools.html".to_string(),
             "tools/index.html".to_string(),
@@ -30,6 +30,28 @@ fn trailing_slash_candidates_do_not_include_double_slashes() {
     let candidates = asset_candidates(path);
     assert_eq!(candidates[2], "tools/index.html");
     assert!(!candidates.iter().any(|candidate| candidate.contains("//")));
+}
+
+#[test]
+fn root_asset_candidates_do_not_include_empty_or_double_slash_paths() {
+    assert_eq!(asset_candidates(""), vec!["index.html".to_string()]);
+}
+
+#[test]
+fn cache_control_does_not_cache_html_shells() {
+    assert_eq!(cache_control_for("index.html"), "no-store");
+    assert_eq!(cache_control_for("tools.html"), "no-store");
+    assert_eq!(cache_control_for("tools/index.html"), "no-store");
+}
+
+#[test]
+fn cache_control_only_marks_next_static_assets_immutable() {
+    assert_eq!(
+        cache_control_for("_next/static/chunks/app-abc123.js"),
+        "public, max-age=31536000, immutable"
+    );
+    assert_eq!(cache_control_for("tools/index.txt"), "public, max-age=3600");
+    assert_eq!(cache_control_for("favicon.ico"), "public, max-age=3600");
 }
 
 #[test]
