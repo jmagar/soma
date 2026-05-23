@@ -430,7 +430,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 12. **Choose a binary distribution path**
 
-    GitHub release tags build Linux artifacts and attach them to the release. Local `just dist` is an operator convenience for preparing files under `dist/`; it does not push generated binaries back to `main`.
+    GitHub release tags build Linux and Windows artifacts and attach them to the release. PR CI also uploads native Linux and Windows build artifacts for smoke testing. Local `just dist` is an operator convenience for preparing files under `dist/`; it does not push generated binaries back to `main`.
 
 13. **Run `just symlink-docs`** after any new CLAUDE.md
 
@@ -442,6 +442,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
     - `rmcp-template` → your repo name (cache keys)
     - `example-mcp` → your Docker image name
     - `example` → your binary name
+    - `example-linux-x86_64` / `example-windows-x86_64` → your artifact names
     - `jmagar` → your GitHub org/username (image registry path)
 
 15. **Update `.env.example`** with your service's actual variable names and descriptions

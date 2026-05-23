@@ -31,6 +31,7 @@ This directory contains focused guides for operating, adapting, testing, and rel
 | `XTASKS.md` | `cargo xtask` automation. |
 | `PRE-COMMIT.md` | Lefthook and fast local guardrails. |
 | `CI.md` | Local CI parity and release gates. |
+| `WINDOWS-RUNNER.md` | Native Windows build artifacts and self-hosted runner setup. |
 | `TESTING.md` | Rust tests, route tests, live MCP tests. |
 | `MCPORTER.md` | Live MCP tool/resource testing and CLI generation. |
 | `SCRIPTS.md` | Script categories and maintenance contract. |

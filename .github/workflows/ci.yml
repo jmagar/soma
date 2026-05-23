@@ -30,6 +30,11 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Keep Windows artifacts portable even on self-hosted runners whose user-level
+  # Cargo config may contain target-cpu=native or machine-specific SIMD flags.
+  WINDOWS_PORTABLE_RUSTFLAGS: >-
+    -C target-cpu=x86-64
+    -C target-feature=-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd,-avx512ifma,-avx512vbmi,-avx512vbmi2,-avx512vnni,-avx512bitalg,-avx512vpopcntdq
 
 jobs:
   # ── fmt: cargo fmt --check ──────────────────────────────────────────────────
@@ -132,6 +137,113 @@ jobs:
 
       - name: pnpm build
         run: pnpm build
+
+  # -- native release builds ----------------------------------------------------
+  #
+  # These jobs mirror the Axon pattern: prove the binary builds on Linux and on
+  # native Windows during PR CI, then upload the runnable artifacts for manual
+  # smoke testing. Release tags still use .github/workflows/release.yml for
+  # packaging and GitHub Release publication.
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: web
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ github.repository }}-build-linux-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ github.repository }}-build-linux-
+
+      - name: Build web assets
+        working-directory: apps/web
+        run: |
+          npm install -g "$(node -p "require('./package.json').packageManager")"
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: cargo build --release
+        run: cargo build --release --locked --bin example
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-linux-x86_64
+          path: target/release/example
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    needs: web
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Cargo
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ github.repository }}-build-windows-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ github.repository }}-build-windows-
+
+      - name: Show Windows Rust CPU flags
+        shell: pwsh
+        env:
+          RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          rustc -vV
+          "RUSTFLAGS=$env:RUSTFLAGS"
+          rustc --print cfg | Select-String 'target_feature'
+          cargo config get build.rustflags --merged
+          if ($LASTEXITCODE -ne 0) { "build.rustflags not set" }
+          cargo config get target.x86_64-pc-windows-msvc.rustflags --merged
+          if ($LASTEXITCODE -ne 0) { "target rustflags not set" }
+          exit 0
+
+      - name: Build web assets
+        shell: pwsh
+        working-directory: apps/web
+        run: |
+          npm install -g "$(node -p "require('./package.json').packageManager")"
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: cargo test
+        shell: pwsh
+        env:
+          RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
+        run: cargo test --locked --all-targets
+
+      - name: cargo build --release
+        shell: pwsh
+        env:
+          RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
+        run: cargo build --release --locked --bin example
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: example-windows-x86_64
+          path: target/release/example.exe
+          if-no-files-found: error
 
   # ── toml: taplo check ─────────────────────────────────────────────────────────
   toml:

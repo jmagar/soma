@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "family"
 source_of_truth: true
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-05-22"
 ---
 
 # Rust Build Setup
@@ -196,6 +196,32 @@ Install the cross-compiler on Debian/Ubuntu build hosts:
 ```bash
 apt install mingw-w64
 ```
+
+## Native Windows CI builds
+
+PR CI also builds on native Windows through `.github/workflows/ci.yml`. This is
+separate from Linux-to-Windows cross-compilation:
+
+- cross-compilation is useful for tag-time packaging when dependencies support it
+- native Windows CI catches Windows runtime, path, shell, and MSVC issues earlier
+- self-hosted Windows runners must be audited for user-level Cargo config
+
+The Windows CI job sets explicit portable CPU flags:
+
+```powershell
+$env:RUSTFLAGS = "-C target-cpu=x86-64 -C target-feature=-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd,-avx512ifma,-avx512vbmi,-avx512vbmi2,-avx512vnni,-avx512bitalg,-avx512vpopcntdq"
+```
+
+Keep machine-specific optimization out of committed config. In particular, do
+not add this to repo or runner-wide config for artifacts that will be shared:
+
+```toml
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-cpu=native"]
+```
+
+For self-hosted runner setup, labels, required tools, artifact smoke testing,
+and Cargo config audits, see `docs/WINDOWS-RUNNER.md`.
 
 ---
 

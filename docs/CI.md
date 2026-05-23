@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: false
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-05-22"
 ---
 
 # CI
@@ -36,9 +36,20 @@ Runs on push/PR to main:
 - `clippy`: `cargo clippy -- -D warnings`
 - `test`: `cargo nextest run --profile ci`
 - `web`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm build`
+- `build-linux`: native Linux release build, uploads `example-linux-x86_64`
+- `build-windows`: native Windows release build and test, uploads `example-windows-x86_64`
 - `toml`: `taplo check`
 - `deny`: `cargo deny check`
 - `gitleaks`: secret scanning
+
+The Linux and Windows build jobs are PR-time artifact checks. They prove the
+binary compiles natively before a release tag exists and give reviewers a
+downloadable artifact for manual smoke testing.
+
+The Windows job follows the Axon CI pattern: it builds on native Windows and
+sets explicit portable CPU flags so self-hosted runner config cannot leak
+`target-cpu=native` into published artifacts. See `docs/WINDOWS-RUNNER.md` for
+the full runner setup and audit process.
 
 ### `.github/workflows/docker-publish.yml`
 
@@ -52,9 +63,11 @@ Runs on push to main + tags:
 ### `.github/workflows/release.yml`
 
 Runs on version tags (`v*`):
-- Build release binaries for linux/amd64 and linux/arm64
+- Build release binaries for linux/amd64 and windows/amd64
 - Create GitHub Release with binary assets
-- Update `install.sh` download URLs
+- Generate `SHA256SUMS`
+- Optionally copy binaries to `bin/` through the existing Git LFS job when that
+  workflow is enabled for the target repo
 
 ## nextest configuration
 
@@ -119,7 +132,15 @@ Large artifacts are blocked unless allowlisted in `scripts/blob-size-allowlist.t
 
 Version tags (`v*`) trigger the release workflow, which builds release binaries and attaches them to the GitHub Release. The release workflow must **not** push generated binaries back to `main`. Local `just dist` / `cargo xtask dist` recipes are operator conveniences for preparing artifacts — they are not a CI write-back path.
 
-Binary naming convention: `<service>-<version>-<arch>-unknown-linux-musl.tar.gz` (e.g. `example-v0.2.0-x86_64-unknown-linux-musl.tar.gz`).
+CI artifact naming convention:
+
+- `example-linux-x86_64`
+- `example-windows-x86_64`
+
+Release tarball naming convention:
+
+- `example-x86_64.tar.gz`
+- `example-windows-x86_64.tar.gz`
 
 ## CHANGELOG.md
 
