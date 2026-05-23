@@ -17,10 +17,12 @@ last_reviewed: "2026-05-22"
 This guide explains the Linux + Windows build workflow and the Windows runner
 setup used by repos derived from `rmcp-template`.
 
-The default workflow uses GitHub-hosted runners:
+The template can run on GitHub-hosted runners, but this repo's Windows job is
+currently wired to the steamy self-hosted runner:
 
 - `build-linux`: `ubuntu-latest`, builds `target/release/example`
-- `build-windows`: `windows-latest`, builds `target/release/example.exe`
+- `build-windows`: `[self-hosted, Windows, rmcp-template, steamy]`, builds
+  `target/release/example.exe`
 
 Both jobs run on push and pull request through `.github/workflows/ci.yml`. They
 upload artifacts named `example-linux-x86_64` and `example-windows-x86_64` so PR
@@ -86,10 +88,24 @@ Do not put `target-cpu=native` in repo config. If a developer wants local native
 optimizations, they belong in that developer's private environment, never in
 committed `.cargo/config.toml`.
 
+## Current Steamy Runner
+
+The active runner is:
+
+- GitHub repo: `jmagar/rmcp-template`
+- Runner name: `rmcp-template-windows-1`
+- Runner path: `C:\Users\jmaga\actions-runner\rmcp-template`
+- Labels: `self-hosted`, `Windows`, `X64`, `rmcp-template`, `steamy`
+- Startup file:
+  `C:\Users\jmaga\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\rmcp-template-runner.vbs`
+
+The runner is nested under the existing Axon runner directory so all GitHub
+Actions runner state for steamy stays under `C:\Users\jmaga\actions-runner`.
+
 ## GitHub-Hosted Runner Setup
 
-No repository configuration is required for the default `windows-latest` setup.
-GitHub provides Windows, MSVC, PowerShell, Node, and Rust installation support.
+No repository configuration is required for `windows-latest`. GitHub provides
+Windows, MSVC, PowerShell, Node, and Rust installation support.
 
 Use the hosted runner when:
 
