@@ -96,8 +96,8 @@ pub const WRITE_SCOPE: &str = "example:write";
 pub const DENY_SCOPE: &str = "example:__deny__";
 
 /// Returns true if `token_scopes` satisfy `required`.
-/// Write scope satisfies read (write ⊇ read).
-/// Single source of truth — called from both REST and MCP enforcement paths.
+/// Write scope satisfies read (write includes read).
+/// Single source of truth - called from both REST and MCP enforcement paths.
 pub fn scopes_satisfy(token_scopes: &[String], required: &str) -> bool {
     token_scopes
         .iter()

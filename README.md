@@ -275,6 +275,7 @@ cargo build --release # release build
 cargo test            # run tests
 cargo clippy -- -D warnings  # lint
 cargo fmt             # format
+cargo xtask contract-audit  # local static/spec contract audit
 
 just dev              # EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp (loopback only, no auth)
 just test             # cargo test
@@ -306,7 +307,8 @@ family and generalized for new MCP services:
 | `just schema-docs` / `just schema-docs-check` | Generate or verify [docs/MCP_SCHEMA.md](docs/MCP_SCHEMA.md) from the MCP action schema |
 | `just openapi` / `just openapi-check` | Generate or verify [docs/generated/openapi.json](docs/generated/openapi.json) for the REST API surface |
 | `just scaffold-contract-check` | Validate scaffold intent JSON Schema and examples in `docs/contracts/` |
-| `just template-check` | Run plugin layout, schema drift, OpenAPI, scaffold contract, and template feature checks |
+| `just contract-audit` | Run local static/spec checks without contacting live upstream services |
+| `just template-check` | Run plugin layout plus the local static/spec contract audit |
 | `just auth-smoke` | Smoke-test bearer-token MCP HTTP auth against a running server |
 | `just pre-release` | Run the release-readiness gate |
 | `just up` / `just down` | Short aliases for Docker Compose start/stop |
@@ -517,6 +519,9 @@ cargo check
 
 # Run tests with nextest
 cargo nextest run
+
+# Run local static/spec contract checks
+cargo xtask contract-audit
 
 # Check environment variables
 cargo xtask check-env

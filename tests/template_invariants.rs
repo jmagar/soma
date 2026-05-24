@@ -54,6 +54,7 @@ fn justfile_exposes_ported_automation_recipes() {
         "file-size-check:",
         "schema-docs:",
         "schema-docs-check:",
+        "contract-audit:",
         "template-features:",
         "template-check:",
         "test-cov:",
@@ -66,6 +67,31 @@ fn justfile_exposes_ported_automation_recipes() {
         "release:",
     ] {
         assert!(justfile.contains(recipe), "Justfile missing {recipe}");
+    }
+}
+
+#[test]
+fn contract_audit_is_exposed_in_automation_and_docs() {
+    for path in [
+        "xtask/src/main.rs",
+        "Justfile",
+        "README.md",
+        "docs/TESTING.md",
+        "docs/PATTERNS.md",
+    ] {
+        let content = read(path);
+        assert!(
+            content.contains("contract-audit"),
+            "{path} should mention contract-audit"
+        );
+    }
+
+    let testing = read("docs/TESTING.md");
+    for tier in ["static-spec", "contract-real", "production-real"] {
+        assert!(
+            testing.contains(tier),
+            "docs/TESTING.md should describe {tier} evidence"
+        );
     }
 }
 

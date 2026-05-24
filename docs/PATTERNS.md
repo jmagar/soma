@@ -2848,6 +2848,76 @@ exec su-exec 1000:1000 "${BINARY}" "$@"
 
 ---
 
+## 51. Contract-Backed REST-Client Testing
+
+Rust MCP servers that primarily wrap an upstream REST API need real evidence
+without making default tests call real homelab services. Use three evidence
+tiers and keep their claims separate:
+
+| Tier | Command shape | Evidence claim |
+|---|---|---|
+| `static-spec` | `cargo xtask contract-audit` | Local schema docs, OpenAPI docs, action metadata, plugin contracts, sidecar tests, and template invariants are in sync. |
+| `contract-real` | `cargo nextest run` with local mocks | The service constructs the expected HTTP requests, parses fixtures, maps errors, and enforces safety gates against a local contract. |
+| `production-real` | explicit `mcporter` smoke | A deployed server can perform allowlisted read-only actions against a real upstream. |
+
+### xtask boundary
+
+`xtask` orchestrates repo-level checks and should stay dependency-light. Do not
+add `wiremock`, `jsonschema`, OpenAPI parsers, or service-specific REST
+assertions to `xtask`. Those belong in the derived server's Rust integration
+tests, where fixtures and schema validators can be reused normally.
+
+`cargo xtask contract-audit` is safe to run in CI and agent worktrees because it
+must not start a real upstream client or execute live MCP actions.
+
+### Mock upstream pattern
+
+Derived REST-client servers should add local mock-upstream tests using
+`wiremock` or an equivalent crate:
+
+```rust
+#[tokio::test]
+async fn list_items_builds_expected_upstream_request() {
+    let server = wiremock::MockServer::start().await;
+
+    wiremock::Mock::given(wiremock::matchers::method("GET"))
+        .and(wiremock::matchers::path("/api/items"))
+        .and(wiremock::matchers::header("authorization", "Bearer test-key"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({"items": [{"id": 1, "name": "demo"}]}),
+        ))
+        .mount(&server)
+        .await;
+
+    let service = service_for_base_url(server.uri());
+    let value = service.list_items().await.unwrap();
+
+    assert_eq!(value["items"][0]["name"], "demo");
+}
+```
+
+For schema-backed fixtures, validate representative JSON with `jsonschema` or
+OpenAPI-derived schemas when practical. Keep curated schema overlays when the
+upstream OpenAPI document is incomplete, instance-specific, or too loose to
+catch real integration mistakes.
+
+### Destructive actions
+
+Default tests must never run destructive actions against live services.
+
+Required coverage:
+
+- without confirmation, the service fails before making any network call
+- with confirmation, the action targets only a mock server or disposable
+  upstream
+- live `mcporter` smoke includes only explicitly allowlisted read-only actions
+
+For services where a "send" action is the primary value, use a dedicated test
+tag, test app, or disposable endpoint gated by an environment variable. Do not
+hide those calls inside the default local or CI path.
+
+---
+
 # Advanced Patterns
 
 ---

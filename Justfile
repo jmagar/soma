@@ -163,18 +163,18 @@ patterns-strict:
 patterns-json:
     cargo xtask patterns --json
 
+# Run local static/spec contract checks without contacting live upstream services
+contract-audit:
+    cargo xtask contract-audit
+
 # Run shell/Rust-adjacent template invariant smoke tests
 template-features:
     bash scripts/test-template-features.sh
 
 # Run fast template-specific checks
 template-check:
-    just patterns-check
+    just contract-audit
     just validate-plugin
-    just schema-docs-check
-    just openapi-check
-    just scaffold-contract-check
-    just template-features
 
 # Run all local quality checks in sequence: fmt-check → lint → check → test
 verify:
