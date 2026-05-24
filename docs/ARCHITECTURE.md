@@ -79,7 +79,7 @@ src/
 #[derive(Clone)]
 pub struct AppState {
     pub config: McpConfig,                  // MCP server config (host, port, auth settings)
-    pub auth_policy: AuthPolicy,            // LoopbackDev | Mounted
+    pub auth_policy: AuthPolicy,            // LoopbackDev | TrustedGatewayUnscoped | Mounted
     pub service: ExampleService,            // The service layer — everything routes through here
     pub response_pages: ResponsePageStore,  // Cached oversized MCP responses for continuation calls
 }
@@ -95,7 +95,8 @@ All surfaces (MCP, REST API, web UI) share **one binary on one port**:
 Port 40060
   ├── /mcp                  → Streamable HTTP MCP transport
   ├── /health               → Unauthenticated liveness probe
-  ├── /status               → Runtime state (auth required)
+  ├── /status               → Public redacted runtime state
+  ├── /openapi.json         → Public generated REST OpenAPI schema
   ├── /v1/example           → REST API action dispatch
   ├── /.well-known/*        → OAuth metadata (when auth_mode=oauth)
   └── /*                    → SPA fallback (serves embedded web UI)

@@ -37,6 +37,7 @@ pnpm -C apps/web check
 pnpm -C apps/web typecheck
 pnpm -C apps/web test
 pnpm -C apps/web build
+pnpm -C apps/web start  # preview apps/web/out after build
 ```
 
 ## Embedding in Rust

@@ -56,11 +56,11 @@ RUN groupadd --gid 1000 example && \
     useradd --uid 1000 --gid example --no-create-home --shell /sbin/nologin example && \
     mkdir -p /data && chown example:example /data
 
-USER 1000:1000
 EXPOSE 40060/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40060/health || exit 1
-CMD ["example", "serve", "mcp"]
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["serve", "mcp"]
 ```
 
 ## docker-compose.yml pattern
@@ -156,10 +156,10 @@ for f in "${DATA_DIR}/.env" "${DATA_DIR}/auth-jwt.pem"; do
     [ -f "${f}" ] && chmod 600 "${f}" || true
 done
 
-exec su-exec 1000:1000 "$@"
+exec gosu 1000:1000 "$@"
 ```
 
-Key principles: fail fast, check every assumption, `exec` not `run` (so PID 1 is the actual service), no signal traps.
+Key principles: fail fast, check every assumption, use `exec` so PID 1 receives signals, and let the root entrypoint fix `/data` permissions before dropping privileges with `gosu`.
 
 ## Health and auth
 

@@ -172,7 +172,7 @@ apps/web/
 ## Build commands
 
 ```bash
-pnpm dev             # Dev server (http://localhost:3001 or next available)
+pnpm dev             # Dev server (http://localhost:3000 unless Next selects another port)
 pnpm build           # Static export to out/
 pnpm lint            # Biome lint
 pnpm typecheck       # TypeScript type check

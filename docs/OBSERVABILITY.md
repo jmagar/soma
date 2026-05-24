@@ -23,7 +23,6 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 |---|---|---|
 | `GET /health` | Public | Fast liveness + upstream connectivity. |
 | `GET /status` | Public | Local redacted runtime metadata. |
-| `GET /metrics` | Bearer | Prometheus-compatible metrics (optional). |
 | `/mcp` | Auth policy | MCP Streamable HTTP endpoint. |
 | `/v1/example` | Auth policy | REST action dispatch. |
 
@@ -62,12 +61,14 @@ Omit secrets, credentials, upstream URLs, and upstream health details from the p
 
 ## Logging
 
-Two destinations simultaneously — console and file:
+The active binary initializes stderr logging through `tracing_subscriber::fmt`.
+The reusable logging module also contains Aurora console formatting and JSON
+file logging support, but dual console+file logging is not wired by default.
 
 | Destination | Format | Writer |
 |---|---|---|
-| Console (stderr) | Human-readable, Aurora colors | `tracing_subscriber::fmt` with `AuroraFormatter` |
-| File (`~/.example/logs/example.log`) | Structured JSON | `tracing_subscriber::fmt::json()` |
+| Console (stderr) | Human-readable | `tracing_subscriber::fmt` |
+| File (`~/.example/logs/example.log`) | Structured JSON | available in `src/logging.rs`; not enabled by default |
 
 Use `RUST_LOG` to control log level:
 

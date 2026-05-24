@@ -424,9 +424,9 @@ fn check_env() -> Result<()> {
         ),
         (
             "EXAMPLE_MCP_HOST",
-            "Bind host (default 0.0.0.0 — set to 127.0.0.1 for local-only)",
+            "Bind host (default 127.0.0.1 — set to 0.0.0.0 only with auth or trusted gateway)",
         ),
-        ("EXAMPLE_MCP_PORT", "Bind port (default 3000)"),
+        ("EXAMPLE_MCP_PORT", "Bind port (default 40060)"),
         (
             "RUST_LOG",
             "Log filter (e.g. info,rmcp=warn — default: info in server mode, warn in stdio/cli)",

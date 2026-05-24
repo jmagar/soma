@@ -1,6 +1,6 @@
 # plugins
 
-Claude Code and Codex plugin packages for the MCP server. Both platforms share the same skills and MCP connection config — only the manifests differ.
+Claude Code, Codex, and Gemini plugin packages for the MCP server. All platforms share the same skills and MCP connection config — only the manifests differ.
 
 ## Structure
 
@@ -11,10 +11,11 @@ plugins/example/
 ├── .codex-plugin/
 │   ├── plugin.json       # Codex manifest
 │   └── README.md         # Codex manifest field reference
+├── gemini-extension.json # Gemini extension manifest
 ├── .mcp.json             # Shared MCP server connection config
 ├── hooks/
 │   ├── hooks.json        # Lifecycle hook definitions
-│   └── plugin-setup.sh  # Deployment and validation script
+│   └── plugin-setup.sh  # Lifecycle setup adapter
 └── skills/
     ├── example/
     │   └── SKILL.md      # Tool documentation for Claude and Codex
@@ -34,7 +35,7 @@ Claude Code plugin manifest. Defines the plugin identity, MCP server connection,
 
 | Field | Type | Description |
 |---|---|---|
-| `server_url` | string | MCP HTTP server base URL (default: `http://localhost:3000`) |
+| `server_url` | string | MCP HTTP server base URL (default: `http://localhost:40060`) |
 | `api_token` | string (sensitive) | Bearer token for auth |
 | `no_auth` | boolean | Disable auth (loopback dev only; non-loopback requires an upstream gateway) |
 | `auth_mode` | string | `bearer` or `oauth` |
@@ -123,15 +124,17 @@ Also includes HTTP fallback examples using `CLAUDE_PLUGIN_OPTION_SERVER_URL` and
 
 ## Version sync
 
-Three files must stay in sync when you bump the version:
+`Cargo.toml` is the canonical package version. Version-bearing files must stay in sync when you bump it:
 
 | File | Field |
 |---|---|
 | `Cargo.toml` | `version` |
-| `.claude-plugin/plugin.json` | `version` |
-| `.codex-plugin/plugin.json` | `version` |
+| `Cargo.lock` | package version |
+| `server.json` | MCP Registry version |
 
-Use `scripts/bump-version.sh patch` (or `minor`/`major`) to update all of them atomically.
+Claude, Codex, and Gemini plugin manifests intentionally do not contain a `version` field. Marketplace/plugin versioning is derived from git metadata.
+
+Use `scripts/bump-version.sh patch` (or `minor`/`major`) to update version-bearing files atomically.
 
 ---
 

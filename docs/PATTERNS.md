@@ -405,7 +405,7 @@ pub fn build_auth_layer(
             AuthLayer::new()
                 .with_static_token(static_token)
                 .with_auth_state(auth_state.clone())
-                .with_static_token_scopes(vec!["example:read".into(), "example:write".into()])
+                .with_static_token_scopes(vec!["example:read".into()])
                 .with_resource_url(resource_url)
                 .with_allow_session_cookie(false),
         ),
@@ -462,7 +462,7 @@ async fn serve_stdio_mcp() -> Result<()> {
 #[derive(Clone)]
 pub struct AppState {
     pub config: McpConfig,                  // MCP server config (host, port, auth settings)
-    pub auth_policy: AuthPolicy,            // LoopbackDev | Mounted
+    pub auth_policy: AuthPolicy,            // LoopbackDev | TrustedGatewayUnscoped | Mounted
     pub service: ExampleService,            // The service layer — everything routes through here
     pub response_pages: ResponsePageStore,  // Cached oversized MCP responses for continuation calls
 }
@@ -741,7 +741,7 @@ Adding an explicit version creates drift and requires manual bumping on every re
 {
   "name": "example",
   "userConfig": {
-    "server_url":    { "type": "string",  "title": "MCP server URL",    "default": "http://localhost:3000", "required": true },
+    "server_url":    { "type": "string",  "title": "MCP server URL",    "default": "http://localhost:40060", "required": true },
     "api_token":     { "type": "string",  "title": "API token",          "sensitive": true },
     "no_auth":       { "type": "boolean", "title": "Disable auth",        "default": false },
     "auth_mode":     { "type": "string",  "title": "Auth mode",           "default": "bearer" },
@@ -818,17 +818,19 @@ RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registr
     cp target/release/example /usr/local/bin/example
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates curl gosu && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/bin/example /usr/local/bin/example
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 RUN groupadd --gid 1000 example && \
     useradd --uid 1000 --gid example --no-create-home --shell /sbin/nologin example && \
     mkdir -p /data && chown example:example /data
 
-USER 1000:1000
-EXPOSE 3000/tcp
+EXPOSE 40060/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -sf http://localhost:3000/health || exit 1
-CMD ["example", "serve", "mcp"]
+  CMD curl -sf http://localhost:40060/health || exit 1
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["serve", "mcp"]
 ```
 
 ---
@@ -849,13 +851,13 @@ services:
       - path: .env
         required: false
     ports:
-      - "${EXAMPLE_MCP_HOST_PORT:-3000}:3000/tcp"
+      - "${EXAMPLE_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
       - ${EXAMPLE_DATA_VOLUME:-example-mcp-data}:/data
     networks:
       - mcp
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:40060/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -961,7 +963,7 @@ run_test "server info hostname non-empty" "example" '{"action":"server_info"}' \
 {
   "mcpServers": {
     "example": {
-      "url": "http://localhost:3000/mcp",
+      "url": "http://localhost:40060/mcp",
       "transport": "http"
     }
   }
@@ -1271,7 +1273,7 @@ service user. It handles permissions, creates required directories, and validate
 ```bash
 #!/bin/sh
 # entrypoint.sh — Docker entrypoint
-# Runs as root, then exec's the service as USER 1000:1000
+# Runs as root, then exec's the service as UID 1000:1000
 set -e
 
 DATA_DIR="${DATA_DIR:-/data}"
@@ -1298,15 +1300,15 @@ if [ -z "${EXAMPLE_API_KEY:-}" ]; then
 fi
 
 # Drop to service user and exec the binary
-exec su-exec 1000:1000 "$@"
+exec gosu 1000:1000 "$@"
 ```
 
 Dockerfile:
 ```dockerfile
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && apk add --no-cache su-exec  # or use gosu on debian
+RUN chmod +x /entrypoint.sh && apt-get update && apt-get install -y gosu
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["example", "serve", "mcp"]
+CMD ["serve", "mcp"]
 ```
 
 ---
@@ -1941,17 +1943,26 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
         "kind": "mcp_response_page",
         "schema_version": 1,
         "code": "response_page",
+        "message": "Tool response was returned as a scrollable serialized JSON page.",
         "truncated": false,
         "serialized_bytes": serialized_bytes,
         "max_response_bytes": MAX_RESPONSE_BYTES,
         "content_format": "application/json-fragment",
         "content": "...serialized JSON page...",
+        "page": {
+            "offset": 0,
+            "page_bytes": 16000,
+            "next_offset": next_offset,
+            "has_more": true
+        },
         "continuation": {
+            "tool": "example",
             "arguments": {
                 "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
                 "_response_page_bytes": 16000
-            }
+            },
+            "note": "Call the same tool with the same original arguments plus these reserved continuation arguments."
         }
     })
 }
@@ -2036,7 +2047,7 @@ Agents and operators should never have to guess what the server is doing.
 |---|---|---|
 | `GET /health` | none | Basic liveness + upstream connectivity |
 | `GET /status` | none | Redacted runtime status from the service layer |
-| `GET /metrics` | bearer | Prometheus-compatible metrics (optional) |
+| `GET /openapi.json` | none | Generated REST OpenAPI schema |
 
 ### /health response (always fast, no auth)
 
@@ -2831,7 +2842,7 @@ if ! chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null; then
 fi
 
 # Verify the data dir is actually writable by UID 1000 before starting
-if ! su-exec 1000:1000 sh -c "touch ${DATA_DIR}/.write_test 2>/dev/null && rm -f ${DATA_DIR}/.write_test"; then
+if ! gosu 1000:1000 sh -c "touch ${DATA_DIR}/.write_test 2>/dev/null && rm -f ${DATA_DIR}/.write_test"; then
     echo "FATAL: ${DATA_DIR} is not writable by UID 1000" >&2
     echo "  Check the volume mount permissions." >&2
     exit 1
@@ -2853,19 +2864,19 @@ echo "[entrypoint] User:     1000:1000"
 [ -n "${EXAMPLE_MCP_HOST:-}" ] && echo "[entrypoint] MCP host: ${EXAMPLE_MCP_HOST}"
 
 # ── 6. Signal handling ────────────────────────────────────────────────────────
-# Let su-exec / the service handle SIGTERM cleanly.
+# Let gosu / the service handle SIGTERM cleanly.
 # Do NOT trap signals here — pass them through to the child process.
 
 # ── 7. Drop privileges and exec ──────────────────────────────────────────────
 # exec replaces this shell process — signals go directly to the service.
-exec su-exec 1000:1000 "${BINARY}" "$@"
+exec gosu 1000:1000 "${BINARY}" "$@"
 ```
 
 ### Key principles
 
 1. **Fail fast** — exit 1 with clear message rather than starting in a broken state
 2. **Every assumption is checked** — binary exists, vars set, dir writable, files secured
-3. **exec, not run** — `exec su-exec` replaces the shell so PID 1 is the actual service
+3. **exec, not run** — `exec gosu` replaces the shell so PID 1 is the actual service
 4. **No traps** — let signals pass through to the service for graceful shutdown
 5. **Log non-secret config** — operators need to see what the container started with
 6. **Idempotent** — running entrypoint twice should be safe (chown, mkdir -p, etc.)
@@ -2952,10 +2963,11 @@ Every service runs all surfaces (MCP, REST API, web UI) from **one binary on one
 There is no separate web server, no separate API server — just one axum router.
 
 ```
-Port 3000
+Port 40060
   ├── /mcp                   → Streamable HTTP MCP transport
   ├── /health                → Unauthenticated liveness probe
-  ├── /status                → Runtime state (auth required)
+  ├── /status                → Public redacted runtime state
+  ├── /openapi.json          → Public generated REST OpenAPI schema
   ├── /v1/<service>          → REST API action dispatch
   │     POST {"action":"greet","params":{"name":"Alice"}}
   ├── /.well-known/*         → OAuth metadata (when auth_mode=oauth)
@@ -3039,26 +3051,31 @@ pub struct ActionRequest {
 
 async fn api_dispatch(
     State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
-    // Reuse the same service methods as MCP tools
-    let result = match body.action.as_str() {
-        "greet" => {
-            let name = body.params["name"].as_str();
-            state.service.greet(name).await
+    let result = match ExampleAction::from_rest(&body.action, &body.params) {
+        Ok(action) => {
+            if let Some(response) = enforce_rest_scope(
+                &state,
+                auth.as_ref().map(|Extension(auth)| auth),
+                &body.action,
+            ) {
+                return response;
+            }
+            execute_service_action(&state.service, &action).await
         }
-        "echo" => {
-            let msg = body.params["message"].as_str().unwrap_or("");
-            state.service.echo(msg).await
-        }
-        "status" => state.service.status().await,
-        other => Err(anyhow::anyhow!(
-            "unknown action: {other}. POST to /v1/example with action=help"
-        )),
+        Err(error) => Err(error),
     };
 
     match result {
-        Ok(value) => Json(value).into_response(),
+        Ok(value) => match cap_rest_response(value) {
+            Ok(value) => Json(value).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            ).into_response(),
+        },
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": e.to_string()})),

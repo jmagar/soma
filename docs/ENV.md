@@ -47,6 +47,8 @@ Only required when `EXAMPLE_MCP_AUTH_MODE=oauth`:
 | `EXAMPLE_MCP_GOOGLE_CLIENT_ID` | Google OAuth client ID. |
 | `EXAMPLE_MCP_GOOGLE_CLIENT_SECRET` | Google OAuth client secret. |
 | `EXAMPLE_MCP_AUTH_ADMIN_EMAIL` | Initial/admin email allowed by the OAuth flow. |
+| `EXAMPLE_MCP_AUTH_SQLITE_PATH` | OAuth session/client database path. Defaults to `/data/auth.db`. |
+| `EXAMPLE_MCP_AUTH_KEY_PATH` | RS256 signing key path. Defaults to `/data/auth-jwt.pem`. |
 
 ## Docker runtime
 

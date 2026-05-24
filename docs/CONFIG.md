@@ -112,7 +112,8 @@ Current env overrides include:
 | Situation | Policy |
 |---|---|
 | Stdio transport | `LoopbackDev` |
-| Loopback bind or `EXAMPLE_MCP_NO_AUTH=true` | `LoopbackDev` |
+| Loopback bind | `LoopbackDev` |
+| `EXAMPLE_MCP_NO_AUTH=true` | `LoopbackDev` only when bound to loopback |
 | Non-loopback with bearer token | `Mounted { auth_state: None }` |
 | OAuth mode (`auth_mode=oauth`) | `Mounted { auth_state: Some(_) }` |
 | Explicit trusted gateway (`EXAMPLE_NOAUTH=true`) | `TrustedGatewayUnscoped` |

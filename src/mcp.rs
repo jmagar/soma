@@ -4,6 +4,7 @@
 //! prompt templates, and dispatch shims. Application state lives in `crate::server`.
 
 mod prompts;
+mod response_paging;
 pub mod rmcp_server;
 mod schemas;
 mod tools;

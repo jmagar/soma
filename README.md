@@ -244,7 +244,7 @@ Set `EXAMPLE_MCP_NO_AUTH=true` or bind to `127.*`. Only legal for local developm
 
 ### OAuth (Google)
 
-Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issues RS256 JWTs after Google authentication. OAuth and bearer can coexist (OAuth mode disables the static token by default; set `disable_static_token_with_oauth = false` to keep both active).
+Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issues RS256 JWTs after Google authentication. OAuth and bearer can coexist when `EXAMPLE_MCP_TOKEN` is also configured.
 
 `/health` is always unauthenticated.
 
@@ -254,7 +254,7 @@ Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issue
 |----------|----------|---------|-------------|
 | `EXAMPLE_API_URL` | no | — | Upstream service base URL |
 | `EXAMPLE_API_KEY` | no | — | Upstream service API key |
-| `EXAMPLE_MCP_HOST` | no | `0.0.0.0` | Bind host |
+| `EXAMPLE_MCP_HOST` | no | `127.0.0.1` | Bind host |
 | `EXAMPLE_MCP_PORT` | no | `40060` | Bind port |
 | `EXAMPLE_MCP_NO_AUTH` | no | `false` | Disable auth (loopback only; 1/true/yes) |
 | `EXAMPLE_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
@@ -434,7 +434,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 11. **Update `config/Dockerfile` to use `entrypoint.sh`**
 
-    Already wired in the template (ENTRYPOINT + CMD split). Verify the gosu/su-exec choice matches your base image.
+    Already wired in the template (ENTRYPOINT + CMD split). The Debian image uses `gosu`; Alpine-based adaptations should switch the entrypoint to `su-exec`.
 
 #### Infrastructure
 

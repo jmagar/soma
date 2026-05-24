@@ -125,17 +125,26 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
         "kind": "mcp_response_page",
         "schema_version": 1,
         "code": "response_page",
+        "message": "Tool response was returned as a scrollable serialized JSON page.",
         "truncated": false,
         "serialized_bytes": serialized_bytes,
         "max_response_bytes": MAX_RESPONSE_BYTES,
         "content_format": "application/json-fragment",
         "content": "...serialized JSON page...",
+        "page": {
+            "offset": 0,
+            "page_bytes": 16000,
+            "next_offset": next_offset,
+            "has_more": true
+        },
         "continuation": {
+            "tool": "example",
             "arguments": {
                 "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
                 "_response_page_bytes": 16000
-            }
+            },
+            "note": "Call the same tool with the same original arguments plus these reserved continuation arguments."
         }
     })
 }

@@ -128,7 +128,7 @@ The Gemini manifest uses `settings.*` interpolation instead of Claude/Codex `use
 Sensitive Gemini settings use:
 
 ```json
-"secret": true
+"sensitive": true
 ```
 
 Keep Gemini setting names aligned with Claude/Codex where possible. For example, prefer `server_url`, `api_token`, `<service>_api_url`, and `<service>_api_key` across all three surfaces.
@@ -240,7 +240,7 @@ Every Rust server with a Claude plugin should expose:
 
 - run `setup check` first
 - run `setup repair` only when needed and only when `--no-repair` is absent
-- emit structured JSON when the global JSON flag is used
+- emit the setup report as structured JSON
 - include `exit_policy`, `blocking_failures`, `advisory_failures`, `ran_repair`, and `no_repair`
 - exit `0` for success or advisory failures
 - exit nonzero for blocking failures

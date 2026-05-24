@@ -27,7 +27,7 @@ Every server binary exposes exactly two server modes and a CLI:
 |---|---|---|
 | `example mcp` | stdio MCP | For Claude Code `~/.claude/settings.json` stdio servers |
 | `example serve` | Streamable HTTP MCP | For Docker/remote deployment |
-| `example [subcommand]` | CLI | Direct API access; all subcommands support `--json` |
+| `example [subcommand]` | CLI | Direct API access; data commands print JSON by default |
 | `example doctor` | Pre-flight check | Validates environment and config |
 | `example --help` | Help | Print usage |
 | `example --version` | Version | Print version |
@@ -60,7 +60,10 @@ Every server binary exposes exactly two server modes and a CLI:
 
 ## Binary environment awareness
 
-The binary normalizes paths, bind hosts, and ports based on its deployment context:
+The binary normalizes data paths based on its deployment context. Bind host and
+port come from typed config and environment variables; Docker deployments must
+set `EXAMPLE_MCP_HOST=0.0.0.0` explicitly when exposing the service outside the
+container.
 
 ```rust
 fn is_containerized() -> bool {
@@ -75,9 +78,6 @@ fn resolve_data_dir(config_path: Option<&str>) -> PathBuf {
     dirs::home_dir().unwrap_or_default().join(".example")
 }
 
-fn resolve_bind_host(configured: &str) -> &str {
-    if is_containerized() { "0.0.0.0" } else { configured }
-}
 ```
 
 ## Appdata convention
@@ -94,7 +94,8 @@ All deployments share `~/.<service>` as the logical data root:
 
 Non-loopback HTTP deployments must use bearer auth or OAuth. The server refuses to bind to a non-loopback address without authentication unless explicitly configured:
 
-- Loopback bind or `EXAMPLE_MCP_NO_AUTH=true` → `LoopbackDev` (no auth)
+- Loopback bind → `LoopbackDev` (no auth)
+- `EXAMPLE_MCP_NO_AUTH=true` → valid only on loopback
 - Non-loopback + bearer token → mounted bearer auth
 - Non-loopback + `auth_mode=oauth` → mounted OAuth auth
 - Non-loopback + `EXAMPLE_NOAUTH=true` → `TrustedGatewayUnscoped` (trusted gateway, explicit opt-out)

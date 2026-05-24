@@ -69,42 +69,30 @@ use super::*;  // access to private items
 
 #[test]
 fn destructive_gate_blocks_without_confirm() {
-    let svc = ExampleService::new(stub_client(), false);
+    let svc = ExampleService::new(stub_client());
     let err = svc.destructive_gate(false).unwrap_err();
     assert!(err.to_string().contains("confirm=true"));
 }
 
 #[test]
 fn destructive_gate_allows_with_confirm() {
-    let svc = ExampleService::new(stub_client(), false);
+    let svc = ExampleService::new(stub_client());
     assert!(svc.destructive_gate(true).is_ok());
 }
 ```
 
 ## Test helpers
 
-`src/lib.rs` exports helpers for integration tests:
+`src/lib.rs` exports helpers for integration tests. Prefer the helper over
+hand-constructing `AppState` in integration tests:
 
 ```rust
-#[cfg(any(test, feature = "test-support"))]
-pub mod testing {
-    pub fn loopback_state() -> AppState {
-        AppState {
-            config: McpConfig::default(),
-            auth_policy: AuthPolicy::LoopbackDev,
-            service: stub_service(),
-            response_pages: Default::default(),
-        }
-    }
+use rmcp_template::testing::loopback_state;
 
-    fn stub_service() -> ExampleService {
-        let client = ExampleClient::new(&ExampleConfig {
-            url: "http://localhost:1".into(),  // unreachable — never called in unit tests
-            api_key: "test".into(),
-            ..Default::default()
-        }).expect("stub client should build");
-        ExampleService::new(client, false)
-    }
+#[tokio::test]
+async fn tool_path_uses_loopback_state() {
+    let state = loopback_state();
+    assert_eq!(state.config.port, 40060);
 }
 ```
 

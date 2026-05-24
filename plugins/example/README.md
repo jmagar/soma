@@ -17,7 +17,7 @@ plugins/example/
 │   └── example             # Release binary (populate with: just install)
 ├── hooks/
 │   ├── hooks.json          # SessionStart + ConfigChange hook definitions
-│   └── plugin-setup.sh     # Deployment and validation script
+│   └── plugin-setup.sh     # Lifecycle setup adapter
 ├── monitors/
 │   └── monitors.json       # Background health monitor (requires Claude Code v2.1.105+)
 └── skills/

@@ -2,7 +2,7 @@
 # Smoke-test the HTTP MCP static bearer-token gate.
 set -euo pipefail
 
-MCP_URL="${EXAMPLE_MCP_URL:-http://localhost:3000/mcp}"
+MCP_URL="${EXAMPLE_MCP_URL:-http://localhost:40060/mcp}"
 TOKEN="${EXAMPLE_MCP_TOKEN:-}"
 TIMEOUT="${MCP_AUTH_TIMEOUT:-10}"
 CHECK_X_API_KEY=false
@@ -12,7 +12,7 @@ usage() {
 Usage: scripts/test-mcp-auth.sh [OPTIONS]
 
 Options:
-  --url URL              MCP URL. Default: EXAMPLE_MCP_URL or http://localhost:3000/mcp.
+  --url URL              MCP URL. Default: EXAMPLE_MCP_URL or http://localhost:40060/mcp.
   --token TOKEN          Expected static bearer token. Default: EXAMPLE_MCP_TOKEN.
   --check-x-api-key      Also require x-api-key auth to succeed. Off by default because
                          the template's pinned lab-auth layer only supports Bearer.

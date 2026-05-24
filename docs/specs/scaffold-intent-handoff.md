@@ -102,11 +102,14 @@ The intent should stay lightweight. The wizard asks enough to choose the scaffol
 | `host` | string | Default bind host | `127.0.0.1` |
 | `port` | integer | Default HTTP port | `3100` |
 | `mcp_transport` | string | MCP transport mode | `stdio`, `http`, or `dual` |
-| `mcp_primitives` | list | MCP primitives to scaffold | `tools`, `resources`, `prompts`, `elicitation` |
+| `mcp_primitives` | comma-separated string | MCP primitives to scaffold | `tools,resources,prompts,elicitation` |
 | `deployment` | string | Deployment scaffolding to include | `none`, `systemd`, or `docker` |
-| `plugins` | list | Plugin surfaces to scaffold | `claude`, `codex`, `gemini`; accepts all, none, or any subset |
+| `plugins` | comma-separated string | Plugin surfaces to scaffold | `claude,codex,gemini`; accepts all, none, or any subset |
 | `publish_mcp` | boolean | Whether to scaffold MCP registry publishing via `server.json` | `true` |
-| `crawl_docs` | object | Optional docs/research inputs for Axon crawling | URLs, repos, or search topics |
+| `crawl_docs` | string | Optional docs/research inputs for Axon crawling | URLs, repos, or search topics |
+
+The service normalizes comma-separated elicitation strings into arrays and a
+structured `crawl_docs` object in the returned payload.
 
 ## Returned JSON contract
 

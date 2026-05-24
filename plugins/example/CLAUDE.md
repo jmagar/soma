@@ -14,7 +14,7 @@ Multi-platform plugin package for the Example MCP server. Contains manifests for
 | `.mcp.json` | Shared MCP server connection config used by all three platforms |
 | `bin/example` | Release binary used by the monitor — populate with `just install` |
 | `hooks/hooks.json` | Lifecycle hook definitions: `SessionStart`, `ConfigChange` |
-| `hooks/plugin-setup.sh` | Deployment and validation script (server mode or client mode) |
+| `hooks/plugin-setup.sh` | Lifecycle setup adapter; maps plugin options and delegates to the binary |
 | `monitors/monitors.json` | Background health monitor config (requires Claude Code v2.1.105+) |
 | `skills/example/SKILL.md` | Three-tier tool documentation shared by Claude and Codex |
 

@@ -85,7 +85,7 @@ For application/platform servers only, also update:
 
 | State | Condition | Behavior |
 |-------|-----------|----------|
-| `LoopbackDev` | `no_auth=true` or host starts with `127.` | No auth, no scope checks |
+| `LoopbackDev` | stdio, loopback bind (`127.*`, `localhost`, `::1`), or `EXAMPLE_MCP_NO_AUTH=true` on loopback | No auth, no scope checks |
 | `TrustedGatewayUnscoped` | `EXAMPLE_NOAUTH=true` behind an authz-enforcing gateway | No auth, no scope checks |
 | `Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
 | `Mounted { auth_state: Some(_) }` | `EXAMPLE_MCP_AUTH_MODE=oauth` | Google OAuth + RS256 JWT |
@@ -97,8 +97,8 @@ For application/platform servers only, also update:
 ```
 EXAMPLE_API_URL              Upstream service base URL
 EXAMPLE_API_KEY              Upstream service API key
-EXAMPLE_MCP_HOST             Bind host (default 0.0.0.0)
-EXAMPLE_MCP_PORT             Bind port (default 3100)
+EXAMPLE_MCP_HOST             Bind host (default 127.0.0.1)
+EXAMPLE_MCP_PORT             Bind port (default 40060)
 EXAMPLE_MCP_NO_AUTH          Disable auth — loopback only (1/true/yes)
 EXAMPLE_MCP_TOKEN            Static bearer token
 EXAMPLE_MCP_ALLOWED_HOSTS    Comma-separated extra Host header values
@@ -113,7 +113,7 @@ RUST_LOG                     Log filter (e.g. info,rmcp=warn)
 
 ## Transports
 
-- `example serve` (or no args) — Streamable HTTP on `EXAMPLE_MCP_PORT` (default 3100)
+- `example serve` (or no args) — Streamable HTTP on `EXAMPLE_MCP_PORT` (default 40060)
 - `example mcp` — stdio transport for child-process MCP clients
 - `example greet / echo / status` — direct CLI
 

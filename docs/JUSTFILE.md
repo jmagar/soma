@@ -66,7 +66,9 @@ last_reviewed: "2026-05-15"
 | `just ci` | `cargo xtask ci` — run all checks locally. |
 | `just symlink-docs` | `cargo xtask symlink-docs` — sync `AGENTS.md`/`GEMINI.md` symlinks. |
 | `just check-env` | `cargo xtask check-env` — validate required environment. |
-| `just patterns` | `cargo xtask patterns` — check architecture contracts. |
+| `just patterns-check` | `cargo xtask patterns` — check architecture contracts. |
+| `just patterns-strict` | `cargo xtask patterns --strict` — fail on warnings. |
+| `just patterns-json` | `cargo xtask patterns --json` — emit machine-readable findings. |
 
 ## Reference docs
 
