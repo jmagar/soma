@@ -15,7 +15,10 @@ last_reviewed: "2026-05-15"
 
 # Testing
 
-The test strategy is layered: parse at the CLI layer, test business/service behavior without a server, then smoke-test live MCP HTTP with mcporter.
+The test strategy is layered: parse at the CLI layer, test business/service
+behavior without a server, verify static contracts, test REST-client behavior
+against local mock upstreams, then smoke-test live MCP HTTP with mcporter when
+transport behavior matters.
 
 ## Rust tests
 
@@ -145,10 +148,44 @@ run_test "server info" "example" '{"action":"status"}'
 run_test "status has version" "example" '{"action":"status"}' "version"
 ```
 
+## Contract-backed REST-client tests
+
+Rust MCP servers that are mostly REST clients should not call real homelab
+services in default tests. Use three evidence tiers instead:
+
+| Tier | What it proves | Default? |
+|---|---|---|
+| `static-spec` | The repo's MCP schema docs, OpenAPI docs, action metadata, plugin contracts, sidecar tests, and template invariants are in sync. | Yes |
+| `contract-real` | The service builds the expected outbound HTTP requests, parses fixtures, maps upstream errors, and enforces safety gates against a local mock upstream and schema fixtures. | Yes |
+| `production-real` | A deployed server can answer read-only MCP calls against a real upstream. | Explicit opt-in only |
+
+Run the static tier with:
+
+```bash
+cargo xtask contract-audit
+just contract-audit
+```
+
+For `contract-real` tests in derived servers, use `wiremock` or an equivalent
+local mock server. Assert the outbound method, path, query string, auth header,
+and body. Return curated JSON fixtures and validate them with `jsonschema` or
+OpenAPI-derived schemas where practical. Keep curated overlays when the upstream
+OpenAPI document is incomplete or instance-specific.
+
+Destructive actions must be tested in one of two ways by default:
+
+- without confirmation, assert the service fails before making any network call
+- with confirmation, target only a mock server or disposable upstream
+
+Live `mcporter` smoke remains `production-real` evidence. Keep it read-only and
+explicitly allowlisted; do not include delete/update/send actions in the live
+suite unless a disposable target is configured.
+
 ## Template checks
 
 ```bash
 just template-check
+cargo xtask contract-audit
 cargo xtask patterns
 scripts/pre-release-check.sh
 ```
@@ -159,6 +196,9 @@ scripts/pre-release-check.sh
 - Assert defaults explicitly.
 - Keep business logic tests below HTTP when possible.
 - Use live mcporter tests for transport/resource/auth integration.
+- Use mock upstream tests for REST-client request construction and response
+  parsing; schema-backed mocks are real contract evidence, not production
+  health checks.
 - A test that checks `is_error: false` only verifies the protocol layer responded — prove the actual data is correct.
 - Negative MCP tool tests should assert `isError: true` and inspect the structured
   error payload: `kind`, `schema_version`, stable `code`, `tool`, `action`,
@@ -166,4 +206,5 @@ scripts/pre-release-check.sh
   be reserved for auth/scope denial, unknown MCP tool names, resource/prompt
   lookup, and server serialization defects.
 
-See `docs/PATTERNS.md` §12, §17, §24 for test sidecar, mcporter, and nextest patterns.
+See `docs/PATTERNS.md` §12, §17, §24, and §51 for test sidecar, mcporter,
+nextest, and REST-client contract testing patterns.

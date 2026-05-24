@@ -108,7 +108,7 @@ Add or revise tests for missing action, unknown action, missing echo message, wr
 
 - [ ] **Step 2: Align docs**
 
-Remove the contradictory `Err(anyhow!(...))` “good” MCP example and replace it with `CallToolResult::structured_error`. Add testing guidance that negative MCP cases must assert `isError` and structured payload fields, not only substring messages.
+Remove the contradictory `Err(anyhow!(...))` "good" MCP example and replace it with `CallToolResult::structured_error`. Add testing guidance that negative MCP cases must assert `isError` and structured payload fields, not only substring messages.
 
 - [ ] **Step 3: Verify**
 

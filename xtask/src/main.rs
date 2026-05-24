@@ -8,6 +8,7 @@
 //!   symlink-docs Create AGENTS.md and GEMINI.md symlinks next to every CLAUDE.md
 //!   check-env    Validate required environment variables are set
 //!   patterns     Check static contracts from docs/PATTERNS.md
+//!   contract-audit Run local static/spec checks for REST-client MCP servers
 //!
 //! TEMPLATE: Add your own commands by adding arms to the match block below.
 //!           Keep each command as a separate `fn` for readability.
@@ -42,6 +43,7 @@ fn main() -> Result<()> {
         Some("symlink-docs") => symlink_docs(),
         Some("check-env") => check_env(),
         Some("patterns") => patterns_cmd(&args[1..]),
+        Some("contract-audit") => contract_audit(),
         Some("check-test-siblings") => check_test_siblings(),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
@@ -51,6 +53,43 @@ fn main() -> Result<()> {
             bail!("Unknown xtask command: {unknown:?}\nRun `cargo xtask --help` for usage.")
         }
     }
+}
+
+// =============================================================================
+// contract-audit — Safe local contract/spec checks for REST-client MCP servers
+// =============================================================================
+
+/// Run the local, non-destructive audit suite for the template contract.
+///
+/// This command intentionally avoids live upstream services. REST-client
+/// behavior belongs in per-server mock-upstream tests; this command verifies
+/// the static contract surfaces that every derived server should keep current.
+fn contract_audit() -> Result<()> {
+    println!("==> contract-audit: local static/spec checks only");
+    println!("==> [1/6] cargo xtask patterns");
+    patterns::run(patterns::PatternOptions::default()).context("patterns contract check failed")?;
+
+    println!("==> [2/6] cargo xtask check-test-siblings");
+    check_test_siblings().context("test sibling check failed")?;
+
+    println!("==> [3/6] scripts/check-schema-docs.py --check");
+    run_cmd("python3", &["scripts/check-schema-docs.py", "--check"])
+        .context("schema docs check failed")?;
+
+    println!("==> [4/6] scripts/check-openapi.py --check");
+    run_cmd("python3", &["scripts/check-openapi.py", "--check"])
+        .context("OpenAPI docs check failed")?;
+
+    println!("==> [5/6] scripts/check-scaffold-intent-contract.py");
+    run_cmd("python3", &["scripts/check-scaffold-intent-contract.py"])
+        .context("scaffold intent contract check failed")?;
+
+    println!("==> [6/6] scripts/test-template-features.sh");
+    run_cmd("bash", &["scripts/test-template-features.sh"])
+        .context("template feature smoke failed")?;
+
+    println!("==> contract-audit: passed; no live upstream services were contacted");
+    Ok(())
 }
 
 // =============================================================================
@@ -496,6 +535,7 @@ COMMANDS:
   check-env             Validate required environment variables are set
   check-test-siblings   Verify every src/*.rs has a sibling *_tests.rs
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
+  contract-audit        Run local static/spec checks without live upstream calls
   help                  Show this help
 
 TEMPLATE:
