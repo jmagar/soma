@@ -112,7 +112,7 @@ Some actions require MCP client capabilities and are excluded from REST action l
 
 ## Agent-first output rules
 
-- No single response may return more than ~10,000 tokens (~40 KB). REST returns a JSON truncation envelope; MCP returns a valid structured page envelope with `_response_offset` continuation arguments instead of invalid partial JSON.
+- No single response may return more than ~10,000 tokens (~40 KB). REST returns a JSON truncation envelope; MCP returns a valid structured page envelope with `_response_cursor` and `_response_offset` continuation arguments instead of invalid partial JSON; continuation calls read cached response data instead of re-running the original action.
 - List actions MUST support `limit` and `offset` (or `cursor`).
 - List actions that return heterogeneous data MUST support `filter` and `state` parameters.
 - Every CLI command that outputs data MUST support `--json`.
@@ -132,6 +132,7 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
         "content": "...serialized JSON page...",
         "continuation": {
             "arguments": {
+                "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
                 "_response_page_bytes": 16000
             }

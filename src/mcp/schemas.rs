@@ -49,13 +49,17 @@ fn build_tool_definitions() -> Vec<Value> {
                 "_response_offset": {
                     "type": "integer",
                     "minimum": 0,
-                    "description": "Reserved MCP adapter continuation offset. Use only when a prior response returned kind=mcp_response_page."
+                    "description": "Reserved MCP adapter continuation offset. Use only with _response_cursor from a prior kind=mcp_response_page response."
                 },
                 "_response_page_bytes": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 16000,
-                    "description": "Reserved MCP adapter page size in bytes. Use only with _response_offset to scroll large serialized JSON responses."
+                    "description": "Reserved MCP adapter page size in bytes. Use with _response_cursor and _response_offset to scroll cached serialized JSON responses."
+                },
+                "_response_cursor": {
+                    "type": "string",
+                    "description": "Reserved MCP adapter cursor. Required with _response_offset so continuation reads cached response data instead of re-running the action."
                 }
             },
             "required": ["action"],

@@ -78,9 +78,10 @@ src/
 ```rust
 #[derive(Clone)]
 pub struct AppState {
-    pub config: McpConfig,        // MCP server config (host, port, auth settings)
-    pub auth_policy: AuthPolicy,  // LoopbackDev | Mounted
-    pub service: ExampleService,  // The service layer — everything routes through here
+    pub config: McpConfig,                  // MCP server config (host, port, auth settings)
+    pub auth_policy: AuthPolicy,            // LoopbackDev | Mounted
+    pub service: ExampleService,            // The service layer — everything routes through here
+    pub response_pages: ResponsePageStore,  // Cached oversized MCP responses for continuation calls
 }
 ```
 

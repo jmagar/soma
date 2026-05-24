@@ -29,12 +29,13 @@ use crate::{
     token_limit::MAX_RESPONSE_BYTES,
 };
 
-use crate::server::{AppState, AuthPolicy};
+use crate::server::{AppState, AuthPolicy, ResponsePageStore};
 
 use super::{prompts, schemas::tool_definitions, tools::execute_tool};
 
 const RESPONSE_OFFSET_PARAM: &str = "_response_offset";
 const RESPONSE_PAGE_BYTES_PARAM: &str = "_response_page_bytes";
+const RESPONSE_CURSOR_PARAM: &str = "_response_cursor";
 const DEFAULT_RESPONSE_PAGE_BYTES: usize = 16_000;
 const MAX_RESPONSE_PAGE_BYTES: usize = 16_000;
 
@@ -106,6 +107,15 @@ impl ServerHandler for ExampleRmcpServer {
         }
 
         let action: String = action_opt.unwrap_or_default();
+        if let Some(cursor) = response_page.cursor.clone() {
+            return tool_result_from_cached_page(
+                &self.state.response_pages,
+                &cursor,
+                response_page,
+                &tool_name,
+                empty_action_as_none(&action),
+            );
+        }
 
         let mut arguments = request
             .arguments
@@ -130,6 +140,7 @@ impl ServerHandler for ExampleRmcpServer {
                 );
                 tool_result_from_json(
                     result,
+                    &self.state.response_pages,
                     response_page,
                     &tool_name,
                     empty_action_as_none(&action),
@@ -284,8 +295,9 @@ fn rmcp_tool_from_json(value: Value) -> Result<Tool, ErrorData> {
     ))
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ResponsePageRequest {
+    cursor: Option<String>,
     offset: usize,
     page_bytes: usize,
 }
@@ -293,6 +305,7 @@ struct ResponsePageRequest {
 impl Default for ResponsePageRequest {
     fn default() -> Self {
         Self {
+            cursor: None,
             offset: 0,
             page_bytes: DEFAULT_RESPONSE_PAGE_BYTES,
         }
@@ -305,6 +318,7 @@ fn response_page_request(
     let Some(args) = args else {
         return Ok(ResponsePageRequest::default());
     };
+    let cursor = optional_string_arg(args, RESPONSE_CURSOR_PARAM)?;
     let offset = optional_usize_arg(args, RESPONSE_OFFSET_PARAM)?.unwrap_or(0);
     let page_bytes = optional_usize_arg(args, RESPONSE_PAGE_BYTES_PARAM)?
         .unwrap_or(DEFAULT_RESPONSE_PAGE_BYTES)
@@ -322,7 +336,47 @@ fn response_page_request(
             })),
         ));
     }
-    Ok(ResponsePageRequest { offset, page_bytes })
+    if offset > 0 && cursor.is_none() {
+        return Err(ErrorData::invalid_params(
+            format!("{RESPONSE_CURSOR_PARAM} is required when {RESPONSE_OFFSET_PARAM} is set"),
+            Some(json!({
+                "kind": "mcp_protocol_error",
+                "schema_version": 1,
+                "code": "missing_response_cursor",
+                "field": RESPONSE_CURSOR_PARAM,
+                "retryable": true,
+                "remediation": format!("Use the {RESPONSE_CURSOR_PARAM} value returned by the previous mcp_response_page continuation."),
+            })),
+        ));
+    }
+    Ok(ResponsePageRequest {
+        cursor,
+        offset,
+        page_bytes,
+    })
+}
+
+fn optional_string_arg(
+    args: &Map<String, Value>,
+    field: &str,
+) -> Result<Option<String>, ErrorData> {
+    let Some(value) = args.get(field) else {
+        return Ok(None);
+    };
+    let Some(value) = value.as_str() else {
+        return Err(ErrorData::invalid_params(
+            format!("{field} must be a string"),
+            Some(json!({
+                "kind": "mcp_protocol_error",
+                "schema_version": 1,
+                "code": "invalid_response_cursor",
+                "field": field,
+                "retryable": true,
+                "remediation": format!("Pass {field} exactly as returned by the previous mcp_response_page continuation."),
+            })),
+        ));
+    };
+    Ok(Some(value.to_owned()))
 }
 
 fn optional_usize_arg(args: &Map<String, Value>, field: &str) -> Result<Option<usize>, ErrorData> {
@@ -363,15 +417,21 @@ fn strip_response_page_params(arguments: &mut Value) {
     };
     arguments.remove(RESPONSE_OFFSET_PARAM);
     arguments.remove(RESPONSE_PAGE_BYTES_PARAM);
+    arguments.remove(RESPONSE_CURSOR_PARAM);
 }
 
 fn tool_result_from_json(
     value: Value,
+    response_pages: &ResponsePageStore,
     page_request: ResponsePageRequest,
     tool: &str,
     action: Option<&str>,
     continuation_args: Option<&Map<String, Value>>,
 ) -> Result<CallToolResult, ErrorData> {
+    if let Some(cursor) = page_request.cursor.clone() {
+        return tool_result_from_cached_page(response_pages, &cursor, page_request, tool, action);
+    }
+
     // Compact JSON (not pretty) recovers ~30-40% of the 40 KB token budget.
     let text = serde_json::to_string(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
@@ -381,7 +441,44 @@ fn tool_result_from_json(
         return Ok(result);
     }
 
-    let payload = response_page_payload(&text, page_request, tool, action, continuation_args);
+    let cursor = response_pages.insert(text.clone());
+    let payload = response_page_payload(
+        &text,
+        page_request,
+        tool,
+        action,
+        continuation_args,
+        Some(&cursor),
+    );
+    let text = serde_json::to_string(&payload)
+        .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
+    let mut result = CallToolResult::structured(payload);
+    result.content = vec![Content::text(text)];
+    Ok(result)
+}
+
+fn tool_result_from_cached_page(
+    response_pages: &ResponsePageStore,
+    cursor: &str,
+    page_request: ResponsePageRequest,
+    tool: &str,
+    action: Option<&str>,
+) -> Result<CallToolResult, ErrorData> {
+    let Some(serialized) = response_pages.get(cursor) else {
+        return Err(ErrorData::invalid_params(
+            "response cursor not found or expired",
+            Some(json!({
+                "kind": "mcp_protocol_error",
+                "schema_version": 1,
+                "code": "response_cursor_not_found",
+                "field": RESPONSE_CURSOR_PARAM,
+                "retryable": true,
+                "remediation": "Re-run the original tool call to create a fresh response cursor.",
+            })),
+        ));
+    };
+    let payload =
+        response_page_payload(&serialized, page_request, tool, action, None, Some(cursor));
     let text = serde_json::to_string(&payload)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     let mut result = CallToolResult::structured(payload);
@@ -411,6 +508,7 @@ fn response_page_payload(
     tool: &str,
     action: Option<&str>,
     continuation_args: Option<&Map<String, Value>>,
+    cursor: Option<&str>,
 ) -> Value {
     let (offset, content, next_offset, has_more) =
         response_page_slice(serialized, page_request.offset, page_request.page_bytes);
@@ -420,6 +518,7 @@ fn response_page_payload(
             action,
             next_offset,
             page_request.page_bytes,
+            cursor,
         );
         json!({
             "tool": tool,
@@ -457,6 +556,7 @@ fn continuation_arguments_with_page(
     action: Option<&str>,
     next_offset: usize,
     page_bytes: usize,
+    cursor: Option<&str>,
 ) -> Value {
     let mut output = arguments.cloned().unwrap_or_default();
     if !output.contains_key("action") {
@@ -464,6 +564,9 @@ fn continuation_arguments_with_page(
             "action".to_owned(),
             action.map(Value::from).unwrap_or(Value::Null),
         );
+    }
+    if let Some(cursor) = cursor {
+        output.insert(RESPONSE_CURSOR_PARAM.to_owned(), json!(cursor));
     }
     output.insert(RESPONSE_OFFSET_PARAM.to_owned(), json!(next_offset));
     output.insert(RESPONSE_PAGE_BYTES_PARAM.to_owned(), json!(page_bytes));

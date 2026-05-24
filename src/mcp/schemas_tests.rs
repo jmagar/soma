@@ -32,6 +32,7 @@ fn schema_advertises_reserved_response_paging_args() {
     assert_eq!(properties["_response_offset"]["minimum"], 0);
     assert_eq!(properties["_response_page_bytes"]["minimum"], 1);
     assert_eq!(properties["_response_page_bytes"]["maximum"], 16000);
+    assert_eq!(properties["_response_cursor"]["type"], "string");
 }
 
 #[test]

@@ -461,9 +461,10 @@ async fn serve_stdio_mcp() -> Result<()> {
 ```rust
 #[derive(Clone)]
 pub struct AppState {
-    pub config: McpConfig,        // MCP server config (host, port, auth settings)
-    pub auth_policy: AuthPolicy,  // LoopbackDev | Mounted
-    pub service: ExampleService,  // The service layer — everything routes through here
+    pub config: McpConfig,                  // MCP server config (host, port, auth settings)
+    pub auth_policy: AuthPolicy,            // LoopbackDev | Mounted
+    pub service: ExampleService,            // The service layer — everything routes through here
+    pub response_pages: ResponsePageStore,  // Cached oversized MCP responses for continuation calls
 }
 ```
 
@@ -697,6 +698,7 @@ pub mod testing {
             config: McpConfig::default(),
             auth_policy: AuthPolicy::LoopbackDev,
             service: stub_service(),
+            response_pages: Default::default(),
         }
     }
 
@@ -1927,7 +1929,9 @@ context windows. All outputs must be bounded, structured, and paginated.
 
 No single response may return more than ~10,000 tokens (~40KB of text). If the
 raw MCP response would exceed this, return a valid structured page envelope
-with `_response_offset` continuation arguments instead of partial JSON:
+with `_response_cursor` and `_response_offset` continuation arguments instead of
+partial JSON. Continuation calls read cached response data instead of re-running
+the original action:
 
 ```rust
 const MAX_RESPONSE_BYTES: usize = 40_000; // ~10K tokens
@@ -1944,6 +1948,7 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
         "content": "...serialized JSON page...",
         "continuation": {
             "arguments": {
+                "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
                 "_response_page_bytes": 16000
             }
@@ -2314,7 +2319,14 @@ the agent a readable payload with `isError: true`:
 
 ```rust
 match state.service.list_things().await {
-    Ok(result)  => tool_result_from_json(result),
+    Ok(result)  => tool_result_from_json(
+        result,
+        &state.response_pages,
+        response_page_request(request.arguments.as_ref())?,
+        "example",
+        Some("list_things"),
+        request.arguments.as_ref(),
+    ),
     Err(error)  => Ok(CallToolResult::structured_error(json!({
         "kind": "mcp_tool_error",
         "schema_version": 1,

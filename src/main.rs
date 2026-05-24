@@ -110,6 +110,7 @@ async fn serve_stdio_mcp() -> Result<()> {
         config: config.mcp,
         auth_policy: AuthPolicy::LoopbackDev, // stdio = trusted local transport
         service,
+        response_pages: Default::default(),
     };
     let svc = mcp::rmcp_server(state).serve(stdio()).await?;
     svc.waiting().await?;
@@ -148,6 +149,7 @@ async fn build_state(config: Config) -> Result<AppState> {
         config: config.mcp,
         auth_policy,
         service,
+        response_pages: Default::default(),
     })
 }
 

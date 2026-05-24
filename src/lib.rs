@@ -54,6 +54,7 @@ pub mod testing {
             config: McpConfig::default(),
             auth_policy: AuthPolicy::LoopbackDev,
             service: stub_service(),
+            response_pages: Default::default(),
         }
     }
 
@@ -66,6 +67,7 @@ pub mod testing {
             },
             auth_policy: AuthPolicy::Mounted { auth_state: None },
             service: stub_service(),
+            response_pages: Default::default(),
         }
     }
 
@@ -84,6 +86,7 @@ pub mod testing {
                 auth_state: Some(Arc::new(auth_state)),
             },
             service: stub_service(),
+            response_pages: Default::default(),
         }
     }
 

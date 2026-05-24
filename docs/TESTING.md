@@ -90,6 +90,7 @@ pub mod testing {
             config: McpConfig::default(),
             auth_policy: AuthPolicy::LoopbackDev,
             service: stub_service(),
+            response_pages: Default::default(),
         }
     }
 
