@@ -15,6 +15,9 @@ This template is the reference point for the local Rust MCP/server family:
 | `../rustifi` | `jmagar/rustifi` | `unifi` |
 | `../apprise-mcp` | `jmagar/apprise-mcp` | `apprise` |
 | `../rustscale` | `jmagar/rustscale` | `tailscale` |
+| `../rustarr` | `jmagar/rustarr` | `rustarr` |
+| `../rustcane` | `jmagar/rustcane` | `rustcane` |
+| `../synapse2` | `jmagar/synapse2` | `synapse2` |
 | `../rmcp-template` | `jmagar/rmcp-template` | `example` |
 | `../unrust` | `jmagar/unrust` | `unraid` |
 
@@ -30,7 +33,7 @@ REST API and Web UI are required only for servers that are more than a thin clie
 
 | Server category | Required surfaces | Examples |
 |---|---|---|
-| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` |
+| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise`, `rustarr`, `rustcane`, `synapse2` |
 | Application/platform server | API + CLI + MCP + Web | `axon`, `lab`, `syslog` |
 
 For upstream-client servers, do not mirror the upstream HTTP API locally by default. Add REST/Web only when the server owns meaningful state, workflows, dashboards, or non-MCP consumers.

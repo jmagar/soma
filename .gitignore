@@ -14,7 +14,7 @@
 config.toml
 config.local.toml
 config/docker-hosts.toml
-
+config.runtime.json
 # ── Rust ──────────────────────────────────────────────────────────────────────
 /target/
 **/*.rs.bk

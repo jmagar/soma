@@ -39,7 +39,7 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 
 If you find yourself computing, filtering, transforming, or validating data in `tools.rs` or `cli.rs`, stop and move it to `app.rs`.
 
-## How to add an action (4-file checklist)
+## How to add an action
 
 1. **`src/example.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).
 
@@ -61,7 +61,7 @@ For actions with parameters, extract them with `string_arg(&args, "param_name")`
 
 ## Auth model
 
-`AuthPolicy` is an enum with three states:
+`AuthPolicy` is an enum with four variants:
 
 | Variant | When | Effect |
 |---------|------|--------|
@@ -161,7 +161,6 @@ Plugin manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `ge
 ## Common gotchas
 
 - **Stdio mode suppresses logs** — `main.rs` sets log level to `warn` in stdio mode so JSON-RPC is not corrupted by log lines on stdout.
-- **`config.toml` is a template file** — it still contains `unraid-mcp` values; update it when adapting this template.
 - **Scope checks run in `rmcp_server.rs`**, not in `tools.rs`. `tools.rs` only dispatches.
 - **`help` action is public** — `required_scope_for("help")` returns `None`. All other actions require at least `example:read`.
 - **Default port is 40060** — set in `default_mcp_port()` in `config.rs`. Override with `EXAMPLE_MCP_PORT`.
