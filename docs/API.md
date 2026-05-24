@@ -112,7 +112,7 @@ Some actions require MCP client capabilities and are excluded from REST action l
 
 ## Agent-first output rules
 
-- No single response may return more than ~10,000 tokens (~40 KB). REST returns a JSON truncation envelope; MCP truncates the serialized tool text.
+- No single response may return more than ~10,000 tokens (~40 KB). REST returns a JSON truncation envelope; MCP returns a valid structured overflow envelope instead of invalid partial JSON.
 - List actions MUST support `limit` and `offset` (or `cursor`).
 - List actions that return heterogeneous data MUST support `filter` and `state` parameters.
 - Every CLI command that outputs data MUST support `--json`.
@@ -120,18 +120,19 @@ Some actions require MCP client capabilities and are excluded from REST action l
 ```rust
 const MAX_RESPONSE_BYTES: usize = 40_000; // ~10K tokens
 
-fn truncate_response(text: &str) -> String {
-    if text.len() <= MAX_RESPONSE_BYTES {
-        return text.to_string();
-    }
-    let boundary = text
-        .char_indices()
-        .map(|(index, _)| index)
-        .take_while(|index| *index <= MAX_RESPONSE_BYTES)
-        .last()
-        .unwrap_or(0);
-    let truncated = &text[..boundary];
-    format!("{truncated}\n\n[TRUNCATED: response exceeded 10K token limit. Use limit/offset or more specific filters.]")
+fn mcp_overflow_response(serialized_bytes: usize) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "mcp_response_overflow",
+        "schema_version": 1,
+        "code": "response_too_large",
+        "truncated": false,
+        "serialized_bytes": serialized_bytes,
+        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "pagination": {
+            "automatic": false,
+            "remediation": "Retry with limit/offset, cursor, filters, or a narrower action."
+        }
+    })
 }
 ```
 
@@ -158,5 +159,12 @@ Common error shapes:
 - Missing required arg: `` "`id` is required for docker_logs — pass id=<container_id>" ``
 - Unknown action: `"unknown action: \"florp\" — valid actions: greet, echo, status, help"`
 - API unreachable: `"EXAMPLE_URL unreachable: connection refused — is the service running?"`
+
+MCP protocol auth/scope failures include structured `data` with `kind:
+mcp_auth_error`, stable `code` values such as `missing_http_context`,
+`missing_auth_context`, or `insufficient_scope`, and remediation text. MCP
+execution failures are sanitized `mcp_tool_error` payloads with
+`code: execution_error` plus a safe `reason_kind` such as `timeout`,
+`rate_limited`, `auth_rejected`, `upstream_unavailable`, or `unknown`.
 
 See `docs/PATTERNS.md` §A2, §39, §40 for the full REST pattern, error structure, and token discipline.

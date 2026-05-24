@@ -26,7 +26,7 @@ use serde_json::{json, Map, Value};
 use crate::{
     actions::{action_names, is_known_action, required_scope_for_action, ValidationError},
     app::ScaffoldIntentValidationError,
-    token_limit,
+    token_limit::MAX_RESPONSE_BYTES,
 };
 
 use crate::server::{AppState, AuthPolicy};
@@ -144,6 +144,7 @@ impl ServerHandler for ExampleRmcpServer {
                 tool_error_result(execution_error_payload(
                     &tool_name,
                     empty_action_as_none(&action),
+                    &error,
                 ))
             }
         }
@@ -273,17 +274,67 @@ fn tool_result_from_json(value: Value) -> Result<CallToolResult, ErrorData> {
     // Compact JSON (not pretty) recovers ~30-40% of the 40 KB token budget.
     let text = serde_json::to_string(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
-    let text = token_limit::truncate_if_needed(&text);
-    Ok(CallToolResult::success(vec![Content::text(text)]))
+    if text.len() <= MAX_RESPONSE_BYTES {
+        let mut result = CallToolResult::structured(value);
+        result.content = vec![Content::text(text)];
+        return Ok(result);
+    }
+
+    let payload = response_overflow_payload(text.len());
+    let text = serde_json::to_string(&payload)
+        .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
+    let mut result = CallToolResult::structured(payload);
+    result.content = vec![Content::text(text)];
+    Ok(result)
 }
 
 fn tool_error_result(value: Value) -> Result<CallToolResult, ErrorData> {
     let text = serde_json::to_string(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
-    let text = token_limit::truncate_if_needed(&text);
-    let mut result = CallToolResult::structured_error(value);
+    let (payload, text) = if text.len() <= MAX_RESPONSE_BYTES {
+        (value, text)
+    } else {
+        let payload = error_overflow_payload(&value, text.len());
+        let text = serde_json::to_string(&payload)
+            .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
+        (payload, text)
+    };
+    let mut result = CallToolResult::structured_error(payload);
     result.content = vec![Content::text(text)];
     Ok(result)
+}
+
+fn response_overflow_payload(serialized_bytes: usize) -> Value {
+    json!({
+        "kind": "mcp_response_overflow",
+        "schema_version": 1,
+        "code": "response_too_large",
+        "message": "Tool response exceeded the MCP response size limit. The original JSON was not returned to avoid invalid truncated JSON.",
+        "overflow": true,
+        "truncated": false,
+        "serialized_bytes": serialized_bytes,
+        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "pagination": {
+            "automatic": false,
+            "reason": "This generic MCP adapter cannot infer action-specific pagination without risking duplicate or missing records.",
+            "remediation": "Retry with limit/offset, cursor, filters, or a narrower action when the tool supports them. Template authors should make large list actions bounded by default.",
+        },
+    })
+}
+
+fn error_overflow_payload(value: &Value, serialized_bytes: usize) -> Value {
+    json!({
+        "kind": "mcp_tool_error",
+        "schema_version": 1,
+        "code": "error_payload_too_large",
+        "original_kind": value.get("kind").cloned().unwrap_or(Value::Null),
+        "original_code": value.get("code").cloned().unwrap_or(Value::Null),
+        "message": "Tool error payload exceeded the MCP response size limit. The original JSON was not returned to avoid invalid truncated JSON.",
+        "retryable": true,
+        "serialized_bytes": serialized_bytes,
+        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "remediation": "Retry with narrower arguments. If this repeats, inspect server logs for the original error details.",
+    })
 }
 
 fn validation_error_payload(tool: &str, action: Option<&str>, error: &anyhow::Error) -> Value {
@@ -358,8 +409,8 @@ fn unknown_action_payload(tool: &str, action: &str) -> Value {
     )
 }
 
-fn execution_error_payload(tool: &str, action: Option<&str>) -> Value {
-    base_tool_error_payload(
+fn execution_error_payload(tool: &str, action: Option<&str>, error: &anyhow::Error) -> Value {
+    let mut payload = base_tool_error_payload(
         "mcp_tool_error",
         "execution_error",
         tool,
@@ -367,7 +418,33 @@ fn execution_error_payload(tool: &str, action: Option<&str>) -> Value {
         "Tool execution failed. Check server logs for details.",
         true,
         "Check service configuration and upstream availability, then retry. Use action=status or action=help for diagnostics.",
-    )
+    );
+    payload["reason_kind"] = json!(execution_error_kind(error));
+    payload
+}
+
+fn execution_error_kind(error: &anyhow::Error) -> &'static str {
+    let text = error.to_string().to_ascii_lowercase();
+    if text.contains("timeout") || text.contains("timed out") {
+        "timeout"
+    } else if text.contains("rate limit") || text.contains("429") {
+        "rate_limited"
+    } else if text.contains("unauthorized")
+        || text.contains("forbidden")
+        || text.contains("401")
+        || text.contains("403")
+    {
+        "auth_rejected"
+    } else if text.contains("connection refused")
+        || text.contains("connection reset")
+        || text.contains("dns")
+        || text.contains("unreachable")
+        || text.contains("temporarily unavailable")
+    {
+        "upstream_unavailable"
+    } else {
+        "unknown"
+    }
 }
 
 fn base_tool_error_payload(
@@ -414,25 +491,6 @@ fn unknown_tool_error(tool_name: &str) -> ErrorData {
     )
 }
 
-#[cfg(test)]
-fn reject_unknown_action_before_scope(action: &str) -> Result<(), ErrorData> {
-    if is_known_action(action) {
-        return Ok(());
-    }
-    Err(ErrorData::invalid_params(
-        ValidationError::UnknownAction {
-            action: action.to_owned(),
-        }
-        .to_string(),
-        None,
-    ))
-}
-
-#[cfg(test)]
-fn internal_tool_error_message(action: &str) -> String {
-    format!("tool execution failed: kind=execution_error action='{action}'")
-}
-
 // ── auth helpers ──────────────────────────────────────────────────────────────
 
 fn require_auth_context<'a>(
@@ -449,11 +507,25 @@ fn require_auth_context<'a>(
                     tracing::error!(
                         "rmcp HTTP Parts extension absent — middleware ordering may be broken"
                     );
-                    ErrorData::invalid_request("forbidden: missing http context", None)
+                    ErrorData::invalid_request(
+                        "forbidden: missing http context",
+                        Some(auth_protocol_error_payload(
+                            "missing_http_context",
+                            "MCP HTTP request context was unavailable for auth enforcement.",
+                            "Check RMCP router mounting and middleware ordering. HTTP transports must preserve request Parts extensions before auth is enforced.",
+                        )),
+                    )
                 })?;
             let auth = parts.extensions.get::<AuthContext>().ok_or_else(|| {
                 tracing::warn!("AuthContext absent — AuthLayer may not be mounted");
-                ErrorData::invalid_request("forbidden: missing auth context", None)
+                ErrorData::invalid_request(
+                    "forbidden: missing auth context",
+                    Some(auth_protocol_error_payload(
+                        "missing_auth_context",
+                        "MCP auth context was unavailable for this request.",
+                        "Reconnect with a valid bearer token or OAuth session, and verify AuthLayer is mounted for the MCP route.",
+                    )),
+                )
             })?;
             Ok(Some(auth))
         }
@@ -472,8 +544,33 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
     );
     Err(ErrorData::invalid_request(
         format!("forbidden: requires scope: {required_scope}"),
-        None,
+        Some(json!({
+            "kind": "mcp_auth_error",
+            "schema_version": 1,
+            "code": "insufficient_scope",
+            "action": action,
+            "required_scope": required_scope,
+            "granted_scopes": auth.scopes,
+            "message": "Authenticated caller does not have the required MCP scope for this action.",
+            "retryable": false,
+            "remediation": "Request a token/session with the required scope, or choose an action allowed by the current token scopes.",
+        })),
     ))
+}
+
+fn auth_protocol_error_payload(
+    code: &str,
+    message: impl Into<String>,
+    remediation: impl Into<String>,
+) -> Value {
+    json!({
+        "kind": "mcp_auth_error",
+        "schema_version": 1,
+        "code": code,
+        "message": message.into(),
+        "retryable": false,
+        "remediation": remediation.into(),
+    })
 }
 
 fn scope_satisfied(token_scopes: &[String], required: &str) -> bool {

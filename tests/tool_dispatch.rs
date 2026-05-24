@@ -5,8 +5,11 @@
 //!
 //! **Template**: mirror this file for your service. Add one test per action.
 
+use rmcp::{model::CallToolRequestParams, service::ServiceError, ServiceExt};
 use rmcp_template::{
-    actions::ExampleAction, mcp::execute_tool_without_peer_for_test, testing::loopback_state,
+    actions::ExampleAction,
+    mcp::{execute_tool_without_peer_for_test, rmcp_server},
+    testing::{bearer_state, loopback_state},
 };
 use serde_json::json;
 
@@ -61,6 +64,80 @@ async fn test_status_returns_ok() {
         .and_then(|v| v.as_str())
         .expect("status field should be present");
     assert_eq!(status, "ok");
+}
+
+#[tokio::test]
+async fn test_real_call_tool_path_returns_status_json() -> anyhow::Result<()> {
+    let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
+
+    let server_handle = tokio::spawn(async move {
+        rmcp_server(loopback_state())
+            .serve(server_transport)
+            .await?
+            .waiting()
+            .await?;
+        anyhow::Ok(())
+    });
+
+    let mut args = serde_json::Map::new();
+    args.insert("action".to_owned(), json!("status"));
+    let client = ().serve(client_transport).await?;
+    let result = client
+        .call_tool(CallToolRequestParams::new("example").with_arguments(args))
+        .await?;
+
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.raw.as_text())
+        .map(|text| text.text.as_str())
+        .expect("call_tool result should contain JSON text");
+    let payload: serde_json::Value = serde_json::from_str(text)?;
+
+    assert_eq!(payload["status"], "ok");
+    assert_eq!(result.structured_content.as_ref(), Some(&payload));
+
+    client.cancel().await?;
+    server_handle.await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_real_call_tool_missing_http_context_returns_structured_auth_error(
+) -> anyhow::Result<()> {
+    let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
+
+    let server_handle = tokio::spawn(async move {
+        rmcp_server(bearer_state("secret"))
+            .serve(server_transport)
+            .await?
+            .waiting()
+            .await?;
+        anyhow::Ok(())
+    });
+
+    let mut args = serde_json::Map::new();
+    args.insert("action".to_owned(), json!("status"));
+    let client = ().serve(client_transport).await?;
+    let error = client
+        .call_tool(CallToolRequestParams::new("example").with_arguments(args))
+        .await
+        .expect_err("bare transport should lack HTTP auth extensions");
+
+    let ServiceError::McpError(error) = error else {
+        panic!("expected MCP protocol error, got: {error}");
+    };
+    assert!(error.message.contains("missing http context"));
+    let data = error
+        .data
+        .expect("auth error should include structured data");
+    assert_eq!(data["kind"], "mcp_auth_error");
+    assert_eq!(data["code"], "missing_http_context");
+    assert_eq!(data["retryable"], false);
+
+    client.cancel().await?;
+    server_handle.await??;
+    Ok(())
 }
 
 #[tokio::test]

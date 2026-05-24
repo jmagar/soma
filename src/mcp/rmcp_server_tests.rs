@@ -6,9 +6,8 @@ use crate::{
 };
 
 use super::{
-    internal_tool_error_message, reject_unknown_action_before_scope, scope_satisfied,
-    tool_error_result, tool_result_from_json, unknown_action_payload, unknown_tool_error,
-    validation_error_payload,
+    check_scope, execution_error_payload, scope_satisfied, tool_error_result,
+    tool_result_from_json, unknown_action_payload, unknown_tool_error, validation_error_payload,
 };
 
 fn scopes(s: &[&str]) -> Vec<String> {
@@ -66,21 +65,7 @@ fn unknown_action_gets_deny_scope() {
 }
 
 #[test]
-fn unknown_action_is_rejected_as_validation_before_scope() {
-    let error = reject_unknown_action_before_scope("nonexistent_action")
-        .expect_err("unknown action should be invalid params");
-    assert!(error.message.contains("unknown example action"));
-}
-
-#[test]
-fn internal_tool_errors_include_stable_kind() {
-    let message = internal_tool_error_message("status");
-    assert!(message.contains("kind=execution_error"));
-    assert!(message.contains("action='status'"));
-}
-
-#[test]
-fn tool_result_from_json_applies_response_cap() {
+fn tool_result_from_json_returns_valid_overflow_envelope() {
     let result = tool_result_from_json(json!({
         "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
     }))
@@ -91,7 +76,17 @@ fn tool_result_from_json_applies_response_cap() {
         .expect("tool result should contain text")
         .text
         .as_str();
-    assert!(text.contains("[TRUNCATED"));
+    let parsed: serde_json::Value =
+        serde_json::from_str(text).expect("overflow text should remain valid JSON");
+
+    assert_eq!(parsed["kind"], "mcp_response_overflow");
+    assert_eq!(parsed["schema_version"], 1);
+    assert_eq!(parsed["code"], "response_too_large");
+    assert_eq!(parsed["truncated"], false);
+    assert_eq!(parsed["pagination"]["automatic"], false);
+    assert!(parsed["serialized_bytes"].as_u64().unwrap() > MAX_RESPONSE_BYTES as u64);
+    assert!(!text.contains("[TRUNCATED"));
+    assert_eq!(result.structured_content.as_ref(), Some(&parsed));
 }
 
 #[test]
@@ -135,6 +130,32 @@ fn unknown_actions_become_retryable_tool_errors() {
 }
 
 #[test]
+fn oversized_tool_errors_return_valid_overflow_envelope() {
+    let result = tool_error_result(json!({
+        "kind": "mcp_tool_error",
+        "schema_version": 1,
+        "code": "huge_error",
+        "message": "x".repeat(MAX_RESPONSE_BYTES + 1),
+    }))
+    .expect("tool error should serialize");
+    let text = result.content[0]
+        .raw
+        .as_text()
+        .expect("tool error should contain text")
+        .text
+        .as_str();
+    let parsed: serde_json::Value =
+        serde_json::from_str(text).expect("overflow error text should remain valid JSON");
+
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(parsed["kind"], "mcp_tool_error");
+    assert_eq!(parsed["code"], "error_payload_too_large");
+    assert_eq!(parsed["original_code"], "huge_error");
+    assert!(parsed["serialized_bytes"].as_u64().unwrap() > MAX_RESPONSE_BYTES as u64);
+    assert_eq!(result.structured_content.as_ref(), Some(&parsed));
+}
+
+#[test]
 fn unknown_tool_stays_protocol_error_with_structured_data() {
     let error = unknown_tool_error("bad_tool");
 
@@ -150,7 +171,8 @@ fn unknown_tool_stays_protocol_error_with_structured_data() {
 
 #[test]
 fn execution_errors_do_not_expose_raw_error_text() {
-    let payload = super::execution_error_payload("example", Some("status"));
+    let raw_error = anyhow::anyhow!("upstream timeout talking to secret-api-key");
+    let payload = execution_error_payload("example", Some("status"), &raw_error);
 
     assert_eq!(
         payload,
@@ -158,6 +180,7 @@ fn execution_errors_do_not_expose_raw_error_text() {
             "kind": "mcp_tool_error",
             "schema_version": 1,
             "code": "execution_error",
+            "reason_kind": "timeout",
             "tool": "example",
             "action": "status",
             "message": "Tool execution failed. Check server logs for details.",
@@ -165,4 +188,29 @@ fn execution_errors_do_not_expose_raw_error_text() {
             "remediation": "Check service configuration and upstream availability, then retry. Use action=status or action=help for diagnostics.",
         })
     );
+    assert!(!payload.to_string().contains("secret-api-key"));
+}
+
+#[test]
+fn insufficient_scope_uses_structured_protocol_error_data() {
+    let auth = lab_auth::AuthContext {
+        sub: "agent-subject".to_owned(),
+        actor_key: None,
+        scopes: scopes(&[READ_SCOPE]),
+        issuer: "test".to_owned(),
+        via_session: false,
+        csrf_token: None,
+        email: None,
+    };
+
+    let error = check_scope(&auth, WRITE_SCOPE, "echo").expect_err("write scope should be denied");
+    let data = error
+        .data
+        .expect("insufficient scope should include structured data");
+    assert_eq!(data["kind"], "mcp_auth_error");
+    assert_eq!(data["code"], "insufficient_scope");
+    assert_eq!(data["action"], "echo");
+    assert_eq!(data["required_scope"], WRITE_SCOPE);
+    assert_eq!(data["granted_scopes"], json!([READ_SCOPE]));
+    assert_eq!(data["retryable"], false);
 }

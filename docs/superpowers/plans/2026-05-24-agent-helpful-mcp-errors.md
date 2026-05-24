@@ -66,7 +66,20 @@ Implement helpers:
 fn tool_error_result(payload: Value) -> Result<CallToolResult, ErrorData> {
     let text = serde_json::to_string(&payload)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
-    let text = token_limit::truncate_if_needed(&text);
+    let payload = if text.len() > MAX_RESPONSE_BYTES {
+        json!({
+            "kind": "mcp_tool_error",
+            "schema_version": 1,
+            "code": "error_payload_too_large",
+            "original_code": payload.get("code").cloned().unwrap_or(Value::Null),
+            "serialized_bytes": text.len(),
+            "max_response_bytes": MAX_RESPONSE_BYTES,
+        })
+    } else {
+        payload
+    };
+    let text = serde_json::to_string(&payload)
+        .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     let mut result = CallToolResult::structured_error(payload);
     result.content = vec![Content::text(text)];
     Ok(result)
