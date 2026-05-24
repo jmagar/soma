@@ -144,7 +144,6 @@ impl ServerHandler for ExampleRmcpServer {
                 tool_error_result(execution_error_payload(
                     &tool_name,
                     empty_action_as_none(&action),
-                    &error,
                 ))
             }
         }
@@ -359,13 +358,13 @@ fn unknown_action_payload(tool: &str, action: &str) -> Value {
     )
 }
 
-fn execution_error_payload(tool: &str, action: Option<&str>, error: &anyhow::Error) -> Value {
+fn execution_error_payload(tool: &str, action: Option<&str>) -> Value {
     base_tool_error_payload(
         "mcp_tool_error",
         "execution_error",
         tool,
         action,
-        format!("Tool execution failed: {error}"),
+        "Tool execution failed. Check server logs for details.",
         true,
         "Check service configuration and upstream availability, then retry. Use action=status or action=help for diagnostics.",
     )

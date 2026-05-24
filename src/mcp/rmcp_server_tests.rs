@@ -147,3 +147,17 @@ fn unknown_tool_stays_protocol_error_with_structured_data() {
     assert_eq!(data["tool"], "bad_tool");
     assert_eq!(data["available_tools"], json!(["example"]));
 }
+
+#[test]
+fn execution_errors_do_not_expose_raw_error_text() {
+    let payload = super::execution_error_payload("example", Some("status"));
+
+    assert_eq!(payload["kind"], "mcp_tool_error");
+    assert_eq!(payload["code"], "execution_error");
+    assert_eq!(payload["action"], "status");
+    assert_eq!(
+        payload["message"],
+        "Tool execution failed. Check server logs for details."
+    );
+    assert!(!payload.to_string().contains("secret"));
+}
