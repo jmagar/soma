@@ -31,6 +31,8 @@ class Server:
     repo: Path
     binary: str
     hook: str | None
+    plugin_root: str | None = None
+    check_plugin_layout: bool = True
     package_args: tuple[str, ...] = ()
     setup_args: tuple[str, ...] = ("setup", "plugin-hook", "--no-repair")
     env: tuple[tuple[str, str], ...] = ()
@@ -44,6 +46,7 @@ SERVERS = [
         WORKSPACE / "syslog-mcp",
         "syslog",
         "scripts/plugin-setup.sh",
+        plugin_root=".",
         setup_args=("setup", "plugin-hook", "--no-repair", "--json"),
         env=(("SYSLOG_MCP_TOKEN", "test-token"),),
     ),
@@ -107,6 +110,7 @@ SERVERS = [
         WORKSPACE / "lab",
         "labby",
         None,
+        check_plugin_layout=False,
         package_args=("-p", "labby", "--all-features"),
         setup_args=("setup", "plugin-hook", "--no-repair", "--json"),
         appdata_env="LAB_HOME",
@@ -129,11 +133,82 @@ def check_hook(server: Server) -> None:
     expected = f"{server.binary} setup plugin-hook \"$@\""
     if expected not in text:
         fail(f"{server.name}: hook must delegate with `{expected}`")
-    forbidden = ["docker compose", "systemctl"]
+    forbidden = [
+        "cargo build",
+        "cargo install",
+        "cargo run",
+        "docker compose",
+        "systemctl",
+    ]
     found = [token for token in forbidden if token in text]
+    if "curl" in text and "| sh" in text:
+        found.append("curl | sh")
     if found:
         fail(f"{server.name}: hook contains forbidden bootstrap tokens: {', '.join(found)}")
     subprocess.run(["bash", "-n", str(hook)], check=True)
+
+
+def check_plugin_layout(server: Server) -> None:
+    if not server.check_plugin_layout:
+        return
+    plugin_root = server.repo / (server.plugin_root or f"plugins/{server.name}")
+    if not plugin_root.is_dir():
+        fail(f"{server.name}: missing plugin root {plugin_root}")
+
+    manifest_relatives = (".claude-plugin/plugin.json", ".codex-plugin/plugin.json")
+    found_manifest = False
+    for relative in manifest_relatives:
+        manifest = plugin_root / relative
+        if not manifest.is_file():
+            continue
+        found_manifest = True
+        try:
+            payload = json.loads(manifest.read_text())
+        except json.JSONDecodeError as error:
+            fail(f"{server.name}: invalid JSON in {manifest}: {error}")
+        if "version" in payload:
+            fail(f"{server.name}: plugin manifest must not contain version: {manifest}")
+    if not found_manifest:
+        fail(f"{server.name}: missing plugin manifests under {plugin_root}")
+
+    required = []
+    if (plugin_root / ".mcp.json").exists():
+        required.append(plugin_root / ".mcp.json")
+    if server.hook is not None:
+        hooks_json = plugin_root / "hooks/hooks.json"
+        if hooks_json.exists():
+            required.append(hooks_json)
+    for path in required:
+        if not path.is_file():
+            fail(f"{server.name}: missing plugin file {path}")
+        try:
+            json.loads(path.read_text())
+        except json.JSONDecodeError as error:
+            fail(f"{server.name}: invalid JSON in {path}: {error}")
+
+
+def check_required_recipes(server: Server) -> None:
+    justfile = server.repo / "Justfile"
+    if not justfile.is_file():
+        fail(f"{server.name}: missing Justfile")
+    output = subprocess.run(
+        ["just", "--list"],
+        cwd=server.repo,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if output.returncode != 0:
+        fail(f"{server.name}: just --list failed: {output.stderr.strip()}")
+    recipes = output.stdout
+    missing = [
+        recipe
+        for recipe in ("validate-plugin", "runtime-current")
+        if f"    {recipe}" not in recipes and f"{recipe}\n" not in recipes
+    ]
+    if missing:
+        fail(f"{server.name}: missing Justfile recipes: {', '.join(missing)}")
 
 
 def check_binary(server: Server) -> None:
@@ -151,7 +226,7 @@ def check_binary(server: Server) -> None:
             "CLAUDE_PLUGIN_DATA": str(appdata),
             **dict(server.env),
         }
-        command = ["cargo", "run", "--quiet", *server.package_args, "--", *server.setup_args]
+        command = ["cargo", "run", "--locked", "--quiet", *server.package_args, "--", *server.setup_args]
         output = subprocess.run(
             command,
             cwd=server.repo,
@@ -191,6 +266,8 @@ def main() -> int:
     args = parser.parse_args()
 
     for server in SERVERS:
+        check_plugin_layout(server)
+        check_required_recipes(server)
         check_hook(server)
         if args.execute:
             check_binary(server)

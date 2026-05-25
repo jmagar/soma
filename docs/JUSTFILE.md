@@ -25,6 +25,7 @@ last_reviewed: "2026-05-15"
 | `just doctor` | Pre-flight environment/connectivity checks (`example doctor`). |
 | `just build` / `just build-release` | Debug/release Rust builds. |
 | `just build-web` | Build static Next.js web assets (`apps/web/out`). |
+| `just web-check` | Run frontend lint, typecheck, tests, and static build. |
 | `just build-full` | Build web assets then release binary (CI use). |
 | `just gen-token` | Generate a random bearer token (`openssl rand -hex 32`). |
 
@@ -62,6 +63,7 @@ last_reviewed: "2026-05-15"
 |---|---|
 | `just build-plugin` | Copy release binary into `bin/` and plugin `bin/`. |
 | `just validate-plugin` | Validate Claude/Codex/Gemini plugin manifests and skills. |
+| `just fleet-alignment-check` | Check fleet plugin hooks, manifests, and required operator recipes. |
 | `just dist` | `cargo xtask dist` — build and copy release artifacts. |
 | `just ci` | `cargo xtask ci` — run all checks locally. |
 | `just symlink-docs` | `cargo xtask symlink-docs` — sync `AGENTS.md`/`GEMINI.md` symlinks. |

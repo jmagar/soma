@@ -31,6 +31,7 @@ src/web.rs          ← Rust: embeds out/ into binary with include_dir!
 
 ```bash
 just build-web       # build apps/web/out
+just web-check       # lint, typecheck, test, and build
 just web-watch       # rebuild on changes
 just build-full      # build web then release binary (CI)
 pnpm -C apps/web check

@@ -49,6 +49,10 @@ build-web:
 web-watch:
     bash scripts/web-watch.sh
 
+# Run frontend lint, typecheck, tests, and static build
+web-check:
+    pnpm -C apps/web validate
+
 # Build the full binary with embedded web assets (runs build-web first)
 build-full: build-web build-release
 
@@ -175,6 +179,10 @@ template-features:
 template-check:
     just contract-audit
     just validate-plugin
+
+# Check fleet plugin hooks, manifests, and required operator recipes
+fleet-alignment-check:
+    python3 scripts/check-plugin-hook-contract.py
 
 # Run all local quality checks in sequence: fmt-check → lint → check → test
 verify:
