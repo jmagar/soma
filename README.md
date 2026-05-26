@@ -47,12 +47,14 @@ Choose the runtime profile from the server's ownership model:
 | Server kind | Best default | Notes |
 |---|---|---|
 | Upstream-client MCP server | `CLI + stdio MCP` binary | Local/plugin install path. Calls the upstream API directly; no local REST/Web mirror by default. |
-| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. |
+| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. The local adapter targets the deployed platform API via `EXAMPLE_API_URL`. |
 | Gateway-shared tool | HTTP MCP retained | Needed for shared gateway/catalog use and remote clients. |
 
 The stdio adapter should expose MCP-native behavior and delegate business
-actions to the same service layer or to the platform API. The REST API should
-expose business actions, not MCP protocol semantics.
+actions to the deployed platform API. The REST API should expose business
+actions, not MCP protocol semantics. In this template, leaving `EXAMPLE_API_URL`
+empty selects offline stub mode; setting it forwards local CLI/stdio calls to
+`{EXAMPLE_API_URL}/v1/example` with `EXAMPLE_API_KEY` as bearer auth when set.
 
 ## What this template gives you
 
@@ -69,7 +71,7 @@ expose business actions, not MCP protocol semantics.
 ## Architecture
 
 ```
-ExampleClient  (src/example.rs)    ← HTTP/GraphQL/gRPC calls to upstream
+ExampleClient  (src/example.rs)    ← upstream calls or deployed API adapter
       ↓
 ExampleService (src/app.rs)        ← all business logic lives here
       ↓
@@ -88,9 +90,9 @@ git clone https://github.com/jmagar/rmcp-template
 cd rmcp-template
 cargo run --bin example-server -- serve          # Streamable HTTP on :40060
 # or
-cargo run -- mcp            # stdio transport
+cargo run --bin example -- mcp            # stdio transport
 # or
-cargo run -- greet --name Alice
+cargo run --bin example -- greet --name Alice
 ```
 
 Health check:

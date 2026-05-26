@@ -124,7 +124,7 @@ The script logs all calls to `/tmp/test-mcp.<timestamp>.log`.
 | `loopback_state()` | `AppState` | No-auth, stub client tests. |
 | `bearer_state(token)` | `AppState` | Mounted bearer-auth route tests. |
 
-The stub client points at `http://localhost:1/stub`, so service-layer tests remain deterministic and do not contact a real upstream.
+The stub client uses an empty `EXAMPLE_API_URL`, so service-layer tests remain deterministic and do not contact a real upstream.
 
 ---
 

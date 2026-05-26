@@ -44,8 +44,8 @@ pub const USAGE: &str = "Usage:
   example --version                 Show version
 
 Environment:
-  EXAMPLE_API_URL          Upstream service URL
-  EXAMPLE_API_KEY          Upstream service API key
+  EXAMPLE_API_URL          Deployed platform API or upstream service URL
+  EXAMPLE_API_KEY          Bearer token or upstream service API key
   EXAMPLE_MCP_HOST         HTTP server bind host (default 127.0.0.1)
   EXAMPLE_MCP_PORT         HTTP server bind port (default 40060)
   EXAMPLE_MCP_NO_AUTH      Disable auth (loopback only)

@@ -3328,6 +3328,12 @@ and `example-server` for API + Web + HTTP MCP deployments. The full profile is
 the default so existing `cargo build` workflows still build the complete
 template.
 
+For application/platform servers, the local `example` profile is an adapter to
+the deployed platform API. Set `EXAMPLE_API_URL=https://service.example.com/`
+and optional `EXAMPLE_API_KEY=<token>`; local CLI and stdio MCP actions forward
+to `POST {EXAMPLE_API_URL}/v1/example`. Leaving `EXAMPLE_API_URL` empty keeps the
+offline template stub active for tests and first-run scaffolds.
+
 ```toml
 [features]
 default = ["full"]

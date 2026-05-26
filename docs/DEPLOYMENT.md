@@ -43,7 +43,7 @@ profile where they apply:
 |---|---|---|
 | `example mcp` | stdio MCP | For Claude Code `~/.claude/settings.json` stdio servers |
 | `example-server serve` | Streamable HTTP MCP | For Docker/remote deployment |
-| `example [subcommand]` | CLI | Direct API access; data commands print JSON by default |
+| `example [subcommand]` | CLI | Local adapter. With `EXAMPLE_API_URL` set, targets the deployed `example-server` REST API; otherwise uses template stub responses. |
 | `example doctor` | Pre-flight check | Validates environment and config |
 | `example --help` | Help | Print usage |
 | `example --version` | Version | Print version |

@@ -41,7 +41,7 @@ pub mod testing {
 
     fn stub_service() -> ExampleService {
         let client = ExampleClient::new(&ExampleConfig {
-            api_url: "http://localhost:1/stub".into(),
+            api_url: String::new(),
             api_key: "test".into(),
         })
         .expect("stub client should always build");

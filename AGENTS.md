@@ -57,12 +57,14 @@ Choose the binary shape from the server category:
 | Server kind | Default binary profile | Notes |
 |---|---|---|
 | Upstream-client MCP server | `CLI + stdio MCP` binary | Local/plugin install path. Calls the upstream API directly; no local REST/Web mirror by default. |
-| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. |
+| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. The local adapter targets the deployed platform API. |
 | Gateway-shared tool | HTTP MCP retained | Needed for shared gateway/catalog use and remote clients. |
 
 The stdio adapter should expose MCP-native behavior and delegate business
-actions to the same service layer or to the platform API. The REST API should
-expose business actions, not MCP protocol semantics.
+actions to the deployed platform API. The REST API should expose business
+actions, not MCP protocol semantics. In this template, `EXAMPLE_API_URL` selects
+that deployed API target for the local adapter; leaving it empty keeps offline
+stub mode for tests and first-run scaffolds.
 
 ## Invariant: zero logic in shims
 
@@ -109,8 +111,8 @@ For application/platform servers only, also update:
 ## Environment variables
 
 ```
-EXAMPLE_API_URL              Upstream service base URL
-EXAMPLE_API_KEY              Upstream service API key
+EXAMPLE_API_URL              Deployed platform API or upstream service base URL
+EXAMPLE_API_KEY              Deployed platform API bearer token or upstream API key
 EXAMPLE_MCP_HOST             Bind host (default 127.0.0.1)
 EXAMPLE_MCP_PORT             Bind port (default 40060)
 EXAMPLE_MCP_NO_AUTH          Disable auth — loopback only (1/true/yes)

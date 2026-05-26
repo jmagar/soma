@@ -1,7 +1,9 @@
-//! Stub transport client for the Example service.
+//! Transport client for the Example service.
 //!
-//! **Template note**: This is a placeholder for whatever HTTP/GraphQL/gRPC client
-//! your real server needs. Replace the methods with actual network calls.
+//! **Template note**: this client has two modes:
+//!   - empty `EXAMPLE_API_URL` keeps the offline template stub working;
+//!   - non-empty `EXAMPLE_API_URL` forwards actions to a deployed `example-server`
+//!     REST API, which is the local CLI/stdio adapter shape for platform servers.
 //!
 //! The pattern:
 //!   - `ExampleClient::new()` builds the transport (HTTP client, connection pool, etc.)
@@ -9,8 +11,10 @@
 //!   - `ExampleService` in `app.rs` wraps this and adds any business logic
 //!   - MCP tools in `mcp/tools.rs` call `ExampleService`, never `ExampleClient` directly
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use reqwest::{header, Url};
 use serde_json::{json, Value};
+use std::time::Duration;
 
 use crate::config::ExampleConfig;
 
@@ -20,68 +24,81 @@ use crate::config::ExampleConfig;
 #[path = "example_tests.rs"]
 mod tests;
 
-/// HTTP (or other transport) client for the example remote service.
+/// HTTP (or other transport) client for the example service.
 ///
-/// In a real server this would hold a `reqwest::Client`, connection pool, base URL, etc.
-// These fields are intentionally kept as stubs — a real implementation would use them.
-#[allow(dead_code)]
+/// For application/platform servers, the lightweight local binary uses this as
+/// an adapter to the deployed `example-server` REST API. For upstream-client
+/// servers, replace the REST envelope with the upstream service's native API.
 #[derive(Clone)]
 pub struct ExampleClient {
-    /// Base URL of the remote service (from `EXAMPLE_API_URL`).
-    api_url: String,
-    /// API key or bearer token (from `EXAMPLE_API_KEY`).
-    api_key: String,
-    // In a real server you'd also have:
-    //   client: reqwest::Client,
+    target: ExampleTarget,
+    client: reqwest::Client,
+}
+
+#[derive(Clone)]
+enum ExampleTarget {
+    /// Offline stub mode used by the template when no deployed API is configured.
+    Stub,
+    /// Deployed platform API reached by the local CLI/stdio adapter.
+    DeployedApi {
+        base_url: Url,
+        bearer_token: Option<String>,
+    },
 }
 
 impl ExampleClient {
     /// Construct a new client from configuration.
     ///
-    /// Returns an error if required config values are missing — this is intentional
-    /// so startup fails loudly rather than silently falling back to empty strings.
-    ///
-    /// **Template**: replace this with real validation / client construction.
+    /// If `EXAMPLE_API_URL` is empty, the template uses local stub responses so
+    /// tests and first-run scaffolds work without a deployed service. If it is
+    /// set, actions are forwarded to `{EXAMPLE_API_URL}/v1/example`.
     pub fn new(cfg: &ExampleConfig) -> Result<Self> {
-        // In a template, we allow empty values so the stub works without real creds.
-        // A real server would `bail!` here:
-        //   if cfg.api_url.is_empty() { anyhow::bail!("EXAMPLE_API_URL is not set"); }
-        //   if cfg.api_key.is_empty() { anyhow::bail!("EXAMPLE_API_KEY is not set"); }
+        let api_url = cfg.api_url.trim();
+        let target = if api_url.is_empty() {
+            ExampleTarget::Stub
+        } else {
+            let base_url = Url::parse(api_url)
+                .with_context(|| format!("invalid EXAMPLE_API_URL: {api_url}"))?;
+            let bearer_token = non_empty(&cfg.api_key);
+            ExampleTarget::DeployedApi {
+                base_url,
+                bearer_token,
+            }
+        };
 
-        // Build reqwest client if you need one:
-        //   let client = reqwest::ClientBuilder::new()
-        //       .timeout(std::time::Duration::from_secs(30))
-        //       .build()
-        //       .context("failed to build HTTP client")?;
-
-        Ok(Self {
-            api_url: cfg.api_url.clone(),
-            api_key: cfg.api_key.clone(),
-        })
+        let client = reqwest::ClientBuilder::new()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .context("failed to build HTTP client")?;
+        Ok(Self { target, client })
     }
-
-    // ── placeholder operations ────────────────────────────────────────────────
-    // Each of these would be a real HTTP/GraphQL/gRPC call in a production server.
-    // They return serde_json::Value so the service layer can transform them freely.
 
     /// Say hello to `name`, or "World" if not provided.
     pub async fn greet(&self, name: Option<&str>) -> Result<Value> {
+        if let Some(value) = self
+            .call_deployed_api("greet", json!({ "name": name }))
+            .await?
+        {
+            return Ok(value);
+        }
+
         let target = name.unwrap_or("World");
-        // Real implementation would call:
-        //   self.client.get(format!("{}/greet", self.api_url))
-        //       .bearer_auth(&self.api_key)
-        //       .query(&[("name", target)])
-        //       .send().await?
-        //       .json().await?
         Ok(json!({
             "greeting": format!("Hello, {target}!"),
             "target": target,
-            "server": self.api_url,
+            "server": "",
         }))
     }
 
     /// Echo a message back unchanged.
     pub async fn echo(&self, message: &str) -> Result<Value> {
+        if let Some(value) = self
+            .call_deployed_api("echo", json!({ "message": message }))
+            .await?
+        {
+            return Ok(value);
+        }
+
         Ok(json!({ "echo": message }))
     }
 
@@ -91,10 +108,69 @@ impl ExampleClient {
     /// so it must not include secrets or sensitive topology (e.g. `api_url`).
     /// TEMPLATE: Add non-sensitive runtime metrics (uptime, version, etc.).
     pub async fn status(&self) -> Result<Value> {
+        if let Some(value) = self.call_deployed_api("status", json!({})).await? {
+            return Ok(value);
+        }
+
         Ok(json!({
             "status": "ok",
             // api_url intentionally omitted — topology leak on unauthenticated endpoint.
             "note": "stub — replace with real health endpoint",
         }))
     }
+
+    async fn call_deployed_api(&self, action: &str, params: Value) -> Result<Option<Value>> {
+        let ExampleTarget::DeployedApi {
+            base_url,
+            bearer_token,
+        } = &self.target
+        else {
+            return Ok(None);
+        };
+
+        let url = api_action_url(base_url)?;
+        let mut request = self.client.post(url).json(&json!({
+            "action": action,
+            "params": params,
+        }));
+        if let Some(token) = bearer_token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("failed to call deployed API action={action}"))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .with_context(|| format!("failed to read deployed API response action={action}"))?;
+
+        if !status.is_success() {
+            anyhow::bail!("deployed API action={action} returned HTTP {status}: {body}");
+        }
+
+        let value = serde_json::from_str(&body)
+            .with_context(|| format!("deployed API returned invalid JSON action={action}"))?;
+        Ok(Some(value))
+    }
+}
+
+fn api_action_url(base_url: &Url) -> Result<Url> {
+    let mut url = base_url.clone();
+    {
+        let mut segments = url
+            .path_segments_mut()
+            .map_err(|_| anyhow::anyhow!("EXAMPLE_API_URL cannot be a base for REST paths"))?;
+        segments.pop_if_empty();
+        segments.push("v1");
+        segments.push("example");
+    }
+    Ok(url)
+}
+
+fn non_empty(value: &str) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_owned())
 }

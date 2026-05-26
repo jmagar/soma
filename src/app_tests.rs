@@ -10,8 +10,8 @@
 //! The service layer tests verify that ExampleService correctly delegates to
 //! ExampleClient and that any transformations or caching are correct.
 //!
-//! **Template**: These tests use real ExampleClient instances (pointing at a
-//! stub URL), which means they test the full delegation chain without mocking.
+//! **Template**: These tests use real ExampleClient instances in offline stub
+//! mode, which means they test the full delegation chain without mocking.
 //! For services with complex business logic, consider adding mock clients.
 
 use super::*;
@@ -20,7 +20,7 @@ use crate::{config::ExampleConfig, example::ExampleClient};
 /// Build a stub ExampleService for testing without real credentials.
 fn stub_service() -> ExampleService {
     let client = ExampleClient::new(&ExampleConfig {
-        api_url: "http://localhost:1/stub".to_string(),
+        api_url: String::new(),
         api_key: "test-key".to_string(),
     })
     .expect("stub client should always build");

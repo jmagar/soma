@@ -17,12 +17,12 @@ last_reviewed: "2026-05-15"
 
 The template uses `EXAMPLE_*` variables. Rename the prefix when adapting the template.
 
-## Upstream service
+## API target
 
 | Variable | Purpose |
 |---|---|
-| `EXAMPLE_API_URL` | Upstream API base URL used by `ExampleClient`. Required. |
-| `EXAMPLE_API_KEY` | Upstream API key or token. Keep secret. Required. |
+| `EXAMPLE_API_URL` | Deployed platform API or upstream API base URL used by `ExampleClient`. Empty selects offline template stub mode. |
+| `EXAMPLE_API_KEY` | Bearer token or upstream API key. Keep secret. Required when the deployed API requires auth. |
 
 ## MCP HTTP server
 

@@ -24,14 +24,18 @@
 
 use super::*;
 use crate::config::ExampleConfig;
+use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
+use serde_json::{json, Value};
+use std::sync::{Arc, Mutex};
+use tokio::net::TcpListener;
 
-/// Helper: build a stub ExampleConfig pointing at a non-existent local server.
-/// Tests do not make real network calls — the stub client methods return mock data.
+/// Helper: build a stub ExampleConfig.
+/// Tests do not make real network calls unless they opt into a mock deployed API.
 fn stub_config() -> ExampleConfig {
     ExampleConfig {
-        // Points at a port nothing listens on — safe for offline tests.
+        // Empty URL selects offline stub mode — safe for offline tests.
         // TEMPLATE: Replace with your service's config struct fields.
-        api_url: "http://localhost:1/stub".to_string(),
+        api_url: String::new(),
         api_key: "test-key".to_string(),
     }
 }
@@ -130,4 +134,119 @@ fn test_client_builds_with_empty_config() {
         result.is_ok(),
         "stub client should build even with empty config (real server should validate)"
     );
+}
+
+#[test]
+fn test_api_action_url_preserves_base_path() {
+    let root = Url::parse("https://example.test/").unwrap();
+    let nested = Url::parse("https://example.test/api").unwrap();
+    let nested_slash = Url::parse("https://example.test/api/").unwrap();
+
+    assert_eq!(
+        api_action_url(&root).unwrap().as_str(),
+        "https://example.test/v1/example"
+    );
+    assert_eq!(
+        api_action_url(&nested).unwrap().as_str(),
+        "https://example.test/api/v1/example"
+    );
+    assert_eq!(
+        api_action_url(&nested_slash).unwrap().as_str(),
+        "https://example.test/api/v1/example"
+    );
+}
+
+#[tokio::test]
+async fn test_client_forwards_actions_to_deployed_api_when_configured() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+
+    let client = ExampleClient::new(&ExampleConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+    })
+    .expect("remote client should build");
+
+    let greeting = client
+        .greet(Some("Ada"))
+        .await
+        .expect("remote greet should succeed");
+    let echo = client
+        .echo("hello")
+        .await
+        .expect("remote echo should succeed");
+    let status = client.status().await.expect("remote status should succeed");
+
+    handle.abort();
+
+    assert_eq!(greeting["source"], "deployed-api");
+    assert_eq!(greeting["greeting"], "Hello, Ada!");
+    assert_eq!(echo["echo"], "hello");
+    assert_eq!(status["status"], "remote-ok");
+
+    let observed = observed.lock().expect("observed requests should lock");
+    assert_eq!(observed.len(), 3);
+    assert!(observed
+        .iter()
+        .all(|request| request.bearer == "Bearer secret-token"));
+    assert_eq!(observed[0].action, "greet");
+    assert_eq!(observed[0].params["name"], "Ada");
+    assert_eq!(observed[1].action, "echo");
+    assert_eq!(observed[1].params["message"], "hello");
+    assert_eq!(observed[2].action, "status");
+}
+
+#[derive(Debug, Clone)]
+struct ObservedRequest {
+    action: String,
+    params: Value,
+    bearer: String,
+}
+
+type ObservedRequests = Arc<Mutex<Vec<ObservedRequest>>>;
+
+async fn mock_deployed_api(
+    observed: ObservedRequests,
+) -> (String, tokio::task::JoinHandle<std::io::Result<()>>) {
+    let app = Router::new()
+        .route("/v1/example", post(mock_action))
+        .with_state(observed);
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock API should bind");
+    let addr = listener.local_addr().expect("mock API should have addr");
+    let handle = tokio::spawn(async move { axum::serve(listener, app.into_make_service()).await });
+    (format!("http://{addr}/"), handle)
+}
+
+async fn mock_action(
+    State(observed): State<ObservedRequests>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    let action = body["action"].as_str().unwrap_or_default().to_owned();
+    let params = body["params"].clone();
+    let bearer = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    observed
+        .lock()
+        .expect("observed requests should lock")
+        .push(ObservedRequest {
+            action: action.clone(),
+            params: params.clone(),
+            bearer,
+        });
+
+    match action.as_str() {
+        "greet" => Json(json!({
+            "source": "deployed-api",
+            "greeting": format!("Hello, {}!", params["name"].as_str().unwrap_or("World")),
+        })),
+        "echo" => Json(json!({ "echo": params["message"] })),
+        "status" => Json(json!({ "status": "remote-ok" })),
+        _ => Json(json!({ "error": "unknown action" })),
+    }
 }

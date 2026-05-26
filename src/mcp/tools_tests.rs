@@ -3,7 +3,7 @@ use crate::{config::ExampleConfig, example::ExampleClient};
 
 fn service() -> ExampleService {
     let client = ExampleClient::new(&ExampleConfig {
-        api_url: "http://localhost:1/stub".to_owned(),
+        api_url: String::new(),
         api_key: "test-key".to_owned(),
     })
     .expect("stub client should build");

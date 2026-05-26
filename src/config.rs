@@ -20,14 +20,16 @@ pub struct Config {
     pub example: ExampleConfig,
 }
 
-/// Config for the example remote service (the thing this MCP server wraps).
+/// Config for the example remote service or deployed platform API.
 ///
-/// **Template**: replace this with config for your actual upstream service.
+/// For application/platform servers, the local CLI + stdio MCP adapter uses
+/// `api_url` as the deployed `example-server` API base URL. For upstream-client
+/// servers, replace this with config for the actual upstream service.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ExampleConfig {
-    /// Full endpoint URL of the remote service (EXAMPLE_API_URL).
-    /// Example: `https://api.example.com/v1`
+    /// Base URL of the deployed platform API or upstream service (EXAMPLE_API_URL).
+    /// Example: `https://example.example.com/`
     pub api_url: String,
     /// API key or bearer token (EXAMPLE_API_KEY).
     pub api_key: String,
