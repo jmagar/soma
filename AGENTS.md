@@ -50,6 +50,20 @@ Do not add a REST/Web surface just to mirror an upstream HTTP API. For upstream-
 
 Exception: `scaffold_intent` is MCP-only because it is specifically an MCP elicitation + plugin skill handoff workflow. There is no true CLI equivalent for exercising client-rendered elicitation and skill selection inside the user's agent/editor permission model.
 
+## Binary and transport profiles
+
+Choose the binary shape from the server category:
+
+| Server kind | Default binary profile | Notes |
+|---|---|---|
+| Upstream-client MCP server | `CLI + stdio MCP` binary | Local/plugin install path. Calls the upstream API directly; no local REST/Web mirror by default. |
+| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. |
+| Gateway-shared tool | HTTP MCP retained | Needed for shared gateway/catalog use and remote clients. |
+
+The stdio adapter should expose MCP-native behavior and delegate business
+actions to the same service layer or to the platform API. The REST API should
+expose business actions, not MCP protocol semantics.
+
 ## Invariant: zero logic in shims
 
 `mcp/tools.rs` and `cli.rs` must not contain business logic. They parse inputs and delegate to `ExampleService`. All computation, validation, and transformation belongs in `app.rs`.

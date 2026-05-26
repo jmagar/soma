@@ -6,7 +6,11 @@ This template ships one service plugin package with three host-specific entrypoi
 - Codex: `plugins/example/.codex-plugin/plugin.json`
 - Gemini: `plugins/example/gemini-extension.json`
 
-All three surfaces should describe the same MCP server, expose the same skills, and connect to the same HTTP MCP endpoint. The host manifests differ, but the service behavior should not.
+All three surfaces should describe the same MCP server and expose the same
+skills. Upstream-client servers should prefer a local stdio binary install for
+plugin use. Application/platform servers may point plugins at the shared HTTP
+MCP endpoint when a central server deployment is the source of truth. The host
+manifests differ, but the service behavior should not.
 
 ## Layout
 
@@ -39,7 +43,7 @@ Each plugin surface should agree on:
 
 - service name and repository URL
 - MCP server name
-- HTTP MCP URL shape: `<server_url>/mcp`
+- MCP connection profile: stdio command for upstream-client servers, or HTTP URL shape `<server_url>/mcp` for platform/gateway deployments
 - bearer token setting name
 - upstream service credential names
 - action list and skill documentation

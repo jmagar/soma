@@ -40,6 +40,20 @@ For upstream-client servers, do not mirror the upstream HTTP API locally by defa
 
 `scaffold_intent` is the template's explicit MCP-only exception: it combines MCP elicitation with plugin skill handoff, so there is no true CLI equivalent inside the user's agent/editor permission model.
 
+### Binary and transport profiles
+
+Choose the runtime profile from the server's ownership model:
+
+| Server kind | Best default | Notes |
+|---|---|---|
+| Upstream-client MCP server | `CLI + stdio MCP` binary | Local/plugin install path. Calls the upstream API directly; no local REST/Web mirror by default. |
+| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. |
+| Gateway-shared tool | HTTP MCP retained | Needed for shared gateway/catalog use and remote clients. |
+
+The stdio adapter should expose MCP-native behavior and delegate business
+actions to the same service layer or to the platform API. The REST API should
+expose business actions, not MCP protocol semantics.
+
 ## What this template gives you
 
 - **Layered architecture** — transport client → service → MCP/CLI shims, enforced by convention

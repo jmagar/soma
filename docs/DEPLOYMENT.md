@@ -19,9 +19,25 @@ This template supports three deployment modes:
 2. **Docker Compose** with `just docker-up`.
 3. **User systemd** with an installed release binary.
 
+## Deployment profile choice
+
+Choose the binary profile from the server category:
+
+| Server kind | Preferred deployment |
+|---|---|
+| Upstream-client MCP server | Installed local binary that exposes CLI + stdio MCP and calls the upstream API directly. |
+| Application/platform server | Docker/systemd server binary that exposes API + Web + HTTP MCP, with optional local CLI/stdio adapter. |
+| Gateway-shared tool | HTTP MCP deployment retained for gateway/catalog access. |
+
+Do not add a local REST/Web mirror only because an upstream service has an HTTP
+API. Add REST/Web when this project owns state, background work, dashboards, or
+non-MCP consumers.
+
 ## Binary command surface
 
-Every server binary exposes exactly two server modes and a CLI:
+The all-in-one template binary exposes two server modes and a CLI. If a derived
+server splits local and server profiles, keep the command names stable on the
+profile where they apply:
 
 | Command | Mode | Description |
 |---|---|---|

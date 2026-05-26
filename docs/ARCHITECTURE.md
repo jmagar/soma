@@ -87,9 +87,22 @@ pub struct AppState {
 
 `AppState` is cloned per-request by the RMCP framework. Keep it cheap to clone — the service wraps an `Arc`-backed `reqwest::Client` internally.
 
+## Binary and transport profiles
+
+The template supports two deployment shapes, chosen by server category:
+
+| Server kind | Default shape |
+|---|---|
+| Upstream-client MCP server | Local `CLI + stdio MCP` binary that calls the upstream API directly. |
+| Application/platform server | Docker/server binary with REST API, Web UI, Streamable HTTP MCP, health/auth, and optional local CLI/stdio adapter. |
+
+Keep MCP-specific behavior in the MCP layer. If a stdio adapter talks to a
+platform API, that API should expose business actions, not MCP protocol
+semantics.
+
 ## Route composition
 
-All surfaces (MCP, REST API, web UI) share **one binary on one port**:
+For the full platform/server profile, HTTP surfaces share one binary on one port:
 
 ```
 Port 40060

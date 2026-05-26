@@ -2503,7 +2503,9 @@ fi
 
 ## 46. Binary Commands — Canonical Mode Names
 
-Every server binary exposes exactly two server modes and a CLI:
+Command names stay stable across binary profiles. The all-in-one template
+binary exposes two server modes and a CLI; split-profile services expose the
+same command names on the binary where that mode applies.
 
 | Command | Mode | Description |
 |---|---|---|
@@ -2957,10 +2959,13 @@ hide those calls inside the default local or CI path.
 
 ---
 
-## A1. Single Binary, Single Port — Multi-Surface Architecture
+## A1. Platform Server Profile — Single Port Multi-Surface Architecture
 
-Every service runs all surfaces (MCP, REST API, web UI) from **one binary on one port**.
-There is no separate web server, no separate API server — just one axum router.
+Application/platform servers run HTTP surfaces (MCP, REST API, web UI) from one
+server binary on one port. There is no separate web server and no separate API
+server in the platform profile, just one axum router. Upstream-client MCP
+servers should usually use the lighter local `CLI + stdio MCP` profile and call
+the upstream API directly instead of adding a local REST/Web mirror.
 
 ```
 Port 40060

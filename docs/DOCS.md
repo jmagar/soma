@@ -82,6 +82,7 @@ docs/
 | Location | What belongs there |
 |---|---|
 | `docs/*.md` | Stable orientation, architecture narrative, and how-to guides. The map, not the territory. |
+| `README.md` | Canonical server surface and binary/transport profile policy for template users. |
 | `docs/PATTERNS.md` | Normative patterns for the entire rmcp server family. Deviation requires an explicit recorded decision. |
 | `docs/contracts/` | Machine-readable JSON schemas and example payloads checked by CI scripts. Committed. |
 | `docs/generated/` | Small artifacts produced by `just openapi`, `just schema-docs`, etc. Only commit when the artifact is part of CI/API compatibility checking. |
