@@ -1,6 +1,26 @@
 # JSON contracts
 
-Machine-readable contracts for template handoff payloads and generated artifacts.
+Durable contracts for template handoff payloads, generated artifacts, and
+profile behavior. Some contracts are machine-readable JSON Schemas; others are
+normative Markdown checklists backed by tests and validators.
+
+## Plugin stdio adapter
+
+- Contract: `plugin-stdio-adapter.md`
+- Decision record: `../adr/0001-stdio-first-plugin-adapter.md`
+
+The local plugin default is a bundled stdio MCP adapter (`example mcp`) that can
+target a deployed platform API through `EXAMPLE_API_URL`. The full server binary
+keeps REST API, Web, Streamable HTTP MCP, health, and auth surfaces for
+Docker/systemd/gateway deployments.
+
+Validate with:
+
+```bash
+bash scripts/check-plugin-stdio-smoke.sh
+bash scripts/validate-plugin-layout.sh
+cargo test --test plugin_contract
+```
 
 ## Scaffold intent
 

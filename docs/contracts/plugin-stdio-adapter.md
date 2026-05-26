@@ -1,0 +1,125 @@
+---
+title: "Plugin stdio adapter contract"
+doc_type: "contract"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: true
+upstream_refs:
+  - "plugins/example/.mcp.json"
+  - "plugins/example/gemini-extension.json"
+  - "src/example.rs"
+  - "src/bin/example.rs"
+  - "src/main.rs"
+last_reviewed: "2026-05-26"
+---
+
+# Plugin stdio adapter contract
+
+This contract records the behavior required by
+[`ADR 0001`](../adr/0001-stdio-first-plugin-adapter.md). It is the stable
+checklist for template adapters and for services scaffolded from this repo.
+
+## Required profiles
+
+| Profile | Binary | Required surfaces | Intended use |
+|---|---|---|---|
+| Local adapter | `example` | CLI + stdio MCP | Plugin installs, local scripting, parity tests |
+| Full server | `example-server` | REST API + Web + Streamable HTTP MCP + health/auth | Docker, systemd, gateway, remote clients |
+
+## Plugin MCP config
+
+Claude Code and Codex share `plugins/example/.mcp.json`. The default MCP server
+entry must be stdio-first:
+
+```json
+{
+  "type": "stdio",
+  "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
+  "args": ["mcp"],
+  "env": {
+    "EXAMPLE_API_URL": "${user_config.example_api_url}",
+    "EXAMPLE_API_KEY": "${user_config.example_api_key}",
+    "RUST_LOG": "warn"
+  }
+}
+```
+
+Gemini must use the same local adapter behavior with Gemini's extension path
+interpolation:
+
+```json
+{
+  "command": "${extensionPath}${/}bin${/}example",
+  "args": ["mcp"],
+  "env": {
+    "EXAMPLE_API_URL": "${settings.example_api_url}",
+    "EXAMPLE_API_KEY": "${settings.example_api_key}",
+    "RUST_LOG": "warn"
+  }
+}
+```
+
+Plugin manifests must not auto-register an HTTP MCP health monitor by default.
+If a derived service needs remote/gateway HTTP MCP, document that as an explicit
+operator setting rather than the plugin install default.
+
+## Adapter API contract
+
+The local adapter resolves its runtime mode from `EXAMPLE_API_URL`:
+
+| `EXAMPLE_API_URL` | Behavior |
+|---|---|
+| empty | Offline template stub mode. Used for local smoke tests and scaffold examples. |
+| set | Forward local CLI and stdio MCP business actions to the deployed API. |
+
+When forwarding, the adapter must:
+
+- preserve any base path in `EXAMPLE_API_URL`;
+- call `POST {EXAMPLE_API_URL}/v1/example`;
+- send `EXAMPLE_API_KEY` as `Authorization: Bearer <token>` when set;
+- send business-action JSON, not MCP protocol JSON;
+- surface execution failures through the existing CLI/MCP error policy.
+
+The REST body shape is:
+
+```json
+{
+  "action": "status",
+  "params": {}
+}
+```
+
+The MCP tool argument shape remains:
+
+```json
+{
+  "action": "status"
+}
+```
+
+## Verification commands
+
+Run these after changing binary profiles, plugin manifests, adapter behavior, or
+transport docs:
+
+```bash
+cargo check --bin example --no-default-features --features cli-mcp
+cargo check --bin example-server --features full
+bash scripts/check-plugin-stdio-smoke.sh
+bash scripts/validate-plugin-layout.sh
+cargo test --test plugin_contract
+```
+
+For release-level validation, also run the normal template gates:
+
+```bash
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+bash scripts/test-template-features.sh
+cargo fmt --check
+git diff --check
+```

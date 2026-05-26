@@ -11,6 +11,7 @@ This directory contains focused guides for operating, adapting, testing, and rel
 | `PHILOSOPHY.md` | Understand the design principles behind the template. |
 | `AGENTS-FIRST.md` | Build outputs and workflows that are reliable for AI agents. |
 | `PATTERNS.md` | Read the canonical long-form pattern catalog. |
+| `adr/0001-stdio-first-plugin-adapter.md` | Understand the accepted local-adapter/server-binary split. |
 
 ## Operations
 
@@ -46,12 +47,14 @@ This directory contains focused guides for operating, adapting, testing, and rel
 | `AUTH.md` | Auth policies and security model. |
 | `PLUGINS.md` | Claude/Codex/Gemini plugin packaging. |
 | `MCP_SCHEMA.md` | Generated MCP tool schema/action contract. |
+| `contracts/plugin-stdio-adapter.md` | Normative binary profile and plugin stdio adapter contract. |
 | `MCP-REGISTRY-PUBLISH-GUIDE.md` | MCP registry publishing guidance. |
 
 ## Directories
 
 | Directory | Contents |
 |---|---|
+| `adr/` | Accepted architecture decision records. |
 | `generated/` | Machine-produced artefacts committed for CI/API compatibility (e.g. `openapi.json`). |
 | `contracts/` | Durable JSON Schema and example contracts (e.g. scaffold intent schema). |
 | `specs/` | Design specs and handoff documents for MCP-only wizard flows. |

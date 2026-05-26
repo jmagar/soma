@@ -12,6 +12,12 @@ plugin use. Application/platform servers may point plugins at the shared HTTP
 MCP endpoint when a central server deployment is the source of truth. The host
 manifests differ, but the service behavior should not.
 
+The local plugin default is stdio-first. See
+[`docs/adr/0001-stdio-first-plugin-adapter.md`](adr/0001-stdio-first-plugin-adapter.md)
+for the accepted decision and
+[`docs/contracts/plugin-stdio-adapter.md`](contracts/plugin-stdio-adapter.md)
+for the exact manifest and adapter contract.
+
 ## Layout
 
 ```text

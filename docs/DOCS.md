@@ -29,6 +29,9 @@ docs/
   ├── MCP_SCHEMA.md                   ← MCP action/scope/schema contract
   ├── MCP-REGISTRY-PUBLISH-GUIDE.md  ← how to publish to the MCP registry
   │
+  ├── adr/                            ← accepted architecture decision records
+  │   └── 0001-stdio-first-plugin-adapter.md
+  │
   ├── QUICKSTART.md                   ← 5-minute getting-started guide
   ├── PHILOSOPHY.md                   ← design principles
   ├── AGENTS-FIRST.md                 ← agent-first output and error design
@@ -58,6 +61,7 @@ docs/
   │
   ├── contracts/                      ← machine-readable JSON contracts
   │   ├── README.md
+  │   ├── plugin-stdio-adapter.md
   │   ├── scaffold-intent.schema.json
   │   └── examples/
   │
@@ -84,6 +88,7 @@ docs/
 | `docs/*.md` | Stable orientation, architecture narrative, and how-to guides. The map, not the territory. |
 | `README.md` | Canonical server surface and binary/transport profile policy for template users. |
 | `docs/PATTERNS.md` | Normative patterns for the entire rmcp server family. Deviation requires an explicit recorded decision. |
+| `docs/adr/` | Accepted architecture decisions. Use ADRs for cross-cutting choices that future adapters must preserve or explicitly supersede. |
 | `docs/contracts/` | Machine-readable JSON schemas and example payloads checked by CI scripts. Committed. |
 | `docs/generated/` | Small artifacts produced by `just openapi`, `just schema-docs`, etc. Only commit when the artifact is part of CI/API compatibility checking. |
 | `docs/specs/` | Implementation specs and handoff documents. Draft until promoted to a stable guide. |
@@ -102,7 +107,7 @@ Every `docs/*.md` file opens with YAML frontmatter:
 ```yaml
 ---
 title: "Human-readable title"
-doc_type: "guide"          # guide | contract | spec | session | report
+doc_type: "guide"          # guide | contract | spec | adr | session | report
 status: "active"           # active | draft | deprecated
 owner: "rmcp-template"     # repo name or team
 audience:
@@ -120,7 +125,7 @@ last_reviewed: "2026-05-15"
 
 | Field | Values | Purpose |
 |---|---|---|
-| `doc_type` | `guide`, `contract`, `spec`, `session`, `report` | Classifies the file's role in the doc hierarchy. |
+| `doc_type` | `guide`, `contract`, `spec`, `adr`, `session`, `report` | Classifies the file's role in the doc hierarchy. |
 | `status` | `active`, `draft`, `deprecated` | `active` = current and maintained; `draft` = in progress; `deprecated` = superseded by another file. |
 | `source_of_truth` | `true` / `false` | `true` only when this file IS the authoritative record. Most guides are `false` — they summarize the code or reference `PATTERNS.md`. When a doc disagrees with `source_of_truth: true` code, update the doc. |
 | `upstream_refs` | file paths | Where to go when this doc and reality diverge. Code files beat docs. |

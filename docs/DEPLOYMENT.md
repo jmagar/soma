@@ -33,6 +33,11 @@ Do not add a local REST/Web mirror only because an upstream service has an HTTP
 API. Add REST/Web when this project owns state, background work, dashboards, or
 non-MCP consumers.
 
+See [`docs/adr/0001-stdio-first-plugin-adapter.md`](adr/0001-stdio-first-plugin-adapter.md)
+for the accepted decision and
+[`docs/contracts/plugin-stdio-adapter.md`](contracts/plugin-stdio-adapter.md)
+for the deployable profile contract.
+
 ## Binary command surface
 
 The all-in-one template binary exposes two server modes and a CLI. If a derived

@@ -100,6 +100,11 @@ Keep MCP-specific behavior in the MCP layer. If a stdio adapter talks to a
 platform API, that API should expose business actions, not MCP protocol
 semantics.
 
+The accepted transport/profile decision is recorded in
+[`docs/adr/0001-stdio-first-plugin-adapter.md`](adr/0001-stdio-first-plugin-adapter.md).
+The normative plugin adapter checklist lives in
+[`docs/contracts/plugin-stdio-adapter.md`](contracts/plugin-stdio-adapter.md).
+
 ## Route composition
 
 For the full platform/server profile, HTTP surfaces share one binary on one port:
