@@ -9,7 +9,7 @@
 .env.*
 *.env
 !.env.example
-
+.broadcastr
 # ── Local config (runtime settings — never commit) ───────────────────────────
 config.toml
 config.local.toml
