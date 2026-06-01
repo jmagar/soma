@@ -12,7 +12,6 @@
     "template"
   ],
   "mcpServers": "./.mcp.json",
-  "hooks": "./hooks/hooks.json",
   "skills": "./skills",
   "userConfig": {
     "use_docker": {
