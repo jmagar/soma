@@ -331,7 +331,7 @@ health:
 
 # Verify that the running Docker/systemd service matches the current artifact
 runtime-current:
-    bash scripts/check-runtime-current.sh --expected-binary target/release/example-server
+    bash scripts/check-runtime-current.sh --expected-binary target/release/rtemplate-server
 
 # Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
 auth-smoke:
@@ -365,13 +365,13 @@ build-plugin: build-local-release
     #!/bin/sh
     set -eu
     target_dir="${CARGO_TARGET_DIR:-target}"
-    if [ ! -x "${target_dir}/release/example" ] && [ -x ".cache/cargo/release/example" ]; then
+    if [ ! -x "${target_dir}/release/rtemplate" ] && [ -x ".cache/cargo/release/rtemplate" ]; then
         target_dir=".cache/cargo"
     fi
     mkdir -p bin plugins/example/bin
-    install -m 755 "${target_dir}/release/example" bin/example
-    install -m 755 "${target_dir}/release/example" plugins/example/bin/example
-    echo "Installed bin/example and plugins/example/bin/example"
+    install -m 755 "${target_dir}/release/rtemplate" bin/rtemplate
+    install -m 755 "${target_dir}/release/rtemplate" plugins/example/bin/rtemplate
+    echo "Installed bin/rtemplate and plugins/example/bin/rtemplate"
 
 # Install the release binary into bin/ (alias for build-plugin kept for compatibility)
 install: build-plugin
@@ -379,8 +379,8 @@ install: build-plugin
 # Install the release binary on the local PATH for runtime smoke testing
 install-local: build-local-release
     mkdir -p "${HOME}/.local/bin"
-    install -m 755 target/release/example "${HOME}/.local/bin/example"
-    @echo "Installed ${HOME}/.local/bin/example"
+    install -m 755 target/release/rtemplate "${HOME}/.local/bin/rtemplate"
+    @echo "Installed ${HOME}/.local/bin/rtemplate"
 
 # Validate all plugin manifests, MCP config, hooks, and skills
 validate-plugin:

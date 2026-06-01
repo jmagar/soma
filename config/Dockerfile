@@ -72,7 +72,7 @@ RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registr
     --mount=type=cache,id=example-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
     touch src/main.rs && cargo build --release --locked -p rmcp-template --bin example-server --features full && \
-    cp target/release/example-server /usr/local/bin/example-server
+    cp target/release/rtemplate-server /usr/local/bin/rtemplate-server
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Minimal Debian image — no Rust toolchain, no build tools.
@@ -95,7 +95,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # TEMPLATE: Replace "example-server" with your server binary name in both COPY and target path.
-COPY --from=builder /usr/local/bin/example-server /usr/local/bin/example-server
+COPY --from=builder /usr/local/bin/rtemplate-server /usr/local/bin/rtemplate-server
 
 # Wire in the entrypoint.
 # TEMPLATE: entrypoint.sh lives at the repo root. It runs as root, fixes /data

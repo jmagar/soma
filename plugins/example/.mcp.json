@@ -2,7 +2,7 @@
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/rtemplate",
       "args": ["mcp"],
       "env": {
         "EXAMPLE_API_URL": "${user_config.example_api_url}",

@@ -23,12 +23,12 @@ description = "Template for building MCP servers with the rmcp crate"
 autobins = false
 
 [[bin]]
-name = "example"
+name = "rtemplate"
 path = "src/bin/example.rs"
 required-features = ["cli-mcp"]
 
 [[bin]]
-name = "example-server"
+name = "rtemplate-server"
 path = "src/main.rs"
 required-features = ["http-server"]
 

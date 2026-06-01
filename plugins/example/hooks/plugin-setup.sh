@@ -23,12 +23,12 @@ export_if_set() {
   export "${env_name}=${value}"
 }
 
-ensure_example_binary() {
-  if command -v example >/dev/null 2>&1; then
+ensure_rtemplate_binary() {
+  if command -v rtemplate >/dev/null 2>&1; then
     return 0
   fi
 
-  local bundled="${CLAUDE_PLUGIN_ROOT}/bin/example"
+  local bundled="${CLAUDE_PLUGIN_ROOT}/bin/rtemplate"
   if [[ ! -x "${bundled}" ]]; then
     printf 'example plugin setup: bundled binary not found at %s\n' "${bundled}" >&2
     printf '  → run: just install   (builds release binary and copies to plugins/example/bin/)\n' >&2
@@ -36,10 +36,10 @@ ensure_example_binary() {
   fi
 
   mkdir -p "${HOME}/.local/bin"
-  ln -sf "${bundled}" "${HOME}/.local/bin/example"
+  ln -sf "${bundled}" "${HOME}/.local/bin/rtemplate"
   export PATH="${HOME}/.local/bin:${PATH}"
 
-  command -v example >/dev/null 2>&1 || {
+  command -v rtemplate >/dev/null 2>&1 || {
     printf 'example plugin setup: symlink created but example still not found in PATH\n' >&2
     printf '  → ensure %s is on your PATH\n' "${HOME}/.local/bin" >&2
     exit 1
@@ -63,8 +63,8 @@ main() {
   chmod 700 "${EXAMPLE_HOME}" 2>/dev/null || true
   export EXAMPLE_HOME
 
-  ensure_example_binary
-  example setup plugin-hook "$@"
+  ensure_rtemplate_binary
+  rtemplate setup plugin-hook "$@"
 }
 
 main "$@"

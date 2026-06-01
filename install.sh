@@ -27,7 +27,7 @@ set -euo pipefail
 REPO="your-org/example-mcp"
 
 # TEMPLATE: Replace with your binary name (matches Cargo.toml [[bin]] name)
-BINARY_NAME="example"
+BINARY_NAME="rtemplate"
 
 # TEMPLATE: Replace with your service display name (shown in messages)
 SERVICE_NAME="example-mcp"
