@@ -84,8 +84,8 @@ fi
 #           The goal: fail loudly here rather than silently misbehave later.
 #
 # Example (uncomment for a real service):
-#   if [ -z "${EXAMPLE_API_KEY:-}" ]; then
-#       echo "ERROR: EXAMPLE_API_KEY is not set." >&2
+#   if [ -z "${RTEMPLATE_API_KEY:-}" ]; then
+#       echo "ERROR: RTEMPLATE_API_KEY is not set." >&2
 #       echo "       Set it in your .env file or Docker environment." >&2
 #       exit 1
 #   fi

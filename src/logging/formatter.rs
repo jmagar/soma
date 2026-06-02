@@ -337,7 +337,7 @@ fn write_level(writer: &mut Writer<'_>, level: tracing::Level, ansi: bool) -> st
 /// # Output anatomy
 ///
 /// ```text
-/// 14:32:01  INFO  starting  bind=0.0.0.0:3000  auth=bearer  service=example-mcp
+/// 14:32:01  INFO  starting  bind=0.0.0.0:3000  auth=bearer  service=rtemplate-mcp
 /// ────────  ────  ─────────  ─────────────────────────────────────────────────
 ///   dim      level  message    structured fields (priority order, then alphabetical)
 /// ```

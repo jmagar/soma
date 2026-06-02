@@ -2,7 +2,7 @@
 //!
 //! Values are loaded in priority order:
 //!   1. `config.toml` (checked in, defaults only — no secrets)
-//!   2. Environment variables (`EXAMPLE_*`, `EXAMPLE_MCP_*`)
+//!   2. Environment variables (`RTEMPLATE_*`, `RTEMPLATE_MCP_*`)
 //!
 //! **Template**: rename `ExampleConfig` to match your service. Adjust env prefixes
 //! throughout. Add any domain-specific config fields you need.
@@ -28,10 +28,10 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ExampleConfig {
-    /// Base URL of the deployed platform API or upstream service (EXAMPLE_API_URL).
+    /// Base URL of the deployed platform API or upstream service (RTEMPLATE_API_URL).
     /// Example: `https://example.example.com/`
     pub api_url: String,
-    /// API key or bearer token (EXAMPLE_API_KEY).
+    /// API key or bearer token (RTEMPLATE_API_KEY).
     pub api_key: String,
 }
 
@@ -39,23 +39,23 @@ pub struct ExampleConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct McpConfig {
-    /// Bind host (EXAMPLE_MCP_HOST). Default: `127.0.0.1` (loopback).
+    /// Bind host (RTEMPLATE_MCP_HOST). Default: `127.0.0.1` (loopback).
     /// Set to `0.0.0.0` to listen on all interfaces — requires auth configured.
     #[serde(default = "default_mcp_host")]
     pub host: String,
-    /// Bind port (EXAMPLE_MCP_PORT). Default: `40060`.
+    /// Bind port (RTEMPLATE_MCP_PORT). Default: `40060`.
     #[serde(default = "default_mcp_port")]
     pub port: u16,
-    /// MCP server name advertised to clients (EXAMPLE_MCP_SERVER_NAME).
+    /// MCP server name advertised to clients (RTEMPLATE_MCP_SERVER_NAME).
     #[serde(default = "default_server_name")]
     pub server_name: String,
-    /// Disable auth entirely — only safe when bound to loopback (EXAMPLE_MCP_NO_AUTH).
+    /// Disable auth entirely — only safe when bound to loopback (RTEMPLATE_MCP_NO_AUTH).
     pub no_auth: bool,
     /// Allow unauthenticated access on non-loopback when behind a trusted reverse proxy
-    /// that enforces its own auth (EXAMPLE_NOAUTH). Loaded here so it participates in
+    /// that enforces its own auth (RTEMPLATE_NOAUTH). Loaded here so it participates in
     /// typed config rather than being a raw env read at call sites.
     pub trusted_gateway: bool,
-    /// Static bearer token for simple auth (EXAMPLE_MCP_TOKEN).
+    /// Static bearer token for simple auth (RTEMPLATE_MCP_TOKEN).
     pub api_token: Option<String>,
     /// Additional allowed Host header values (comma-separated in env).
     pub allowed_hosts: Vec<String>,
@@ -121,14 +121,14 @@ pub enum AuthMode {
 
 fn default_mcp_host() -> String {
     // Default to loopback for safety. Operators who need external access must
-    // explicitly set EXAMPLE_MCP_HOST=0.0.0.0 (and configure auth).
+    // explicitly set RTEMPLATE_MCP_HOST=0.0.0.0 (and configure auth).
     "127.0.0.1".into()
 }
 fn default_mcp_port() -> u16 {
     40060
 }
 fn default_server_name() -> String {
-    "example-mcp".into()
+    "rtemplate-mcp".into()
 }
 fn default_auth_sqlite_path() -> String {
     "/data/auth.db".into()
@@ -255,39 +255,39 @@ impl Config {
             }
         }
 
-        // Env overrides — EXAMPLE_MCP_* for server config, EXAMPLE_API_* for upstream
-        env_str("EXAMPLE_MCP_HOST", &mut config.mcp.host);
-        env_parse("EXAMPLE_MCP_PORT", &mut config.mcp.port)?;
-        env_str("EXAMPLE_MCP_SERVER_NAME", &mut config.mcp.server_name);
-        env_bool("EXAMPLE_MCP_NO_AUTH", &mut config.mcp.no_auth)?;
-        env_bool("EXAMPLE_NOAUTH", &mut config.mcp.trusted_gateway)?;
-        env_opt_str("EXAMPLE_MCP_TOKEN", &mut config.mcp.api_token);
-        env_list("EXAMPLE_MCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
+        // Env overrides — RTEMPLATE_MCP_* for server config, RTEMPLATE_API_* for upstream
+        env_str("RTEMPLATE_MCP_HOST", &mut config.mcp.host);
+        env_parse("RTEMPLATE_MCP_PORT", &mut config.mcp.port)?;
+        env_str("RTEMPLATE_MCP_SERVER_NAME", &mut config.mcp.server_name);
+        env_bool("RTEMPLATE_MCP_NO_AUTH", &mut config.mcp.no_auth)?;
+        env_bool("RTEMPLATE_NOAUTH", &mut config.mcp.trusted_gateway)?;
+        env_opt_str("RTEMPLATE_MCP_TOKEN", &mut config.mcp.api_token);
+        env_list("RTEMPLATE_MCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
         env_list(
-            "EXAMPLE_MCP_ALLOWED_ORIGINS",
+            "RTEMPLATE_MCP_ALLOWED_ORIGINS",
             &mut config.mcp.allowed_origins,
         );
-        env_opt_str("EXAMPLE_MCP_PUBLIC_URL", &mut config.mcp.auth.public_url);
+        env_opt_str("RTEMPLATE_MCP_PUBLIC_URL", &mut config.mcp.auth.public_url);
         env_str(
-            "EXAMPLE_MCP_AUTH_ADMIN_EMAIL",
+            "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL",
             &mut config.mcp.auth.admin_email,
         );
         env_opt_str(
-            "EXAMPLE_MCP_GOOGLE_CLIENT_ID",
+            "RTEMPLATE_MCP_GOOGLE_CLIENT_ID",
             &mut config.mcp.auth.google_client_id,
         );
         env_opt_str(
-            "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET",
+            "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET",
             &mut config.mcp.auth.google_client_secret,
         );
-        if let Ok(v) = std::env::var("EXAMPLE_MCP_AUTH_MODE") {
+        if let Ok(v) = std::env::var("RTEMPLATE_MCP_AUTH_MODE") {
             if !v.is_empty() {
                 config.mcp.auth.mode = match v.to_lowercase().as_str() {
                     "oauth" => AuthMode::OAuth,
                     "bearer" => AuthMode::Bearer,
                     other => {
                         return Err(anyhow::anyhow!(
-                            "invalid EXAMPLE_MCP_AUTH_MODE {:?}: must be \"bearer\" or \"oauth\"",
+                            "invalid RTEMPLATE_MCP_AUTH_MODE {:?}: must be \"bearer\" or \"oauth\"",
                             other
                         ));
                     }
@@ -296,8 +296,8 @@ impl Config {
         }
 
         // Upstream service config
-        env_str("EXAMPLE_API_URL", &mut config.example.api_url);
-        env_str("EXAMPLE_API_KEY", &mut config.example.api_key);
+        env_str("RTEMPLATE_API_URL", &mut config.example.api_url);
+        env_str("RTEMPLATE_API_KEY", &mut config.example.api_key);
 
         Ok(config)
     }

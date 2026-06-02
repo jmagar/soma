@@ -16,7 +16,7 @@ TOOLS_RS = ROOT / "src/mcp/tools.rs"
 PROMPTS_RS = ROOT / "src/mcp/prompts.rs"
 RMCP_SERVER_RS = ROOT / "src/mcp/rmcp_server.rs"
 README = ROOT / "README.md"
-SKILL = ROOT / "plugins/example/skills/example/SKILL.md"
+SKILL = ROOT / "plugins/rtemplate/skills/example/SKILL.md"
 DOC = ROOT / "docs/MCP_SCHEMA.md"
 
 
@@ -103,7 +103,7 @@ def render() -> str:
             "- `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.",
             "- The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.",
             "- `help` is intentionally public and must have no required scope.",
-            "- `src/mcp/tools.rs`, `README.md`, and `plugins/example/skills/example/SKILL.md` must mention every action.",
+            "- `src/mcp/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.",
             "- `src/mcp/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.",
             "- `src/mcp/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.",
             "",
@@ -148,7 +148,7 @@ def check_mentions(actions: list[str]) -> list[str]:
     failures: list[str] = []
     surfaces = {
         "README.md": read(README),
-        "plugins/example/skills/example/SKILL.md": read(SKILL),
+        "plugins/rtemplate/skills/example/SKILL.md": read(SKILL),
         "src/mcp/tools.rs HELP_TEXT": read(TOOLS_RS),
     }
     for label, text in surfaces.items():

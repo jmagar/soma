@@ -55,8 +55,8 @@ Audited Justfiles across all 9 repos in the rmcp-server family (rmcp-template, l
 | File | Repo | Action | Purpose |
 |------|------|--------|---------|
 | `Justfile` | rmcp-template | Rewritten | Added 14 recipes; fixed `publish`; removed plugin version loop |
-| `plugins/example/.claude-plugin/plugin.json` | rmcp-template | Modified | Removed `"version"` field |
-| `plugins/example/.codex-plugin/plugin.json` | rmcp-template | Modified | Removed `"version"` field |
+| `plugins/rtemplate/.claude-plugin/plugin.json` | rmcp-template | Modified | Removed `"version"` field |
+| `plugins/rtemplate/.codex-plugin/plugin.json` | rmcp-template | Modified | Removed `"version"` field |
 | `docs/PATTERNS.md` | rmcp-template | Modified | §13 + §36: added no-version convention with rationale |
 | `Justfile` | rustifi | Modified | Removed plugin version-bump loop from `publish` |
 | `plugins/unifi/.claude-plugin/plugin.json` | rustifi | Modified | Removed `"version"` |

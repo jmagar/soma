@@ -74,7 +74,7 @@ openssl rand -hex 32
 Start with auth:
 
 ```bash
-EXAMPLE_MCP_TOKEN=a3f2c1... cargo run --bin example-server -- serve
+RTEMPLATE_MCP_TOKEN=a3f2c1... cargo run --bin example-server -- serve
 ```
 
 Now all `/mcp` calls require `Authorization: Bearer a3f2c1...`:
@@ -119,7 +119,7 @@ Or use Streamable HTTP (server must be running):
 
 - Read the [README](../README.md) for the step-by-step guide to adapting this template for your own API.
 - Read [CLAUDE.md](../CLAUDE.md) for the thin-shim rule and how to add actions.
-- For OAuth setup, set `EXAMPLE_MCP_AUTH_MODE=oauth` and the `EXAMPLE_MCP_GOOGLE_*` env vars — see the env var table in the README.
+- For OAuth setup, set `RTEMPLATE_MCP_AUTH_MODE=oauth` and the `RTEMPLATE_MCP_GOOGLE_*` env vars — see the env var table in the README.
 
 ## Checklist for adapting this template
 

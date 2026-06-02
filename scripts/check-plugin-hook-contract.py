@@ -101,11 +101,11 @@ SERVERS = [
         # env-var mapping lives in apply_plugin_options() in src/cli/setup.rs.
         None,
         env=(
-            ("EXAMPLE_API_URL", "https://api.example.test"),
-            ("EXAMPLE_API_KEY", "test-key"),
-            ("EXAMPLE_MCP_TOKEN", "test-token"),
+            ("RTEMPLATE_API_URL", "https://api.example.test"),
+            ("RTEMPLATE_API_KEY", "test-key"),
+            ("RTEMPLATE_MCP_TOKEN", "test-token"),
         ),
-        appdata_env="EXAMPLE_HOME",
+        appdata_env="RTEMPLATE_HOME",
     ),
     Server(
         "lab",

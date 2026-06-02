@@ -45,11 +45,11 @@ just test-mcporter
 }
 ```
 
-The script targets `http://<EXAMPLE_MCP_HOST>:<EXAMPLE_MCP_PORT>/mcp`, defaulting to `http://localhost:40060/mcp` to match `just dev`. It remaps `0.0.0.0` to `localhost`. If `EXAMPLE_MCP_TOKEN` is set, it sends `Authorization: Bearer <token>`.
+The script targets `http://<RTEMPLATE_MCP_HOST>:<RTEMPLATE_MCP_PORT>/mcp`, defaulting to `http://localhost:40060/mcp` to match `just dev`. It remaps `0.0.0.0` to `localhost`. If `RTEMPLATE_MCP_TOKEN` is set, it sends `Authorization: Bearer <token>`.
 
 ## What the test suite validates
 
-- auth rejection when `EXAMPLE_MCP_TOKEN` is set
+- auth rejection when `RTEMPLATE_MCP_TOKEN` is set
 - tool semantic behavior for `greet`, `echo`, `status`, and `help`
 - MCP resource behavior for `example://schema/mcp-tool`
 

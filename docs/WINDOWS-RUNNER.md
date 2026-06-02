@@ -220,8 +220,8 @@ For MCP transport smoke testing:
 For HTTP smoke testing:
 
 ```powershell
-$env:EXAMPLE_MCP_HOST = "127.0.0.1"
-$env:EXAMPLE_MCP_NO_AUTH = "true"
+$env:RTEMPLATE_MCP_HOST = "127.0.0.1"
+$env:RTEMPLATE_MCP_NO_AUTH = "true"
 .\example.exe serve
 ```
 

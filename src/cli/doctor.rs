@@ -16,7 +16,7 @@
 //! This is the reference implementation for the rmcp-template family. When you
 //! clone the template for a real service, the things you MUST change are:
 //!
-//! 1. Replace `EXAMPLE_API_URL` / `EXAMPLE_API_KEY` with your service's env vars.
+//! 1. Replace `RTEMPLATE_API_URL` / `RTEMPLATE_API_KEY` with your service's env vars.
 //! 2. Replace `"example"` binary name with your binary name in `check_binary_in_path`.
 //! 3. Replace `~/.example/` data dir with your service's data dir (see `config::default_data_dir`).
 //! 4. Add any service-specific checks (e.g. database connectivity, auth token format).
@@ -73,11 +73,11 @@ pub async fn run_doctor(config: &Config, json: bool) -> Result<()> {
     //
     // Required vars fail with ✗.  Optional vars warn with ⚠.
     checks.push(check_required_var(
-        "EXAMPLE_API_URL",
+        "RTEMPLATE_API_URL",
         &config.example.api_url,
     ));
     checks.push(check_required_var(
-        "EXAMPLE_API_KEY",
+        "RTEMPLATE_API_KEY",
         &config.example.api_key,
     ));
 
@@ -225,7 +225,7 @@ impl DoctorCheck {
 /// Output follows the §48 layout:
 ///
 /// ```text
-/// example-mcp v0.1.0 — environment check
+/// rtemplate-mcp v0.1.0 — environment check
 ///
 ///   Config
 ///   ────────────────────────────────────────────
@@ -289,12 +289,12 @@ fn print_doctor_report(checks: &[DoctorCheck]) {
         };
     }
 
-    // TEMPLATE: Replace "example-mcp" with your service name and binary name.
+    // TEMPLATE: Replace "rtemplate-mcp" with your service name and binary name.
     println!();
     println!(
         "{}",
         bold!(format!(
-            "example-mcp v{} — environment check",
+            "rtemplate-mcp v{} — environment check",
             env!("CARGO_PKG_VERSION")
         ))
     );

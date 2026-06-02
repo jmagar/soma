@@ -237,7 +237,7 @@ Use this approval wording:
 | `example` | `<binary_name>` |
 | `rmcp-template` | `<crate_name>` |
 | `ExampleService` | `<ServiceName>Service` |
-| `EXAMPLE_*` | `<ENV_PREFIX>_*` |
+| `RTEMPLATE_*` | `<ENV_PREFIX>_*` |
 | `example:read` | `<service_name>:read` |
 
 Keep `scaffold_intent` MCP-only in scaffolded projects and rename its scope from `example:read` to `<service_name>:read`.

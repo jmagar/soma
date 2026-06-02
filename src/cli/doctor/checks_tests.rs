@@ -219,5 +219,5 @@ fn auth_config_rejects_non_loopback_without_auth() {
     let check = check_auth_config(&config);
 
     assert!(!check.ok);
-    assert!(check.hint.unwrap().contains("EXAMPLE_MCP_TOKEN"));
+    assert!(check.hint.unwrap().contains("RTEMPLATE_MCP_TOKEN"));
 }

@@ -46,8 +46,8 @@ Ran an 8-agent parallel comprehensive review (code quality, architecture, securi
 
 - **Compact JSON for MCP responses (M20)**: switched `serde_json::to_string_pretty` → `to_string` in `tool_result_from_json()`. Recovers ~30% of the 40 KB token budget. Schema resource kept `to_string_pretty` for human readability since it's consumed by operators not agents.
 - **`Cow<'_, str>` for `truncate_if_needed`**: eliminates heap allocation in the common (no-truncation) path. Callers receive `Cow::Borrowed` when no truncation occurs.
-- **Default host `127.0.0.1`**: changed from `0.0.0.0`. Operators must explicitly set `EXAMPLE_MCP_HOST=0.0.0.0` to expose externally, forcing a conscious decision rather than an accidental exposure.
-- **`trusted_gateway` into typed `Config`**: `EXAMPLE_NOAUTH` was a raw env read in `server.rs`; moved into `McpConfig.trusted_gateway` so it participates in typed configuration and appears in `setup check` output.
+- **Default host `127.0.0.1`**: changed from `0.0.0.0`. Operators must explicitly set `RTEMPLATE_MCP_HOST=0.0.0.0` to expose externally, forcing a conscious decision rather than an accidental exposure.
+- **`trusted_gateway` into typed `Config`**: `RTEMPLATE_NOAUTH` was a raw env read in `server.rs`; moved into `McpConfig.trusted_gateway` so it participates in typed configuration and appears in `setup check` output.
 - **M9 parse ordering fix**: extracted `action_opt: Option<String>` before scope check so a missing action returns "action is required" (validation error) instead of hitting `DENY_SCOPE` first (misleading "forbidden" error).
 - **Beads for unfixed items**: the 23 remaining items (typed error enum, scaffold_intent refactor, SBOM/cosign, etc.) require week-scale refactors or upstream decisions. Filed as P1/P2/P3 beads rather than attempting incomplete fixes.
 - **Honest accounting**: initially claimed ~102 fixes were done; user pushed back; revised to ~55 real fixes in first pass, then continued until ~95 were genuinely complete.
@@ -57,7 +57,7 @@ Ran an 8-agent parallel comprehensive review (code quality, architecture, securi
 ### Rust source
 | File | Change |
 |---|---|
-| `src/config.rs` | Default host → 127.0.0.1; `trusted_gateway` field; `EXAMPLE_MCP_SERVER_NAME` env; `SERVICE_HOME_DIRNAME` const; is_loopback [::1] fix |
+| `src/config.rs` | Default host → 127.0.0.1; `trusted_gateway` field; `RTEMPLATE_MCP_SERVER_NAME` env; `SERVICE_HOME_DIRNAME` const; is_loopback [::1] fix |
 | `src/server.rs` | Annotate `trusted_gateway_from_env()` as pre-config fallback |
 | `src/actions.rs` | `scopes_satisfy()` extracted; `string_param` wrapper removed; inline tests → sidecar |
 | `src/actions_tests.rs` | New sidecar test file with 12 tests |
@@ -100,7 +100,7 @@ Ran an 8-agent parallel comprehensive review (code quality, architecture, securi
 | `CLAUDE.md` | scaffold_intent parity row; missing module files; CHANGELOG checklist step; just dev description; default host |
 | `docs/DOCKER.md`, `docs/MCPORTER.md`, `docs/SCRIPTS.md` | Port 3000/3100 → 40060 |
 | `docs/ARCHITECTURE.md`, `docs/CONFIG.md`, `docs/ENV.md`, `docs/OBSERVABILITY.md` | Port fixes; module maps |
-| `docs/AUTH.md` | Fix `EXAMPLE_MCP_DISABLE_STATIC_TOKEN_WITH_OAUTH` (not an env var) |
+| `docs/AUTH.md` | Fix `RTEMPLATE_MCP_DISABLE_STATIC_TOKEN_WITH_OAUTH` (not an env var) |
 | `docs/README.md` | Add generated/, contracts/, specs/, sessions/ directories |
 | `docs/PATTERNS.md` | 2 port placeholders 3000 → 40060 |
 | `docs/CONFIG.md` | Two-path config search pseudocode |
@@ -166,7 +166,7 @@ bd list --status=open     # → 23 open issues filed
 
 ## Risks and Rollback
 
-- **Default host change**: any operator who relied on `0.0.0.0` without setting `EXAMPLE_MCP_HOST` will find the server only listening on loopback after pulling. They must explicitly set `EXAMPLE_MCP_HOST=0.0.0.0`. This is intentional and the correct behavior; the old default was unsafe.
+- **Default host change**: any operator who relied on `0.0.0.0` without setting `RTEMPLATE_MCP_HOST` will find the server only listening on loopback after pulling. They must explicitly set `RTEMPLATE_MCP_HOST=0.0.0.0`. This is intentional and the correct behavior; the old default was unsafe.
 - **Compact JSON**: MCP clients that were parsing pretty-printed JSON for display will now receive compact JSON. All MCP clients must accept both; this is a cosmetic change only.
 - **Rollback**: all changes are in git. `git revert <sha>` for any individual commit or `git reset --hard <pre-session-sha>` (before `6190ffa`) to undo the entire session.
 

@@ -125,6 +125,6 @@ gh pr create --title "feat: ..." --body "..."
 ## Next Steps
 
 **Follow-on tasks:**
-- Ship themes inside the plugin (`plugins/example/.claude-plugin/themes/aurora.json`) so they distribute with `plugin install`.
+- Ship themes inside the plugin (`plugins/rtemplate/.claude-plugin/themes/aurora.json`) so they distribute with `plugin install`.
 - Consider adding `aurora-daltonized` variant based on Aurora's accessibility-adjusted palette.
 - Index the official Claude Code theme token docs into Axon so future `axon ask` queries return results directly.

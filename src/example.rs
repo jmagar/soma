@@ -1,8 +1,8 @@
 //! Transport client for the Example service.
 //!
 //! **Template note**: this client has two modes:
-//!   - empty `EXAMPLE_API_URL` keeps the offline template stub working;
-//!   - non-empty `EXAMPLE_API_URL` forwards actions to a deployed `example-server`
+//!   - empty `RTEMPLATE_API_URL` keeps the offline template stub working;
+//!   - non-empty `RTEMPLATE_API_URL` forwards actions to a deployed `example-server`
 //!     REST API, which is the local CLI/stdio adapter shape for platform servers.
 //!
 //! The pattern:
@@ -49,16 +49,16 @@ enum ExampleTarget {
 impl ExampleClient {
     /// Construct a new client from configuration.
     ///
-    /// If `EXAMPLE_API_URL` is empty, the template uses local stub responses so
+    /// If `RTEMPLATE_API_URL` is empty, the template uses local stub responses so
     /// tests and first-run scaffolds work without a deployed service. If it is
-    /// set, actions are forwarded to `{EXAMPLE_API_URL}/v1/example`.
+    /// set, actions are forwarded to `{RTEMPLATE_API_URL}/v1/example`.
     pub fn new(cfg: &ExampleConfig) -> Result<Self> {
         let api_url = cfg.api_url.trim();
         let target = if api_url.is_empty() {
             ExampleTarget::Stub
         } else {
             let base_url = Url::parse(api_url)
-                .with_context(|| format!("invalid EXAMPLE_API_URL: {api_url}"))?;
+                .with_context(|| format!("invalid RTEMPLATE_API_URL: {api_url}"))?;
             let bearer_token = non_empty(&cfg.api_key);
             ExampleTarget::DeployedApi {
                 base_url,
@@ -162,7 +162,7 @@ fn api_action_url(base_url: &Url) -> Result<Url> {
     {
         let mut segments = url
             .path_segments_mut()
-            .map_err(|_| anyhow::anyhow!("EXAMPLE_API_URL cannot be a base for REST paths"))?;
+            .map_err(|_| anyhow::anyhow!("RTEMPLATE_API_URL cannot be a base for REST paths"))?;
         segments.pop_if_empty();
         segments.push("v1");
         segments.push("example");

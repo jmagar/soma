@@ -24,7 +24,7 @@ bash tests/mcporter/test-mcp.sh
 just template-check
 
 # Protected MCP auth smoke (requires running bearer-auth server)
-EXAMPLE_MCP_TOKEN=<token> just auth-smoke
+RTEMPLATE_MCP_TOKEN=<token> just auth-smoke
 
 # Full release-readiness gate
 scripts/pre-release-check.sh
@@ -89,7 +89,7 @@ bash tests/mcporter/test-mcp.sh --verbose
 
 # Default target is http://localhost:40060/mcp (the `just dev` port).
 # Override target when testing another deployment:
-EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_PORT=3100 bash tests/mcporter/test-mcp.sh
+RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=3100 bash tests/mcporter/test-mcp.sh
 ```
 
 Prerequisites:
@@ -105,7 +105,7 @@ Suites:
 
 | Suite | What it validates |
 |---|---|
-| `suite_auth` | Missing and bad bearer tokens return `401` when `EXAMPLE_MCP_TOKEN` is set. |
+| `suite_auth` | Missing and bad bearer tokens return `401` when `RTEMPLATE_MCP_TOKEN` is set. |
 | `suite_core` | `greet`, `echo`, `status`, and `help` return semantically correct values. |
 | `suite_schema_resource` | `example://schema/mcp-tool` resolves and contains a valid tool schema with `inputSchema.properties.action`. |
 
@@ -124,7 +124,7 @@ The script logs all calls to `/tmp/test-mcp.<timestamp>.log`.
 | `loopback_state()` | `AppState` | No-auth, stub client tests. |
 | `bearer_state(token)` | `AppState` | Mounted bearer-auth route tests. |
 
-The stub client uses an empty `EXAMPLE_API_URL`, so service-layer tests remain deterministic and do not contact a real upstream.
+The stub client uses an empty `RTEMPLATE_API_URL`, so service-layer tests remain deterministic and do not contact a real upstream.
 
 ---
 

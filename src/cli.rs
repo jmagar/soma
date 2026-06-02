@@ -44,12 +44,12 @@ pub const USAGE: &str = "Usage:
   example --version                 Show version
 
 Environment:
-  EXAMPLE_API_URL          Deployed platform API or upstream service URL
-  EXAMPLE_API_KEY          Bearer token or upstream service API key
-  EXAMPLE_MCP_HOST         HTTP server bind host (default 127.0.0.1)
-  EXAMPLE_MCP_PORT         HTTP server bind port (default 40060)
-  EXAMPLE_MCP_NO_AUTH      Disable auth (loopback only)
-  EXAMPLE_MCP_TOKEN        Static bearer token
+  RTEMPLATE_API_URL          Deployed platform API or upstream service URL
+  RTEMPLATE_API_KEY          Bearer token or upstream service API key
+  RTEMPLATE_MCP_HOST         HTTP server bind host (default 127.0.0.1)
+  RTEMPLATE_MCP_PORT         HTTP server bind port (default 40060)
+  RTEMPLATE_MCP_NO_AUTH      Disable auth (loopback only)
+  RTEMPLATE_MCP_TOKEN        Static bearer token
   RUST_LOG                 Log filter (e.g. info,rmcp=warn)";
 
 pub fn usage() -> &'static str {
@@ -79,7 +79,7 @@ pub enum Command {
     /// Designed to be run as a plugin monitor — stdout is the event stream,
     /// stderr is debug output. Exits only on CTRL+C.
     Watch {
-        /// Base URL of the MCP server (default: http://localhost:{EXAMPLE_MCP_PORT}).
+        /// Base URL of the MCP server (default: http://localhost:{RTEMPLATE_MCP_PORT}).
         url: Option<String>,
         /// Poll interval in seconds (default: 10).
         interval: u64,

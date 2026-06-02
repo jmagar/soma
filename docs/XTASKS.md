@@ -85,9 +85,9 @@ Run `just symlink-docs` after adding any new `CLAUDE.md` file.
 `cargo xtask check-env` reports missing or misconfigured environment before startup:
 
 ```
-✓ EXAMPLE_API_URL:   https://example.internal/api (set)
-✗ EXAMPLE_API_KEY:   not set
-  → Set EXAMPLE_API_KEY in ~/.example/.env or your environment
+✓ RTEMPLATE_API_URL:   https://example.internal/api (set)
+✗ RTEMPLATE_API_KEY:   not set
+  → Set RTEMPLATE_API_KEY in ~/.example/.env or your environment
 ```
 
 See `docs/PATTERNS.md` §24 and §48 for the xtask and doctor patterns.

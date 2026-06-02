@@ -13,11 +13,11 @@
 name: rmcp-template
 
 services:
-  # TEMPLATE: Replace "example-mcp" with your service name throughout this file.
-  example-mcp:
+  # TEMPLATE: Replace "rtemplate-mcp" with your service name throughout this file.
+  rtemplate-mcp:
     extends:
       file: docker-compose.prod.yml
-      service: example-mcp
+      service: rtemplate-mcp
     image: rmcp-template:dev
     pull_policy: build
     build:

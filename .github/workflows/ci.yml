@@ -315,27 +315,27 @@ jobs:
 
       - name: Start MCP server
         env:
-          EXAMPLE_MCP_HOST: 127.0.0.1
-          EXAMPLE_MCP_PORT: 40123
-          EXAMPLE_MCP_NO_AUTH: "true"
+          RTEMPLATE_MCP_HOST: 127.0.0.1
+          RTEMPLATE_MCP_PORT: 40123
+          RTEMPLATE_MCP_NO_AUTH: "true"
           RUST_LOG: info,rmcp=warn
         run: |
           set -euo pipefail
-          ./target/debug/example-server serve mcp > /tmp/example-mcp.log 2>&1 &
-          echo "$!" > /tmp/example-mcp.pid
+          ./target/debug/example-server serve mcp > /tmp/rtemplate-mcp.log 2>&1 &
+          echo "$!" > /tmp/rtemplate-mcp.pid
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:40123/health >/dev/null 2>&1; then
               exit 0
             fi
             sleep 1
           done
-          cat /tmp/example-mcp.log
+          cat /tmp/rtemplate-mcp.log
           exit 1
 
       - name: Run mcporter smoke tests
         env:
-          EXAMPLE_MCP_HOST: 127.0.0.1
-          EXAMPLE_MCP_PORT: 40123
+          RTEMPLATE_MCP_HOST: 127.0.0.1
+          RTEMPLATE_MCP_PORT: 40123
         run: bash tests/mcporter/test-mcp.sh --timeout-ms 20000
 
       - name: Upload MCP smoke logs
@@ -344,7 +344,7 @@ jobs:
         with:
           name: mcp-smoke-logs
           path: |
-            /tmp/example-mcp.log
+            /tmp/rtemplate-mcp.log
             /tmp/test-mcp.*.log
           if-no-files-found: warn
           retention-days: 14
@@ -352,7 +352,7 @@ jobs:
       - name: Stop MCP server
         if: always()
         run: |
-          kill "$(cat /tmp/example-mcp.pid 2>/dev/null)" 2>/dev/null || true
+          kill "$(cat /tmp/rtemplate-mcp.pid 2>/dev/null)" 2>/dev/null || true
 
   # -- container-smoke: compose config plus Docker build on PRs/main ------------
   container-smoke:

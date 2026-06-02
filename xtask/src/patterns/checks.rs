@@ -240,9 +240,9 @@ pub(super) fn plugins(reporter: &mut PatternReporter) {
         reporter.fail("plugins", failures.join("; "));
     }
 
-    let hook_path = Path::new("plugins/example/hooks/hooks.json");
+    let hook_path = Path::new("plugins/rtemplate/hooks/hooks.json");
     if hook_path.exists() {
-        let hook = read_file("plugins/example/hooks/hooks.json");
+        let hook = read_file("plugins/rtemplate/hooks/hooks.json");
         // The hook must call the binary directly (no plugin-setup.sh wrapper).
         if hook.contains("plugin-setup.sh") {
             reporter.fail(

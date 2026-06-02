@@ -46,7 +46,7 @@ Configuration is split between non-secret settings (`config.toml`) and secrets (
 [mcp]
 host = "127.0.0.1"
 port = 40060
-server_name = "example-mcp"
+server_name = "rtemplate-mcp"
 no_auth = false
 trusted_gateway = false
 allowed_hosts = []
@@ -66,15 +66,15 @@ auth_code_ttl_secs = 300
 
 ```bash
 # .env — secrets and URLs ONLY
-EXAMPLE_API_URL=https://example.internal/api
-EXAMPLE_API_KEY=your_api_key_here
+RTEMPLATE_API_URL=https://example.internal/api
+RTEMPLATE_API_KEY=your_api_key_here
 
 # MCP auth
-EXAMPLE_MCP_TOKEN=your_bearer_token_here
+RTEMPLATE_MCP_TOKEN=your_bearer_token_here
 
 # OAuth (only when auth_mode=oauth in config.toml)
-# EXAMPLE_MCP_GOOGLE_CLIENT_ID=...
-# EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=...
+# RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
+# RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
 
 # Docker runtime
 PUID=1000
@@ -91,21 +91,21 @@ Current env overrides include:
 
 | Config field | Env var |
 |---|---|
-| `mcp.host` | `EXAMPLE_MCP_HOST` |
-| `mcp.port` | `EXAMPLE_MCP_PORT` |
-| `mcp.server_name` | `EXAMPLE_MCP_SERVER_NAME` |
-| `mcp.no_auth` | `EXAMPLE_MCP_NO_AUTH` |
-| `mcp.trusted_gateway` | `EXAMPLE_NOAUTH` |
-| `mcp.api_token` | `EXAMPLE_MCP_TOKEN` |
-| `mcp.allowed_hosts` | `EXAMPLE_MCP_ALLOWED_HOSTS` |
-| `mcp.allowed_origins` | `EXAMPLE_MCP_ALLOWED_ORIGINS` |
-| `mcp.auth.public_url` | `EXAMPLE_MCP_PUBLIC_URL` |
-| `mcp.auth.mode` | `EXAMPLE_MCP_AUTH_MODE` |
-| `mcp.auth.google_client_id` | `EXAMPLE_MCP_GOOGLE_CLIENT_ID` |
-| `mcp.auth.google_client_secret` | `EXAMPLE_MCP_GOOGLE_CLIENT_SECRET` |
-| `mcp.auth.admin_email` | `EXAMPLE_MCP_AUTH_ADMIN_EMAIL` |
-| `example.api_url` | `EXAMPLE_API_URL` |
-| `example.api_key` | `EXAMPLE_API_KEY` |
+| `mcp.host` | `RTEMPLATE_MCP_HOST` |
+| `mcp.port` | `RTEMPLATE_MCP_PORT` |
+| `mcp.server_name` | `RTEMPLATE_MCP_SERVER_NAME` |
+| `mcp.no_auth` | `RTEMPLATE_MCP_NO_AUTH` |
+| `mcp.trusted_gateway` | `RTEMPLATE_NOAUTH` |
+| `mcp.api_token` | `RTEMPLATE_MCP_TOKEN` |
+| `mcp.allowed_hosts` | `RTEMPLATE_MCP_ALLOWED_HOSTS` |
+| `mcp.allowed_origins` | `RTEMPLATE_MCP_ALLOWED_ORIGINS` |
+| `mcp.auth.public_url` | `RTEMPLATE_MCP_PUBLIC_URL` |
+| `mcp.auth.mode` | `RTEMPLATE_MCP_AUTH_MODE` |
+| `mcp.auth.google_client_id` | `RTEMPLATE_MCP_GOOGLE_CLIENT_ID` |
+| `mcp.auth.google_client_secret` | `RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET` |
+| `mcp.auth.admin_email` | `RTEMPLATE_MCP_AUTH_ADMIN_EMAIL` |
+| `example.api_url` | `RTEMPLATE_API_URL` |
+| `example.api_key` | `RTEMPLATE_API_KEY` |
 
 ## Auth policy summary
 
@@ -113,10 +113,10 @@ Current env overrides include:
 |---|---|
 | Stdio transport | `LoopbackDev` |
 | Loopback bind | `LoopbackDev` |
-| `EXAMPLE_MCP_NO_AUTH=true` | `LoopbackDev` only when bound to loopback |
+| `RTEMPLATE_MCP_NO_AUTH=true` | `LoopbackDev` only when bound to loopback |
 | Non-loopback with bearer token | `Mounted { auth_state: None }` |
 | OAuth mode (`auth_mode=oauth`) | `Mounted { auth_state: Some(_) }` |
-| Explicit trusted gateway (`EXAMPLE_NOAUTH=true`) | `TrustedGatewayUnscoped` |
+| Explicit trusted gateway (`RTEMPLATE_NOAUTH=true`) | `TrustedGatewayUnscoped` |
 
 Non-loopback no-auth should only be used when an upstream gateway enforces authorization.
 

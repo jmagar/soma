@@ -10,7 +10,7 @@ normative Markdown checklists backed by tests and validators.
 - Decision record: `../adr/0001-stdio-first-plugin-adapter.md`
 
 The local plugin default is a bundled stdio MCP adapter (`example mcp`) that can
-target a deployed platform API through `EXAMPLE_API_URL`. The full server binary
+target a deployed platform API through `RTEMPLATE_API_URL`. The full server binary
 keeps REST API, Web, Streamable HTTP MCP, health, and auth surfaces for
 Docker/systemd/gateway deployments.
 

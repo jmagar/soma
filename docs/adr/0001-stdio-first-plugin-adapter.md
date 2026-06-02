@@ -39,19 +39,19 @@ server.
 ## Decision
 
 - Plugin installs default to stdio MCP through the bundled local binary.
-- Claude Code and Codex use `plugins/example/.mcp.json` with:
+- Claude Code and Codex use `plugins/rtemplate/.mcp.json` with:
   - `"type": "stdio"`
   - `"command": "${CLAUDE_PLUGIN_ROOT}/bin/example"`
   - `"args": ["mcp"]`
 - Gemini uses the equivalent extension-local command:
   - `"command": "${extensionPath}${/}bin${/}example"`
   - `"args": ["mcp"]`
-- Plugin settings inject `EXAMPLE_API_URL` and `EXAMPLE_API_KEY` into the
+- Plugin settings inject `RTEMPLATE_API_URL` and `RTEMPLATE_API_KEY` into the
   stdio child process.
-- Empty `EXAMPLE_API_URL` means template stub mode for local smoke tests and
+- Empty `RTEMPLATE_API_URL` means template stub mode for local smoke tests and
   scaffolded examples.
-- Non-empty `EXAMPLE_API_URL` makes the local adapter forward business actions
-  to `POST {EXAMPLE_API_URL}/v1/example`; `EXAMPLE_API_KEY` is sent as bearer
+- Non-empty `RTEMPLATE_API_URL` makes the local adapter forward business actions
+  to `POST {RTEMPLATE_API_URL}/v1/example`; `RTEMPLATE_API_KEY` is sent as bearer
   auth when set.
 - HTTP MCP remains available from `example-server serve` for Docker, remote
   clients, gateway catalogs, and full platform deployments.

@@ -2,9 +2,9 @@
 
 This template ships one service plugin package with three host-specific entrypoints:
 
-- Claude Code: `plugins/example/.claude-plugin/plugin.json`
-- Codex: `plugins/example/.codex-plugin/plugin.json`
-- Gemini: `plugins/example/gemini-extension.json`
+- Claude Code: `plugins/rtemplate/.claude-plugin/plugin.json`
+- Codex: `plugins/rtemplate/.codex-plugin/plugin.json`
+- Gemini: `plugins/rtemplate/gemini-extension.json`
 
 All three surfaces should describe the same MCP server and expose the same
 skills. Upstream-client servers should prefer a local stdio binary install for
@@ -21,7 +21,7 @@ for the exact manifest and adapter contract.
 ## Layout
 
 ```text
-plugins/example/
+plugins/rtemplate/
   .claude-plugin/
     plugin.json          # Claude Code manifest
   .codex-plugin/
@@ -58,7 +58,7 @@ Keep the plugin manifests thin. Runtime setup belongs in the service binary, not
 
 ## Claude Code
 
-Claude Code uses `plugins/example/.claude-plugin/plugin.json`.
+Claude Code uses `plugins/rtemplate/.claude-plugin/plugin.json`.
 
 Responsibilities:
 
@@ -67,7 +67,7 @@ Responsibilities:
 - defines `userConfig` settings exposed in Claude Code
 - marks sensitive values with `sensitive: true`
 
-Claude-specific lifecycle hooks live in `plugins/example/hooks/hooks.json`. The default hooks are:
+Claude-specific lifecycle hooks live in `plugins/rtemplate/hooks/hooks.json`. The default hooks are:
 
 | Hook | Trigger | Command |
 | --- | --- | --- |
@@ -90,7 +90,7 @@ The hook script may map `CLAUDE_PLUGIN_OPTION_*` values into runtime env vars, c
 
 ## Codex
 
-Codex uses `plugins/example/.codex-plugin/plugin.json`.
+Codex uses `plugins/rtemplate/.codex-plugin/plugin.json`.
 
 Responsibilities:
 
@@ -114,11 +114,11 @@ Codex-specific fields to adapt:
 | `interface.defaultPrompt` | three realistic prompts |
 | `interface.brandColor` | service-appropriate hex color |
 
-See `plugins/example/.codex-plugin/README.md` for the full manifest field reference.
+See `plugins/rtemplate/.codex-plugin/README.md` for the full manifest field reference.
 
 ## Gemini
 
-Gemini uses `plugins/example/gemini-extension.json`.
+Gemini uses `plugins/rtemplate/gemini-extension.json`.
 
 Responsibilities:
 
@@ -131,7 +131,7 @@ Responsibilities:
 The Gemini manifest uses `settings.*` interpolation instead of Claude/Codex `user_config.*` interpolation:
 
 ```json
-"env": { "EXAMPLE_API_URL": "${settings.example_api_url}" }
+"env": { "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}" }
 ```
 
 Sensitive Gemini settings use:
@@ -171,7 +171,7 @@ template gates.
 
 ## Shared MCP Config
 
-Claude Code and Codex share `plugins/example/.mcp.json`:
+Claude Code and Codex share `plugins/rtemplate/.mcp.json`:
 
 ```json
 {
@@ -181,8 +181,8 @@ Claude Code and Codex share `plugins/example/.mcp.json`:
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
       "args": ["mcp"],
       "env": {
-        "EXAMPLE_API_URL": "${user_config.example_api_url}",
-        "EXAMPLE_API_KEY": "${user_config.example_api_key}",
+        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
+        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
         "RUST_LOG": "warn"
       }
     }
@@ -194,7 +194,7 @@ Gemini carries equivalent MCP config directly in `gemini-extension.json` because
 
 ## Skills
 
-`plugins/example/skills/example/SKILL.md` is shared across Claude, Codex, and Gemini. Every skill follows the three-tier fallback pattern — agents try each tier in order and stop when one works:
+`plugins/rtemplate/skills/example/SKILL.md` is shared across Claude, Codex, and Gemini. Every skill follows the three-tier fallback pattern — agents try each tier in order and stop when one works:
 
 ```markdown
 # example — Claude Code Skill
@@ -215,13 +215,13 @@ example things [--json]
 example thing <id> [--json]
 example status
 
-Env required: EXAMPLE_API_URL, EXAMPLE_API_KEY
+Env required: RTEMPLATE_API_URL, RTEMPLATE_API_KEY
 
 ## Tier 3: Direct API (last resort)
 Use when neither MCP nor CLI is available.
 
-curl -H "Authorization: Bearer $EXAMPLE_API_KEY" \
-     "$EXAMPLE_API_URL/things"
+curl -H "Authorization: Bearer $RTEMPLATE_API_KEY" \
+     "$RTEMPLATE_API_URL/things"
 
 ## Gotchas
 - [service-specific pitfalls go here]
@@ -278,9 +278,9 @@ Keep version and metadata synchronized across:
 | File | Fields |
 | --- | --- |
 | `Cargo.toml` | package `version`, homepage/repository when present |
-| `plugins/example/.claude-plugin/plugin.json` | identity, repository, user config; no `version` field |
-| `plugins/example/.codex-plugin/plugin.json` | identity, repository, interface metadata; no `version` field |
-| `plugins/example/gemini-extension.json` | identity, repository, settings |
+| `plugins/rtemplate/.claude-plugin/plugin.json` | identity, repository, user config; no `version` field |
+| `plugins/rtemplate/.codex-plugin/plugin.json` | identity, repository, interface metadata; no `version` field |
+| `plugins/rtemplate/gemini-extension.json` | identity, repository, settings |
 | `server.json` | package version and registry metadata, when present |
 
 `Cargo.toml` is the canonical version source for this template. Use
@@ -297,7 +297,7 @@ When creating a real server from the template:
 1. Rename `example`, `Example`, and `EXAMPLE` across plugin files.
 2. Update all three manifests with the real repository, description, author, keywords, and capability claims.
 3. Keep credential names aligned across Claude `userConfig`, Codex shared `.mcp.json`, and Gemini `settings`.
-4. Replace upstream credential fields such as `example_api_url` and `example_api_key`.
+4. Replace upstream credential fields such as `rtemplate_api_url` and `rtemplate_api_key`.
 5. Update `apply_plugin_options()` in `src/cli/setup.rs` to map service-specific plugin options into env vars.
 6. Implement `<binary> setup plugin-hook`, `--no-repair`, `check`, and `repair`.
 7. Update shared skill docs for the actual action surface.

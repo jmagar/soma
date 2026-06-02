@@ -16,7 +16,7 @@ Ran `/claude-md-management:claude-md-improver` to audit and improve CLAUDE.md fi
 
 ## Session Overview
 
-Audited all four CLAUDE.md files in the repo, scored them against the skill's quality rubric (average B+, 88/100), and applied three small corrections to the root `./CLAUDE.md`. Other three files (`docs/`, `plugins/example/`, `apps/web/`) needed no changes.
+Audited all four CLAUDE.md files in the repo, scored them against the skill's quality rubric (average B+, 88/100), and applied three small corrections to the root `./CLAUDE.md`. Other three files (`docs/`, `plugins/rtemplate/`, `apps/web/`) needed no changes.
 
 ## Sequence of Events
 
@@ -34,7 +34,7 @@ Audited all four CLAUDE.md files in the repo, scored them against the skill's qu
 - Root `CLAUDE.md:42` heading "How to add an action (4-file checklist)" was outdated — list had grown to 8 steps.
 - Root `CLAUDE.md:64` said "AuthPolicy is an enum with three states" but the table below listed 4 variants.
 - Root `CLAUDE.md:155` warned `config.toml` still held `unraid-mcp` values; `grep -i unraid config.toml` returned no matches, so the gotcha is stale.
-- `docs/CLAUDE.md`, `plugins/example/CLAUDE.md`, and `apps/web/CLAUDE.md` are in good shape — concise, current, project-specific.
+- `docs/CLAUDE.md`, `plugins/rtemplate/CLAUDE.md`, and `apps/web/CLAUDE.md` are in good shape — concise, current, project-specific.
 
 ## Technical Decisions
 

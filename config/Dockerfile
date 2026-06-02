@@ -8,7 +8,7 @@
 # Key substitutions:
 #   "example-server"       → your server binary name (e.g. "myservice-server")
 #   "example-cargo-*"      → your cache mount IDs (e.g. "myservice-cargo-*")
-#   "example-mcp"          → your systemd/Docker service name
+#   "rtemplate-mcp"          → your systemd/Docker service name
 #   EXPOSE 40060            → your port (must match config.toml [mcp] port)
 #   HEALTHCHECK port 40060  → same as EXPOSE
 #   CMD ["serve", "mcp"]   → default args passed to the server binary
@@ -115,8 +115,8 @@ RUN groupadd --gid 1000 example && \
 ENV RUST_LOG=info
 
 # TEMPLATE: Add other default env vars your binary needs.
-# ENV EXAMPLE_MCP_HOST=0.0.0.0
-# ENV EXAMPLE_MCP_PORT=3000
+# ENV RTEMPLATE_MCP_HOST=0.0.0.0
+# ENV RTEMPLATE_MCP_PORT=3000
 
 # NOTE: No USER directive here — entrypoint.sh drops to UID 1000:1000 via gosu.
 # This allows entrypoint.sh to run as root (for chown /data) before execing the binary.
@@ -132,7 +132,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # MCP registry label — used by Claude Code plugin discovery.
 # TEMPLATE: Replace with your registry path: "tv.tootie/yourservice-mcp"
-LABEL io.modelcontextprotocol.server.name="tv.tootie/example-mcp"
+LABEL io.modelcontextprotocol.server.name="tv.tootie/rtemplate-mcp"
 
 # Entrypoint handles permission setup and privilege drop.
 # CMD is the default argument passed to entrypoint.sh.

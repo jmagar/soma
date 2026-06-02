@@ -2,7 +2,7 @@
 
 ## What this project is
 
-A reusable Rust template for building MCP servers with the rmcp crate. The binary is named `example`. All stub identifiers (`Example*`, `EXAMPLE_*`) are renamed when the template is used for a real service.
+A reusable Rust template for building MCP servers with the rmcp crate. The binary is named `example`. All stub identifiers (`Example*`, `RTEMPLATE_*`) are renamed when the template is used for a real service.
 
 ## Module map
 
@@ -66,7 +66,7 @@ For actions with parameters, extract them with `string_arg(&args, "param_name")`
 | Variant | When | Effect |
 |---------|------|--------|
 | `AuthPolicy::LoopbackDev` | `no_auth=true` or host is loopback (`localhost`, `127.*`, `::1`) via `McpConfig::is_loopback()` | No auth middleware; scope checks bypassed |
-| `AuthPolicy::TrustedGatewayUnscoped` | `EXAMPLE_NOAUTH=true` on non-loopback behind an authz-enforcing gateway | No auth middleware; scope checks bypassed |
+| `AuthPolicy::TrustedGatewayUnscoped` | `RTEMPLATE_NOAUTH=true` on non-loopback behind an authz-enforcing gateway | No auth middleware; scope checks bypassed |
 | `AuthPolicy::Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
 | `AuthPolicy::Mounted { auth_state: Some(_) }` | `auth_mode = "oauth"` | Full Google OAuth + RS256 JWT issuance |
 
@@ -76,19 +76,19 @@ Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `example:read
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EXAMPLE_API_URL` | — | Upstream service base URL |
-| `EXAMPLE_API_KEY` | — | Upstream service API key |
-| `EXAMPLE_MCP_HOST` | `127.0.0.1` | Bind host |
-| `EXAMPLE_MCP_PORT` | `40060` | Bind port |
-| `EXAMPLE_MCP_NO_AUTH` | `false` | Disable auth (loopback only) |
-| `EXAMPLE_MCP_TOKEN` | — | Static bearer token |
-| `EXAMPLE_MCP_ALLOWED_HOSTS` | — | Extra comma-separated Host header values |
-| `EXAMPLE_MCP_ALLOWED_ORIGINS` | — | Extra comma-separated CORS origins |
-| `EXAMPLE_MCP_PUBLIC_URL` | — | Public URL for OAuth metadata endpoints |
-| `EXAMPLE_MCP_AUTH_MODE` | `bearer` | `bearer` or `oauth` |
-| `EXAMPLE_MCP_GOOGLE_CLIENT_ID` | — | Google OAuth client ID |
-| `EXAMPLE_MCP_GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret |
-| `EXAMPLE_MCP_AUTH_ADMIN_EMAIL` | — | OAuth admin email |
+| `RTEMPLATE_API_URL` | — | Upstream service base URL |
+| `RTEMPLATE_API_KEY` | — | Upstream service API key |
+| `RTEMPLATE_MCP_HOST` | `127.0.0.1` | Bind host |
+| `RTEMPLATE_MCP_PORT` | `40060` | Bind port |
+| `RTEMPLATE_MCP_NO_AUTH` | `false` | Disable auth (loopback only) |
+| `RTEMPLATE_MCP_TOKEN` | — | Static bearer token |
+| `RTEMPLATE_MCP_ALLOWED_HOSTS` | — | Extra comma-separated Host header values |
+| `RTEMPLATE_MCP_ALLOWED_ORIGINS` | — | Extra comma-separated CORS origins |
+| `RTEMPLATE_MCP_PUBLIC_URL` | — | Public URL for OAuth metadata endpoints |
+| `RTEMPLATE_MCP_AUTH_MODE` | `bearer` | `bearer` or `oauth` |
+| `RTEMPLATE_MCP_GOOGLE_CLIENT_ID` | — | Google OAuth client ID |
+| `RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET` | — | Google OAuth client secret |
+| `RTEMPLATE_MCP_AUTH_ADMIN_EMAIL` | — | OAuth admin email |
 | `RUST_LOG` | `info` | Log filter |
 
 ## Elicitation
@@ -117,7 +117,7 @@ cargo test                # all tests
 cargo clippy -- -D warnings  # lint (must pass)
 cargo fmt                 # format
 
-just dev                  # EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run -- serve mcp (loopback only, no auth)
+just dev                  # RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run -- serve mcp (loopback only, no auth)
 just test                 # cargo test
 just lint                 # cargo clippy -- -D warnings
 just fmt                  # cargo fmt
@@ -163,7 +163,7 @@ Plugin manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `ge
 - **Stdio mode suppresses logs** — `main.rs` sets log level to `warn` in stdio mode so JSON-RPC is not corrupted by log lines on stdout.
 - **Scope checks run in `rmcp_server.rs`**, not in `tools.rs`. `tools.rs` only dispatches.
 - **`help` action is public** — `required_scope_for("help")` returns `None`. All other actions require at least `example:read`.
-- **Default port is 40060** — set in `default_mcp_port()` in `config.rs`. Override with `EXAMPLE_MCP_PORT`.
+- **Default port is 40060** — set in `default_mcp_port()` in `config.rs`. Override with `RTEMPLATE_MCP_PORT`.
 - **`elicit_name` is MCP-only** — elicitation requires a live client connection; it cannot be invoked from the CLI. This is the one intentional parity exception.
 - **`watch`, `serve`, and `doctor` are CLI infrastructure** — they are not MCP actions and have no parity requirement. `watch` polls `/health` and emits state-change lines to stdout (used by the plugin monitor). `serve` starts the HTTP server. `doctor` runs pre-flight checks. None belong in the MCP parity table.
 

@@ -44,7 +44,7 @@ Four PR Review Toolkit review lanes were run against the branch diff: code revie
 - Treated `example:write` as satisfying read checks instead of keeping the obsolete `example:admin` wording.
 - Classified only parser/validation errors as REST 400s; service execution failures now log and return 500.
 - Kept `apps/web/out/` generated output ignored, with only `.gitkeep` tracked to satisfy clean Rust builds.
-- Updated the schema-doc checker to read `ACTION_SPECS` rather than regexing deleted `EXAMPLE_ACTIONS` and `READ_ONLY_ACTIONS` constants.
+- Updated the schema-doc checker to read `ACTION_SPECS` rather than regexing deleted `RTEMPLATE_ACTIONS` and `READ_ONLY_ACTIONS` constants.
 
 ## Files Modified
 

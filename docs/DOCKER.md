@@ -67,19 +67,19 @@ CMD ["serve", "mcp"]
 
 ```yaml
 services:
-  example-mcp:
-    image: ghcr.io/jmagar/example-mcp:${VERSION:-latest}
+  rtemplate-mcp:
+    image: ghcr.io/jmagar/rtemplate-mcp:${VERSION:-latest}
     build:
       context: .
       dockerfile: config/Dockerfile
-    container_name: example-mcp
+    container_name: rtemplate-mcp
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
     env_file:
       - path: .env
         required: false
     ports:
-      - "${EXAMPLE_MCP_HOST_PORT:-40060}:40060/tcp"
+      - "${RTEMPLATE_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
       - ${HOME}/.example:/data
     networks:
@@ -98,7 +98,7 @@ services:
 
 networks:
   mcp:
-    name: ${DOCKER_NETWORK:-example-mcp}
+    name: ${DOCKER_NETWORK:-rtemplate-mcp}
     external: true
 ```
 
@@ -143,7 +143,7 @@ set -e
 DATA_DIR="${DATA_DIR:-/data}"
 
 # Validate required vars before starting
-for var in EXAMPLE_API_URL EXAMPLE_API_KEY; do
+for var in RTEMPLATE_API_URL RTEMPLATE_API_KEY; do
     eval "val=\${${var}:-}"
     [ -z "${val}" ] && { echo "FATAL: ${var} is not set" >&2; exit 1; }
 done
@@ -174,6 +174,6 @@ docker compose up -d --force-recreate
 
 ## Build artifacts
 
-`just build-plugin` copies the release binary to both `bin/example` and `plugins/example/bin/example`. The plugin binary path is allowlisted in `scripts/blob-size-allowlist.txt`.
+`just build-plugin` copies the release binary to both `bin/example` and `plugins/rtemplate/bin/example`. The plugin binary path is allowlisted in `scripts/blob-size-allowlist.txt`.
 
 See `docs/PATTERNS.md` §14, §15, §25, §26, §50 for the full Dockerfile, compose, appdata, and entrypoint patterns.

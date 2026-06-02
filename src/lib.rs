@@ -93,35 +93,35 @@ pub mod testing {
 
     pub async fn build_auth_state(data_dir: &std::path::Path) -> lab_auth::state::AuthState {
         let vars: Vec<(String, String)> = vec![
-            ("EXAMPLE_MCP_AUTH_MODE".into(), "oauth".into()),
+            ("RTEMPLATE_MCP_AUTH_MODE".into(), "oauth".into()),
             (
-                "EXAMPLE_MCP_PUBLIC_URL".into(),
+                "RTEMPLATE_MCP_PUBLIC_URL".into(),
                 "https://example.example.com".into(),
             ),
             (
-                "EXAMPLE_MCP_GOOGLE_CLIENT_ID".into(),
+                "RTEMPLATE_MCP_GOOGLE_CLIENT_ID".into(),
                 "test-client-id".into(),
             ),
             (
-                "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET".into(),
+                "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET".into(),
                 "test-client-secret".into(),
             ),
             (
-                "EXAMPLE_MCP_AUTH_ADMIN_EMAIL".into(),
+                "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL".into(),
                 "admin@example.com".into(),
             ),
             (
-                "EXAMPLE_MCP_AUTH_SQLITE_PATH".into(),
+                "RTEMPLATE_MCP_AUTH_SQLITE_PATH".into(),
                 data_dir.join("auth.db").display().to_string(),
             ),
             (
-                "EXAMPLE_MCP_AUTH_KEY_PATH".into(),
+                "RTEMPLATE_MCP_AUTH_KEY_PATH".into(),
                 data_dir.join("auth-jwt.pem").display().to_string(),
             ),
         ];
 
         let auth_config = lab_auth::config::AuthConfigBuilder::new()
-            .env_prefix("EXAMPLE_MCP")
+            .env_prefix("RTEMPLATE_MCP")
             .session_cookie_name("example_mcp_session")
             .scopes_supported(vec![
                 crate::actions::READ_SCOPE.into(),

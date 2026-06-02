@@ -2,7 +2,7 @@
 
 ## What this project is
 
-A Rust template for building MCP servers with the rmcp crate. The stub binary is named `example`. All `Example*` / `EXAMPLE_*` identifiers are renamed when the template is adapted for a real service.
+A Rust template for building MCP servers with the rmcp crate. The stub binary is named `example`. All `Example*` / `RTEMPLATE_*` identifiers are renamed when the template is adapted for a real service.
 
 ## Key files
 
@@ -62,7 +62,7 @@ Choose the binary shape from the server category:
 
 The stdio adapter should expose MCP-native behavior and delegate business
 actions to the deployed platform API. The REST API should expose business
-actions, not MCP protocol semantics. In this template, `EXAMPLE_API_URL` selects
+actions, not MCP protocol semantics. In this template, `RTEMPLATE_API_URL` selects
 that deployed API target for the local adapter; leaving it empty keeps offline
 stub mode for tests and first-run scaffolds.
 
@@ -101,35 +101,35 @@ For application/platform servers only, also update:
 
 | State | Condition | Behavior |
 |-------|-----------|----------|
-| `LoopbackDev` | stdio, loopback bind (`127.*`, `localhost`, `::1`), or `EXAMPLE_MCP_NO_AUTH=true` on loopback | No auth, no scope checks |
-| `TrustedGatewayUnscoped` | `EXAMPLE_NOAUTH=true` behind an authz-enforcing gateway | No auth, no scope checks |
+| `LoopbackDev` | stdio, loopback bind (`127.*`, `localhost`, `::1`), or `RTEMPLATE_MCP_NO_AUTH=true` on loopback | No auth, no scope checks |
+| `TrustedGatewayUnscoped` | `RTEMPLATE_NOAUTH=true` behind an authz-enforcing gateway | No auth, no scope checks |
 | `Mounted { auth_state: None }` | Default non-loopback | Static bearer token required |
-| `Mounted { auth_state: Some(_) }` | `EXAMPLE_MCP_AUTH_MODE=oauth` | Google OAuth + RS256 JWT |
+| `Mounted { auth_state: Some(_) }` | `RTEMPLATE_MCP_AUTH_MODE=oauth` | Google OAuth + RS256 JWT |
 
 `help` action requires no scope. Read actions require `example:read`; mutating actions require `example:write`, which satisfies read.
 
 ## Environment variables
 
 ```
-EXAMPLE_API_URL              Deployed platform API or upstream service base URL
-EXAMPLE_API_KEY              Deployed platform API bearer token or upstream API key
-EXAMPLE_MCP_HOST             Bind host (default 127.0.0.1)
-EXAMPLE_MCP_PORT             Bind port (default 40060)
-EXAMPLE_MCP_NO_AUTH          Disable auth — loopback only (1/true/yes)
-EXAMPLE_MCP_TOKEN            Static bearer token
-EXAMPLE_MCP_ALLOWED_HOSTS    Comma-separated extra Host header values
-EXAMPLE_MCP_ALLOWED_ORIGINS  Comma-separated extra CORS origins
-EXAMPLE_MCP_PUBLIC_URL       Public URL for OAuth metadata
-EXAMPLE_MCP_AUTH_MODE        bearer (default) or oauth
-EXAMPLE_MCP_GOOGLE_CLIENT_ID     Google OAuth client ID (OAuth mode)
-EXAMPLE_MCP_GOOGLE_CLIENT_SECRET  Google OAuth client secret (OAuth mode)
-EXAMPLE_MCP_AUTH_ADMIN_EMAIL  OAuth admin email (OAuth mode)
+RTEMPLATE_API_URL              Deployed platform API or upstream service base URL
+RTEMPLATE_API_KEY              Deployed platform API bearer token or upstream API key
+RTEMPLATE_MCP_HOST             Bind host (default 127.0.0.1)
+RTEMPLATE_MCP_PORT             Bind port (default 40060)
+RTEMPLATE_MCP_NO_AUTH          Disable auth — loopback only (1/true/yes)
+RTEMPLATE_MCP_TOKEN            Static bearer token
+RTEMPLATE_MCP_ALLOWED_HOSTS    Comma-separated extra Host header values
+RTEMPLATE_MCP_ALLOWED_ORIGINS  Comma-separated extra CORS origins
+RTEMPLATE_MCP_PUBLIC_URL       Public URL for OAuth metadata
+RTEMPLATE_MCP_AUTH_MODE        bearer (default) or oauth
+RTEMPLATE_MCP_GOOGLE_CLIENT_ID     Google OAuth client ID (OAuth mode)
+RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET  Google OAuth client secret (OAuth mode)
+RTEMPLATE_MCP_AUTH_ADMIN_EMAIL  OAuth admin email (OAuth mode)
 RUST_LOG                     Log filter (e.g. info,rmcp=warn)
 ```
 
 ## Transports
 
-- `example-server serve` (or no args) — Streamable HTTP on `EXAMPLE_MCP_PORT` (default 40060)
+- `example-server serve` (or no args) — Streamable HTTP on `RTEMPLATE_MCP_PORT` (default 40060)
 - `example mcp` — stdio transport for child-process MCP clients
 - `example greet / echo / status` — direct CLI
 
@@ -220,6 +220,6 @@ bd close <id>         # Complete work
 
 ## Plugin setup hooks
 
-Plugin setup is owned by the binary. `hooks/hooks.json` calls `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly (no shell wrapper). The binary's `apply_plugin_options()` (`src/cli/setup.rs`), run before `Config::load()`, maps `CLAUDE_PLUGIN_OPTION_*` values to the binary's `EXAMPLE_*` env vars; `install_self()` self-installs the binary into `~/.local/bin`.
+Plugin setup is owned by the binary. `hooks/hooks.json` calls `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly (no shell wrapper). The binary's `apply_plugin_options()` (`src/cli/setup.rs`), run before `Config::load()`, maps `CLAUDE_PLUGIN_OPTION_*` values to the binary's `RTEMPLATE_*` env vars; `install_self()` self-installs the binary into `~/.local/bin`.
 
 `example setup check` is read-only, `example setup repair` is idempotent, and `example setup plugin-hook --no-repair` is audit mode. Do not add Docker Compose, systemd, or service bootstrap logic into the hook path. Use `scripts/check-plugin-hook-contract.py` to audit this pattern across the Rust servers.

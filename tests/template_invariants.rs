@@ -98,9 +98,9 @@ fn contract_audit_is_exposed_in_automation_and_docs() {
 #[test]
 fn plugin_manifests_do_not_have_version_fields() {
     for path in [
-        "plugins/example/.claude-plugin/plugin.json",
-        "plugins/example/.codex-plugin/plugin.json",
-        "plugins/example/gemini-extension.json",
+        "plugins/rtemplate/.claude-plugin/plugin.json",
+        "plugins/rtemplate/.codex-plugin/plugin.json",
+        "plugins/rtemplate/gemini-extension.json",
     ] {
         let manifest = json(path);
         assert!(

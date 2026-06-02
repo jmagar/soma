@@ -58,7 +58,7 @@ Do not treat seed transcripts or conversation context as sufficient evidence for
 
 ## Naming
 
-- The binary and template identifiers use `example` / `Example` / `EXAMPLE_` as placeholders. These are renamed when the template is adapted.
+- The binary and template identifiers use `example` / `Example` / `RTEMPLATE_` as placeholders. These are renamed when the template is adapted.
 - The pattern family is `rmcp-server`. Member servers include `lab`, `axon_rust`, `syslog-mcp`, `rustify`, `rustifi`, `apprise-mcp`, `rustscale`, `unrust`, and this template.
 - Do not rewrite captured reference snapshots or upstream repopacks to match current naming. Those files preserve provenance.
 

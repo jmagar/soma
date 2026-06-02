@@ -31,9 +31,9 @@
 #
 # Server is assumed to be running as HTTP on localhost:40060 (the `just dev` port).
 # Credentials are sourced from ~/.claude-homelab/.env OR environment variables:
-#   EXAMPLE_MCP_HOST  (default: localhost)
-#   EXAMPLE_MCP_PORT  (default: 40060)
-#   EXAMPLE_MCP_TOKEN (optional; omit for no-auth dev mode)
+#   RTEMPLATE_MCP_HOST  (default: localhost)
+#   RTEMPLATE_MCP_PORT  (default: 40060)
+#   RTEMPLATE_MCP_TOKEN (optional; omit for no-auth dev mode)
 #
 # Usage:
 #   ./tests/mcporter/test-mcp.sh [--timeout-ms N] [--parallel] [--verbose]
@@ -126,15 +126,15 @@ load_env() {
     log_warn "${ENV_FILE} not found — using environment variables"
   fi
 
-  # TEMPLATE: Replace EXAMPLE_MCP_HOST/PORT with your service's env var names.
-  local host="${EXAMPLE_MCP_HOST:-localhost}"
+  # TEMPLATE: Replace RTEMPLATE_MCP_HOST/PORT with your service's env var names.
+  local host="${RTEMPLATE_MCP_HOST:-localhost}"
   # Remap bind address 0.0.0.0 → localhost for outbound connections
   [[ "${host}" == "0.0.0.0" ]] && host="localhost"
-  local port="${EXAMPLE_MCP_PORT:-40060}"
+  local port="${RTEMPLATE_MCP_PORT:-40060}"
   MCP_URL="http://${host}:${port}/mcp"
 
-  # TEMPLATE: Replace EXAMPLE_MCP_TOKEN with your service's token env var.
-  local token="${EXAMPLE_MCP_TOKEN:-}"
+  # TEMPLATE: Replace RTEMPLATE_MCP_TOKEN with your service's token env var.
+  local token="${RTEMPLATE_MCP_TOKEN:-}"
   MCPORTER_HEADER_ARGS=()
   if [[ -n "${token}" ]]; then
     MCPORTER_HEADER_ARGS+=(--header "Authorization: Bearer ${token}")
@@ -144,7 +144,7 @@ load_env() {
   if [[ ${#MCPORTER_HEADER_ARGS[@]} -gt 0 ]]; then
     log_info "Auth: Bearer token configured"
   else
-    log_info "Auth: none (EXAMPLE_MCP_TOKEN unset — server must be in no-auth mode)"
+    log_info "Auth: none (RTEMPLATE_MCP_TOKEN unset — server must be in no-auth mode)"
   fi
 }
 
@@ -174,7 +174,7 @@ smoke_test_server() {
   if [[ "${health_status}" != "ok" ]]; then
     log_error "Health endpoint at ${base_url}/health did not return status=ok"
     # TEMPLATE: Replace "example" with your service name in the diagnostic messages.
-    log_error "Is the example-mcp server running?  just dev   or   just docker-up"
+    log_error "Is the rtemplate-mcp server running?  just dev   or   just docker-up"
     log_error "Then retry:  ./tests/mcporter/test-mcp.sh"
     return 2
   fi
@@ -483,10 +483,10 @@ _fail() {
 suite_auth() {
   printf '\n%b== auth enforcement ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  # TEMPLATE: Replace EXAMPLE_MCP_TOKEN with your token env var name.
-  if [[ -z "${EXAMPLE_MCP_TOKEN:-}" ]]; then
-    skip_test "auth: unauthenticated /mcp returns 401" "EXAMPLE_MCP_TOKEN unset"
-    skip_test "auth: bad token returns 401"             "EXAMPLE_MCP_TOKEN unset"
+  # TEMPLATE: Replace RTEMPLATE_MCP_TOKEN with your token env var name.
+  if [[ -z "${RTEMPLATE_MCP_TOKEN:-}" ]]; then
+    skip_test "auth: unauthenticated /mcp returns 401" "RTEMPLATE_MCP_TOKEN unset"
+    skip_test "auth: bad token returns 401"             "RTEMPLATE_MCP_TOKEN unset"
     return
   fi
 
@@ -737,8 +737,8 @@ main() {
   load_env
 
   printf '%b%s%b\n' "${C_BOLD}" "$(printf '=%.0s' {1..65})" "${C_RESET}"
-  # TEMPLATE: Replace "example-mcp" with your service name in this banner.
-  printf '%b  example-mcp integration smoke-test%b\n' "${C_BOLD}" "${C_RESET}"
+  # TEMPLATE: Replace "rtemplate-mcp" with your service name in this banner.
+  printf '%b  rtemplate-mcp integration smoke-test%b\n' "${C_BOLD}" "${C_RESET}"
   printf '%b  Project:  %s%b\n' "${C_BOLD}" "${PROJECT_DIR}" "${C_RESET}"
   printf '%b  MCP URL:  %s%b\n' "${C_BOLD}" "${MCP_URL}" "${C_RESET}"
   printf '%b  Timeout:  %dms/call | Parallel: %s%b\n' \
@@ -756,7 +756,7 @@ main() {
     log_error "To diagnose:"
     log_error "  just dev                            # start in no-auth dev mode"
     log_error "  curl http://localhost:40060/health   # check health endpoint"
-    log_error "  docker ps | grep example-mcp        # check Docker container"
+    log_error "  docker ps | grep rtemplate-mcp        # check Docker container"
     exit 2
   }
 

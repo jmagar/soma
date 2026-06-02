@@ -261,7 +261,7 @@ The `scaffold-project` skill is responsible for turning scaffold intent JSON int
 Location:
 
 ```text
-plugins/example/skills/scaffold-project/SKILL.md
+plugins/rtemplate/skills/scaffold-project/SKILL.md
 ```
 
 The skill must:
@@ -326,8 +326,8 @@ The coding agent may mutate files only after the user approves the plan produced
 | MCP schema/action enum | `src/mcp/schemas.rs` via `action_names()` |
 | Generated schema docs | `docs/MCP_SCHEMA.md` |
 | Schema docs generator descriptions | `scripts/check-schema-docs.py` |
-| Tool skill reference | `plugins/example/skills/example/SKILL.md` |
-| Handoff skill | `plugins/example/skills/scaffold-project/SKILL.md` |
+| Tool skill reference | `plugins/rtemplate/skills/example/SKILL.md` |
+| Handoff skill | `plugins/rtemplate/skills/scaffold-project/SKILL.md` |
 | Web API explorer metadata | `apps/web/lib/template.ts` |
 
 ## Validation requirements

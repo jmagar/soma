@@ -33,8 +33,8 @@ Remote `origin/refactor/server-api-module-split` matched local `HEAD` after the 
 | Plugin validator | Updated `scripts/validate-plugin-layout.sh` so it enforces the new Claude plugin server URL default. |
 | Setup hook behavior | Updated `src/cli.rs` so `setup repair` writes `.env` before re-running `setup check`, and no-repair mode reports a missing `.env` as an advisory failure rather than silently succeeding. |
 | Plugin contract tests | Updated `tests/plugin_contract.rs` to assert the new advisory `env_file_missing` behavior and to use port `0` for test isolation. |
-| AI instruction mirrors | Added `AGENTS.md` and `GEMINI.md` symlinks next to nested `CLAUDE.md` files in `apps/web`, `docs`, and `plugins/example`. |
-| Plugin distribution layout | Added `plugins/example/bin/.gitkeep` so the plugin binary directory exists in git. |
+| AI instruction mirrors | Added `AGENTS.md` and `GEMINI.md` symlinks next to nested `CLAUDE.md` files in `apps/web`, `docs`, and `plugins/rtemplate`. |
+| Plugin distribution layout | Added `plugins/rtemplate/bin/.gitkeep` so the plugin binary directory exists in git. |
 
 ## Verification
 

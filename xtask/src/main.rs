@@ -412,21 +412,21 @@ fn check_env() -> Result<()> {
     // REQUIRED_VARS accordingly.
     const REQUIRED_VARS: &[(&str, &str)] = &[
         // TEMPLATE: Uncomment and adapt once you have a real upstream service:
-        // ("EXAMPLE_API_URL", "Full base URL of the upstream service (e.g. https://api.example.com/v1)"),
-        // ("EXAMPLE_API_KEY", "API key or bearer token for the upstream service"),
+        // ("RTEMPLATE_API_URL", "Full base URL of the upstream service (e.g. https://api.example.com/v1)"),
+        // ("RTEMPLATE_API_KEY", "API key or bearer token for the upstream service"),
     ];
 
     // TEMPLATE: Optional variables — server boots without them but warns.
     const OPTIONAL_VARS: &[(&str, &str)] = &[
         (
-            "EXAMPLE_MCP_TOKEN",
+            "RTEMPLATE_MCP_TOKEN",
             "Static bearer token for /mcp (required in production; omit only in loopback dev mode)",
         ),
         (
-            "EXAMPLE_MCP_HOST",
+            "RTEMPLATE_MCP_HOST",
             "Bind host (default 127.0.0.1 — set to 0.0.0.0 only with auth or trusted gateway)",
         ),
-        ("EXAMPLE_MCP_PORT", "Bind port (default 40060)"),
+        ("RTEMPLATE_MCP_PORT", "Bind port (default 40060)"),
         (
             "RUST_LOG",
             "Log filter (e.g. info,rmcp=warn — default: info in server mode, warn in stdio/cli)",

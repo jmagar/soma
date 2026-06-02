@@ -172,7 +172,7 @@ Validation errors return HTTP 400 with an `error` field. Never leak secrets in e
 Common error shapes:
 - Missing required arg: `` "`id` is required for docker_logs — pass id=<container_id>" ``
 - Unknown action: `"unknown action: \"florp\" — valid actions: greet, echo, status, help"`
-- API unreachable: `"EXAMPLE_URL unreachable: connection refused — is the service running?"`
+- API unreachable: `"RTEMPLATE_URL unreachable: connection refused — is the service running?"`
 
 MCP protocol auth/scope failures include structured `data` with `kind:
 mcp_auth_error`, stable `code` values such as `missing_http_context`,

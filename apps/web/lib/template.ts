@@ -3,7 +3,7 @@ export const WEB_APP_CONFIG = {
   displayName: "rmcp-template",
   dashboardTitle: "Operator Dashboard",
   description: "MCP server operator dashboard",
-  apiBaseUrl: process.env.NEXT_PUBLIC_EXAMPLE_API_BASE_URL ?? "",
+  apiBaseUrl: process.env.NEXT_PUBLIC_RTEMPLATE_API_BASE_URL ?? "",
   restEndpoint: "/v1/example",
   healthEndpoint: "/health",
   statusEndpoint: "/status",

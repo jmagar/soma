@@ -8,7 +8,7 @@ share the same skills.
 ## Structure
 
 ```
-plugins/example/
+plugins/rtemplate/
 ├── .claude-plugin/
 │   └── plugin.json       # Claude Code manifest
 ├── .codex-plugin/
@@ -45,10 +45,10 @@ Claude Code plugin manifest. Defines the plugin identity, MCP server connection,
 | `google_client_id` | string (sensitive) | Google OAuth client ID |
 | `google_client_secret` | string (sensitive) | Google OAuth client secret |
 | `auth_admin_email` | string | OAuth admin email |
-| `example_api_url` | string | Deployed platform API or upstream service URL used by stdio adapter |
-| `example_api_key` | string (sensitive) | Deployed API bearer token or upstream service API key |
+| `rtemplate_api_url` | string | Deployed platform API or upstream service URL used by stdio adapter |
+| `rtemplate_api_key` | string (sensitive) | Deployed API bearer token or upstream service API key |
 
-**TEMPLATE**: Replace `example_api_url` / `example_api_key` with your service's credential fields.
+**TEMPLATE**: Replace `rtemplate_api_url` / `rtemplate_api_key` with your service's credential fields.
 
 ### `.codex-plugin/plugin.json`
 
@@ -74,8 +74,8 @@ the bundled local binary in stdio mode.
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
       "args": ["mcp"],
       "env": {
-        "EXAMPLE_API_URL": "${user_config.example_api_url}",
-        "EXAMPLE_API_KEY": "${user_config.example_api_key}",
+        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
+        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
         "RUST_LOG": "warn"
       }
     }
@@ -102,7 +102,7 @@ Timeout: 300 seconds.
 
 The lifecycle command. Runs on every session start and config change, called directly by `hooks.json` (no shell wrapper).
 
-- Reads `CLAUDE_PLUGIN_OPTION_*` env vars from plugin `userConfig` and maps them to the binary's `EXAMPLE_*` runtime env vars (`apply_plugin_options()` in `src/cli/setup.rs`)
+- Reads `CLAUDE_PLUGIN_OPTION_*` env vars from plugin `userConfig` and maps them to the binary's `RTEMPLATE_*` runtime env vars (`apply_plugin_options()` in `src/cli/setup.rs`)
 - Self-installs into `~/.local/bin` so the binary is callable in the user's own terminal
 - Prepares the plugin appdata directory
 - Checks/repairs setup and emits the JSON hook contract
@@ -147,7 +147,7 @@ Use `scripts/bump-version.sh patch` (or `minor`/`major`) to update version-beari
 
 When adapting this plugin for a real service:
 
-1. Replace all `example` / `Example` / `EXAMPLE_` identifiers with your service name.
+1. Replace all `example` / `Example` / `RTEMPLATE_` identifiers with your service name.
 2. Update `userConfig` in both `plugin.json` files to match your service's credential fields.
 3. Update `skills/example/SKILL.md` with your actual actions, parameters, and examples.
 4. Set `brandColor` in `.codex-plugin/plugin.json` to your service's color.

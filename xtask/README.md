@@ -123,8 +123,8 @@ just check-env
 Example output:
 
 ```
-[OK]      EXAMPLE_MCP_TOKEN   — Static bearer token for MCP auth
-[MISSING] EXAMPLE_API_KEY     — Upstream service API key (required)
+[OK]      RTEMPLATE_MCP_TOKEN   — Static bearer token for MCP auth
+[MISSING] RTEMPLATE_API_KEY     — Upstream service API key (required)
 
 Error: 1 required variable(s) missing. Copy .env.example to .env and fill in the values.
 ```

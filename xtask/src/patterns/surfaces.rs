@@ -36,7 +36,7 @@ const WEB_FORBIDDEN: &[&str] = &[
     "node:child_process",
     "fs.",
     "node:fs",
-    "process.env.EXAMPLE_",
+    "process.env.RTEMPLATE_",
     "fetch(\"https://",
     "fetch('https://",
 ];

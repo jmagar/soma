@@ -5,11 +5,11 @@
 #           Replace all occurrences of "EXAMPLE" with your service name in caps.
 #
 # Key substitutions:
-#   "example-mcp"          -> your Docker service/container name
-#   "example-mcp-data"     -> your Docker volume name
+#   "rtemplate-mcp"          -> your Docker service/container name
+#   "rtemplate-mcp-data"     -> your Docker volume name
 #   "ghcr.io/.../example"  -> your published Docker image path
 #   port 40060             -> your service's MCP port
-#   EXAMPLE_*              -> your env var prefix
+#   RTEMPLATE_*              -> your env var prefix
 # =============================================================================
 
 name: rmcp-template
@@ -32,19 +32,19 @@ x-common-service: &common-service
       compress: "true"
 
 services:
-  example-mcp:
+  rtemplate-mcp:
     <<: *common-service
     # TEMPLATE: Replace with your image path.
-    image: ghcr.io/your-org/example-mcp:${EXAMPLE_MCP_VERSION:-latest}
-    container_name: example-mcp
+    image: ghcr.io/your-org/rtemplate-mcp:${RTEMPLATE_MCP_VERSION:-latest}
+    container_name: rtemplate-mcp
     env_file:
       - path: .env
         required: false
     environment:
-      EXAMPLE_MCP_HOST: 0.0.0.0
-      EXAMPLE_NOAUTH: "true"
+      RTEMPLATE_MCP_HOST: 0.0.0.0
+      RTEMPLATE_NOAUTH: "true"
     ports:
-      - "${EXAMPLE_MCP_HOST_PORT:-40060}:40060/tcp"
+      - "${RTEMPLATE_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
       - ${HOME}/.example:/data
     cap_drop:
@@ -68,7 +68,7 @@ services:
           cpus: '0.5'
 
 volumes:
-  example-mcp-data:
+  rtemplate-mcp-data:
 
 networks:
   mcp:

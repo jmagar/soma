@@ -48,7 +48,7 @@ profile where they apply:
 |---|---|---|
 | `example mcp` | stdio MCP | For Claude Code `~/.claude/settings.json` stdio servers |
 | `example-server serve` | Streamable HTTP MCP | For Docker/remote deployment |
-| `example [subcommand]` | CLI | Local adapter. With `EXAMPLE_API_URL` set, targets the deployed `example-server` REST API; otherwise uses template stub responses. |
+| `example [subcommand]` | CLI | Local adapter. With `RTEMPLATE_API_URL` set, targets the deployed `example-server` REST API; otherwise uses template stub responses. |
 | `example doctor` | Pre-flight check | Validates environment and config |
 | `example --help` | Help | Print usage |
 | `example --version` | Version | Print version |
@@ -72,7 +72,7 @@ profile where they apply:
    ```
 6. Smoke-test auth:
    ```bash
-   EXAMPLE_MCP_TOKEN=<token> just auth-smoke
+   RTEMPLATE_MCP_TOKEN=<token> just auth-smoke
    ```
 7. Run MCP integration tests:
    ```bash
@@ -83,7 +83,7 @@ profile where they apply:
 
 The binary normalizes data paths based on its deployment context. Bind host and
 port come from typed config and environment variables; Docker deployments must
-set `EXAMPLE_MCP_HOST=0.0.0.0` explicitly when exposing the service outside the
+set `RTEMPLATE_MCP_HOST=0.0.0.0` explicitly when exposing the service outside the
 container.
 
 ```rust
@@ -116,10 +116,10 @@ All deployments share `~/.<service>` as the logical data root:
 Non-loopback HTTP deployments must use bearer auth or OAuth. The server refuses to bind to a non-loopback address without authentication unless explicitly configured:
 
 - Loopback bind → `LoopbackDev` (no auth)
-- `EXAMPLE_MCP_NO_AUTH=true` → valid only on loopback
+- `RTEMPLATE_MCP_NO_AUTH=true` → valid only on loopback
 - Non-loopback + bearer token → mounted bearer auth
 - Non-loopback + `auth_mode=oauth` → mounted OAuth auth
-- Non-loopback + `EXAMPLE_NOAUTH=true` → `TrustedGatewayUnscoped` (trusted gateway, explicit opt-out)
+- Non-loopback + `RTEMPLATE_NOAUTH=true` → `TrustedGatewayUnscoped` (trusted gateway, explicit opt-out)
 - Non-loopback + no credentials + no gateway acknowledgment → startup error
 
 ## Claude Code stdio config
@@ -161,7 +161,7 @@ Each service in the rmcp family uses a fixed port to avoid collisions:
 | apprise-mcp | 8765 | `apprise` |
 | rmcp-template | 40060 | `example` |
 
-Set the port via `EXAMPLE_MCP_PORT` or in `config.toml`. Update `EXPOSE` in the Dockerfile and the port mapping in `docker-compose.yml` to match.
+Set the port via `RTEMPLATE_MCP_PORT` or in `config.toml`. Update `EXPOSE` in the Dockerfile and the port mapping in `docker-compose.yml` to match.
 
 ## Worktree file propagation
 

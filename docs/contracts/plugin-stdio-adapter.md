@@ -9,8 +9,8 @@ audience:
 scope: "template"
 source_of_truth: true
 upstream_refs:
-  - "plugins/example/.mcp.json"
-  - "plugins/example/gemini-extension.json"
+  - "plugins/rtemplate/.mcp.json"
+  - "plugins/rtemplate/gemini-extension.json"
   - "src/example.rs"
   - "src/bin/example.rs"
   - "src/main.rs"
@@ -32,7 +32,7 @@ checklist for template adapters and for services scaffolded from this repo.
 
 ## Plugin MCP config
 
-Claude Code and Codex share `plugins/example/.mcp.json`. The default MCP server
+Claude Code and Codex share `plugins/rtemplate/.mcp.json`. The default MCP server
 entry must be stdio-first:
 
 ```json
@@ -41,8 +41,8 @@ entry must be stdio-first:
   "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
   "args": ["mcp"],
   "env": {
-    "EXAMPLE_API_URL": "${user_config.example_api_url}",
-    "EXAMPLE_API_KEY": "${user_config.example_api_key}",
+    "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
+    "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
     "RUST_LOG": "warn"
   }
 }
@@ -56,8 +56,8 @@ interpolation:
   "command": "${extensionPath}${/}bin${/}example",
   "args": ["mcp"],
   "env": {
-    "EXAMPLE_API_URL": "${settings.example_api_url}",
-    "EXAMPLE_API_KEY": "${settings.example_api_key}",
+    "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}",
+    "RTEMPLATE_API_KEY": "${settings.rtemplate_api_key}",
     "RUST_LOG": "warn"
   }
 }
@@ -69,18 +69,18 @@ operator setting rather than the plugin install default.
 
 ## Adapter API contract
 
-The local adapter resolves its runtime mode from `EXAMPLE_API_URL`:
+The local adapter resolves its runtime mode from `RTEMPLATE_API_URL`:
 
-| `EXAMPLE_API_URL` | Behavior |
+| `RTEMPLATE_API_URL` | Behavior |
 |---|---|
 | empty | Offline template stub mode. Used for local smoke tests and scaffold examples. |
 | set | Forward local CLI and stdio MCP business actions to the deployed API. |
 
 When forwarding, the adapter must:
 
-- preserve any base path in `EXAMPLE_API_URL`;
-- call `POST {EXAMPLE_API_URL}/v1/example`;
-- send `EXAMPLE_API_KEY` as `Authorization: Bearer <token>` when set;
+- preserve any base path in `RTEMPLATE_API_URL`;
+- call `POST {RTEMPLATE_API_URL}/v1/example`;
+- send `RTEMPLATE_API_KEY` as `Authorization: Bearer <token>` when set;
 - send business-action JSON, not MCP protocol JSON;
 - surface execution failures through the existing CLI/MCP error policy.
 

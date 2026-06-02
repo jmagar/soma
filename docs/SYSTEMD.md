@@ -13,7 +13,7 @@ last_reviewed: "2026-05-15"
 
 # systemd
 
-The template supports user-level systemd deployments when a unit named `example-mcp.service` is installed by the derived service.
+The template supports user-level systemd deployments when a unit named `rtemplate-mcp.service` is installed by the derived service.
 
 ## Install the binary
 
@@ -25,7 +25,7 @@ install -m 755 target/release/example-server ~/.local/bin/example-server
 Or use the install script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/example-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/rtemplate-mcp/main/install.sh | bash
 ```
 
 The binary installs to `~/.local/bin/`. Verify it's in `$PATH`:
@@ -62,8 +62,8 @@ Key points:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user restart example-mcp.service
-systemctl --user status example-mcp.service
+systemctl --user restart rtemplate-mcp.service
+systemctl --user status rtemplate-mcp.service
 ```
 
 ## Runtime verification
@@ -86,8 +86,8 @@ If hashes differ, install the new binary and restart the unit.
 With systemd, logs go to the journal:
 
 ```bash
-journalctl --user -u example-mcp.service -f
-journalctl --user -u example-mcp.service --since "1h ago"
+journalctl --user -u rtemplate-mcp.service -f
+journalctl --user -u rtemplate-mcp.service --since "1h ago"
 ```
 
 The binary also writes structured JSON logs to `~/.example/logs/example.log` regardless of deployment mode (see `docs/OBSERVABILITY.md`).

@@ -26,12 +26,12 @@ Static bearer tokens default to `example:read` only. OAuth tokens carry whatever
 
 ```bash
 # Generate a token
-export EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)
+export RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)
 
 # Or: just gen-token
 ```
 
-Set `EXAMPLE_MCP_TOKEN` in your environment or `.env` file. Clients authenticate with:
+Set `RTEMPLATE_MCP_TOKEN` in your environment or `.env` file. Clients authenticate with:
 
 ```
 Authorization: Bearer <token>
@@ -46,16 +46,16 @@ That's all. The server validates the header on every request to `/mcp` and `/v1/
 Set the following environment variables:
 
 ```bash
-EXAMPLE_MCP_AUTH_MODE=oauth
-EXAMPLE_MCP_PUBLIC_URL=https://your-server.example.com   # public URL for OAuth callbacks
-EXAMPLE_MCP_GOOGLE_CLIENT_ID=...
-EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=...
-EXAMPLE_MCP_AUTH_ADMIN_EMAIL=you@example.com
+RTEMPLATE_MCP_AUTH_MODE=oauth
+RTEMPLATE_MCP_PUBLIC_URL=https://your-server.example.com   # public URL for OAuth callbacks
+RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
+RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
+RTEMPLATE_MCP_AUTH_ADMIN_EMAIL=you@example.com
 ```
 
 The server exposes standard OAuth discovery endpoints under `/mcp/.well-known/` that MCP clients can use for dynamic registration. Session cookies are disabled — all auth is via `Authorization` headers.
 
-OAuth and bearer token can coexist: set both `EXAMPLE_MCP_TOKEN` and the OAuth variables. When `EXAMPLE_MCP_TOKEN` is unset, OAuth mode accepts only OAuth-issued bearer JWTs.
+OAuth and bearer token can coexist: set both `RTEMPLATE_MCP_TOKEN` and the OAuth variables. When `RTEMPLATE_MCP_TOKEN` is unset, OAuth mode accepts only OAuth-issued bearer JWTs.
 
 ---
 
@@ -69,22 +69,22 @@ This is enforced by `server::resolve_auth_policy_kind()`. The exact error:
 Refusing to bind MCP server to 0.0.0.0 without authentication.
 
 Choose one of:
-1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1
-2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)
-3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth (+ OAuth credentials)
-4. Disable auth:        EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true
-5. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)
+1. Bind to loopback:    RTEMPLATE_MCP_HOST=127.0.0.1
+2. Set a bearer token:  RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)
+3. Enable OAuth:        RTEMPLATE_MCP_AUTH_MODE=oauth (+ OAuth credentials)
+4. Disable auth:        RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true
+5. Upstream gateway:    RTEMPLATE_NOAUTH=true  (if a proxy handles auth)
 ```
 
 The guard passes when any of the following is true:
 
 | Condition | Variable | Notes |
 |---|---|---|
-| Loopback bind | `EXAMPLE_MCP_HOST=127.0.0.1` | Trust boundary is the network address |
-| Bearer token set | `EXAMPLE_MCP_TOKEN=<token>` | Auth middleware enforces it |
-| OAuth enabled | `EXAMPLE_MCP_AUTH_MODE=oauth` | Auth middleware enforces it |
-| Auth disabled | `EXAMPLE_MCP_HOST=127.0.0.1` + `EXAMPLE_MCP_NO_AUTH=true` | Local dev — see below |
-| Gateway override | `EXAMPLE_NOAUTH=true` | Upstream handles auth — see below |
+| Loopback bind | `RTEMPLATE_MCP_HOST=127.0.0.1` | Trust boundary is the network address |
+| Bearer token set | `RTEMPLATE_MCP_TOKEN=<token>` | Auth middleware enforces it |
+| OAuth enabled | `RTEMPLATE_MCP_AUTH_MODE=oauth` | Auth middleware enforces it |
+| Auth disabled | `RTEMPLATE_MCP_HOST=127.0.0.1` + `RTEMPLATE_MCP_NO_AUTH=true` | Local dev — see below |
+| Gateway override | `RTEMPLATE_NOAUTH=true` | Upstream handles auth — see below |
 
 ---
 
@@ -94,10 +94,10 @@ For local development, disable auth entirely:
 
 ```bash
 just dev
-# equivalent to: EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run --bin example-server -- serve mcp
+# equivalent to: RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run --bin example-server -- serve mcp
 ```
 
-`EXAMPLE_MCP_NO_AUTH=true` is accepted only on a loopback bind. It sets the auth policy to `LoopbackDev`, removes the auth middleware, and requires no token for local calls.
+`RTEMPLATE_MCP_NO_AUTH=true` is accepted only on a loopback bind. It sets the auth policy to `LoopbackDev`, removes the auth middleware, and requires no token for local calls.
 
 **Do not use this in production.**
 
@@ -108,10 +108,10 @@ just dev
 If you deploy behind a gateway that handles authentication for all services (e.g. an MCP proxy that validates tokens before routing to this server), you can disable auth at the server level:
 
 ```bash
-EXAMPLE_NOAUTH=true         # acknowledge the startup guard that an upstream gateway handles auth
+RTEMPLATE_NOAUTH=true         # acknowledge the startup guard that an upstream gateway handles auth
 ```
 
-`EXAMPLE_NOAUTH=true` selects the explicit `TrustedGatewayUnscoped` policy. It removes the local auth middleware and scope checks, so only use it when a trusted upstream gateway enforces both authentication and authorization before traffic reaches this server.
+`RTEMPLATE_NOAUTH=true` selects the explicit `TrustedGatewayUnscoped` policy. It removes the local auth middleware and scope checks, so only use it when a trusted upstream gateway enforces both authentication and authorization before traffic reaches this server.
 
 ---
 
@@ -127,8 +127,8 @@ The `AuthPolicy` enum in `src/server.rs` controls what the router does:
 
 | Policy | When | Auth enforced? | Scope checks? |
 |---|---|---|---|
-| `LoopbackDev` | Loopback bind, or stdio mode. `EXAMPLE_MCP_NO_AUTH=true` also enables this policy for loopback development. | No | No |
-| `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `EXAMPLE_NOAUTH=true` | No | No |
+| `LoopbackDev` | Loopback bind, or stdio mode. `RTEMPLATE_MCP_NO_AUTH=true` also enables this policy for loopback development. | No | No |
+| `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `RTEMPLATE_NOAUTH=true` | No | No |
 | `Mounted { auth_state: None }` | Bearer-only mode | Yes (token) | Yes |
 | `Mounted { auth_state: Some(_) }` | OAuth mode (+ optional token) | Yes (OAuth / token) | Yes |
 
@@ -138,4 +138,4 @@ Public endpoints (`/health`, `/status`) are never gated by auth, regardless of p
 
 ## TEMPLATE
 
-When you adapt this template, replace all `EXAMPLE_` prefixes with your service's prefix throughout `src/config.rs`, `src/main.rs`, and this document.
+When you adapt this template, replace all `RTEMPLATE_` prefixes with your service's prefix throughout `src/config.rs`, `src/main.rs`, and this document.

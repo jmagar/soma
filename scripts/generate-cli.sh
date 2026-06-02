@@ -21,9 +21,9 @@ trap 'rm -f "$schema_json"' EXIT
 
 curl_headers=(-H "Accept: application/json, text/event-stream")
 mcporter_args=(generate-cli --command http://localhost:40060/mcp --name example-cli --output dist/example-cli)
-if [[ -n "${EXAMPLE_MCP_TOKEN:-}" ]]; then
-    curl_headers+=(-H "Authorization: Bearer ${EXAMPLE_MCP_TOKEN}")
-    mcporter_args+=(--header "Authorization: Bearer ${EXAMPLE_MCP_TOKEN}")
+if [[ -n "${RTEMPLATE_MCP_TOKEN:-}" ]]; then
+    curl_headers+=(-H "Authorization: Bearer ${RTEMPLATE_MCP_TOKEN}")
+    mcporter_args+=(--header "Authorization: Bearer ${RTEMPLATE_MCP_TOKEN}")
 fi
 
 if ! timeout 10 curl -sf "${curl_headers[@]}" \

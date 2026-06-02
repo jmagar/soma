@@ -10,7 +10,7 @@ CHECKS=0
 PASSED=0
 FAILED=0
 
-PLUGIN_ROOT="${PLUGIN_ROOT:-plugins/example}"
+PLUGIN_ROOT="${PLUGIN_ROOT:-plugins/rtemplate}"
 CLAUDE_PLUGIN_JSON="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
 CODEX_PLUGIN_JSON="${PLUGIN_ROOT}/.codex-plugin/plugin.json"
 GEMINI_EXTENSION_JSON="${PLUGIN_ROOT}/gemini-extension.json"
@@ -56,22 +56,22 @@ check "Claude plugin declares auth_mode default" "jq -er '.userConfig.auth_mode.
 
 check "Codex plugin manifest exists" "test -f '${CODEX_PLUGIN_JSON}'"
 check "Codex plugin manifest is valid JSON" "jq empty '${CODEX_PLUGIN_JSON}'"
-check "Codex plugin name is example-mcp" "test \"\$(jq -er '.name' '${CODEX_PLUGIN_JSON}')\" = 'example-mcp'"
+check "Codex plugin name is rtemplate-mcp" "test \"\$(jq -er '.name' '${CODEX_PLUGIN_JSON}')\" = 'rtemplate-mcp'"
 check "Codex plugin has no version field" "test \"\$(jq -er 'has(\"version\")' '${CODEX_PLUGIN_JSON}')\" = 'false'"
 check "Codex plugin points to MCP config" "test \"\$(jq -er '.mcpServers' '${CODEX_PLUGIN_JSON}')\" = './.mcp.json'"
 check "Codex plugin points to skills directory" "test \"\$(jq -er '.skills' '${CODEX_PLUGIN_JSON}')\" = './skills/'"
 
 check "Gemini extension manifest exists" "test -f '${GEMINI_EXTENSION_JSON}'"
 check "Gemini extension manifest is valid JSON" "jq empty '${GEMINI_EXTENSION_JSON}'"
-check "Gemini extension name is example-mcp" "test \"\$(jq -er '.name' '${GEMINI_EXTENSION_JSON}')\" = 'example-mcp'"
+check "Gemini extension name is rtemplate-mcp" "test \"\$(jq -er '.name' '${GEMINI_EXTENSION_JSON}')\" = 'rtemplate-mcp'"
 check "Gemini extension has no version field" "test \"\$(jq -er 'has(\"version\")' '${GEMINI_EXTENSION_JSON}')\" = 'false'"
 check "Gemini extension points to skills directory" "test \"\$(jq -er '.skills' '${GEMINI_EXTENSION_JSON}')\" = './skills'"
 check "Gemini MCP server is named example" "jq -er '.mcpServers.example' '${GEMINI_EXTENSION_JSON}'"
 check "Gemini MCP transport is stdio" "jq -er '.mcpServers.example.type == \"stdio\"' '${GEMINI_EXTENSION_JSON}'"
 check "Gemini MCP command uses bundled binary" "jq -er '.mcpServers.example.command == \"\${extensionPath}\${/}bin\${/}example\"' '${GEMINI_EXTENSION_JSON}'"
 check "Gemini MCP args run stdio mode" "jq -er '.mcpServers.example.args == [\"mcp\"]' '${GEMINI_EXTENSION_JSON}'"
-check "Gemini MCP env maps API URL" "jq -er '.mcpServers.example.env.EXAMPLE_API_URL == \"\${settings.example_api_url}\"' '${GEMINI_EXTENSION_JSON}'"
-check "Gemini MCP env maps API key" "jq -er '.mcpServers.example.env.EXAMPLE_API_KEY == \"\${settings.example_api_key}\"' '${GEMINI_EXTENSION_JSON}'"
+check "Gemini MCP env maps API URL" "jq -er '.mcpServers.example.env.RTEMPLATE_API_URL == \"\${settings.rtemplate_api_url}\"' '${GEMINI_EXTENSION_JSON}'"
+check "Gemini MCP env maps API key" "jq -er '.mcpServers.example.env.RTEMPLATE_API_KEY == \"\${settings.rtemplate_api_key}\"' '${GEMINI_EXTENSION_JSON}'"
 
 check "MCP config exists" "test -f '${MCP_JSON}'"
 check "MCP config is valid JSON" "jq empty '${MCP_JSON}'"
@@ -79,8 +79,8 @@ check "MCP server is named example" "jq -er '.mcpServers.example' '${MCP_JSON}'"
 check "MCP transport is stdio" "jq -er '.mcpServers.example.type == \"stdio\"' '${MCP_JSON}'"
 check "MCP command uses bundled binary" "jq -er '.mcpServers.example.command == \"\${CLAUDE_PLUGIN_ROOT}/bin/example\"' '${MCP_JSON}'"
 check "MCP args run stdio mode" "jq -er '.mcpServers.example.args == [\"mcp\"]' '${MCP_JSON}'"
-check "MCP env maps API URL" "jq -er '.mcpServers.example.env.EXAMPLE_API_URL == \"\${user_config.example_api_url}\"' '${MCP_JSON}'"
-check "MCP env maps API key" "jq -er '.mcpServers.example.env.EXAMPLE_API_KEY == \"\${user_config.example_api_key}\"' '${MCP_JSON}'"
+check "MCP env maps API URL" "jq -er '.mcpServers.example.env.RTEMPLATE_API_URL == \"\${user_config.rtemplate_api_url}\"' '${MCP_JSON}'"
+check "MCP env maps API key" "jq -er '.mcpServers.example.env.RTEMPLATE_API_KEY == \"\${user_config.rtemplate_api_key}\"' '${MCP_JSON}'"
 check "Plugin packaged stdio MCP smoke passes" "PLUGIN_ROOT='${PLUGIN_ROOT}' bash scripts/check-plugin-stdio-smoke.sh"
 
 check "hooks config exists" "test -f '${HOOKS_JSON}'"

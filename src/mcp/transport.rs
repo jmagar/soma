@@ -77,7 +77,7 @@ pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
 }
 
 fn push_configured_origin(origins: &mut Vec<String>, origin: &str) {
-    let Some(origin) = extract_configured_origin_with_label(origin, "EXAMPLE_MCP_ALLOWED_ORIGINS")
+    let Some(origin) = extract_configured_origin_with_label(origin, "RTEMPLATE_MCP_ALLOWED_ORIGINS")
     else {
         return;
     };
@@ -109,7 +109,7 @@ fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
     let Ok(parsed) = url::Url::parse(url) else {
         tracing::warn!(
             public_url = url,
-            "EXAMPLE_MCP_PUBLIC_URL is not a valid URL"
+            "RTEMPLATE_MCP_PUBLIC_URL is not a valid URL"
         );
         return;
     };
@@ -119,7 +119,7 @@ fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
     if host.contains('*') {
         tracing::warn!(
             host,
-            "EXAMPLE_MCP_PUBLIC_URL host contains wildcard; skipping"
+            "RTEMPLATE_MCP_PUBLIC_URL host contains wildcard; skipping"
         );
         return;
     }
@@ -156,7 +156,7 @@ fn has_port(host: &str) -> bool {
 }
 
 fn extract_origin(url: &str) -> Option<String> {
-    extract_origin_with_label(url, "EXAMPLE_MCP_PUBLIC_URL")
+    extract_origin_with_label(url, "RTEMPLATE_MCP_PUBLIC_URL")
 }
 
 fn extract_origin_with_label(url: &str, label: &'static str) -> Option<String> {

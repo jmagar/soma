@@ -1,10 +1,10 @@
 {
-  "name": "example",
+  "name": "rtemplate",
   "description": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server \u2014 a Rust-based MCP server built from rmcp-template.",
   "author": {
     "name": "your-username"
   },
-  "repository": "https://github.com/your-org/example-mcp",
+  "repository": "https://github.com/your-org/rtemplate-mcp",
   "license": "MIT",
   "keywords": [
     "example",
@@ -31,7 +31,7 @@
     "api_token": {
       "type": "string",
       "title": "API token",
-      "description": "Optional bearer token for HTTP MCP fallback. Not used by the default stdio connection. Server mode: pick any value and use the same value in EXAMPLE_MCP_TOKEN. Generate one with: openssl rand -hex 32 or just gen-token.",
+      "description": "Optional bearer token for HTTP MCP fallback. Not used by the default stdio connection. Server mode: pick any value and use the same value in RTEMPLATE_MCP_TOKEN. Generate one with: openssl rand -hex 32 or just gen-token.",
       "sensitive": true,
       "required": false
     },
@@ -75,17 +75,17 @@
       "description": "Bootstrap allowed Google account for OAuth mode. The server refuses to start OAuth mode without at least one allowlisted email address. Server mode only.",
       "default": ""
     },
-    "example_api_url": {
+    "rtemplate_api_url": {
       "type": "string",
       "title": "Service API URL",
-      "description": "TEMPLATE: Replace 'example_api_url' with your service's credential field name (e.g. 'myservice_api_url'). For platform servers, this is the deployed REST API base URL used by the local stdio adapter. For upstream-client servers, this is the upstream service endpoint. Maps to EXAMPLE_API_URL env var.",
+      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name (e.g. 'myservice_api_url'). For platform servers, this is the deployed REST API base URL used by the local stdio adapter. For upstream-client servers, this is the upstream service endpoint. Maps to RTEMPLATE_API_URL env var.",
       "sensitive": true,
       "default": ""
     },
-    "example_api_key": {
+    "rtemplate_api_key": {
       "type": "string",
       "title": "Service API key",
-      "description": "TEMPLATE: Replace 'example_api_key' with your service's credential field name (e.g. 'myservice_api_key'). API key or bearer token for authenticating to your upstream service. Maps to EXAMPLE_API_KEY env var. Never stored in config.toml.",
+      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name (e.g. 'myservice_api_key'). API key or bearer token for authenticating to your upstream service. Maps to RTEMPLATE_API_KEY env var. Never stored in config.toml.",
       "sensitive": true,
       "default": ""
     }

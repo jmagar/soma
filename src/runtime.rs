@@ -43,7 +43,7 @@ pub async fn serve_http_mcp() -> Result<()> {
         bind = %state.config.bind_addr(),
         server_name = %state.config.server_name,
         auth = ?state.auth_policy,
-        "example-mcp starting"
+        "rtemplate-mcp starting"
     );
 
     let bind = state.config.bind_addr();
@@ -78,7 +78,7 @@ pub async fn serve_stdio_mcp() -> Result<()> {
 /// Dispatch CLI subcommands.
 pub async fn run_cli() -> Result<()> {
     let parsed = cli::parse_args()?;
-    // Translate CLAUDE_PLUGIN_OPTION_* into EXAMPLE_* env vars BEFORE Config::load()
+    // Translate CLAUDE_PLUGIN_OPTION_* into RTEMPLATE_* env vars BEFORE Config::load()
     // so the plugin hook can call the binary directly (no plugin-setup.sh wrapper).
     if matches!(
         parsed,
@@ -120,7 +120,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
         AuthPolicyKind::MountedBearer => Ok(AuthPolicy::Mounted { auth_state: None }),
         AuthPolicyKind::MountedOAuth => {
             let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
-                .env_prefix("EXAMPLE_MCP")
+                .env_prefix("RTEMPLATE_MCP")
                 .session_cookie_name("example_mcp_session")
                 .scopes_supported(vec![
                     crate::actions::READ_SCOPE.into(),

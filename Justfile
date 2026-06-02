@@ -14,9 +14,9 @@ default:
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
-# WARNING: EXAMPLE_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
+# WARNING: RTEMPLATE_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
 dev:
-    EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true cargo run --bin rtemplate-server -- serve mcp
+    RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run --bin rtemplate-server -- serve mcp
 
 # Run in stdio MCP transport mode (for Claude Desktop or direct pipe)
 mcp:
@@ -267,7 +267,7 @@ uninstall-hooks:
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
-# Generate a cryptographically random bearer token for EXAMPLE_MCP_TOKEN
+# Generate a cryptographically random bearer token for RTEMPLATE_MCP_TOKEN
 # Copy the output into your .env file
 gen-token:
     openssl rand -hex 32
@@ -281,7 +281,7 @@ setup:
 
 # Build the Docker image from source (does not start the container)
 docker-build:
-    docker build -f config/Dockerfile -t example-mcp .
+    docker build -f config/Dockerfile -t rtemplate-mcp .
 
 # Start the Docker Compose stack in detached mode
 # TEMPLATE: The compose file references the "jakenet" external network.
@@ -337,13 +337,13 @@ runtime-current:
 auth-smoke:
     bash scripts/test-mcp-auth.sh
 
-# Call the status action via the REST API (requires EXAMPLE_MCP_TOKEN in env)
+# Call the status action via the REST API (requires RTEMPLATE_MCP_TOKEN in env)
 status:
     #!/usr/bin/env bash
     set -euo pipefail
-    TOKEN="${EXAMPLE_MCP_TOKEN:-}"
+    TOKEN="${RTEMPLATE_MCP_TOKEN:-}"
     if [[ -z "${TOKEN}" ]]; then
-        echo "Set EXAMPLE_MCP_TOKEN or use 'just dev' (no-auth mode)"
+        echo "Set RTEMPLATE_MCP_TOKEN or use 'just dev' (no-auth mode)"
         exit 1
     fi
     curl -sf http://localhost:40060/mcp \
@@ -368,10 +368,10 @@ build-plugin: build-local-release
     if [ ! -x "${target_dir}/release/rtemplate" ] && [ -x ".cache/cargo/release/rtemplate" ]; then
         target_dir=".cache/cargo"
     fi
-    mkdir -p bin plugins/example/bin
+    mkdir -p bin plugins/rtemplate/bin
     install -m 755 "${target_dir}/release/rtemplate" bin/rtemplate
-    install -m 755 "${target_dir}/release/rtemplate" plugins/example/bin/rtemplate
-    echo "Installed bin/rtemplate and plugins/example/bin/rtemplate"
+    install -m 755 "${target_dir}/release/rtemplate" plugins/rtemplate/bin/rtemplate
+    echo "Installed bin/rtemplate and plugins/rtemplate/bin/rtemplate"
 
 # Install the release binary into bin/ (alias for build-plugin kept for compatibility)
 install: build-plugin

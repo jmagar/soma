@@ -26,7 +26,7 @@ description: TEMPLATE SKILL — Replace this description with your service's tri
 # Example Skill
 
 <!-- TEMPLATE: Replace this paragraph with your service description -->
-Rust-based MCP server template. Exposes a single `example` MCP tool with action-based dispatch for interacting with an example remote service. The plugin default is local stdio MCP (`bin/example mcp`); for platform deployments the local adapter calls the deployed API configured by `example_api_url`.
+Rust-based MCP server template. Exposes a single `example` MCP tool with action-based dispatch for interacting with an example remote service. The plugin default is local stdio MCP (`bin/example mcp`); for platform deployments the local adapter calls the deployed API configured by `rtemplate_api_url`.
 
 ## Tool
 
@@ -98,7 +98,7 @@ mcp__example__example(action="echo", message="Hello, world!")
 
 ### `action="status"` — Server status
 
-No parameters. Returns status from the local stub or from the deployed API when `example_api_url` / `EXAMPLE_API_URL` is configured.
+No parameters. Returns status from the local stub or from the deployed API when `rtemplate_api_url` / `RTEMPLATE_API_URL` is configured.
 
 ```
 mcp__example__example(action="status")
@@ -219,8 +219,8 @@ Use only when the stdio MCP tool is unavailable or when debugging a remote HTTP
 deployment. The plugin default launches `${CLAUDE_PLUGIN_ROOT}/bin/example mcp`
 and passes:
 
-- `CLAUDE_PLUGIN_OPTION_EXAMPLE_API_URL` — deployed platform API or upstream URL
-- `CLAUDE_PLUGIN_OPTION_EXAMPLE_API_KEY` — deployed API bearer token or upstream key
+- `CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL` — deployed platform API or upstream URL
+- `CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_KEY` — deployed API bearer token or upstream key
 
 For HTTP fallback, configure:
 

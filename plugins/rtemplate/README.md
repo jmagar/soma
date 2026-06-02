@@ -4,14 +4,14 @@ Multi-platform plugin package that connects Claude Code, Codex, and Gemini CLI t
 
 The default MCP connection is the bundled local stdio adapter:
 `${CLAUDE_PLUGIN_ROOT}/bin/example mcp`. For platform deployments, set
-`example_api_url` to the deployed `example-server` REST API base URL so the local
+`rtemplate_api_url` to the deployed `example-server` REST API base URL so the local
 adapter forwards business actions to that API. HTTP MCP remains available as a
 manual fallback for remote/gateway deployments.
 
 ## Structure
 
 ```
-plugins/example/
+plugins/rtemplate/
 ├── .claude-plugin/
 │   └── plugin.json         # Claude Code manifest
 ├── .codex-plugin/
@@ -55,8 +55,8 @@ stdio mode and passes the user-configured API target into the child process:
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
       "args": ["mcp"],
       "env": {
-        "EXAMPLE_API_URL": "${user_config.example_api_url}",
-        "EXAMPLE_API_KEY": "${user_config.example_api_key}",
+        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
+        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
         "RUST_LOG": "warn"
       }
     }
@@ -73,7 +73,7 @@ from each platform's user-configurable settings at runtime.
 
 `hooks/hooks.json` runs `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly on `SessionStart` and `ConfigChange` (no shell wrapper).
 
-The binary maps plugin settings (`CLAUDE_PLUGIN_OPTION_*`) to its `EXAMPLE_*` environment variables via `apply_plugin_options()` (`src/cli/setup.rs`), self-installs into `~/.local/bin`, prepares appdata, and runs setup checks/repair.
+The binary maps plugin settings (`CLAUDE_PLUGIN_OPTION_*`) to its `RTEMPLATE_*` environment variables via `apply_plugin_options()` (`src/cli/setup.rs`), self-installs into `~/.local/bin`, prepares appdata, and runs setup checks/repair.
 
 ## Monitors
 
@@ -96,7 +96,7 @@ The monitor emits only on state transitions — Claude is not notified while the
 The command references `${CLAUDE_PLUGIN_ROOT}/bin/example` — populate `bin/` before installing the plugin:
 
 ```bash
-just install   # builds release binary and copies to plugins/example/bin/example
+just install   # builds release binary and copies to plugins/rtemplate/bin/example
 ```
 
 Disabling the plugin mid-session does not stop an already-running monitor; it stops when the session ends.
@@ -107,10 +107,10 @@ Disabling the plugin mid-session does not stop an already-running monitor; it st
 
 ## TEMPLATE checklist
 
-1. Replace every `example` / `Example` / `EXAMPLE_` identifier with your service name
+1. Replace every `example` / `Example` / `RTEMPLATE_` identifier with your service name
 2. Update `userConfig` / `settings` in all three manifests to match your service's credentials
 3. Update `skills/example/SKILL.md` — action table, parameters, response shapes, workflows
 4. Set `brandColor` and `defaultPrompt` in `.codex-plugin/plugin.json`
 5. Keep `.mcp.json` stdio-first unless your service must be remote HTTP only
-6. Update `apply_plugin_options()` in `src/cli/setup.rs` to map your service's plugin options to its `EXAMPLE_*` vars
+6. Update `apply_plugin_options()` in `src/cli/setup.rs` to map your service's plugin options to its `RTEMPLATE_*` vars
 7. Run `cargo xtask symlink-docs` after adding any new `CLAUDE.md`

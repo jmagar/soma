@@ -68,13 +68,13 @@ pub enum AuthPolicyKind {
     MountedOAuth,
 }
 
-/// Read EXAMPLE_NOAUTH from the environment directly.
+/// Read RTEMPLATE_NOAUTH from the environment directly.
 ///
 /// Prefer `config.mcp.trusted_gateway` (loaded via `Config::load`) when a
 /// typed config is available. This function exists for call sites that need the
 /// value before config is fully loaded (e.g. early startup guards).
 pub fn trusted_gateway_from_env() -> bool {
-    std::env::var("EXAMPLE_NOAUTH")
+    std::env::var("RTEMPLATE_NOAUTH")
         .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
         .unwrap_or(false)
 }
@@ -99,10 +99,10 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
             return Ok(AuthPolicyKind::TrustedGatewayUnscoped);
         }
         anyhow::bail!(
-            "Refusing to bind MCP server to {} with EXAMPLE_MCP_NO_AUTH=true.\n\
+            "Refusing to bind MCP server to {} with RTEMPLATE_MCP_NO_AUTH=true.\n\
              \n\
-             EXAMPLE_MCP_NO_AUTH is only allowed on loopback binds. For a trusted \
-             upstream proxy deployment, also set EXAMPLE_NOAUTH=true.",
+             RTEMPLATE_MCP_NO_AUTH is only allowed on loopback binds. For a trusted \
+             upstream proxy deployment, also set RTEMPLATE_NOAUTH=true.",
             config.mcp.host
         );
     }
@@ -118,13 +118,13 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
             "Refusing to bind MCP server to {} without authentication.\n\
              \n\
              Choose one of:\n\
-             1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1\n\
-             2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)\n\
-             3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth (+ OAuth credentials)\n\
-             4. Local no-auth dev:   EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_NO_AUTH=true\n\
-             5. Upstream gateway:    EXAMPLE_NOAUTH=true  (if a proxy handles auth)\n\
+             1. Bind to loopback:    RTEMPLATE_MCP_HOST=127.0.0.1\n\
+             2. Set a bearer token:  RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)\n\
+             3. Enable OAuth:        RTEMPLATE_MCP_AUTH_MODE=oauth (+ OAuth credentials)\n\
+             4. Local no-auth dev:   RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true\n\
+             5. Upstream gateway:    RTEMPLATE_NOAUTH=true  (if a proxy handles auth)\n\
              \n\
-             TEMPLATE: Replace EXAMPLE_ prefix with your service's prefix throughout.",
+             TEMPLATE: Replace RTEMPLATE_ prefix with your service's prefix throughout.",
             config.mcp.host
         );
     }
@@ -135,12 +135,12 @@ fn validate_public_url(config: &Config) -> Result<()> {
         return Ok(());
     };
     let parsed = url::Url::parse(public_url)
-        .map_err(|error| anyhow::anyhow!("EXAMPLE_MCP_PUBLIC_URL is invalid: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("RTEMPLATE_MCP_PUBLIC_URL is invalid: {error}"))?;
     let Some(host) = parsed.host_str() else {
-        anyhow::bail!("EXAMPLE_MCP_PUBLIC_URL must include a host");
+        anyhow::bail!("RTEMPLATE_MCP_PUBLIC_URL must include a host");
     };
     if host.contains('*') {
-        anyhow::bail!("EXAMPLE_MCP_PUBLIC_URL must not contain wildcard hosts");
+        anyhow::bail!("RTEMPLATE_MCP_PUBLIC_URL must not contain wildcard hosts");
     }
     Ok(())
 }
@@ -222,7 +222,7 @@ pub fn build_auth_layer(
             if static_token.is_none() && auth_state.is_none() {
                 tracing::warn!(
                     "auth layer mounted but no static_token or auth_state configured — \
-                     all requests will be rejected; set EXAMPLE_MCP_TOKEN or configure OAuth"
+                     all requests will be rejected; set RTEMPLATE_MCP_TOKEN or configure OAuth"
                 );
             }
             Some(

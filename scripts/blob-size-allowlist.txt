@@ -6,4 +6,4 @@
 # docs/references/**/*.md
 
 # Plugin build embeds a platform binary for plugin distribution.
-plugins/example/bin/*
+plugins/rtemplate/bin/*

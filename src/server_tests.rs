@@ -25,7 +25,7 @@ fn non_loopback_no_auth_without_gateway_is_rejected() {
     let mut config = config("0.0.0.0");
     config.mcp.no_auth = true;
     let error = resolve_auth_policy_kind(&config, false).unwrap_err();
-    assert!(error.to_string().contains("EXAMPLE_MCP_NO_AUTH=true"));
+    assert!(error.to_string().contains("RTEMPLATE_MCP_NO_AUTH=true"));
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn invalid_public_url_is_rejected() {
     let error = resolve_auth_policy_kind(&config, true).unwrap_err();
     assert!(error
         .to_string()
-        .contains("EXAMPLE_MCP_PUBLIC_URL is invalid"));
+        .contains("RTEMPLATE_MCP_PUBLIC_URL is invalid"));
 }
 
 #[test]
@@ -94,5 +94,5 @@ fn wildcard_public_url_is_rejected() {
     let error = resolve_auth_policy_kind(&config, true).unwrap_err();
     assert!(error
         .to_string()
-        .contains("EXAMPLE_MCP_PUBLIC_URL must not contain wildcard hosts"));
+        .contains("RTEMPLATE_MCP_PUBLIC_URL must not contain wildcard hosts"));
 }

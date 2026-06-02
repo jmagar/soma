@@ -112,7 +112,7 @@ include_dir = { version = "0.7", optional = true }
 
 ## Runtime configuration
 
-`apps/web/lib/template.ts` defines the service display name, endpoints, and optional API base URL. `NEXT_PUBLIC_EXAMPLE_API_BASE_URL` should be empty by default so the UI uses same-origin API calls when served by the Rust binary.
+`apps/web/lib/template.ts` defines the service display name, endpoints, and optional API base URL. `NEXT_PUBLIC_RTEMPLATE_API_BASE_URL` should be empty by default so the UI uses same-origin API calls when served by the Rust binary.
 
 Use `apps/web/.env.example` for local web development overrides only.
 

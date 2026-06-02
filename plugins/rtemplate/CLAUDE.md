@@ -1,4 +1,4 @@
-# plugins/example — Claude Code instructions
+# plugins/rtemplate — Claude Code instructions
 
 ## What this directory is
 
@@ -34,7 +34,7 @@ server. The binary must exist at that path before the plugin is installed.
 Populate it with:
 
 ```bash
-just install   # cargo build --release, then copies to plugins/example/bin/example
+just install   # cargo build --release, then copies to plugins/rtemplate/bin/example
 ```
 
 `monitors/monitors.json` is optional and only useful for HTTP deployments. Its
@@ -54,7 +54,7 @@ The three-tier structure must be preserved:
 
 ## Updating the plugin option mapping
 
-`apply_plugin_options()` in `src/cli/setup.rs` reads `CLAUDE_PLUGIN_OPTION_*` env vars that map to the `userConfig` fields in `plugin.json`, translating them into the binary's `EXAMPLE_*` vars before `Config::load()`. When you add or rename a `userConfig` field, update the mapping table in that function to match. (This replaces the former `plugin-setup.sh` wrapper, which has been removed.)
+`apply_plugin_options()` in `src/cli/setup.rs` reads `CLAUDE_PLUGIN_OPTION_*` env vars that map to the `userConfig` fields in `plugin.json`, translating them into the binary's `RTEMPLATE_*` vars before `Config::load()`. When you add or rename a `userConfig` field, update the mapping table in that function to match. (This replaces the former `plugin-setup.sh` wrapper, which has been removed.)
 
 Sensitive fields declared `"sensitive": true` in `plugin.json` are available as env vars in hooks but are **never** substituted into skill content.
 
@@ -62,7 +62,7 @@ Sensitive fields declared `"sensitive": true` in `plugin.json` are available as 
 
 When renaming `example` → your service:
 
-1. Replace all `example` / `Example` / `EXAMPLE_` identifiers in every file in this directory.
+1. Replace all `example` / `Example` / `RTEMPLATE_` identifiers in every file in this directory.
 2. Rename `skills/example/` to `skills/<your-service>/`.
-3. Update `apply_plugin_options()` in `src/cli/setup.rs` — its mapping table maps `CLAUDE_PLUGIN_OPTION_*` to your service's actual `EXAMPLE_*` vars.
+3. Update `apply_plugin_options()` in `src/cli/setup.rs` — its mapping table maps `CLAUDE_PLUGIN_OPTION_*` to your service's actual `RTEMPLATE_*` vars.
 4. Keep the no-version rule: do not add `"version"` to any manifest.

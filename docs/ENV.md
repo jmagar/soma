@@ -15,40 +15,40 @@ last_reviewed: "2026-05-15"
 
 # Environment variables
 
-The template uses `EXAMPLE_*` variables. Rename the prefix when adapting the template.
+The template uses `RTEMPLATE_*` variables. Rename the prefix when adapting the template.
 
 ## API target
 
 | Variable | Purpose |
 |---|---|
-| `EXAMPLE_API_URL` | Deployed platform API or upstream API base URL used by `ExampleClient`. Empty selects offline template stub mode. |
-| `EXAMPLE_API_KEY` | Bearer token or upstream API key. Keep secret. Required when the deployed API requires auth. |
+| `RTEMPLATE_API_URL` | Deployed platform API or upstream API base URL used by `ExampleClient`. Empty selects offline template stub mode. |
+| `RTEMPLATE_API_KEY` | Bearer token or upstream API key. Keep secret. Required when the deployed API requires auth. |
 
 ## MCP HTTP server
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `EXAMPLE_MCP_HOST` | `127.0.0.1` | Bind host for HTTP transport. Set `0.0.0.0` only with bearer, OAuth, or trusted-gateway auth configured. |
-| `EXAMPLE_MCP_PORT` | `40060` | Bind port for HTTP transport. |
-| `EXAMPLE_MCP_NO_AUTH` | `false` | Disable local auth for loopback development only. |
-| `EXAMPLE_NOAUTH` | `false` | Trusted-gateway no-auth mode for non-loopback deployments. |
-| `EXAMPLE_MCP_TOKEN` | unset | Static bearer token. Required for bearer-only mounted HTTP. |
-| `EXAMPLE_MCP_ALLOWED_HOSTS` | unset | Extra accepted Host header values (comma-separated). |
-| `EXAMPLE_MCP_ALLOWED_ORIGINS` | unset | Extra CORS origins (comma-separated). |
-| `EXAMPLE_MCP_PUBLIC_URL` | unset | Public URL used for OAuth metadata endpoints. |
-| `EXAMPLE_MCP_AUTH_MODE` | `bearer` | `bearer` or `oauth`. |
+| `RTEMPLATE_MCP_HOST` | `127.0.0.1` | Bind host for HTTP transport. Set `0.0.0.0` only with bearer, OAuth, or trusted-gateway auth configured. |
+| `RTEMPLATE_MCP_PORT` | `40060` | Bind port for HTTP transport. |
+| `RTEMPLATE_MCP_NO_AUTH` | `false` | Disable local auth for loopback development only. |
+| `RTEMPLATE_NOAUTH` | `false` | Trusted-gateway no-auth mode for non-loopback deployments. |
+| `RTEMPLATE_MCP_TOKEN` | unset | Static bearer token. Required for bearer-only mounted HTTP. |
+| `RTEMPLATE_MCP_ALLOWED_HOSTS` | unset | Extra accepted Host header values (comma-separated). |
+| `RTEMPLATE_MCP_ALLOWED_ORIGINS` | unset | Extra CORS origins (comma-separated). |
+| `RTEMPLATE_MCP_PUBLIC_URL` | unset | Public URL used for OAuth metadata endpoints. |
+| `RTEMPLATE_MCP_AUTH_MODE` | `bearer` | `bearer` or `oauth`. |
 
 ## OAuth mode
 
-Only required when `EXAMPLE_MCP_AUTH_MODE=oauth`:
+Only required when `RTEMPLATE_MCP_AUTH_MODE=oauth`:
 
 | Variable | Purpose |
 |---|---|
-| `EXAMPLE_MCP_GOOGLE_CLIENT_ID` | Google OAuth client ID. |
-| `EXAMPLE_MCP_GOOGLE_CLIENT_SECRET` | Google OAuth client secret. |
-| `EXAMPLE_MCP_AUTH_ADMIN_EMAIL` | Initial/admin email allowed by the OAuth flow. |
-| `EXAMPLE_MCP_AUTH_SQLITE_PATH` | OAuth session/client database path. Defaults to `/data/auth.db`. |
-| `EXAMPLE_MCP_AUTH_KEY_PATH` | RS256 signing key path. Defaults to `/data/auth-jwt.pem`. |
+| `RTEMPLATE_MCP_GOOGLE_CLIENT_ID` | Google OAuth client ID. |
+| `RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET` | Google OAuth client secret. |
+| `RTEMPLATE_MCP_AUTH_ADMIN_EMAIL` | Initial/admin email allowed by the OAuth flow. |
+| `RTEMPLATE_MCP_AUTH_SQLITE_PATH` | OAuth session/client database path. Defaults to `/data/auth.db`. |
+| `RTEMPLATE_MCP_AUTH_KEY_PATH` | RS256 signing key path. Defaults to `/data/auth-jwt.pem`. |
 
 ## Docker runtime
 
@@ -71,15 +71,15 @@ Only required when `EXAMPLE_MCP_AUTH_MODE=oauth`:
 
 ```bash
 # .env — secrets and URLs ONLY
-EXAMPLE_API_URL=https://example.internal/api
-EXAMPLE_API_KEY=your_api_key_here
+RTEMPLATE_API_URL=https://example.internal/api
+RTEMPLATE_API_KEY=your_api_key_here
 
 # MCP auth
-EXAMPLE_MCP_TOKEN=your_bearer_token_here
+RTEMPLATE_MCP_TOKEN=your_bearer_token_here
 
 # OAuth (only when auth_mode=oauth in config.toml)
-# EXAMPLE_MCP_GOOGLE_CLIENT_ID=...
-# EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=...
+# RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
+# RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
 
 # Docker runtime
 PUID=1000

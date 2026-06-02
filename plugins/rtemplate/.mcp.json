@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "rtemplate": {
+      "type": "stdio",
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/rtemplate",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
+        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
+        "RUST_LOG": "warn"
+      }
+    }
+  }
+}

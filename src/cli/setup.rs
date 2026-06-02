@@ -27,7 +27,7 @@ pub enum SetupCommand {
 }
 
 /// Translate Claude Code plugin options (`CLAUDE_PLUGIN_OPTION_*`) into the
-/// `EXAMPLE_*` process env vars the binary reads, before `Config::load()` runs.
+/// `RTEMPLATE_*` process env vars the binary reads, before `Config::load()` runs.
 ///
 /// This replaces the former `plugin-setup.sh` wrapper: the binary now owns the
 /// env-var mapping itself, so the plugin hook can invoke the binary directly.
@@ -35,26 +35,26 @@ pub enum SetupCommand {
 /// `reject_unsafe_value` guard. Only applied on the plugin-hook path, matching
 /// the script's scope.
 pub fn apply_plugin_options() {
-    // CLAUDE_PLUGIN_OPTION_<OPT> -> <EXAMPLE_ENVVAR>
+    // CLAUDE_PLUGIN_OPTION_<OPT> -> <RTEMPLATE_ENVVAR>
     let map = [
-        ("CLAUDE_PLUGIN_OPTION_API_TOKEN", "EXAMPLE_MCP_TOKEN"),
-        ("CLAUDE_PLUGIN_OPTION_SERVER_URL", "EXAMPLE_SERVER_URL"),
-        ("CLAUDE_PLUGIN_OPTION_EXAMPLE_API_URL", "EXAMPLE_API_URL"),
-        ("CLAUDE_PLUGIN_OPTION_EXAMPLE_API_KEY", "EXAMPLE_API_KEY"),
-        ("CLAUDE_PLUGIN_OPTION_AUTH_MODE", "EXAMPLE_MCP_AUTH_MODE"),
-        ("CLAUDE_PLUGIN_OPTION_NO_AUTH", "EXAMPLE_MCP_NO_AUTH"),
-        ("CLAUDE_PLUGIN_OPTION_PUBLIC_URL", "EXAMPLE_MCP_PUBLIC_URL"),
+        ("CLAUDE_PLUGIN_OPTION_API_TOKEN", "RTEMPLATE_MCP_TOKEN"),
+        ("CLAUDE_PLUGIN_OPTION_SERVER_URL", "RTEMPLATE_SERVER_URL"),
+        ("CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL", "RTEMPLATE_API_URL"),
+        ("CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_KEY", "RTEMPLATE_API_KEY"),
+        ("CLAUDE_PLUGIN_OPTION_AUTH_MODE", "RTEMPLATE_MCP_AUTH_MODE"),
+        ("CLAUDE_PLUGIN_OPTION_NO_AUTH", "RTEMPLATE_MCP_NO_AUTH"),
+        ("CLAUDE_PLUGIN_OPTION_PUBLIC_URL", "RTEMPLATE_MCP_PUBLIC_URL"),
         (
             "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_ID",
-            "EXAMPLE_MCP_GOOGLE_CLIENT_ID",
+            "RTEMPLATE_MCP_GOOGLE_CLIENT_ID",
         ),
         (
             "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET",
-            "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET",
+            "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET",
         ),
         (
             "CLAUDE_PLUGIN_OPTION_AUTH_ADMIN_EMAIL",
-            "EXAMPLE_MCP_AUTH_ADMIN_EMAIL",
+            "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL",
         ),
     ];
     for (opt, dest) in map {
@@ -226,14 +226,14 @@ fn setup_check(config: &Config, no_repair: bool) -> SetupReport {
     }
     if config.example.api_url.is_empty() {
         report.blocking_failures.push(SetupFailure {
-            code: "missing_example_api_url",
-            message: "EXAMPLE_API_URL is required".into(),
+            code: "missing_rtemplate_api_url",
+            message: "RTEMPLATE_API_URL is required".into(),
         });
     }
     if config.example.api_key.is_empty() {
         report.blocking_failures.push(SetupFailure {
-            code: "missing_example_api_key",
-            message: "EXAMPLE_API_KEY is required".into(),
+            code: "missing_rtemplate_api_key",
+            message: "RTEMPLATE_API_KEY is required".into(),
         });
     }
 
@@ -291,30 +291,30 @@ fn check_auth(config: &Config, report: &mut SetupReport) {
             report,
             &config.mcp.auth.public_url,
             "missing_oauth_public_url",
-            "EXAMPLE_MCP_PUBLIC_URL is required for OAuth mode",
+            "RTEMPLATE_MCP_PUBLIC_URL is required for OAuth mode",
         );
         require_oauth_field(
             report,
             &config.mcp.auth.google_client_id,
             "missing_oauth_client_id",
-            "EXAMPLE_MCP_GOOGLE_CLIENT_ID is required for OAuth mode",
+            "RTEMPLATE_MCP_GOOGLE_CLIENT_ID is required for OAuth mode",
         );
         require_oauth_field(
             report,
             &config.mcp.auth.google_client_secret,
             "missing_oauth_client_secret",
-            "EXAMPLE_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode",
+            "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode",
         );
         require_oauth_field(
             report,
             &Some(config.mcp.auth.admin_email.clone()),
             "missing_oauth_admin_email",
-            "EXAMPLE_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode",
+            "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode",
         );
     } else if config.mcp.api_token.as_deref().unwrap_or("").is_empty() {
         report.blocking_failures.push(SetupFailure {
             code: "missing_mcp_token",
-            message: "EXAMPLE_MCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
+            message: "RTEMPLATE_MCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
         });
     }
 }
@@ -329,12 +329,12 @@ fn check_port(host: &str, port: u16, report: &mut SetupReport) {
 }
 
 fn setup_data_dir() -> anyhow::Result<PathBuf> {
-    // L11: setup_data_dir uses CLAUDE_PLUGIN_DATA/EXAMPLE_HOME while Config::load
+    // L11: setup_data_dir uses CLAUDE_PLUGIN_DATA/RTEMPLATE_HOME while Config::load
     // searches ~/.example/config.toml first. In the plugin context CLAUDE_PLUGIN_DATA
     // and the config search path should coincide, but they can diverge in non-standard
     // deployments. TEMPLATE: align these when adapting the template.
     if let Some(val) =
-        std::env::var_os("CLAUDE_PLUGIN_DATA").or_else(|| std::env::var_os("EXAMPLE_HOME"))
+        std::env::var_os("CLAUDE_PLUGIN_DATA").or_else(|| std::env::var_os("RTEMPLATE_HOME"))
     {
         return Ok(PathBuf::from(val));
     }
@@ -343,30 +343,30 @@ fn setup_data_dir() -> anyhow::Result<PathBuf> {
 
 fn write_env(data_dir: &Path, config: &Config) -> Result<()> {
     let mut lines = vec![
-        dotenv_assignment("EXAMPLE_API_URL", &config.example.api_url)?,
-        dotenv_assignment("EXAMPLE_API_KEY", &config.example.api_key)?,
-        dotenv_assignment("EXAMPLE_MCP_HOST", &config.mcp.host)?,
-        dotenv_assignment("EXAMPLE_MCP_PORT", &config.mcp.port.to_string())?,
-        dotenv_assignment("EXAMPLE_MCP_NO_AUTH", &config.mcp.no_auth.to_string())?,
+        dotenv_assignment("RTEMPLATE_API_URL", &config.example.api_url)?,
+        dotenv_assignment("RTEMPLATE_API_KEY", &config.example.api_key)?,
+        dotenv_assignment("RTEMPLATE_MCP_HOST", &config.mcp.host)?,
+        dotenv_assignment("RTEMPLATE_MCP_PORT", &config.mcp.port.to_string())?,
+        dotenv_assignment("RTEMPLATE_MCP_NO_AUTH", &config.mcp.no_auth.to_string())?,
     ];
 
     if let Some(token) = config.mcp.api_token.as_deref().filter(|v| !v.is_empty()) {
-        lines.push(dotenv_assignment("EXAMPLE_MCP_TOKEN", token)?);
+        lines.push(dotenv_assignment("RTEMPLATE_MCP_TOKEN", token)?);
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
-        lines.push("EXAMPLE_MCP_AUTH_MODE=oauth".into());
+        lines.push("RTEMPLATE_MCP_AUTH_MODE=oauth".into());
         if let Some(v) = &config.mcp.auth.public_url {
-            lines.push(dotenv_assignment("EXAMPLE_MCP_PUBLIC_URL", v)?);
+            lines.push(dotenv_assignment("RTEMPLATE_MCP_PUBLIC_URL", v)?);
         }
         if let Some(v) = &config.mcp.auth.google_client_id {
-            lines.push(dotenv_assignment("EXAMPLE_MCP_GOOGLE_CLIENT_ID", v)?);
+            lines.push(dotenv_assignment("RTEMPLATE_MCP_GOOGLE_CLIENT_ID", v)?);
         }
         if let Some(v) = &config.mcp.auth.google_client_secret {
-            lines.push(dotenv_assignment("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET", v)?);
+            lines.push(dotenv_assignment("RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET", v)?);
         }
         if !config.mcp.auth.admin_email.is_empty() {
             lines.push(dotenv_assignment(
-                "EXAMPLE_MCP_AUTH_ADMIN_EMAIL",
+                "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL",
                 &config.mcp.auth.admin_email,
             )?);
         }

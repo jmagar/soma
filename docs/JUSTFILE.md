@@ -19,7 +19,7 @@ last_reviewed: "2026-05-15"
 
 | Recipe | Purpose |
 |---|---|
-| `just dev` | Run HTTP MCP server on loopback in no-auth dev mode (`EXAMPLE_MCP_NO_AUTH=true`). |
+| `just dev` | Run HTTP MCP server on loopback in no-auth dev mode (`RTEMPLATE_MCP_NO_AUTH=true`). |
 | `just mcp` | Run stdio MCP transport (`example mcp`). |
 | `just greet` | Quick CLI smoke test. |
 | `just doctor` | Pre-flight environment/connectivity checks (`example doctor`). |
@@ -88,7 +88,7 @@ refresh-docs-dry:       bash scripts/refresh-docs.sh --dry-run
 ```
 $ example doctor
 
-example-mcp v0.1.0 — environment check
+rtemplate-mcp v0.1.0 — environment check
 
   Config
   ──────────────────────────────────────────
@@ -98,9 +98,9 @@ example-mcp v0.1.0 — environment check
 
   Service credentials
   ──────────────────────────────────────────
-  ✓ EXAMPLE_API_URL:   https://example.internal/api (set)
-  ✗ EXAMPLE_API_KEY:   not set
-    → Set EXAMPLE_API_KEY in ~/.example/.env
+  ✓ RTEMPLATE_API_URL:   https://example.internal/api (set)
+  ✗ RTEMPLATE_API_KEY:   not set
+    → Set RTEMPLATE_API_KEY in ~/.example/.env
 
   Connectivity
   ──────────────────────────────────────────

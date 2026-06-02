@@ -222,7 +222,7 @@ The service is where you add:
 - Input validation and defaults
 - Business rules (e.g. "don't allow deletes without confirm")
 - Cross-cutting concerns (logging, metrics, caching)
-- Error enrichment ("couldn't connect to X: check EXAMPLE_URL")
+- Error enrichment ("couldn't connect to X: check RTEMPLATE_URL")
 
 ---
 
@@ -238,7 +238,7 @@ pub struct ExampleClient {
 
 impl ExampleClient {
     pub fn new(cfg: &ExampleConfig) -> Result<Self> {
-        if cfg.url.is_empty() { anyhow::bail!("EXAMPLE_URL is not set"); }
+        if cfg.url.is_empty() { anyhow::bail!("RTEMPLATE_URL is not set"); }
         let client = reqwest::ClientBuilder::new()
             .danger_accept_invalid_certs(cfg.skip_tls_verify)
             .build()?;
@@ -291,7 +291,7 @@ site = "default"
 [mcp]
 host = "0.0.0.0"
 port = 3000
-server_name = "example-mcp"
+server_name = "rtemplate-mcp"
 
 [mcp.auth]
 mode = "bearer"           # or "oauth"
@@ -307,15 +307,15 @@ auth_code_ttl_secs = 300
 
 ```bash
 # .env — secrets and URLs ONLY
-EXAMPLE_API_URL=https://example.internal/api
-EXAMPLE_API_KEY=your_api_key_here
+RTEMPLATE_API_URL=https://example.internal/api
+RTEMPLATE_API_KEY=your_api_key_here
 
 # MCP auth
-EXAMPLE_MCP_TOKEN=your_bearer_token_here
+RTEMPLATE_MCP_TOKEN=your_bearer_token_here
 
 # OAuth (only when auth_mode=oauth in config.toml)
-# EXAMPLE_MCP_GOOGLE_CLIENT_ID=...
-# EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=...
+# RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
+# RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
 
 # Docker runtime
 PUID=1000
@@ -339,11 +339,11 @@ impl Config {
         }
 
         // 2. Env overrides (secrets + any setting the user wants to override)
-        env_str("EXAMPLE_MCP_HOST", &mut config.mcp.host);
-        env_parse("EXAMPLE_MCP_PORT", &mut config.mcp.port)?;
-        env_opt_str("EXAMPLE_MCP_TOKEN", &mut config.mcp.api_token);
-        env_str("EXAMPLE_API_URL", &mut config.example.url);
-        env_str("EXAMPLE_API_KEY", &mut config.example.api_key);
+        env_str("RTEMPLATE_MCP_HOST", &mut config.mcp.host);
+        env_parse("RTEMPLATE_MCP_PORT", &mut config.mcp.port)?;
+        env_opt_str("RTEMPLATE_MCP_TOKEN", &mut config.mcp.api_token);
+        env_str("RTEMPLATE_API_URL", &mut config.example.url);
+        env_str("RTEMPLATE_API_KEY", &mut config.example.api_key);
         // ...
         Ok(config)
     }
@@ -374,7 +374,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
         let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
-            .env_prefix("EXAMPLE_MCP")
+            .env_prefix("RTEMPLATE_MCP")
             .session_cookie_name("example_mcp_session")
             .scopes_supported(vec!["example:read".into(), "example:write".into()])
             .default_scope("example:read")
@@ -748,8 +748,8 @@ Adding an explicit version creates drift and requires manual bumping on every re
     "google_client_id":     { "type": "string", "title": "Google client ID",     "sensitive": true },
     "google_client_secret": { "type": "string", "title": "Google client secret", "sensitive": true },
     "auth_admin_email":     { "type": "string", "title": "OAuth admin email" },
-    "example_api_url": { "type": "string", "title": "Example API URL", "sensitive": true, "required": true },
-    "example_api_key": { "type": "string", "title": "Example API key", "sensitive": true, "required": true }
+    "rtemplate_api_url": { "type": "string", "title": "Example API URL", "sensitive": true, "required": true },
+    "rtemplate_api_key": { "type": "string", "title": "Example API key", "sensitive": true, "required": true }
   },
   "mcpServers": "./plugins/<service>/.mcp.json",
   "hooks": "./plugins/<service>/hooks/hooks.json",
@@ -840,21 +840,21 @@ CMD ["serve", "mcp"]
 
 ```yaml
 services:
-  example-mcp:
-    image: ghcr.io/jmagar/example-mcp:${VERSION:-latest}
+  rtemplate-mcp:
+    image: ghcr.io/jmagar/rtemplate-mcp:${VERSION:-latest}
     build:
       context: .
       dockerfile: config/Dockerfile
-    container_name: example-mcp
+    container_name: rtemplate-mcp
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
     env_file:
       - path: .env
         required: false
     ports:
-      - "${EXAMPLE_MCP_HOST_PORT:-40060}:40060/tcp"
+      - "${RTEMPLATE_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
-      - ${EXAMPLE_DATA_VOLUME:-example-mcp-data}:/data
+      - ${RTEMPLATE_DATA_VOLUME:-rtemplate-mcp-data}:/data
     networks:
       - mcp
     healthcheck:
@@ -870,11 +870,11 @@ services:
           cpus: '0.5'
 
 volumes:
-  example-mcp-data:
+  rtemplate-mcp-data:
 
 networks:
   mcp:
-    name: ${DOCKER_NETWORK:-example-mcp}
+    name: ${DOCKER_NETWORK:-rtemplate-mcp}
     external: true
 ```
 
@@ -890,10 +890,10 @@ networks:
 
 ```bash
 #!/usr/bin/env bash
-# One-line install: curl -fsSL https://raw.githubusercontent.com/jmagar/example-mcp/main/install.sh | bash
+# One-line install: curl -fsSL https://raw.githubusercontent.com/jmagar/rtemplate-mcp/main/install.sh | bash
 set -euo pipefail
 
-REPO="jmagar/example-mcp"
+REPO="jmagar/rtemplate-mcp"
 BINARY="example"
 INSTALL_DIR="${HOME}/.local/bin"
 
@@ -915,9 +915,9 @@ chmod +x "${INSTALL_DIR}/${BINARY}"
 if [[ ! -f .env ]]; then
   cat > .env << 'ENV'
 # Required — set these before running
-EXAMPLE_API_URL=https://your-service.internal/api
-EXAMPLE_API_KEY=your_api_key_here
-EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)
+RTEMPLATE_API_URL=https://your-service.internal/api
+RTEMPLATE_API_KEY=your_api_key_here
+RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)
 # Docker
 PUID=1000
 PGID=1000
@@ -1039,13 +1039,13 @@ Use when MCP is unavailable but the binary is installed.
 example things [--json]
 example thing <id> [--json]
 
-Env required: EXAMPLE_API_URL, EXAMPLE_API_KEY
+Env required: RTEMPLATE_API_URL, RTEMPLATE_API_KEY
 
 ## Tier 3: Direct API (last resort)
 Use when neither MCP nor CLI is available.
 
-curl -H "Authorization: Bearer $EXAMPLE_API_KEY" \
-     "$EXAMPLE_API_URL/things"
+curl -H "Authorization: Bearer $RTEMPLATE_API_KEY" \
+     "$RTEMPLATE_API_URL/things"
 
 ## Gotchas
 - [service-specific pitfalls]
@@ -1295,8 +1295,8 @@ if [ -f "${DATA_DIR}/.env" ]; then
 fi
 
 # Validate required env vars are set (fail fast)
-if [ -z "${EXAMPLE_API_KEY:-}" ]; then
-    echo "ERROR: EXAMPLE_API_KEY is not set" >&2
+if [ -z "${RTEMPLATE_API_KEY:-}" ]; then
+    echo "ERROR: RTEMPLATE_API_KEY is not set" >&2
     exit 1
 fi
 
@@ -1321,11 +1321,11 @@ configured, unless the operator explicitly opts out.
 
 Centralize this decision in library code, not the binary:
 
-- loopback bind with `EXAMPLE_MCP_NO_AUTH=true` → `LoopbackDev`
-- non-loopback with `EXAMPLE_NOAUTH=true` → `TrustedGatewayUnscoped`
+- loopback bind with `RTEMPLATE_MCP_NO_AUTH=true` → `LoopbackDev`
+- non-loopback with `RTEMPLATE_NOAUTH=true` → `TrustedGatewayUnscoped`
 - non-loopback with bearer token → mounted bearer auth
 - non-loopback with OAuth mode → mounted OAuth auth
-- non-loopback with `EXAMPLE_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
+- non-loopback with `RTEMPLATE_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
 
 Called in `serve_mcp()` before binding the TCP listener.
 
@@ -1598,34 +1598,34 @@ Or via GitHub OAuth:
 ```json
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "tv.tootie/example-mcp",
+  "name": "tv.tootie/rtemplate-mcp",
   "title": "Example MCP",
   "description": "One-line description of what the server does.",
   "repository": {
-    "url": "https://github.com/jmagar/example-mcp",
+    "url": "https://github.com/jmagar/rtemplate-mcp",
     "source": "github"
   },
   "version": "0.1.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/example-mcp:0.1.0",
+      "identifier": "ghcr.io/jmagar/rtemplate-mcp:0.1.0",
       "version": "0.1.0",
       "environmentVariables": [
         {
-          "name": "EXAMPLE_API_URL",
+          "name": "RTEMPLATE_API_URL",
           "description": "Base URL of your Example service.",
           "isRequired": true,
           "isSecret": false
         },
         {
-          "name": "EXAMPLE_API_KEY",
+          "name": "RTEMPLATE_API_KEY",
           "description": "API key for authentication.",
           "isRequired": true,
           "isSecret": true
         },
         {
-          "name": "EXAMPLE_MCP_TOKEN",
+          "name": "RTEMPLATE_MCP_TOKEN",
           "description": "Bearer token for MCP endpoint auth.",
           "isRequired": false,
           "isSecret": true
@@ -1650,7 +1650,7 @@ The `release.yml` workflow updates `server.json` version automatically on tag:
   run: |
     VERSION="${GITHUB_REF_NAME#v}"
     jq --arg v "$VERSION" \
-       --arg img "ghcr.io/jmagar/example-mcp:${VERSION}" \
+       --arg img "ghcr.io/jmagar/rtemplate-mcp:${VERSION}" \
        '.version = $v | .packages[0].identifier = $img | .packages[0].version = $v' \
        server.json > server.tmp && mv server.tmp server.json
 ```
@@ -1682,10 +1682,10 @@ plugins/
 
 ```json
 {
-  "name": "example-mcp",
+  "name": "rtemplate-mcp",
   "description": "Example service MCP server for Codex.",
-  "homepage": "https://github.com/jmagar/example-mcp",
-  "repository": "https://github.com/jmagar/example-mcp",
+  "homepage": "https://github.com/jmagar/rtemplate-mcp",
+  "repository": "https://github.com/jmagar/rtemplate-mcp",
   "license": "MIT",
   "keywords": ["example", "mcp", "homelab"],
   "skills": "./skills/",
@@ -1697,7 +1697,7 @@ plugins/
     "developerName": "Jacob Magar",
     "category": "Infrastructure",
     "capabilities": ["Read"],
-    "websiteURL": "https://github.com/jmagar/example-mcp",
+    "websiteURL": "https://github.com/jmagar/rtemplate-mcp",
     "defaultPrompt": [
       "Check Example service status.",
       "List all items in Example.",
@@ -1909,8 +1909,8 @@ Every MCP error message must include:
 - **Missing required arg**: `"`id` is required for docker_logs — pass id=<container_id>"`
 - **Wrong type**: `"`tail` must be an integer, got \"fifty\""`
 - **Unknown action**: `"unknown action: \"florp\" — valid actions: array, disks, docker, ..., help"`
-- **API unreachable**: `"EXAMPLE_URL unreachable: connection refused (http://localhost:8765) — is the service running?"`
-- **Auth failure**: `"API key rejected (EXAMPLE_API_KEY) — check the key is valid and has not expired"`
+- **API unreachable**: `"RTEMPLATE_URL unreachable: connection refused (http://localhost:8765) — is the service running?"`
+- **Auth failure**: `"API key rejected (RTEMPLATE_API_KEY) — check the key is valid and has not expired"`
 
 ### CLI error messages
 
@@ -2300,7 +2300,7 @@ pub async fn list_things(&self) -> Result<Value> {
         .timeout(Duration::from_secs(30))
         .send()
         .await
-        .context("upstream request failed — is EXAMPLE_URL correct?")?
+        .context("upstream request failed — is RTEMPLATE_URL correct?")?
         .json::<Value>()
         .await
         .context("upstream returned invalid JSON")
@@ -2313,7 +2313,7 @@ pub async fn list_things(&self) -> Result<Value> {
             anyhow::anyhow!(
                 "upstream unreachable: {}\n\
                  Hint: run `example health` to check service status\n\
-                 Config: EXAMPLE_URL={}",
+                 Config: RTEMPLATE_URL={}",
                 e, self.base_url
             )
         } else {
@@ -2510,7 +2510,7 @@ same command names on the binary where that mode applies.
 | Command | Mode | Description |
 |---|---|---|
 | `<service> mcp` | stdio MCP transport | For Claude Code `.claude/settings.json` stdio servers; output goes to stdout, logs to stderr |
-| `<service> serve` | Streamable HTTP MCP | For remote/Docker deployment; binds to `EXAMPLE_MCP_HOST:EXAMPLE_MCP_PORT` |
+| `<service> serve` | Streamable HTTP MCP | For remote/Docker deployment; binds to `RTEMPLATE_MCP_HOST:RTEMPLATE_MCP_PORT` |
 | `<service> [subcommand]` | CLI | Direct API access; all subcommands support `--json` |
 | `<service> doctor` | Pre-flight check | Validates environment and config before deployment (see §48) |
 | `<service> --help` | Help | Print usage |
@@ -2546,7 +2546,7 @@ INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "${INSTALL_DIR}"
 
 # Download and install
-BINARY_URL="https://github.com/jmagar/example-mcp/releases/latest/download/example-linux-amd64"
+BINARY_URL="https://github.com/jmagar/rtemplate-mcp/releases/latest/download/example-linux-amd64"
 curl -fsSL "${BINARY_URL}" -o "${INSTALL_DIR}/example"
 chmod +x "${INSTALL_DIR}/example"
 
@@ -2580,7 +2580,7 @@ environment and reports what's missing before the user tries to start the server
 ```
 $ example doctor
 
-example-mcp v0.1.0 — environment check
+rtemplate-mcp v0.1.0 — environment check
 
   Config
   ──────────────────────────────────────────────
@@ -2591,9 +2591,9 @@ example-mcp v0.1.0 — environment check
 
   Service credentials
   ──────────────────────────────────────────────
-  ✓ EXAMPLE_API_URL:   https://example.internal/api (set)
-  ✗ EXAMPLE_API_KEY:   not set
-    → Set EXAMPLE_API_KEY in ~/.example/.env or your environment
+  ✓ RTEMPLATE_API_URL:   https://example.internal/api (set)
+  ✗ RTEMPLATE_API_KEY:   not set
+    → Set RTEMPLATE_API_KEY in ~/.example/.env or your environment
 
   Connectivity
   ──────────────────────────────────────────────
@@ -2601,8 +2601,8 @@ example-mcp v0.1.0 — environment check
 
   MCP server
   ──────────────────────────────────────────────
-  ✓ MCP port 40060:    available  # TEMPLATE: canonical rmcp-template port is 40060 (EXAMPLE_MCP_PORT)
-  ✓ Auth mode:         no-auth (EXAMPLE_NOAUTH=true)
+  ✓ MCP port 40060:    available  # TEMPLATE: canonical rmcp-template port is 40060 (RTEMPLATE_MCP_PORT)
+  ✓ Auth mode:         no-auth (RTEMPLATE_NOAUTH=true)
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1 issue found. Fix it before running: example-server serve
@@ -2624,8 +2624,8 @@ pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
     checks.push(check_binary_in_path("example"));
 
     // 2. Required env vars / config
-    checks.push(check_required_var("EXAMPLE_API_URL", &config.example.url));
-    checks.push(check_required_var("EXAMPLE_API_KEY", &config.example.api_key));
+    checks.push(check_required_var("RTEMPLATE_API_URL", &config.example.url));
+    checks.push(check_required_var("RTEMPLATE_API_KEY", &config.example.api_key));
 
     // 3. Connectivity (non-fatal if unreachable)
     if !config.example.url.is_empty() {
@@ -2668,7 +2668,7 @@ struct DoctorCheck {
 ```json
 [
   {"category": "config", "name": "Config file", "ok": true, "value": "~/.example/config.toml"},
-  {"category": "credentials", "name": "EXAMPLE_API_KEY", "ok": false, "hint": "Set EXAMPLE_API_KEY in ~/.example/.env"},
+  {"category": "credentials", "name": "RTEMPLATE_API_KEY", "ok": false, "hint": "Set RTEMPLATE_API_KEY in ~/.example/.env"},
   {"category": "connectivity", "name": "Upstream", "ok": true, "value": "200 OK", "latency_ms": 42}
 ]
 ```
@@ -2732,18 +2732,18 @@ preflight() {
         || echo "⚠  PATH: ~/.local/bin not in PATH — will print instructions"
 
     # 6. Required env vars (warn, don't fail — can be set post-install)
-    [[ -n "${EXAMPLE_API_URL:-}" ]] \
-        && echo "✓ EXAMPLE_API_URL: set" \
-        || echo "⚠  EXAMPLE_API_URL: not set (required before running the server)"
-    [[ -n "${EXAMPLE_API_KEY:-}" ]] \
-        && echo "✓ EXAMPLE_API_KEY: set" \
-        || echo "⚠  EXAMPLE_API_KEY: not set (required before running the server)"
+    [[ -n "${RTEMPLATE_API_URL:-}" ]] \
+        && echo "✓ RTEMPLATE_API_URL: set" \
+        || echo "⚠  RTEMPLATE_API_URL: not set (required before running the server)"
+    [[ -n "${RTEMPLATE_API_KEY:-}" ]] \
+        && echo "✓ RTEMPLATE_API_KEY: set" \
+        || echo "⚠  RTEMPLATE_API_KEY: not set (required before running the server)"
 
     # 7. Port availability (warn only)
     # TEMPLATE: canonical rmcp-template port is 40060; update this default when adapting
-    local port="${EXAMPLE_MCP_PORT:-40060}"
+    local port="${RTEMPLATE_MCP_PORT:-40060}"
     if ss -tlnp "sport = :${port}" 2>/dev/null | awk 'NR>1' | grep -q .; then
-        echo "⚠  Port ${port}: already in use (change EXAMPLE_MCP_PORT if needed)"
+        echo "⚠  Port ${port}: already in use (change RTEMPLATE_MCP_PORT if needed)"
     else
         echo "✓ Port ${port}: available"
     fi
@@ -2817,7 +2817,7 @@ fi
 # Fail fast with a clear message rather than a cryptic runtime error.
 # TEMPLATE: Add your service's required vars here.
 missing_vars=""
-for var in EXAMPLE_API_URL EXAMPLE_API_KEY; do
+for var in RTEMPLATE_API_URL RTEMPLATE_API_KEY; do
     eval "val=\${${var}:-}"
     if [ -z "${val}" ]; then
         missing_vars="${missing_vars} ${var}"
@@ -2857,8 +2857,8 @@ echo "[entrypoint] Data dir: ${DATA_DIR}"
 echo "[entrypoint] Binary:   ${BINARY}"
 echo "[entrypoint] User:     1000:1000"
 # Log non-secret config
-[ -n "${EXAMPLE_MCP_PORT:-}" ] && echo "[entrypoint] MCP port: ${EXAMPLE_MCP_PORT}"
-[ -n "${EXAMPLE_MCP_HOST:-}" ] && echo "[entrypoint] MCP host: ${EXAMPLE_MCP_HOST}"
+[ -n "${RTEMPLATE_MCP_PORT:-}" ] && echo "[entrypoint] MCP port: ${RTEMPLATE_MCP_PORT}"
+[ -n "${RTEMPLATE_MCP_HOST:-}" ] && echo "[entrypoint] MCP host: ${RTEMPLATE_MCP_HOST}"
 
 # ── 6. Signal handling ────────────────────────────────────────────────────────
 # Let gosu / the service handle SIGTERM cleanly.
@@ -3324,9 +3324,9 @@ the default so existing `cargo build` workflows still build the complete
 template.
 
 For application/platform servers, the local `example` profile is an adapter to
-the deployed platform API. Set `EXAMPLE_API_URL=https://service.example.com/`
-and optional `EXAMPLE_API_KEY=<token>`; local CLI and stdio MCP actions forward
-to `POST {EXAMPLE_API_URL}/v1/example`. Leaving `EXAMPLE_API_URL` empty keeps the
+the deployed platform API. Set `RTEMPLATE_API_URL=https://service.example.com/`
+and optional `RTEMPLATE_API_KEY=<token>`; local CLI and stdio MCP actions forward
+to `POST {RTEMPLATE_API_URL}/v1/example`. Leaving `RTEMPLATE_API_URL` empty keeps the
 offline template stub active for tests and first-run scaffolds.
 
 ```toml

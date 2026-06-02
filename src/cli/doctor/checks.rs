@@ -198,10 +198,10 @@ pub async fn check_upstream(base_url: &str) -> DoctorCheck {
     // TEMPLATE: Change "/health" to your upstream's actual probe path.
     let health_url = format!("{}/health", base_url.trim_end_matches('/'));
 
-    // Use strict TLS by default. Set EXAMPLE_DOCTOR_ACCEPT_INVALID_CERTS=true
+    // Use strict TLS by default. Set RTEMPLATE_DOCTOR_ACCEPT_INVALID_CERTS=true
     // only for dev environments with self-signed certificates.
     // TEMPLATE: Replace the env var prefix when adapting this template.
-    let accept_invalid_certs = std::env::var("EXAMPLE_DOCTOR_ACCEPT_INVALID_CERTS")
+    let accept_invalid_certs = std::env::var("RTEMPLATE_DOCTOR_ACCEPT_INVALID_CERTS")
         .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
         .unwrap_or(false);
     let client = match reqwest::ClientBuilder::new()
@@ -251,8 +251,8 @@ pub async fn check_upstream(base_url: &str) -> DoctorCheck {
                 "Upstream reachable",
                 format!(
                     "Could not reach {health_url}: {e}\n    \
-                     → Check EXAMPLE_API_URL is correct and the service is running.\n    \
-                     TEMPLATE: Replace EXAMPLE_API_URL with your service's env var."
+                     → Check RTEMPLATE_API_URL is correct and the service is running.\n    \
+                     TEMPLATE: Replace RTEMPLATE_API_URL with your service's env var."
                 ),
                 elapsed,
             )
@@ -279,9 +279,9 @@ pub fn check_port_available(host: &str, port: u16) -> DoctorCheck {
             format!("MCP bind {bind}"),
             format!(
                 "Bind address {bind} is unavailable: {e}\n    \
-                 → Set EXAMPLE_MCP_PORT to a different port.\n    \
+                 → Set RTEMPLATE_MCP_PORT to a different port.\n    \
                  → Or stop the process using this address: ss -tlnp | grep :{port}\n    \
-                 TEMPLATE: Replace EXAMPLE_MCP_PORT with your service prefix."
+                 TEMPLATE: Replace RTEMPLATE_MCP_PORT with your service prefix."
             ),
         ),
     }
@@ -308,7 +308,7 @@ pub fn check_auth_config(config: &Config) -> DoctorCheck {
         Ok(AuthPolicyKind::TrustedGatewayUnscoped) => DoctorCheck::pass(
             "auth",
             "Auth mode",
-            "trusted gateway unscoped (EXAMPLE_NOAUTH=true — upstream handles auth and authz)",
+            "trusted gateway unscoped (RTEMPLATE_NOAUTH=true — upstream handles auth and authz)",
         ),
         Ok(AuthPolicyKind::MountedOAuth) => {
             DoctorCheck::pass("auth", "Auth mode", "OAuth (Google)")
@@ -322,11 +322,11 @@ pub fn check_auth_config(config: &Config) -> DoctorCheck {
             format!(
                 "{error}\n    \
                  Fix ONE of:\n    \
-                 1. Bind to loopback:    EXAMPLE_MCP_HOST=127.0.0.1\n    \
-                 2. Set a bearer token:  EXAMPLE_MCP_TOKEN=$(openssl rand -hex 32)\n    \
-                 3. Enable OAuth:        EXAMPLE_MCP_AUTH_MODE=oauth\n    \
-                 4. Upstream gateway:    EXAMPLE_NOAUTH=true\n    \
-                 TEMPLATE: Replace EXAMPLE_ prefix with your service prefix."
+                 1. Bind to loopback:    RTEMPLATE_MCP_HOST=127.0.0.1\n    \
+                 2. Set a bearer token:  RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)\n    \
+                 3. Enable OAuth:        RTEMPLATE_MCP_AUTH_MODE=oauth\n    \
+                 4. Upstream gateway:    RTEMPLATE_NOAUTH=true\n    \
+                 TEMPLATE: Replace RTEMPLATE_ prefix with your service prefix."
             ),
         ),
     }

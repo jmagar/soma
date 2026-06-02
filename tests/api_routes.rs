@@ -155,7 +155,7 @@ async fn status_returns_only_local_redacted_metadata() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ok");
-    assert_eq!(body["server"], "example-mcp");
+    assert_eq!(body["server"], "rtemplate-mcp");
     assert_eq!(body["transport"], "http");
     assert!(body.get("version").is_some());
     assert!(body.get("api_url").is_none(), "{body}");

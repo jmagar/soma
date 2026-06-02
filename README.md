@@ -23,7 +23,7 @@ This template is the reference point for the local Rust MCP/server family:
 
 ## Plugin Surfaces
 
-The template ships Claude Code, Codex, and Gemini plugin surfaces from one shared `plugins/example/` package. See [docs/PLUGINS.md](docs/PLUGINS.md) for the manifest layout, shared MCP config, skills, hook setup contract, and per-host adaptation checklist.
+The template ships Claude Code, Codex, and Gemini plugin surfaces from one shared `plugins/rtemplate/` package. See [docs/PLUGINS.md](docs/PLUGINS.md) for the manifest layout, shared MCP config, skills, hook setup contract, and per-host adaptation checklist.
 
 ## Server surface policy
 
@@ -47,14 +47,14 @@ Choose the runtime profile from the server's ownership model:
 | Server kind | Best default | Notes |
 |---|---|---|
 | Upstream-client MCP server | `CLI + stdio MCP` binary | Local/plugin install path. Calls the upstream API directly; no local REST/Web mirror by default. |
-| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. The local adapter targets the deployed platform API via `EXAMPLE_API_URL`. |
+| Application/platform server | Docker/server binary with API + Web + HTTP MCP, plus optional local `CLI + stdio MCP` adapter | Use when the project owns state, jobs, dashboards, or multiple non-MCP consumers. The local adapter targets the deployed platform API via `RTEMPLATE_API_URL`. |
 | Gateway-shared tool | HTTP MCP retained | Needed for shared gateway/catalog use and remote clients. |
 
 The stdio adapter should expose MCP-native behavior and delegate business
 actions to the deployed platform API. The REST API should expose business
-actions, not MCP protocol semantics. In this template, leaving `EXAMPLE_API_URL`
+actions, not MCP protocol semantics. In this template, leaving `RTEMPLATE_API_URL`
 empty selects offline stub mode; setting it forwards local CLI/stdio calls to
-`{EXAMPLE_API_URL}/v1/example` with `EXAMPLE_API_KEY` as bearer auth when set.
+`{RTEMPLATE_API_URL}/v1/example` with `RTEMPLATE_API_KEY` as bearer auth when set.
 The accepted decision is recorded in
 [ADR 0001](docs/adr/0001-stdio-first-plugin-adapter.md); the testable adapter
 contract lives in
@@ -134,8 +134,8 @@ Find and replace these identifiers across the project:
 | `ExampleService` | `MyServiceService` |
 | `ExampleConfig` | `MyServiceConfig` |
 | `ExampleRmcpServer` | `MyServiceRmcpServer` |
-| `EXAMPLE_API_URL` | `MYSERVICE_API_URL` |
-| `EXAMPLE_MCP_*` | `MYSERVICE_MCP_*` |
+| `RTEMPLATE_API_URL` | `MYSERVICE_API_URL` |
+| `RTEMPLATE_MCP_*` | `MYSERVICE_MCP_*` |
 | `example:read` | `myservice:read` |
 | `example://schema/mcp-tool` | `myservice://schema/mcp-tool` |
 
@@ -256,15 +256,15 @@ The single `example` tool dispatches on the `action` parameter:
 
 ### Bearer token (default)
 
-Set `EXAMPLE_MCP_TOKEN`. All `/mcp` requests must include `Authorization: Bearer <token>`.
+Set `RTEMPLATE_MCP_TOKEN`. All `/mcp` requests must include `Authorization: Bearer <token>`.
 
 ### No auth (loopback only)
 
-Set `EXAMPLE_MCP_NO_AUTH=true` or bind to `127.*`. Only legal for local development.
+Set `RTEMPLATE_MCP_NO_AUTH=true` or bind to `127.*`. Only legal for local development.
 
 ### OAuth (Google)
 
-Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issues RS256 JWTs after Google authentication. OAuth and bearer can coexist when `EXAMPLE_MCP_TOKEN` is also configured.
+Set `RTEMPLATE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issues RS256 JWTs after Google authentication. OAuth and bearer can coexist when `RTEMPLATE_MCP_TOKEN` is also configured.
 
 `/health` is always unauthenticated.
 
@@ -272,19 +272,19 @@ Set `EXAMPLE_MCP_AUTH_MODE=oauth` and the OAuth env vars below. The server issue
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `EXAMPLE_API_URL` | no | — | Upstream service base URL |
-| `EXAMPLE_API_KEY` | no | — | Upstream service API key |
-| `EXAMPLE_MCP_HOST` | no | `127.0.0.1` | Bind host |
-| `EXAMPLE_MCP_PORT` | no | `40060` | Bind port |
-| `EXAMPLE_MCP_NO_AUTH` | no | `false` | Disable auth (loopback only; 1/true/yes) |
-| `EXAMPLE_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
-| `EXAMPLE_MCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
-| `EXAMPLE_MCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
-| `EXAMPLE_MCP_PUBLIC_URL` | OAuth | — | Public URL (e.g. `https://myservice.example.com`) |
-| `EXAMPLE_MCP_AUTH_MODE` | no | `bearer` | `bearer` or `oauth` |
-| `EXAMPLE_MCP_GOOGLE_CLIENT_ID` | OAuth | — | Google OAuth client ID |
-| `EXAMPLE_MCP_GOOGLE_CLIENT_SECRET` | OAuth | — | Google OAuth client secret |
-| `EXAMPLE_MCP_AUTH_ADMIN_EMAIL` | OAuth | — | Admin email address |
+| `RTEMPLATE_API_URL` | no | — | Upstream service base URL |
+| `RTEMPLATE_API_KEY` | no | — | Upstream service API key |
+| `RTEMPLATE_MCP_HOST` | no | `127.0.0.1` | Bind host |
+| `RTEMPLATE_MCP_PORT` | no | `40060` | Bind port |
+| `RTEMPLATE_MCP_NO_AUTH` | no | `false` | Disable auth (loopback only; 1/true/yes) |
+| `RTEMPLATE_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
+| `RTEMPLATE_MCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
+| `RTEMPLATE_MCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
+| `RTEMPLATE_MCP_PUBLIC_URL` | OAuth | — | Public URL (e.g. `https://myservice.example.com`) |
+| `RTEMPLATE_MCP_AUTH_MODE` | no | `bearer` | `bearer` or `oauth` |
+| `RTEMPLATE_MCP_GOOGLE_CLIENT_ID` | OAuth | — | Google OAuth client ID |
+| `RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET` | OAuth | — | Google OAuth client secret |
+| `RTEMPLATE_MCP_AUTH_ADMIN_EMAIL` | OAuth | — | Admin email address |
 | `RUST_LOG` | no | `info` | Log filter (e.g. `info,rmcp=warn`) |
 
 ## Development commands
@@ -404,9 +404,9 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
    | `ExampleService` | `MyServiceService` |
    | `ExampleConfig` | `MyServiceConfig` |
    | `ExampleRmcpServer` | `MyServiceRmcpServer` |
-   | `EXAMPLE_API_URL` | `MYSERVICE_API_URL` |
-   | `EXAMPLE_MCP_*` | `MYSERVICE_MCP_*` |
-   | `EXAMPLE_NOAUTH` | `MYSERVICE_NOAUTH` |
+   | `RTEMPLATE_API_URL` | `MYSERVICE_API_URL` |
+   | `RTEMPLATE_MCP_*` | `MYSERVICE_MCP_*` |
+   | `RTEMPLATE_NOAUTH` | `MYSERVICE_NOAUTH` |
    | `example:read` | `myservice:read` |
    | `example://schema/mcp-tool` | `myservice://schema/mcp-tool` |
    | `.example` (data dir) | `.myservice` (in `config.rs` and `docker-compose.yml`) |
@@ -450,7 +450,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 10. **Update `entrypoint.sh`**
 
-    Uncomment the `REQUIRED_VARS` check block and add your service's required env vars. Replace `EXAMPLE_API_KEY` references with your prefix.
+    Uncomment the `REQUIRED_VARS` check block and add your service's required env vars. Replace `RTEMPLATE_API_KEY` references with your prefix.
 
 11. **Update `config/Dockerfile` to use `entrypoint.sh`**
 
@@ -470,7 +470,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
     In all three workflows, replace:
     - `rmcp-template` → your repo name (cache keys)
-    - `example-mcp` → your Docker image name
+    - `rtemplate-mcp` → your Docker image name
     - `example` → your binary name
     - `example-linux-x86_64` / `example-windows-x86_64` → your artifact names
     - `jmagar` → your GitHub org/username (image registry path)
@@ -483,17 +483,17 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
 
 17. **Update plugin.json userConfig for your service's credentials**
 
-    Edit `plugins/example/.claude-plugin/plugin.json`. Replace the `example_api_url` / `example_api_key` fields with your service's actual credential names and descriptions.
+    Edit `plugins/rtemplate/.claude-plugin/plugin.json`. Replace the `rtemplate_api_url` / `rtemplate_api_key` fields with your service's actual credential names and descriptions.
 
 18. **Update `apply_plugin_options()` in `src/cli/setup.rs`**
 
-    This function maps `CLAUDE_PLUGIN_OPTION_*` plugin options to the binary's `EXAMPLE_*` env vars (it replaces the old `plugin-setup.sh` wrapper). Replace `EXAMPLE_*` env var names and add any service-specific credentials your binary needs.
+    This function maps `CLAUDE_PLUGIN_OPTION_*` plugin options to the binary's `RTEMPLATE_*` env vars (it replaces the old `plugin-setup.sh` wrapper). Replace `RTEMPLATE_*` env var names and add any service-specific credentials your binary needs.
 
-19. **Update `plugins/example/skills/`**
+19. **Update `plugins/rtemplate/skills/`**
 
-    Replace the action table in `plugins/example/skills/example/SKILL.md` with your actual actions and documented response shapes. Keep or adapt `plugins/example/skills/scaffold-project/SKILL.md` if you want the elicitation setup wizard to generate approval-first scaffold plans. Good skill docs drive better AI tool use.
+    Replace the action table in `plugins/rtemplate/skills/example/SKILL.md` with your actual actions and documented response shapes. Keep or adapt `plugins/rtemplate/skills/scaffold-project/SKILL.md` if you want the elicitation setup wizard to generate approval-first scaffold plans. Good skill docs drive better AI tool use.
 
-20. **Update `plugins/example/.codex-plugin/plugin.json`** for Codex plugin registry
+20. **Update `plugins/rtemplate/.codex-plugin/plugin.json`** for Codex plugin registry
 
     Every field marked `TEMPLATE:` must be replaced. Key fields:
     - `name` — `<your-service>-mcp`
@@ -503,7 +503,7 @@ This checklist covers everything you need to adapt rmcp-template for a real serv
     - `interface.defaultPrompt` — 3 sample prompts demonstrating your actions
     - `interface.brandColor` — hex color matching your service's brand
 
-    See `plugins/example/.codex-plugin/README.md` for the full field reference.
+    See `plugins/rtemplate/.codex-plugin/README.md` for the full field reference.
 
 21. **Write `server.json`** for MCP registry publishing
 

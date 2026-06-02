@@ -47,7 +47,7 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 ```json
 {
   "status": "ok",
-  "server": "example-mcp",
+  "server": "rtemplate-mcp",
   "version": "0.1.0",
   "transport": "http"
 }

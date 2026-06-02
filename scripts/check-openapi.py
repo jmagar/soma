@@ -90,7 +90,7 @@ def render() -> dict[str, Any]:
                 "Generated OpenAPI schema for rmcp-template's REST surface. "
                 "TEMPLATE: rename Example identifiers and action schemas when adapting. "
                 "Auth modes: loopback/trusted-gateway deployments may have no local auth; "
-                "mounted bearer mode uses EXAMPLE_MCP_TOKEN; OAuth mode uses bearer JWTs. "
+                "mounted bearer mode uses RTEMPLATE_MCP_TOKEN; OAuth mode uses bearer JWTs. "
                 "REST actions require their action-specific scopes when auth is mounted."
             ),
         },

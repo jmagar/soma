@@ -18,12 +18,12 @@ fn json(path: &str) -> Value {
 #[test]
 fn plugin_manifests_exist_for_all_supported_hosts() {
     for path in [
-        "plugins/example/.claude-plugin/plugin.json",
-        "plugins/example/.codex-plugin/plugin.json",
-        "plugins/example/gemini-extension.json",
-        "plugins/example/.mcp.json",
-        "plugins/example/hooks/hooks.json",
-        "plugins/example/skills/example/SKILL.md",
+        "plugins/rtemplate/.claude-plugin/plugin.json",
+        "plugins/rtemplate/.codex-plugin/plugin.json",
+        "plugins/rtemplate/gemini-extension.json",
+        "plugins/rtemplate/.mcp.json",
+        "plugins/rtemplate/hooks/hooks.json",
+        "plugins/rtemplate/skills/rtemplate/SKILL.md",
     ] {
         assert!(std::path::Path::new(path).exists(), "{path} should exist");
     }
@@ -31,14 +31,14 @@ fn plugin_manifests_exist_for_all_supported_hosts() {
 
 #[test]
 fn plugin_manifests_share_identity_and_connection_settings() {
-    let claude = json("plugins/example/.claude-plugin/plugin.json");
-    let codex = json("plugins/example/.codex-plugin/plugin.json");
-    let gemini = json("plugins/example/gemini-extension.json");
-    let mcp = json("plugins/example/.mcp.json");
+    let claude = json("plugins/rtemplate/.claude-plugin/plugin.json");
+    let codex = json("plugins/rtemplate/.codex-plugin/plugin.json");
+    let gemini = json("plugins/rtemplate/gemini-extension.json");
+    let mcp = json("plugins/rtemplate/.mcp.json");
 
-    assert_eq!(claude["name"], "example");
-    assert_eq!(codex["name"], "example-mcp");
-    assert_eq!(gemini["name"], "example-mcp");
+    assert_eq!(claude["name"], "rtemplate");
+    assert_eq!(codex["name"], "rtemplate-mcp");
+    assert_eq!(gemini["name"], "rtemplate-mcp");
     assert!(
         claude.get("experimental").is_none(),
         "stdio-first plugin should not auto-register HTTP health monitors"
@@ -47,22 +47,22 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     assert!(claude["repository"]
         .as_str()
         .unwrap()
-        .ends_with("example-mcp"));
+        .ends_with("rtemplate-mcp"));
     assert!(codex["repository"]
         .as_str()
         .unwrap()
-        .ends_with("example-mcp"));
+        .ends_with("rtemplate-mcp"));
     assert!(gemini["repository"]
         .as_str()
         .unwrap()
-        .ends_with("example-mcp"));
+        .ends_with("rtemplate-mcp"));
 
     let user_config = claude["userConfig"].as_object().unwrap();
     for key in [
         "server_url",
         "api_token",
-        "example_api_url",
-        "example_api_key",
+        "rtemplate_api_url",
+        "rtemplate_api_key",
     ] {
         assert!(
             user_config.contains_key(key),
@@ -79,8 +79,8 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     for key in [
         "server_url",
         "api_token",
-        "example_api_url",
-        "example_api_key",
+        "rtemplate_api_url",
+        "rtemplate_api_key",
     ] {
         assert!(
             gemini_settings.contains(&key),
@@ -88,50 +88,50 @@ fn plugin_manifests_share_identity_and_connection_settings() {
         );
     }
 
-    assert_eq!(mcp["mcpServers"]["example"]["type"], "stdio");
+    assert_eq!(mcp["mcpServers"]["rtemplate"]["type"], "stdio");
     assert_eq!(
-        mcp["mcpServers"]["example"]["command"],
+        mcp["mcpServers"]["rtemplate"]["command"],
         "${CLAUDE_PLUGIN_ROOT}/bin/rtemplate"
     );
     assert_eq!(
-        mcp["mcpServers"]["example"]["args"],
+        mcp["mcpServers"]["rtemplate"]["args"],
         serde_json::json!(["mcp"])
     );
     assert_eq!(
-        mcp["mcpServers"]["example"]["env"]["EXAMPLE_API_URL"],
-        "${user_config.example_api_url}"
+        mcp["mcpServers"]["rtemplate"]["env"]["RTEMPLATE_API_URL"],
+        "${user_config.rtemplate_api_url}"
     );
     assert_eq!(
-        mcp["mcpServers"]["example"]["env"]["EXAMPLE_API_KEY"],
-        "${user_config.example_api_key}"
+        mcp["mcpServers"]["rtemplate"]["env"]["RTEMPLATE_API_KEY"],
+        "${user_config.rtemplate_api_key}"
     );
-    assert!(mcp["mcpServers"]["example"].get("url").is_none());
-    assert!(mcp["mcpServers"]["example"].get("headers").is_none());
+    assert!(mcp["mcpServers"]["rtemplate"].get("url").is_none());
+    assert!(mcp["mcpServers"]["rtemplate"].get("headers").is_none());
 
-    assert_eq!(gemini["mcpServers"]["example"]["type"], "stdio");
+    assert_eq!(gemini["mcpServers"]["rtemplate"]["type"], "stdio");
     assert_eq!(
-        gemini["mcpServers"]["example"]["command"],
+        gemini["mcpServers"]["rtemplate"]["command"],
         "${extensionPath}${/}bin${/}example"
     );
     assert_eq!(
-        gemini["mcpServers"]["example"]["args"],
+        gemini["mcpServers"]["rtemplate"]["args"],
         serde_json::json!(["mcp"])
     );
     assert_eq!(
-        gemini["mcpServers"]["example"]["env"]["EXAMPLE_API_URL"],
-        "${settings.example_api_url}"
+        gemini["mcpServers"]["rtemplate"]["env"]["RTEMPLATE_API_URL"],
+        "${settings.rtemplate_api_url}"
     );
     assert_eq!(
-        gemini["mcpServers"]["example"]["env"]["EXAMPLE_API_KEY"],
-        "${settings.example_api_key}"
+        gemini["mcpServers"]["rtemplate"]["env"]["RTEMPLATE_API_KEY"],
+        "${settings.rtemplate_api_key}"
     );
-    assert!(gemini["mcpServers"]["example"].get("url").is_none());
-    assert!(gemini["mcpServers"]["example"].get("headers").is_none());
+    assert!(gemini["mcpServers"]["rtemplate"].get("url").is_none());
+    assert!(gemini["mcpServers"]["rtemplate"].get("headers").is_none());
 }
 
 #[test]
 fn claude_hooks_call_binary_setup_plugin_hook_directly() {
-    let hooks = json("plugins/example/hooks/hooks.json");
+    let hooks = json("plugins/rtemplate/hooks/hooks.json");
     for hook_name in ["SessionStart", "ConfigChange"] {
         let command = hooks["hooks"][hook_name][0]["hooks"][0]["command"]
             .as_str()
@@ -167,10 +167,10 @@ fn setup_command(data_dir: &std::path::Path) -> Command {
         .env("HOME", data_dir)
         .env("PATH", std::env::var("PATH").unwrap_or_default())
         .env("CLAUDE_PLUGIN_DATA", data_dir)
-        .env("EXAMPLE_API_URL", "https://api.example.test")
-        .env("EXAMPLE_API_KEY", "example-secret")
-        .env("EXAMPLE_MCP_PORT", "0")
-        .env("EXAMPLE_MCP_TOKEN", "mcp-secret");
+        .env("RTEMPLATE_API_URL", "https://api.example.test")
+        .env("RTEMPLATE_API_KEY", "example-secret")
+        .env("RTEMPLATE_MCP_PORT", "0")
+        .env("RTEMPLATE_MCP_TOKEN", "mcp-secret");
     cmd
 }
 
@@ -219,9 +219,9 @@ fn setup_repair_creates_env_file_without_upstream_contact() {
     assert_eq!(json["no_repair"], false);
 
     let env_file = std::fs::read_to_string(missing.join(".env")).unwrap();
-    assert!(env_file.contains("EXAMPLE_API_URL=https://api.example.test"));
-    assert!(env_file.contains("EXAMPLE_API_KEY=example-secret"));
-    assert!(env_file.contains("EXAMPLE_MCP_TOKEN=mcp-secret"));
+    assert!(env_file.contains("RTEMPLATE_API_URL=https://api.example.test"));
+    assert!(env_file.contains("RTEMPLATE_API_KEY=example-secret"));
+    assert!(env_file.contains("RTEMPLATE_MCP_TOKEN=mcp-secret"));
     assert_env_file_mode(missing.join(".env").as_path());
 }
 
@@ -244,7 +244,7 @@ fn setup_repair_replaces_existing_env_file_with_private_mode() {
 
     let env_file = fs::read_to_string(&env_path).unwrap();
     assert!(!env_file.contains("OLD_VALUE"));
-    assert!(env_file.contains("EXAMPLE_API_URL=https://api.example.test"));
+    assert!(env_file.contains("RTEMPLATE_API_URL=https://api.example.test"));
     assert_env_file_mode(&env_path);
 }
 
@@ -264,9 +264,9 @@ fn assert_env_file_mode(path: &std::path::Path) {
 // --no-repair`.
 //
 // Notes:
-//   - `setup_command` sets EXAMPLE_MCP_TOKEN, which normally selects bearer
-//     mode.  We override that by adding EXAMPLE_MCP_AUTH_MODE=oauth.
-//   - We omit EXAMPLE_MCP_TOKEN here so the setup logic enters the OAuth
+//   - `setup_command` sets RTEMPLATE_MCP_TOKEN, which normally selects bearer
+//     mode.  We override that by adding RTEMPLATE_MCP_AUTH_MODE=oauth.
+//   - We omit RTEMPLATE_MCP_TOKEN here so the setup logic enters the OAuth
 //     credential-check branch (token takes precedence in bearer mode).
 //   - Port is kept at 0 (from setup_command) to avoid mcp_port_in_use noise.
 
@@ -276,14 +276,14 @@ fn oauth_setup_command(data_dir: &std::path::Path) -> Command {
         .env("HOME", data_dir)
         .env("PATH", std::env::var("PATH").unwrap_or_default())
         .env("CLAUDE_PLUGIN_DATA", data_dir)
-        .env("EXAMPLE_API_URL", "https://api.example.test")
-        .env("EXAMPLE_API_KEY", "example-secret")
-        .env("EXAMPLE_MCP_PORT", "0")
-        .env("EXAMPLE_MCP_AUTH_MODE", "oauth")
-        .env("EXAMPLE_MCP_PUBLIC_URL", "https://mcp.example.test")
-        .env("EXAMPLE_MCP_GOOGLE_CLIENT_ID", "test-client-id")
-        .env("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET", "test-client-secret")
-        .env("EXAMPLE_MCP_AUTH_ADMIN_EMAIL", "admin@example.test");
+        .env("RTEMPLATE_API_URL", "https://api.example.test")
+        .env("RTEMPLATE_API_KEY", "example-secret")
+        .env("RTEMPLATE_MCP_PORT", "0")
+        .env("RTEMPLATE_MCP_AUTH_MODE", "oauth")
+        .env("RTEMPLATE_MCP_PUBLIC_URL", "https://mcp.example.test")
+        .env("RTEMPLATE_MCP_GOOGLE_CLIENT_ID", "test-client-id")
+        .env("RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET", "test-client-secret")
+        .env("RTEMPLATE_MCP_AUTH_ADMIN_EMAIL", "admin@example.test");
     cmd
 }
 
@@ -307,7 +307,7 @@ fn oauth_missing_public_url_produces_blocking_failure() {
     let dir = tempdir().unwrap();
     let mut cmd = oauth_setup_command(dir.path());
     // Remove the public URL so the check fires.
-    cmd.env_remove("EXAMPLE_MCP_PUBLIC_URL");
+    cmd.env_remove("RTEMPLATE_MCP_PUBLIC_URL");
     let output = cmd
         .args(["setup", "plugin-hook", "--no-repair"])
         .output()
@@ -330,7 +330,7 @@ fn oauth_missing_public_url_produces_blocking_failure() {
 fn oauth_missing_client_id_produces_blocking_failure() {
     let dir = tempdir().unwrap();
     let mut cmd = oauth_setup_command(dir.path());
-    cmd.env_remove("EXAMPLE_MCP_GOOGLE_CLIENT_ID");
+    cmd.env_remove("RTEMPLATE_MCP_GOOGLE_CLIENT_ID");
     let output = cmd
         .args(["setup", "plugin-hook", "--no-repair"])
         .output()
@@ -352,7 +352,7 @@ fn oauth_missing_client_id_produces_blocking_failure() {
 fn oauth_missing_client_secret_produces_blocking_failure() {
     let dir = tempdir().unwrap();
     let mut cmd = oauth_setup_command(dir.path());
-    cmd.env_remove("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET");
+    cmd.env_remove("RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET");
     let output = cmd
         .args(["setup", "plugin-hook", "--no-repair"])
         .output()
@@ -374,7 +374,7 @@ fn oauth_missing_client_secret_produces_blocking_failure() {
 fn oauth_missing_admin_email_produces_blocking_failure() {
     let dir = tempdir().unwrap();
     let mut cmd = oauth_setup_command(dir.path());
-    cmd.env_remove("EXAMPLE_MCP_AUTH_ADMIN_EMAIL");
+    cmd.env_remove("RTEMPLATE_MCP_AUTH_ADMIN_EMAIL");
     let output = cmd
         .args(["setup", "plugin-hook", "--no-repair"])
         .output()
@@ -395,7 +395,7 @@ fn oauth_missing_admin_email_produces_blocking_failure() {
 // ── write_env OAuth branch (L28) ──────────────────────────────────────────────
 //
 // When `auth_mode = OAuth` with all OAuth fields set, `setup repair` must
-// write a .env that includes EXAMPLE_MCP_AUTH_MODE=oauth and all four OAuth
+// write a .env that includes RTEMPLATE_MCP_AUTH_MODE=oauth and all four OAuth
 // credential lines.
 
 #[test]
@@ -416,24 +416,24 @@ fn setup_repair_oauth_writes_oauth_env_lines() {
 
     let env_file = fs::read_to_string(data_dir.join(".env")).unwrap();
     assert!(
-        env_file.contains("EXAMPLE_MCP_AUTH_MODE=oauth"),
-        ".env should contain EXAMPLE_MCP_AUTH_MODE=oauth"
+        env_file.contains("RTEMPLATE_MCP_AUTH_MODE=oauth"),
+        ".env should contain RTEMPLATE_MCP_AUTH_MODE=oauth"
     );
     assert!(
-        env_file.contains("EXAMPLE_MCP_PUBLIC_URL=https://mcp.example.test"),
-        ".env should contain EXAMPLE_MCP_PUBLIC_URL"
+        env_file.contains("RTEMPLATE_MCP_PUBLIC_URL=https://mcp.example.test"),
+        ".env should contain RTEMPLATE_MCP_PUBLIC_URL"
     );
     assert!(
-        env_file.contains("EXAMPLE_MCP_GOOGLE_CLIENT_ID=test-client-id"),
-        ".env should contain EXAMPLE_MCP_GOOGLE_CLIENT_ID"
+        env_file.contains("RTEMPLATE_MCP_GOOGLE_CLIENT_ID=test-client-id"),
+        ".env should contain RTEMPLATE_MCP_GOOGLE_CLIENT_ID"
     );
     assert!(
-        env_file.contains("EXAMPLE_MCP_GOOGLE_CLIENT_SECRET=test-client-secret"),
-        ".env should contain EXAMPLE_MCP_GOOGLE_CLIENT_SECRET"
+        env_file.contains("RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=test-client-secret"),
+        ".env should contain RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET"
     );
     assert!(
-        env_file.contains("EXAMPLE_MCP_AUTH_ADMIN_EMAIL=admin@example.test"),
-        ".env should contain EXAMPLE_MCP_AUTH_ADMIN_EMAIL"
+        env_file.contains("RTEMPLATE_MCP_AUTH_ADMIN_EMAIL=admin@example.test"),
+        ".env should contain RTEMPLATE_MCP_AUTH_ADMIN_EMAIL"
     );
     assert_env_file_mode(&data_dir.join(".env"));
 }

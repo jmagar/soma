@@ -91,7 +91,7 @@ Notes: both `bd create` commands succeeded, but emitted `Warning: auto-export: g
 - `bash scripts/check-version-sync.sh`: passed with all three version-bearing files at `v0.4.0`.
 - `docker compose --env-file .env.example -f docker-compose.prod.yml config --quiet` and `docker compose --env-file .env.example -f docker-compose.yml config --quiet`: passed.
 - `cargo build --locked --bin example`: passed locally.
-- `EXAMPLE_MCP_HOST=127.0.0.1 EXAMPLE_MCP_PORT=40123 bash tests/mcporter/test-mcp.sh --timeout-ms 20000`: passed with `10` pass, `0` fail, `2` skip.
+- `RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=40123 bash tests/mcporter/test-mcp.sh --timeout-ms 20000`: passed with `10` pass, `0` fail, `2` skip.
 - `gh variable set MCP_REGISTRY_DOMAIN --body tootie.tv -R jmagar/rmcp-template`: set the repository variable.
 - `gh run list --branch main --limit 5 --json ...`: showed push workflow failures on `0085d88` and `8a5c0d5`.
 - `gh api repos/jmagar/rmcp-template/check-runs/.../annotations`: showed GitHub billing/spending-limit failure annotations.

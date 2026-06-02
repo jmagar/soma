@@ -17,11 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Plugin `SessionStart`/`ConfigChange` hooks now call `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly instead of going through the `plugin-setup.sh` shell wrapper. The env-var mapping the script performed (`CLAUDE_PLUGIN_OPTION_*` → `EXAMPLE_*`) now lives in `apply_plugin_options()` in `src/cli/setup.rs`, applied before `Config::load()` on the plugin-hook path.
+- Plugin `SessionStart`/`ConfigChange` hooks now call `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly instead of going through the `plugin-setup.sh` shell wrapper. The env-var mapping the script performed (`CLAUDE_PLUGIN_OPTION_*` → `RTEMPLATE_*`) now lives in `apply_plugin_options()` in `src/cli/setup.rs`, applied before `Config::load()` on the plugin-hook path.
 
 ### Removed
 
-- `plugins/example/hooks/plugin-setup.sh` — the wrapper was a pure env-mapping middleman now handled by the binary's `setup plugin-hook` command.
+- `plugins/rtemplate/hooks/plugin-setup.sh` — the wrapper was a pure env-mapping middleman now handled by the binary's `setup plugin-hook` command.
 
 ## [0.4.0] — 2026-05-14
 
@@ -36,19 +36,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `src/cli/watch.rs` — `example watch` subcommand for live file-system monitoring.
-- `plugins/example/monitors/` — plugin monitor definitions for event-driven automation.
-- `plugins/example/gemini-extension.json` — Gemini extension manifest for multi-platform plugin distribution.
+- `plugins/rtemplate/monitors/` — plugin monitor definitions for event-driven automation.
+- `plugins/rtemplate/gemini-extension.json` — Gemini extension manifest for multi-platform plugin distribution.
 - `.github/dependabot.yml` + `.github/workflows/dependabot-auto-merge.yml` — automated dependency updates with auto-merge for minor/patch bumps.
 - `scripts/asciicheck.py`, `scripts/check-blob-size.py`, `scripts/check-dependency-updates.sh`, `scripts/check-file-size.sh`, `scripts/check-runtime-current.sh`, `scripts/validate-plugin-layout.sh`, `scripts/blob-size-allowlist.txt` — repository validation and quality scripts.
 - `tests/plugin_contract.rs` — plugin contract integration tests.
 - `docs/PLUGINS.md` — documentation for the plugin system and distribution model.
-- `plugins/README.md`, `plugins/example/README.md`, `plugins/example/CLAUDE.md` — plugin-level documentation and agent guidance.
+- `plugins/README.md`, `plugins/rtemplate/README.md`, `plugins/rtemplate/CLAUDE.md` — plugin-level documentation and agent guidance.
 - `apps/web/README.md`, `xtask/README.md`, `tests/README.md`, `scripts/README.md` — README coverage for every major directory.
 - `.claude/` — Claude Code project settings for agent-assisted development.
 
 ### Changed
 
-- `plugins/example/hooks/plugin-setup.sh` — significant simplification; reduced from ~500 to ~50 lines by extracting reusable logic and removing duplication.
+- `plugins/rtemplate/hooks/plugin-setup.sh` — significant simplification; reduced from ~500 to ~50 lines by extracting reusable logic and removing duplication.
 - `Justfile` — expanded with additional recipes covering plugin validation, script checks, and workflow shortcuts.
 - `lefthook.yml` — pre-commit hook additions aligned with new script suite.
 - `AGENTS.md`, `CLAUDE.md` — updated agent and AI tooling guidance to reflect current project structure.
@@ -83,8 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Layered architecture: `ExampleClient` (transport) → `ExampleService` (business logic) → MCP/CLI shims
 - Action-based dispatch: single `example` MCP tool with `action` parameter routing
 - Both transports: Streamable HTTP (`example serve`) and stdio (`example mcp`)
-- Bearer token authentication via `EXAMPLE_MCP_TOKEN`
-- Google OAuth authentication via `EXAMPLE_MCP_AUTH_MODE=oauth` (issues RS256 JWTs)
+- Bearer token authentication via `RTEMPLATE_MCP_TOKEN`
+- Google OAuth authentication via `RTEMPLATE_MCP_AUTH_MODE=oauth` (issues RS256 JWTs)
 - Loopback/no-auth mode for local development
 - MCP elicitation support (`elicit_name` action, spec 2025-06-18) with graceful fallback
 - MCP resources: exposes tool schema at `example://schema/mcp-tool`

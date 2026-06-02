@@ -34,7 +34,7 @@ python3 scripts/check-schema-docs.py --check
 - `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.
 - The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.
 - `help` is intentionally public and must have no required scope.
-- `src/mcp/tools.rs`, `README.md`, and `plugins/example/skills/example/SKILL.md` must mention every action.
+- `src/mcp/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.
 - `src/mcp/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.
 - `src/mcp/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.
 

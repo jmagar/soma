@@ -94,7 +94,7 @@ preflight() {
 
 One-line install:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/example-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/rtemplate-mcp/main/install.sh | bash
 ```
 
 After install: `example doctor` to validate the environment.

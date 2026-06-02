@@ -58,7 +58,7 @@ Audited 6 MCP servers running locally in Docker, discovered they had no auth tok
 | `/home/jmagar/workspace/rustifi/.env` | Replaced `UNIFI_MCP_DISABLE_HTTP_AUTH=true` with `UNIFI_MCP_TOKEN=<token>` |
 | `/home/jmagar/workspace/rustscale/.env` | Replaced no-auth flags with `TAILSCALE_MCP_TOKEN=<token>` |
 | `/home/jmagar/workspace/apprise-mcp/.env` | Replaced no-auth flags with `APPRISE_MCP_TOKEN=<token>` |
-| `/home/jmagar/workspace/rmcp-template/.env` | Replaced no-auth flags with `EXAMPLE_MCP_TOKEN=<token>`; removed duplicate `EXAMPLE_NOAUTH=true` |
+| `/home/jmagar/workspace/rmcp-template/.env` | Replaced no-auth flags with `RTEMPLATE_MCP_TOKEN=<token>`; removed duplicate `RTEMPLATE_NOAUTH=true` |
 | `/home/jmagar/.mcporter/mcporter.json` | Added all 6 servers with real HTTPS domain URLs and bearer tokens; fixed trailing comma left by earlier edit |
 
 ## Commands Executed

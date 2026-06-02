@@ -179,7 +179,7 @@ Validates that version-bearing files agree. Missing `CHANGELOG.md` entries are w
 ### `generate-cli.sh`
 
 ```bash
-EXAMPLE_MCP_TOKEN=... bash scripts/generate-cli.sh
+RTEMPLATE_MCP_TOKEN=... bash scripts/generate-cli.sh
 just generate-cli
 ```
 
@@ -236,7 +236,7 @@ bash scripts/repair.sh
 just repair
 ```
 
-Stops, rebuilds, and restarts the `example-mcp` service. Detects the active service manager automatically: prefers a systemd user unit (`example-mcp.service`), falls back to Docker Compose. Useful after an in-place binary update without a full `docker compose build`.
+Stops, rebuilds, and restarts the `rtemplate-mcp` service. Detects the active service manager automatically: prefers a systemd user unit (`rtemplate-mcp.service`), falls back to Docker Compose. Useful after an in-place binary update without a full `docker compose build`.
 
 ### `run-ascii-check.sh`
 
@@ -260,7 +260,7 @@ Copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to `CLAUDE_PLUGIN_DATA` when neede
 ### `test-mcp-auth.sh`
 
 ```bash
-EXAMPLE_MCP_TOKEN=... scripts/test-mcp-auth.sh
+RTEMPLATE_MCP_TOKEN=... scripts/test-mcp-auth.sh
 scripts/test-mcp-auth.sh --url http://localhost:3100/mcp --token ...
 scripts/test-mcp-auth.sh --check-x-api-key
 ```
@@ -289,7 +289,7 @@ Watches `apps/web/` for changes and rebuilds on save using `watchexec`. Ignores 
 
 ```bash
 scripts/validate-plugin-layout.sh
-PLUGIN_ROOT=plugins/example scripts/validate-plugin-layout.sh
+PLUGIN_ROOT=plugins/rtemplate scripts/validate-plugin-layout.sh
 just validate-plugin
 ```
 

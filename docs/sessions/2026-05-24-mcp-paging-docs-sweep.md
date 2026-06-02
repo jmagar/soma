@@ -32,7 +32,7 @@ Implemented replay-safe MCP response paging with server-side cursors, refreshed 
 
 - MCP continuation needed a cursor because replaying `action=echo` with only `_response_offset` could drop required original arguments or re-run a future mutating action.
 - `just contract-audit` caught that `src/mcp/rmcp_server.rs` exceeded the hard line limit after paging changes; moving paging into `src/mcp/response_paging.rs` restored the contract gate.
-- Several docs still claimed stale defaults: `EXAMPLE_MCP_HOST=0.0.0.0`, port `3100` or `3000`, `/status` requiring auth, `/metrics` being present, and plugin manifests carrying versions.
+- Several docs still claimed stale defaults: `RTEMPLATE_MCP_HOST=0.0.0.0`, port `3100` or `3000`, `/status` requiring auth, `/metrics` being present, and plugin manifests carrying versions.
 - `docs/MCP_SCHEMA.md` is generated, so reserved `_response_*` docs had to be added to `scripts/check-schema-docs.py` and regenerated.
 
 ## Technical Decisions

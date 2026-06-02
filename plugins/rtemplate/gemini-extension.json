@@ -1,19 +1,26 @@
 {
-  "name": "example-mcp",
+  "name": "rtemplate-mcp",
   "description": "TEMPLATE: Replace with a one-line description of your MCP server. E.g.: 'Gotify notification server MCP bridge for Gemini CLI.'",
   "author": "Jacob Magar",
-  "repository": "https://github.com/jmagar/example-mcp",
+  "repository": "https://github.com/jmagar/rtemplate-mcp",
   "license": "MIT",
-  "keywords": ["example", "mcp", "template", "homelab"],
+  "keywords": [
+    "example",
+    "mcp",
+    "template",
+    "homelab"
+  ],
   "contextFileName": "GEMINI.md",
   "mcpServers": {
-    "example": {
+    "rtemplate": {
       "type": "stdio",
       "command": "${extensionPath}${/}bin${/}example",
-      "args": ["mcp"],
+      "args": [
+        "mcp"
+      ],
       "env": {
-        "EXAMPLE_API_URL": "${settings.example_api_url}",
-        "EXAMPLE_API_KEY": "${settings.example_api_key}",
+        "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}",
+        "RTEMPLATE_API_KEY": "${settings.rtemplate_api_key}",
         "RUST_LOG": "warn"
       }
     }
@@ -33,13 +40,13 @@
       "sensitive": true
     },
     {
-      "name": "example_api_url",
-      "description": "TEMPLATE: Replace 'example_api_url' with your service's credential field name. For platform servers, this is the deployed REST API base URL used by the local stdio adapter. For upstream-client servers, this is the upstream service endpoint. Maps to EXAMPLE_API_URL env var.",
+      "name": "rtemplate_api_url",
+      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. For platform servers, this is the deployed REST API base URL used by the local stdio adapter. For upstream-client servers, this is the upstream service endpoint. Maps to RTEMPLATE_API_URL env var.",
       "required": false
     },
     {
-      "name": "example_api_key",
-      "description": "TEMPLATE: Replace 'example_api_key' with your service's credential field name. API key or bearer token for your upstream service. Maps to EXAMPLE_API_KEY env var.",
+      "name": "rtemplate_api_key",
+      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. API key or bearer token for your upstream service. Maps to RTEMPLATE_API_KEY env var.",
       "required": false,
       "sensitive": true
     }

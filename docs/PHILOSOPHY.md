@@ -40,7 +40,7 @@ Zero business logic in shims. If you're writing validation in `mcp/tools.rs`, mo
 ## Secure defaults
 
 - `.env` is ignored and blocked from commits by `scripts/block-env-commits.sh`.
-- Non-loopback HTTP requires auth unless explicitly behind a trusted gateway (`EXAMPLE_NOAUTH=true`).
+- Non-loopback HTTP requires auth unless explicitly behind a trusted gateway (`RTEMPLATE_NOAUTH=true`).
 - Secrets in plugin settings must be marked `sensitive: true`.
 - Plugin manifests do not carry version fields — marketplace versioning comes from git SHA/tags.
 - Never hard-code tokens in unit files or documentation.

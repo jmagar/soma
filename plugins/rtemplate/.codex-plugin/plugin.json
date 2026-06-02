@@ -1,8 +1,8 @@
 {
-  "name": "example-mcp",
+  "name": "rtemplate-mcp",
   "description": "TEMPLATE: Replace with a one-line description of your MCP server for the Codex plugin registry. E.g.: 'Gotify notification server MCP bridge for Codex.'",
-  "homepage": "https://github.com/jmagar/example-mcp",
-  "repository": "https://github.com/jmagar/example-mcp",
+  "homepage": "https://github.com/jmagar/rtemplate-mcp",
+  "repository": "https://github.com/jmagar/rtemplate-mcp",
   "license": "MIT",
   "keywords": [
     "example",
@@ -22,7 +22,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/jmagar/example-mcp",
+    "websiteURL": "https://github.com/jmagar/rtemplate-mcp",
     "defaultPrompt": [
       "TEMPLATE: Replace with 3 natural-language prompts that demonstrate your server's most useful actions.",
       "Check Example service status.",

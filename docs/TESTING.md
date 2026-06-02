@@ -122,7 +122,7 @@ just test-mcporter
 The mcporter harness validates tools and resources against a running server. It logs calls to `/tmp/test-mcp.<timestamp>.log`.
 
 The test script validates:
-- auth rejection when `EXAMPLE_MCP_TOKEN` is set
+- auth rejection when `RTEMPLATE_MCP_TOKEN` is set
 - tool semantic behavior for `greet`, `echo`, `status`, and `help`
 - MCP resource behavior for `example://schema/mcp-tool`
 
