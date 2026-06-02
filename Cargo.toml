@@ -79,6 +79,7 @@ anyhow = "1"
 
 # Static asset embedding (web UI)
 include_dir = { version = "0.7", optional = true }
+dotenvy = "0.15.7"
 
 [features]
 default = ["full"]

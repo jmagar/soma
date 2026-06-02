@@ -29,6 +29,11 @@ async fn main() -> Result<()> {
         || matches!(args.as_slice(), [c] if c == "serve")
         || matches!(args.as_slice(), [a, b] if a == "serve" && b == "mcp");
 
+    // Load ~/.<service>/.env (or /data/.env in a container) before any config
+    // load so the binary works on bare metal without a process manager injecting
+    // env. Non-overriding: explicit process env still wins.
+    rmcp_template::config::load_dotenv();
+
     runtime::init_logging(stdio_mode, serve_mode);
 
     if serve_mode {
