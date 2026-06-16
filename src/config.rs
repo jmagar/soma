@@ -125,7 +125,7 @@ fn default_mcp_host() -> String {
     "127.0.0.1".into()
 }
 fn default_mcp_port() -> u16 {
-    40060
+    40000
 }
 fn default_server_name() -> String {
     "rtemplate-mcp".into()
