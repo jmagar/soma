@@ -38,7 +38,7 @@ entry must be stdio-first:
 ```json
 {
   "type": "stdio",
-  "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
+  "command": "example",
   "args": ["mcp"],
   "env": {
     "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
@@ -48,12 +48,11 @@ entry must be stdio-first:
 }
 ```
 
-Gemini must use the same local adapter behavior with Gemini's extension path
-interpolation:
+Gemini must use the same local adapter behavior:
 
 ```json
 {
-  "command": "${extensionPath}${/}bin${/}example",
+  "command": "example",
   "args": ["mcp"],
   "env": {
     "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}",

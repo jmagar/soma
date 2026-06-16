@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::app::ExampleService;
@@ -110,43 +111,114 @@ pub enum ActionTransport {
     McpOnly,
 }
 
+impl ActionTransport {
+    pub fn mcp(self) -> bool {
+        matches!(self, Self::Any | Self::McpOnly)
+    }
+
+    pub fn cli(self) -> bool {
+        matches!(self, Self::Any)
+    }
+
+    pub fn rest(self) -> bool {
+        matches!(self, Self::Any)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParamSpec {
+    pub name: &'static str,
+    pub ty: &'static str,
+    pub required: bool,
+    pub description: &'static str,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActionSpec {
     pub name: &'static str,
+    pub description: &'static str,
     pub required_scope: Option<&'static str>,
     pub transport: ActionTransport,
+    pub destructive: bool,
+    pub requires_admin: bool,
+    pub params: &'static [ParamSpec],
+    pub returns: &'static str,
 }
+
+const GREET_PARAMS: &[ParamSpec] = &[ParamSpec {
+    name: "name",
+    ty: "string",
+    required: false,
+    description: "Name to greet. Omit to greet the world.",
+}];
+
+const ECHO_PARAMS: &[ParamSpec] = &[ParamSpec {
+    name: "message",
+    ty: "string",
+    required: true,
+    description: "Message to echo back. Must not be empty.",
+}];
 
 pub const ACTION_SPECS: &[ActionSpec] = &[
     ActionSpec {
         name: "greet",
+        description: "Return a greeting.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::Any,
+        destructive: false,
+        requires_admin: false,
+        params: GREET_PARAMS,
+        returns: "Greeting",
     },
     ActionSpec {
         name: "echo",
+        description: "Echo a message back unchanged.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::Any,
+        destructive: false,
+        requires_admin: false,
+        params: ECHO_PARAMS,
+        returns: "EchoResult",
     },
     ActionSpec {
         name: "status",
+        description: "Return server status and configuration info.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::Any,
+        destructive: false,
+        requires_admin: false,
+        params: &[],
+        returns: "Status",
     },
     ActionSpec {
         name: "elicit_name",
+        description: "Ask the MCP client to collect a name, then return a personalised greeting.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::McpOnly,
+        destructive: false,
+        requires_admin: false,
+        params: &[],
+        returns: "Greeting",
     },
     ActionSpec {
         name: "scaffold_intent",
+        description: "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::McpOnly,
+        destructive: false,
+        requires_admin: false,
+        params: &[],
+        returns: "ScaffoldIntentReport",
     },
     ActionSpec {
         name: "help",
+        description: "Show the action reference.",
         required_scope: None,
         transport: ActionTransport::Any,
+        destructive: false,
+        requires_admin: false,
+        params: &[],
+        returns: "HelpPayload",
     },
 ];
 
@@ -161,14 +233,14 @@ pub fn is_known_action(action: &str) -> bool {
 pub fn rest_action_names() -> Vec<&'static str> {
     ACTION_SPECS
         .iter()
-        .filter(|spec| spec.transport == ActionTransport::Any)
+        .filter(|spec| spec.transport.rest())
         .map(|spec| spec.name)
         .collect()
 }
 
 pub fn is_rest_action(action: &str) -> bool {
     action_spec(action)
-        .map(|spec| spec.transport == ActionTransport::Any)
+        .map(|spec| spec.transport.rest())
         .unwrap_or(false)
 }
 
@@ -186,8 +258,76 @@ pub fn required_scope_for_action(action: &str) -> Option<&'static str> {
         .unwrap_or(Some(DENY_SCOPE))
 }
 
-fn action_spec(action: &str) -> Option<&'static ActionSpec> {
+pub fn action_spec(action: &str) -> Option<&'static ActionSpec> {
     ACTION_SPECS.iter().find(|spec| spec.name == action)
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SurfaceAvailability {
+    pub mcp: bool,
+    pub cli: bool,
+    pub rest: bool,
+    pub web_ui: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ParamDoc {
+    pub name: String,
+    pub ty: String,
+    pub required: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ActionDoc {
+    pub service: String,
+    pub action: String,
+    pub description: String,
+    pub destructive: bool,
+    pub requires_admin: bool,
+    pub required_scope: Option<String>,
+    pub params: Vec<ParamDoc>,
+    pub returns: String,
+    pub surface_availability: SurfaceAvailability,
+    pub auth_posture: String,
+    pub mcp_only_exception: Option<String>,
+}
+
+pub fn action_catalog() -> Vec<ActionDoc> {
+    ACTION_SPECS
+        .iter()
+        .map(|spec| ActionDoc {
+            service: "example".to_owned(),
+            action: spec.name.to_owned(),
+            description: spec.description.to_owned(),
+            destructive: spec.destructive,
+            requires_admin: spec.requires_admin,
+            required_scope: spec.required_scope.map(ToOwned::to_owned),
+            params: spec
+                .params
+                .iter()
+                .map(|param| ParamDoc {
+                    name: param.name.to_owned(),
+                    ty: param.ty.to_owned(),
+                    required: param.required,
+                    description: param.description.to_owned(),
+                })
+                .collect(),
+            returns: spec.returns.to_owned(),
+            surface_availability: SurfaceAvailability {
+                mcp: spec.transport.mcp(),
+                cli: spec.transport.cli(),
+                rest: spec.transport.rest(),
+                web_ui: false,
+            },
+            auth_posture: match spec.required_scope {
+                Some(scope) => format!("requires `{scope}` on authenticated transports"),
+                None => "public action; no action scope required".to_owned(),
+            },
+            mcp_only_exception: (spec.transport == ActionTransport::McpOnly)
+                .then(|| "MCP-only because it requires client-rendered elicitation.".to_owned()),
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -283,6 +423,7 @@ pub fn rest_help() -> Value {
     json!({
         "actions": rest_action_names(),
         "mcp_only_actions": mcp_only_action_names(),
+        "catalog": action_catalog(),
         "usage": "POST /v1/example with {\"action\": \"<action>\", \"params\": {...}}",
         "examples": {
             "greet":  {"action": "greet",  "params": {"name": "Alice"}},

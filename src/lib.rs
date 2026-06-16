@@ -14,8 +14,10 @@
 pub mod actions;
 pub mod api;
 pub mod app;
+pub mod binary_status;
 pub mod cli;
 pub mod config;
+pub mod env_registry;
 pub mod example;
 pub mod logging;
 pub mod mcp;

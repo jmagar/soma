@@ -359,22 +359,12 @@ status:
 repair:
     bash scripts/repair.sh
 
-# Copy the release binary into plugin bin/ for local plugin packaging.
-# TEMPLATE: Replace "example" with your binary name
-build-plugin: build-local-release
-    #!/bin/sh
-    set -eu
-    target_dir="${CARGO_TARGET_DIR:-target}"
-    if [ ! -x "${target_dir}/release/rtemplate" ] && [ -x ".cache/cargo/release/rtemplate" ]; then
-        target_dir=".cache/cargo"
-    fi
-    mkdir -p bin plugins/rtemplate/bin
-    install -m 755 "${target_dir}/release/rtemplate" bin/rtemplate
-    install -m 755 "${target_dir}/release/rtemplate" plugins/rtemplate/bin/rtemplate
-    echo "Installed bin/rtemplate and plugins/rtemplate/bin/rtemplate"
+# Validate plugin metadata. Plugins launch the installed PATH binary and do not
+# bundle a release artifact.
+build-plugin: validate-plugin
 
-# Install the release binary into bin/ (alias for build-plugin kept for compatibility)
-install: build-plugin
+# Install the release binary on the local PATH.
+install: install-local
 
 # Install the release binary on the local PATH for runtime smoke testing
 install-local: build-local-release

@@ -1,5 +1,5 @@
 ---
-name: example
+name: rtemplate
 description: TEMPLATE SKILL — Replace this description with your service's trigger phrases. This skill should be used when the user asks to interact with the Example service via MCP. Trigger phrases should describe what your service does, e.g. "query my service", "check example status", "call example API". The description is what the AI reads to decide when to invoke this skill — be specific and use the exact phrases your users will say.
 ---
 
@@ -26,7 +26,7 @@ description: TEMPLATE SKILL — Replace this description with your service's tri
 # Example Skill
 
 <!-- TEMPLATE: Replace this paragraph with your service description -->
-Rust-based MCP server template. Exposes a single `example` MCP tool with action-based dispatch for interacting with an example remote service. The plugin default is local stdio MCP (`bin/example mcp`); for platform deployments the local adapter calls the deployed API configured by `rtemplate_api_url`.
+Rust-based MCP server template. Exposes a single `example` MCP tool with action-based dispatch for interacting with an example remote service. The plugin default is local stdio MCP (`rtemplate mcp` from PATH); for platform deployments the local adapter calls the deployed API configured by `rtemplate_api_url`.
 
 ## Tool
 
@@ -216,7 +216,7 @@ mcp__example__example(action="help")
      The CLAUDE_PLUGIN_OPTION_* env vars are injected by the plugin runtime. -->
 
 Use only when the stdio MCP tool is unavailable or when debugging a remote HTTP
-deployment. The plugin default launches `${CLAUDE_PLUGIN_ROOT}/bin/example mcp`
+deployment. The plugin default launches `rtemplate mcp`
 and passes:
 
 - `CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL` — deployed platform API or upstream URL

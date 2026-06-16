@@ -1,4 +1,4 @@
-use crate::actions::action_names;
+use crate::actions::{action_names, action_spec};
 
 use super::tool_definitions;
 
@@ -21,6 +21,10 @@ fn echo_message_schema_requires_non_empty_string() {
     assert_eq!(
         tools[0]["inputSchema"]["properties"]["message"]["minLength"],
         1
+    );
+    assert_eq!(
+        tools[0]["inputSchema"]["properties"]["message"]["description"],
+        action_spec("echo").unwrap().params[0].description
     );
 }
 
@@ -49,6 +53,25 @@ fn schema_conditionally_requires_echo_message() {
                     .is_some_and(|required| required.iter().any(|field| field == "message"))
         ),
         "echo action must conditionally require message"
+    );
+}
+
+#[test]
+fn schema_mcp_only_condition_is_derived_from_action_metadata() {
+    let tools = tool_definitions();
+    let all_of = tools[0]["inputSchema"]["allOf"]
+        .as_array()
+        .expect("schema should include conditional action validation");
+    assert!(
+        all_of.iter().any(|entry| {
+            entry["if"]["properties"]["action"]["enum"]
+                .as_array()
+                .is_some_and(|actions| {
+                    actions.contains(&serde_json::json!("elicit_name"))
+                        && actions.contains(&serde_json::json!("scaffold_intent"))
+                })
+        }),
+        "MCP-only actions should be grouped in a derived schema condition"
     );
 }
 

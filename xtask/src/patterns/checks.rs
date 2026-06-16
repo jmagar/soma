@@ -243,16 +243,16 @@ pub(super) fn plugins(reporter: &mut PatternReporter) {
     let hook_path = Path::new("plugins/rtemplate/hooks/hooks.json");
     if hook_path.exists() {
         let hook = read_file("plugins/rtemplate/hooks/hooks.json");
-        // The hook must call the binary directly (no plugin-setup.sh wrapper).
+        // The hook must call the installed PATH binary directly (no plugin-setup.sh wrapper).
         if hook.contains("plugin-setup.sh") {
             reporter.fail(
                 "plugins",
                 "hooks.json must not reference the removed plugin-setup.sh wrapper",
             );
-        } else if !hook.contains("/bin/rtemplate setup plugin-hook") {
+        } else if !hook.contains("rtemplate setup plugin-hook") {
             reporter.fail(
                 "plugins",
-                "hooks.json must call `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly",
+                "hooks.json must call `rtemplate setup plugin-hook` directly",
             );
         } else {
             reporter.ok(

@@ -63,7 +63,7 @@ last_reviewed: "2026-05-15"
 
 | Recipe | Purpose |
 |---|---|
-| `just build-plugin` | Copy release binary into `bin/` and plugin `bin/`. |
+| `just build-plugin` | Validate plugin manifests, hooks, MCP config, and skills. |
 | `just validate-plugin` | Validate Claude/Codex/Gemini plugin manifests and skills. |
 | `just fleet-alignment-check` | Check fleet plugin hooks, manifests, and required operator recipes. |
 | `just dist` | `cargo xtask dist` — build and copy release artifacts. |

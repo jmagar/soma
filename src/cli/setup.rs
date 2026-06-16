@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     config::{default_data_dir, AuthMode, Config},
+    env_registry,
     server::resolve_auth_policy_kind,
 };
 use anyhow::{bail, Result};
@@ -23,7 +24,9 @@ pub enum SetupCommand {
     /// Copy this binary into ~/.local/bin so it is available as a bare command
     /// in the user's own terminal, independent of Claude Code.
     Install,
-    PluginHook { no_repair: bool },
+    PluginHook {
+        no_repair: bool,
+    },
 }
 
 /// Translate Claude Code plugin options (`CLAUDE_PLUGIN_OPTION_*`) into the
@@ -35,29 +38,7 @@ pub enum SetupCommand {
 /// `reject_unsafe_value` guard. Only applied on the plugin-hook path, matching
 /// the script's scope.
 pub fn apply_plugin_options() {
-    // CLAUDE_PLUGIN_OPTION_<OPT> -> <RTEMPLATE_ENVVAR>
-    let map = [
-        ("CLAUDE_PLUGIN_OPTION_API_TOKEN", "RTEMPLATE_MCP_TOKEN"),
-        ("CLAUDE_PLUGIN_OPTION_SERVER_URL", "RTEMPLATE_SERVER_URL"),
-        ("CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL", "RTEMPLATE_API_URL"),
-        ("CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_KEY", "RTEMPLATE_API_KEY"),
-        ("CLAUDE_PLUGIN_OPTION_AUTH_MODE", "RTEMPLATE_MCP_AUTH_MODE"),
-        ("CLAUDE_PLUGIN_OPTION_NO_AUTH", "RTEMPLATE_MCP_NO_AUTH"),
-        ("CLAUDE_PLUGIN_OPTION_PUBLIC_URL", "RTEMPLATE_MCP_PUBLIC_URL"),
-        (
-            "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_ID",
-            "RTEMPLATE_MCP_GOOGLE_CLIENT_ID",
-        ),
-        (
-            "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET",
-            "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET",
-        ),
-        (
-            "CLAUDE_PLUGIN_OPTION_AUTH_ADMIN_EMAIL",
-            "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL",
-        ),
-    ];
-    for (opt, dest) in map {
+    for (opt, dest) in env_registry::plugin_option_mappings() {
         if let Some(v) = std::env::var_os(opt) {
             let s = v.to_string_lossy();
             if s.is_empty() || s.contains('\n') || s.contains('\r') {
@@ -159,7 +140,8 @@ fn install_self() -> Result<PathBuf> {
     let name = exe
         .file_name()
         .ok_or_else(|| anyhow::anyhow!("cannot determine binary name from {}", exe.display()))?;
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
     let bin_dir = home.join(".local").join("bin");
     std::fs::create_dir_all(&bin_dir)?;
     let dest = bin_dir.join(name);
@@ -314,7 +296,8 @@ fn check_auth(config: &Config, report: &mut SetupReport) {
     } else if config.mcp.api_token.as_deref().unwrap_or("").is_empty() {
         report.blocking_failures.push(SetupFailure {
             code: "missing_mcp_token",
-            message: "RTEMPLATE_MCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
+            message: "RTEMPLATE_MCP_TOKEN is required unless no_auth or OAuth mode is enabled"
+                .into(),
         });
     }
 }

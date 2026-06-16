@@ -174,6 +174,6 @@ docker compose up -d --force-recreate
 
 ## Build artifacts
 
-`just build-plugin` copies the release binary to both `bin/example` and `plugins/rtemplate/bin/example`. The plugin binary path is allowlisted in `scripts/blob-size-allowlist.txt`.
+`just build-plugin` validates the plugin metadata. Plugins launch the installed PATH binary and do not bundle a release artifact.
 
 See `docs/PATTERNS.md` §14, §15, §25, §26, §50 for the full Dockerfile, compose, appdata, and entrypoint patterns.

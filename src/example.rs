@@ -112,11 +112,15 @@ impl ExampleClient {
             return Ok(value);
         }
 
-        Ok(json!({
+        let mut status = json!({
             "status": "ok",
             // api_url intentionally omitted — topology leak on unauthenticated endpoint.
             "note": "stub — replace with real health endpoint",
-        }))
+        });
+        if let Some(warning) = crate::binary_status::stale_binary_warning() {
+            status["warnings"] = json!([warning]);
+        }
+        Ok(status)
     }
 
     async fn call_deployed_api(&self, action: &str, params: Value) -> Result<Option<Value>> {

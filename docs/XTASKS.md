@@ -28,7 +28,7 @@ xtask/
 
 | Command | Purpose |
 |---|---|
-| `cargo xtask dist` | Build release binary and copy it to `bin/example`. |
+| `cargo xtask dist` | Build the release binary into the Cargo target directory. |
 | `cargo xtask ci` | Run local CI sequence: fmt, clippy, tests, taplo, patterns, audit when tools exist. |
 | `cargo xtask symlink-docs` | Create `AGENTS.md` and `GEMINI.md` symlinks next to each `CLAUDE.md`. |
 | `cargo xtask check-env` | Validate required environment before server start. |

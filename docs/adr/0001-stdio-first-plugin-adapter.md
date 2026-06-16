@@ -38,13 +38,13 @@ server.
 
 ## Decision
 
-- Plugin installs default to stdio MCP through the bundled local binary.
+- Plugin installs default to stdio MCP through the installed local binary.
 - Claude Code and Codex use `plugins/rtemplate/.mcp.json` with:
   - `"type": "stdio"`
-  - `"command": "${CLAUDE_PLUGIN_ROOT}/bin/example"`
+  - `"command": "example"`
   - `"args": ["mcp"]`
 - Gemini uses the equivalent extension-local command:
-  - `"command": "${extensionPath}${/}bin${/}example"`
+  - `"command": "example"`
   - `"args": ["mcp"]`
 - Plugin settings inject `RTEMPLATE_API_URL` and `RTEMPLATE_API_KEY` into the
   stdio child process.

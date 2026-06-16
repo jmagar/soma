@@ -14,9 +14,13 @@
 //! ```
 
 use crate::{
-    actions::rest_help, app::ExampleService, config::ExampleConfig, example::ExampleClient,
+    actions::{rest_help, ActionSpec, ACTION_SPECS},
+    app::ExampleService,
+    config::ExampleConfig,
+    example::ExampleClient,
 };
 use anyhow::{anyhow, Result};
+use std::io::{BufRead, IsTerminal, Write};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
@@ -186,6 +190,7 @@ where
 pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     let client = ExampleClient::new(cfg)?;
     let service = ExampleService::new(client);
+    confirm_command_if_destructive(&cmd)?;
 
     let result = match &cmd {
         Command::Greet { name } => service.greet(name.as_deref()).await?,
@@ -201,6 +206,68 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
 
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
+}
+
+fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {
+    let Some(action) = command_action_name(cmd) else {
+        return Ok(());
+    };
+    confirm_destructive_action_allowed(ACTION_SPECS, action, false, std::io::stdin().is_terminal())
+}
+
+fn command_action_name(cmd: &Command) -> Option<&'static str> {
+    match cmd {
+        Command::Greet { .. } => Some("greet"),
+        Command::Echo { .. } => Some("echo"),
+        Command::Status => Some("status"),
+        Command::Help => Some("help"),
+        Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => None,
+    }
+}
+
+pub fn confirm_destructive_action_allowed(
+    actions: &[ActionSpec],
+    action: &str,
+    yes: bool,
+    stdin_is_terminal: bool,
+) -> Result<()> {
+    if yes
+        || !actions
+            .iter()
+            .any(|spec| spec.name == action && spec.destructive)
+    {
+        return Ok(());
+    }
+    if !stdin_is_terminal {
+        return Err(anyhow!(
+            "pass -y / --yes to confirm destructive action `{action}`"
+        ));
+    }
+    confirm_destructive_action_from_io(action, &mut std::io::stdin().lock(), &mut std::io::stderr())
+}
+
+fn confirm_destructive_action_from_io<R, W>(
+    action: &str,
+    reader: &mut R,
+    writer: &mut W,
+) -> Result<()>
+where
+    R: BufRead,
+    W: Write,
+{
+    write!(
+        writer,
+        "Action `{action}` is destructive. Type `{action}` to continue: "
+    )?;
+    writer.flush()?;
+
+    let mut input = String::new();
+    reader.read_line(&mut input)?;
+    if input.trim() == action {
+        Ok(())
+    } else {
+        Err(anyhow!("aborted by user"))
+    }
 }
 
 // ── arg parsing helpers ───────────────────────────────────────────────────────

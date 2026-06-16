@@ -64,14 +64,14 @@ See `.codex-plugin/README.md` for a full field reference and `brandColor` guide.
 ### `.mcp.json`
 
 Shared MCP server connection config used by Claude Code and Codex. It launches
-the bundled local binary in stdio mode.
+the installed local binary in stdio mode.
 
 ```json
 {
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
+      "command": "rtemplate",
       "args": ["mcp"],
       "env": {
         "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
@@ -93,8 +93,8 @@ Defines two lifecycle hooks:
 
 | Hook | Trigger | Command |
 |---|---|---|
-| `SessionStart` | Every Claude Code session start | `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` |
-| `ConfigChange` | User updates plugin settings | `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` |
+| `SessionStart` | Every Claude Code session start | `rtemplate setup plugin-hook` |
+| `ConfigChange` | User updates plugin settings | `rtemplate setup plugin-hook` |
 
 Timeout: 300 seconds.
 
@@ -103,7 +103,7 @@ Timeout: 300 seconds.
 The lifecycle command. Runs on every session start and config change, called directly by `hooks.json` (no shell wrapper).
 
 - Reads `CLAUDE_PLUGIN_OPTION_*` env vars from plugin `userConfig` and maps them to the binary's `RTEMPLATE_*` runtime env vars (`apply_plugin_options()` in `src/cli/setup.rs`)
-- Self-installs into `~/.local/bin` so the binary is callable in the user's own terminal
+- Runs from the binary already installed on `PATH`
 - Prepares the plugin appdata directory
 - Checks/repairs setup and emits the JSON hook contract
 

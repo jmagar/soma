@@ -14,7 +14,7 @@
   "mcpServers": {
     "rtemplate": {
       "type": "stdio",
-      "command": "${extensionPath}${/}bin${/}example",
+      "command": "rtemplate",
       "args": [
         "mcp"
       ],

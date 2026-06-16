@@ -3,7 +3,7 @@
 //! Invoked via: `cargo xtask <command>`
 //!
 //! Commands:
-//!   dist         Build release binary and copy it to bin/ (Git LFS tracked)
+//!   dist         Build release binary into Cargo target dir
 //!   ci           Run all CI checks: fmt, clippy, nextest, taplo, audit
 //!   symlink-docs Create AGENTS.md and GEMINI.md symlinks next to every CLAUDE.md
 //!   check-env    Validate required environment variables are set
@@ -93,56 +93,31 @@ fn contract_audit() -> Result<()> {
 }
 
 // =============================================================================
-// dist — Build release binary and copy to bin/
+// dist — Build release binary
 // =============================================================================
 
-/// Build the release binary and copy it to `bin/` for Git LFS distribution.
+/// Build the release binary. Distribution is handled by package/release tooling;
+/// plugins reference an installed PATH binary and do not bundle artifacts.
 ///
-/// The `bin/` directory is tracked via Git LFS (see .gitattributes). This lets
-/// plugin users install the binary without needing a Rust toolchain — `install.sh`
-/// downloads the LFS object directly.
-///
-/// TEMPLATE: Replace "example" with your binary name throughout this function.
+/// TEMPLATE: Replace "rtemplate" with your binary name throughout this function.
 ///           The binary name must match Cargo.toml `[[bin]] name = "..."`.
-///
-/// After running `cargo xtask dist`:
-///   1. Commit bin/example
-///   2. Push — Git LFS uploads the binary automatically
 fn dist() -> Result<()> {
-    // TEMPLATE: Replace "example" with your binary name.
-    const BINARY_NAME: &str = "example";
+    // TEMPLATE: Replace "rtemplate" with your binary name.
+    const BINARY_NAME: &str = "rtemplate";
 
     println!("==> Building release binary: {BINARY_NAME}");
-    run_cargo(&["build", "--release", "--locked"])?;
+    run_cargo(&["build", "--release", "--locked", "--bin", BINARY_NAME])?;
 
-    // Determine the target directory (respects CARGO_TARGET_DIR override).
     let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into());
-
-    let src = std::path::Path::new(&target_dir)
+    let artifact = std::path::Path::new(&target_dir)
         .join("release")
         .join(BINARY_NAME);
-    if !src.exists() {
-        bail!("Release binary not found at {src:?} — build must have failed");
+    if !artifact.exists() {
+        bail!("Release binary not found at {artifact:?} — build must have failed");
     }
 
-    // Create bin/ and copy
-    std::fs::create_dir_all("bin").context("Failed to create bin/")?;
-    let dst = std::path::Path::new("bin").join(BINARY_NAME);
-    std::fs::copy(&src, &dst).with_context(|| format!("Failed to copy {src:?} to {dst:?}"))?;
-
-    // Set executable bit on Unix
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&dst)?.permissions();
-        perms.set_mode(0o755);
-        std::fs::set_permissions(&dst, perms)?;
-    }
-
-    println!("==> Copied {src:?} → {dst:?}");
-    println!(
-        "==> Run `git add bin/{BINARY_NAME} && git commit -m 'chore: update binary'` to publish via LFS"
-    );
+    println!("==> Built {artifact:?}");
+    println!("==> Run `just install-local` to install it to ~/.local/bin for plugin use");
     Ok(())
 }
 
@@ -529,7 +504,7 @@ USAGE:
   cargo xtask <command>
 
 COMMANDS:
-  dist                  Build release binary and copy to bin/ (Git LFS)
+  dist                  Build release binary into Cargo target dir
   ci                    Run all CI checks: fmt, clippy, nextest, taplo, audit
   symlink-docs          Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
   check-env             Validate required environment variables are set

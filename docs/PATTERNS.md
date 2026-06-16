@@ -776,8 +776,8 @@ Adding an explicit version creates drift and requires manual bumping on every re
 ```json
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/<binary> setup plugin-hook", "timeout": 600 }] }],
-    "ConfigChange": [{ "matcher": "user_settings", "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/<binary> setup plugin-hook", "timeout": 600 }] }]
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "<binary> setup plugin-hook", "timeout": 600 }] }],
+    "ConfigChange": [{ "matcher": "user_settings", "hooks": [{ "type": "command", "command": "<binary> setup plugin-hook", "timeout": 600 }] }]
   }
 }
 ```

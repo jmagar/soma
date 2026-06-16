@@ -31,8 +31,6 @@ plugins/rtemplate/
   gemini-extension.json  # Gemini CLI extension manifest
   hooks/
     hooks.json           # Claude lifecycle hook declarations (call the binary directly)
-  bin/
-    example             # Optional Git LFS-tracked plugin binary artifact
   skills/
     example/
       SKILL.md           # Shared action documentation
@@ -71,8 +69,8 @@ Claude-specific lifecycle hooks live in `plugins/rtemplate/hooks/hooks.json`. Th
 
 | Hook | Trigger | Command |
 | --- | --- | --- |
-| `SessionStart` | every Claude Code session start | `${CLAUDE_PLUGIN_ROOT}/bin/<binary> setup plugin-hook` |
-| `ConfigChange` | plugin user settings change | `${CLAUDE_PLUGIN_ROOT}/bin/<binary> setup plugin-hook` |
+| `SessionStart` | every Claude Code session start | `<binary> setup plugin-hook` |
+| `ConfigChange` | plugin user settings change | `<binary> setup plugin-hook` |
 
 The hook calls the binary directly (no shell wrapper). The standard command is:
 
@@ -86,7 +84,7 @@ For rollout audits, the binary must also support:
 <binary> setup plugin-hook --no-repair
 ```
 
-The hook script may map `CLAUDE_PLUGIN_OPTION_*` values into runtime env vars, create the appdata directory, ensure the binary is available, and call the binary. It should not own Docker/systemd orchestration, config rewriting, smoke-test policy, or failure classification.
+The hook command runs the binary already installed on `PATH`. It may map `CLAUDE_PLUGIN_OPTION_*` values into runtime env vars, create the appdata directory, and call the binary's setup logic. It should not own Docker/systemd orchestration, config rewriting, smoke-test policy, or failure classification.
 
 ## Codex
 
@@ -158,10 +156,10 @@ The validator checks:
 - Claude, Codex, and Gemini manifests are valid JSON
 - plugin manifests do not contain a `version` field
 - manifests point to the shared `.mcp.json`, hooks, and skills paths
-- shared MCP config launches `${CLAUDE_PLUGIN_ROOT}/bin/example mcp`
-- Gemini config launches `${extensionPath}${/}bin${/}example mcp`
+- shared MCP config launches `example mcp`
+- Gemini config launches `example mcp`
 - HTTP MCP remains available as a documented fallback for remote/gateway deployments
-- hook config runs `${CLAUDE_PLUGIN_ROOT}/bin/<binary> setup plugin-hook` directly
+- hook config runs `<binary> setup plugin-hook` directly
 - every skill has `name:` and `description:` frontmatter
 
 Use `PLUGIN_ROOT=plugins/<service>` when validating an adapted service package.
@@ -178,7 +176,7 @@ Claude Code and Codex share `plugins/rtemplate/.mcp.json`:
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
+      "command": "example",
       "args": ["mcp"],
       "env": {
         "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
@@ -309,7 +307,7 @@ When creating a real server from the template:
 
 Each server should include tests that prove:
 
-- Claude hook config calls `${CLAUDE_PLUGIN_ROOT}/bin/<binary> setup plugin-hook` directly
+- Claude hook config calls `<binary> setup plugin-hook` directly
 - `apply_plugin_options()` maps `CLAUDE_PLUGIN_OPTION_*` into the binary's env vars
 - `setup plugin-hook --no-repair` parses and does not mutate appdata
 - JSON plugin-hook output contains `exit_policy`, `blocking_failures`, `advisory_failures`, `ran_repair`, and `no_repair`

@@ -89,10 +89,7 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     }
 
     assert_eq!(mcp["mcpServers"]["rtemplate"]["type"], "stdio");
-    assert_eq!(
-        mcp["mcpServers"]["rtemplate"]["command"],
-        "${CLAUDE_PLUGIN_ROOT}/bin/rtemplate"
-    );
+    assert_eq!(mcp["mcpServers"]["rtemplate"]["command"], "rtemplate");
     assert_eq!(
         mcp["mcpServers"]["rtemplate"]["args"],
         serde_json::json!(["mcp"])
@@ -109,10 +106,7 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     assert!(mcp["mcpServers"]["rtemplate"].get("headers").is_none());
 
     assert_eq!(gemini["mcpServers"]["rtemplate"]["type"], "stdio");
-    assert_eq!(
-        gemini["mcpServers"]["rtemplate"]["command"],
-        "${extensionPath}${/}bin${/}example"
-    );
+    assert_eq!(gemini["mcpServers"]["rtemplate"]["command"], "rtemplate");
     assert_eq!(
         gemini["mcpServers"]["rtemplate"]["args"],
         serde_json::json!(["mcp"])
@@ -136,10 +130,7 @@ fn claude_hooks_call_binary_setup_plugin_hook_directly() {
         let command = hooks["hooks"][hook_name][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert_eq!(
-            command,
-            "${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook"
-        );
+        assert_eq!(command, "rtemplate setup plugin-hook");
     }
 }
 

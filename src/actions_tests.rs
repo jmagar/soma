@@ -25,6 +25,38 @@ fn action_metadata_is_the_action_source_of_truth() {
     assert_eq!(required_scope_for_action("help"), None);
     assert_eq!(required_scope_for_action("greet"), Some(READ_SCOPE));
     assert_eq!(required_scope_for_action("unknown"), Some(DENY_SCOPE));
+    let echo = action_spec("echo").expect("echo spec should exist");
+    assert_eq!(echo.description, "Echo a message back unchanged.");
+    assert_eq!(echo.returns, "EchoResult");
+    assert_eq!(echo.params[0].name, "message");
+    assert!(echo.params[0].required);
+    assert!(!echo.destructive);
+    assert!(!echo.requires_admin);
+}
+
+#[test]
+fn action_catalog_projects_surfaces_and_auth_posture() {
+    let catalog = action_catalog();
+    let greet = catalog
+        .iter()
+        .find(|entry| entry.action == "greet")
+        .expect("greet catalog entry should exist");
+    assert_eq!(greet.service, "example");
+    assert!(greet.surface_availability.mcp);
+    assert!(greet.surface_availability.cli);
+    assert!(greet.surface_availability.rest);
+    assert!(!greet.surface_availability.web_ui);
+    assert_eq!(greet.required_scope.as_deref(), Some(READ_SCOPE));
+    assert!(greet.auth_posture.contains(READ_SCOPE));
+
+    let scaffold = catalog
+        .iter()
+        .find(|entry| entry.action == "scaffold_intent")
+        .expect("scaffold_intent catalog entry should exist");
+    assert!(scaffold.surface_availability.mcp);
+    assert!(!scaffold.surface_availability.cli);
+    assert!(!scaffold.surface_availability.rest);
+    assert!(scaffold.mcp_only_exception.is_some());
 }
 
 #[test]

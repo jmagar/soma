@@ -2,7 +2,7 @@
   "mcpServers": {
     "rtemplate": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/rtemplate",
+      "command": "rtemplate",
       "args": [
         "mcp"
       ],

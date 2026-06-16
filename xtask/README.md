@@ -28,7 +28,7 @@ just ci
 
 ### `cargo xtask dist`
 
-Build the release binary and copy it to `bin/` for Git LFS-tracked distribution.
+Build the release binary into the Cargo target directory.
 
 1. Runs `cargo build --release --locked`
 2. Copies the binary to `bin/<binary-name>` (creating `bin/` if needed)

@@ -2,8 +2,8 @@
 
 Multi-platform plugin package that connects Claude Code, Codex, and Gemini CLI to the Example MCP server.
 
-The default MCP connection is the bundled local stdio adapter:
-`${CLAUDE_PLUGIN_ROOT}/bin/example mcp`. For platform deployments, set
+The default MCP connection is the installed local stdio adapter:
+`rtemplate mcp`. For platform deployments, set
 `rtemplate_api_url` to the deployed `example-server` REST API base URL so the local
 adapter forwards business actions to that API. HTTP MCP remains available as a
 manual fallback for remote/gateway deployments.
@@ -19,8 +19,6 @@ plugins/rtemplate/
 │   └── README.md           # Codex manifest field reference
 ├── gemini-extension.json   # Gemini CLI extension manifest
 ├── .mcp.json               # Shared stdio MCP connection config (Claude/Codex)
-├── bin/
-│   └── example             # Release binary (populate with: just install)
 ├── hooks/
 │   └── hooks.json          # SessionStart + ConfigChange hook definitions (call the binary directly)
 ├── monitors/
@@ -44,7 +42,7 @@ Claude Code and Codex read their MCP connection config from the shared `.mcp.jso
 
 ## MCP connection
 
-`.mcp.json` is shared by Claude Code and Codex. It launches the bundled binary in
+`.mcp.json` is shared by Claude Code and Codex. It launches the installed binary in
 stdio mode and passes the user-configured API target into the child process:
 
 ```json
@@ -52,7 +50,7 @@ stdio mode and passes the user-configured API target into the child process:
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/example",
+      "command": "rtemplate",
       "args": ["mcp"],
       "env": {
         "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
@@ -71,7 +69,7 @@ from each platform's user-configurable settings at runtime.
 
 ## Hooks
 
-`hooks/hooks.json` runs `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly on `SessionStart` and `ConfigChange` (no shell wrapper).
+`hooks/hooks.json` runs `rtemplate setup plugin-hook` directly on `SessionStart` and `ConfigChange` (no shell wrapper).
 
 The binary maps plugin settings (`CLAUDE_PLUGIN_OPTION_*`) to its `RTEMPLATE_*` environment variables via `apply_plugin_options()` (`src/cli/setup.rs`), self-installs into `~/.local/bin`, prepares appdata, and runs setup checks/repair.
 
@@ -84,7 +82,7 @@ It is not registered by default because the plugin's default MCP path is stdio
 and does not require a local HTTP server. Projects that ship the full
 `example-server` HTTP profile can opt into this monitor from the Claude manifest.
 
-When enabled, it runs `example watch` (the binary in `bin/`) and delivers each
+When enabled, it runs `rtemplate watch` from `PATH` and delivers each
 stdout line to Claude as a notification whenever the HTTP server changes state.
 
 The monitor emits only on state transitions — Claude is not notified while the server is stable. Three states:
@@ -93,10 +91,10 @@ The monitor emits only on state transitions — Claude is not notified while the
 - `DOWN` — connection refused / timeout
 - `DEGRADED(HTTP N)` — non-2xx HTTP response
 
-The command references `${CLAUDE_PLUGIN_ROOT}/bin/example` — populate `bin/` before installing the plugin:
+The command requires `rtemplate` to be installed on `PATH` before enabling the monitor:
 
 ```bash
-just install   # builds release binary and copies to plugins/rtemplate/bin/example
+just install-local
 ```
 
 Disabling the plugin mid-session does not stop an already-running monitor; it stops when the session ends.

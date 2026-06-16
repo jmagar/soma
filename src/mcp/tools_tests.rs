@@ -134,3 +134,13 @@ fn primitive_defaults_to_tools_when_input_is_empty() {
         .expect("valid scaffold intent should build");
     assert_eq!(value["mcp_primitives"], json!(["tools"]));
 }
+
+#[test]
+fn help_text_is_generated_from_action_metadata() {
+    let text = help_text();
+    assert!(text.contains("### echo"));
+    assert!(text.contains("Echo a message back unchanged."));
+    assert!(text.contains("`message` (string, required)"));
+    assert!(text.contains("- Surface: MCP only"));
+    assert!(text.contains("ACTION_SPECS"));
+}

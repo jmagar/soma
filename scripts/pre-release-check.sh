@@ -61,7 +61,7 @@ if [[ "$RUN_VERIFY" == true ]]; then
 fi
 
 if [[ "$RUN_BUILD_PLUGIN" == true ]]; then
-  run_check "plugin binary build" just build-plugin
+  run_check "plugin package validation" just build-plugin
 fi
 
 if [[ "$RUN_MCPORTER" == true ]]; then

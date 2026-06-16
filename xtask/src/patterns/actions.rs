@@ -34,13 +34,19 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
             .cloned()
             .collect::<Vec<_>>()
     };
-    let missing_help = action_names
-        .iter()
-        .filter(|action| {
-            !tools.contains(&format!("### {action}")) && !tools.contains(&format!("`{action}`"))
-        })
-        .cloned()
-        .collect::<Vec<_>>();
+    let help_uses_metadata =
+        tools.contains("for spec in ACTION_SPECS") && tools.contains("spec.description");
+    let missing_help = if help_uses_metadata {
+        Vec::new()
+    } else {
+        action_names
+            .iter()
+            .filter(|action| {
+                !tools.contains(&format!("### {action}")) && !tools.contains(&format!("`{action}`"))
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    };
     let missing_tests = action_names
         .iter()
         .filter(|action| {

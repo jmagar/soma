@@ -77,7 +77,8 @@ pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
 }
 
 fn push_configured_origin(origins: &mut Vec<String>, origin: &str) {
-    let Some(origin) = extract_configured_origin_with_label(origin, "RTEMPLATE_MCP_ALLOWED_ORIGINS")
+    let Some(origin) =
+        extract_configured_origin_with_label(origin, "RTEMPLATE_MCP_ALLOWED_ORIGINS")
     else {
         return;
     };

@@ -12,6 +12,7 @@
     "template"
   ],
   "mcpServers": "./.mcp.json",
+  "hooks": "./hooks/hooks.json",
   "skills": "./skills",
   "userConfig": {
     "use_docker": {
@@ -24,7 +25,7 @@
     "server_url": {
       "type": "string",
       "title": "Server URL",
-      "description": "Optional HTTP server base URL for remote/platform fallback and health monitoring. The default MCP connection uses the bundled local stdio adapter at bin/example mcp.",
+      "description": "Optional HTTP server base URL for remote/platform fallback and health monitoring. The default MCP connection uses the installed local stdio adapter: rtemplate mcp.",
       "required": false,
       "default": ""
     },

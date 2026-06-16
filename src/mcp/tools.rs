@@ -14,8 +14,9 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::OnceLock;
 
-use crate::actions::{execute_service_action, ExampleAction};
+use crate::actions::{execute_service_action, ActionTransport, ExampleAction, ACTION_SPECS};
 use crate::app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent};
 use crate::server::AppState;
 
@@ -80,7 +81,7 @@ async fn dispatch_non_elicitation_action(
     action: &ExampleAction,
 ) -> anyhow::Result<Value> {
     match action {
-        ExampleAction::Help => Ok(json!({ "help": HELP_TEXT })),
+        ExampleAction::Help => Ok(json!({ "help": help_text() })),
         other => execute_service_action(service, other).await,
     }
 }
@@ -263,50 +264,81 @@ async fn elicit_name(service: &ExampleService, peer: &Peer<RoleServer>) -> anyho
 
 // ── help text ─────────────────────────────────────────────────────────────────
 
-const HELP_TEXT: &str = r#"# example MCP Tool
+static HELP_TEXT: OnceLock<String> = OnceLock::new();
 
-A template demonstrating the action-based dispatch pattern for MCP servers.
-Set the `action` argument to select an operation.
+fn help_text() -> &'static str {
+    HELP_TEXT.get_or_init(build_help_text).as_str()
+}
 
-## Actions
+fn build_help_text() -> String {
+    let mut text = String::from(
+        "# example MCP Tool\n\nA template demonstrating the action-based dispatch pattern for MCP servers.\nSet the `action` argument to select an operation.\n\n## Actions\n",
+    );
 
-### greet
-Return a greeting. Optional `name` parameter (string).
-Example: `{ "action": "greet", "name": "Alice" }`
+    for spec in ACTION_SPECS {
+        text.push_str("\n### ");
+        text.push_str(spec.name);
+        text.push('\n');
+        text.push_str(spec.description);
+        text.push('\n');
+        text.push_str("- Returns: `");
+        text.push_str(spec.returns);
+        text.push_str("`\n");
+        match spec.required_scope {
+            Some(scope) => {
+                text.push_str("- Scope: `");
+                text.push_str(scope);
+                text.push_str("`\n");
+            }
+            None => text.push_str("- Scope: public\n"),
+        }
+        if spec.destructive {
+            text.push_str("- Destructive: yes\n");
+        }
+        if spec.requires_admin {
+            text.push_str("- Requires admin: yes\n");
+        }
+        if spec.transport == ActionTransport::McpOnly {
+            text.push_str("- Surface: MCP only\n");
+        } else {
+            text.push_str("- Surfaces: MCP, CLI, REST\n");
+        }
+        if spec.params.is_empty() {
+            text.push_str("- Params: none\n");
+        } else {
+            text.push_str("- Params:\n");
+            for param in spec.params {
+                let required = if param.required {
+                    "required"
+                } else {
+                    "optional"
+                };
+                text.push_str("  - `");
+                text.push_str(param.name);
+                text.push_str("` (");
+                text.push_str(param.ty);
+                text.push_str(", ");
+                text.push_str(required);
+                text.push_str("): ");
+                text.push_str(param.description);
+                text.push('\n');
+            }
+        }
+    }
 
-### echo
-Echo a message back unchanged. Required `message` parameter (non-empty string).
-Example: `{ "action": "echo", "message": "Hello!" }`
-
-### status
-Return the server status and configuration info.
-Example: `{ "action": "status" }`
-
-### elicit_name
-Demonstrates MCP elicitation — the server asks the user for their name
-via the MCP client UI, then returns a personalised greeting.
-Requires a client that supports the MCP elicitation capability (spec 2025-06-18).
-Example: `{ "action": "elicit_name" }`
-
-### scaffold_intent
-Uses MCP elicitation to collect project scaffold intent and returns JSON for the
-`scaffold-project` skill. This action does not mutate files; the skill creates an
-approval-first plan that the user can accept, edit, or reject.
-Example: `{ "action": "scaffold_intent" }`
-
-### help
-Show this documentation.
-Example: `{ "action": "help" }`
-
-## Adding a new action
+    text.push_str(
+        "\n## Adding a new action
 
 1. Add the action metadata to `ACTION_SPECS` in `actions.rs`.
-2. Add any new parameters to the `inputSchema` in `mcp/schemas.rs`.
+2. Add any new parameters to the action's `params` metadata.
 3. Add a method to `ExampleClient` in `example.rs` (transport).
 4. Add a method to `ExampleService` in `app.rs` (business logic).
 5. Add a match arm in `dispatch_example()` in `mcp/tools.rs`.
 6. Add a test covering parser, schema, and dispatch behavior.
-"#;
+",
+    );
+    text
+}
 
 #[cfg(test)]
 #[path = "tools_tests.rs"]

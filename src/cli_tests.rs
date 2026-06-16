@@ -1,4 +1,20 @@
-use super::{parse_args_from, usage, Command, SetupCommand};
+use crate::actions::{ActionSpec, ActionTransport};
+
+use super::{
+    confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from, usage,
+    Command, SetupCommand,
+};
+
+const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
+    name: "delete_everything",
+    description: "Delete everything.",
+    required_scope: None,
+    transport: ActionTransport::Any,
+    destructive: true,
+    requires_admin: false,
+    params: &[],
+    returns: "DeleteResult",
+}];
 
 #[test]
 fn empty_args_returns_none() {
@@ -179,4 +195,42 @@ fn parser_rejects_unknown_and_malformed_flags() {
 fn parser_reports_duplicate_value_flags() {
     let err = parse_args_from(["greet", "--name", "Alice", "--name", "Bob"]).unwrap_err();
     assert!(err.to_string().contains("duplicate --name"));
+}
+
+#[test]
+fn destructive_confirmation_is_not_required_for_safe_actions() {
+    confirm_destructive_action_allowed(TEST_DESTRUCTIVE_ACTIONS, "status", false, false).unwrap();
+}
+
+#[test]
+fn destructive_confirmation_requires_yes_when_non_interactive() {
+    let err = confirm_destructive_action_allowed(
+        TEST_DESTRUCTIVE_ACTIONS,
+        "delete_everything",
+        false,
+        false,
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("--yes"));
+
+    confirm_destructive_action_allowed(TEST_DESTRUCTIVE_ACTIONS, "delete_everything", true, false)
+        .unwrap();
+}
+
+#[test]
+fn destructive_confirmation_accepts_exact_action_name() {
+    let mut input = std::io::Cursor::new(b"delete_everything\n");
+    let mut output = Vec::new();
+    confirm_destructive_action_from_io("delete_everything", &mut input, &mut output).unwrap();
+    let prompt = String::from_utf8(output).unwrap();
+    assert!(prompt.contains("delete_everything"));
+}
+
+#[test]
+fn destructive_confirmation_rejects_mismatched_input() {
+    let mut input = std::io::Cursor::new(b"nope\n");
+    let mut output = Vec::new();
+    let err = confirm_destructive_action_from_io("delete_everything", &mut input, &mut output)
+        .unwrap_err();
+    assert!(err.to_string().contains("aborted"));
 }

@@ -8,9 +8,9 @@
 
 use std::sync::OnceLock;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
-use crate::actions::action_names;
+use crate::actions::{action_names, ActionTransport, ACTION_SPECS};
 
 /// Cached JSON schema definitions (static data, built once at first call).
 static TOOL_DEFINITIONS: OnceLock<Vec<Value>> = OnceLock::new();
@@ -26,66 +26,131 @@ pub(super) fn tool_definitions() -> &'static Vec<Value> {
 }
 
 fn build_tool_definitions() -> Vec<Value> {
+    let properties = build_input_properties();
+    let mut all_of = required_param_conditionals();
+    let mcp_only = mcp_only_action_names();
+    if !mcp_only.is_empty() {
+        all_of.push(json!({
+            "if": {
+                "properties": {
+                    "action": { "enum": mcp_only }
+                },
+                "required": ["action"]
+            },
+            "then": {
+                "description": "This action uses MCP elicitation. The setup fields are requested through the client-rendered elicitation form, not through tool-call arguments."
+            }
+        }));
+    }
+
     vec![json!({
         "name": "example",
         "description": "Example MCP tool demonstrating the action-based dispatch pattern. Use action=help for full documentation.",
         "inputSchema": {
             "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "description": "The operation to perform.",
-                    "enum": action_names()
-                },
-                "name": {
-                    "type": "string",
-                    "description": "Name to greet (optional, action=greet only). Omit to greet the world."
-                },
-                "message": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "Message to echo back (required for action=echo)."
-                },
-                "_response_offset": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "description": "Reserved MCP adapter continuation offset. Use only with _response_cursor from a prior kind=mcp_response_page response."
-                },
-                "_response_page_bytes": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 16000,
-                    "description": "Reserved MCP adapter page size in bytes. Use with _response_cursor and _response_offset to scroll cached serialized JSON responses."
-                },
-                "_response_cursor": {
-                    "type": "string",
-                    "description": "Reserved MCP adapter cursor. Required with _response_offset so continuation reads cached response data instead of re-running the action."
-                }
-            },
+            "properties": properties,
             "required": ["action"],
             "additionalProperties": false,
-            "allOf": [
-                {
-                    "if": {
-                        "properties": { "action": { "const": "echo" } },
-                        "required": ["action"]
-                    },
-                    "then": { "required": ["message"] }
-                },
-                {
-                    "if": {
-                        "properties": {
-                            "action": { "enum": ["elicit_name", "scaffold_intent"] }
-                        },
-                        "required": ["action"]
-                    },
-                    "then": {
-                        "description": "This action uses MCP elicitation. The setup fields are requested through the client-rendered elicitation form, not through tool-call arguments."
-                    }
-                }
-            ]
+            "allOf": all_of
         }
     })]
+}
+
+fn build_input_properties() -> Map<String, Value> {
+    let mut properties = Map::new();
+    properties.insert(
+        "action".to_owned(),
+        json!({
+            "type": "string",
+            "description": "The operation to perform.",
+            "enum": action_names()
+        }),
+    );
+
+    for spec in ACTION_SPECS {
+        for param in spec.params {
+            properties
+                .entry(param.name.to_owned())
+                .or_insert_with(|| param_schema(param));
+        }
+    }
+
+    properties.insert(
+        "_response_offset".to_owned(),
+        json!({
+            "type": "integer",
+            "minimum": 0,
+            "description": "Reserved MCP adapter continuation offset. Use only with _response_cursor from a prior kind=mcp_response_page response."
+        }),
+    );
+    properties.insert(
+        "_response_page_bytes".to_owned(),
+        json!({
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16000,
+            "description": "Reserved MCP adapter page size in bytes. Use with _response_cursor and _response_offset to scroll cached serialized JSON responses."
+        }),
+    );
+    properties.insert(
+        "_response_cursor".to_owned(),
+        json!({
+            "type": "string",
+            "description": "Reserved MCP adapter cursor. Required with _response_offset so continuation reads cached response data instead of re-running the action."
+        }),
+    );
+    properties
+}
+
+fn param_schema(param: &crate::actions::ParamSpec) -> Value {
+    let json_type = match param.ty {
+        "string" => "string",
+        "integer" => "integer",
+        "number" => "number",
+        "boolean" => "boolean",
+        "object" => "object",
+        "array" => "array",
+        _ => "string",
+    };
+    let mut schema = json!({
+        "type": json_type,
+        "description": param.description,
+    });
+    if param.required && json_type == "string" {
+        schema["minLength"] = json!(1);
+    }
+    schema
+}
+
+fn required_param_conditionals() -> Vec<Value> {
+    ACTION_SPECS
+        .iter()
+        .filter_map(|spec| {
+            let required = spec
+                .params
+                .iter()
+                .filter(|param| param.required)
+                .map(|param| Value::String(param.name.to_owned()))
+                .collect::<Vec<_>>();
+            (!required.is_empty()).then(|| {
+                json!({
+                    "if": {
+                        "properties": { "action": { "const": spec.name } },
+                        "required": ["action"]
+                    },
+                    "then": { "required": required }
+                })
+            })
+        })
+        .collect()
+}
+
+fn mcp_only_action_names() -> Vec<&'static str> {
+    ACTION_SPECS
+        .iter()
+        .filter(|spec| spec.transport == ActionTransport::McpOnly)
+        .map(|spec| spec.name)
+        .collect()
 }
 
 #[cfg(test)]
