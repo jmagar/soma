@@ -1,0 +1,191 @@
+use serde_json::json;
+
+use rtemplate_contracts::{
+    actions::{required_scope_for_action, ValidationError, READ_SCOPE, WRITE_SCOPE},
+    token_limit::MAX_RESPONSE_BYTES,
+};
+
+use super::{
+    check_scope, execution_error_payload, scope_satisfied, tool_error_result,
+    unknown_action_payload, unknown_tool_error, validation_error_payload,
+};
+
+fn scopes(s: &[&str]) -> Vec<String> {
+    s.iter().map(|x| x.to_string()).collect()
+}
+
+#[test]
+fn read_scope_satisfies_read_requirement() {
+    assert!(scope_satisfied(&scopes(&[READ_SCOPE]), READ_SCOPE));
+}
+
+#[test]
+fn write_scope_satisfies_read_requirement() {
+    assert!(
+        scope_satisfied(&scopes(&[WRITE_SCOPE]), READ_SCOPE),
+        "write scope should satisfy read requirement (write includes read)"
+    );
+}
+
+#[test]
+fn empty_scopes_denied() {
+    assert!(!scope_satisfied(&[], READ_SCOPE));
+}
+
+#[test]
+fn unrelated_scope_denied() {
+    assert!(!scope_satisfied(&scopes(&["other:scope"]), READ_SCOPE));
+}
+
+#[test]
+fn read_scope_does_not_satisfy_write() {
+    assert!(
+        !scope_satisfied(&scopes(&[READ_SCOPE]), WRITE_SCOPE),
+        "read scope must not satisfy write requirement"
+    );
+}
+
+#[test]
+fn greet_requires_read_scope() {
+    assert_eq!(required_scope_for_action("greet"), Some(READ_SCOPE));
+}
+
+#[test]
+fn help_requires_no_scope() {
+    assert_eq!(required_scope_for_action("help"), None);
+}
+
+#[test]
+fn unknown_action_gets_deny_scope() {
+    use rtemplate_contracts::actions::DENY_SCOPE;
+    assert_eq!(
+        required_scope_for_action("nonexistent_action"),
+        Some(DENY_SCOPE)
+    );
+}
+
+#[test]
+fn validation_errors_become_structured_tool_errors() {
+    let error = anyhow::Error::from(ValidationError::MissingField {
+        field: "message".to_owned(),
+    });
+    let payload = validation_error_payload("example", Some("echo"), &error);
+    let result = tool_error_result(payload).expect("tool error should serialize");
+
+    assert_eq!(result.is_error, Some(true));
+    let structured = result
+        .structured_content
+        .as_ref()
+        .expect("structured content should be present");
+    assert_eq!(structured["kind"], "mcp_tool_error");
+    assert_eq!(structured["schema_version"], 1);
+    assert_eq!(structured["code"], "missing_field");
+    assert_eq!(structured["tool"], "example");
+    assert_eq!(structured["action"], "echo");
+    assert_eq!(structured["field"], "message");
+    assert!(structured["remediation"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("action=help"));
+}
+
+#[test]
+fn unknown_actions_become_retryable_tool_errors() {
+    let result = tool_error_result(unknown_action_payload("example", "missing"))
+        .expect("unknown action payload should serialize");
+
+    assert_eq!(result.is_error, Some(true));
+    let structured = result.structured_content.as_ref().unwrap();
+    assert_eq!(structured["code"], "unknown_action");
+    assert_eq!(structured["bad_value"], "missing");
+    assert!(structured["available_actions"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("help")));
+}
+
+#[test]
+fn oversized_tool_errors_return_valid_overflow_envelope() {
+    let result = tool_error_result(json!({
+        "kind": "mcp_tool_error",
+        "schema_version": 1,
+        "code": "huge_error",
+        "message": "x".repeat(MAX_RESPONSE_BYTES + 1),
+    }))
+    .expect("tool error should serialize");
+    let text = result.content[0]
+        .raw
+        .as_text()
+        .expect("tool error should contain text")
+        .text
+        .as_str();
+    let parsed: serde_json::Value =
+        serde_json::from_str(text).expect("overflow error text should remain valid JSON");
+
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(parsed["kind"], "mcp_tool_error");
+    assert_eq!(parsed["code"], "error_payload_too_large");
+    assert_eq!(parsed["original_code"], "huge_error");
+    assert!(parsed["serialized_bytes"].as_u64().unwrap() > MAX_RESPONSE_BYTES as u64);
+    assert_eq!(result.structured_content.as_ref(), Some(&parsed));
+}
+
+#[test]
+fn unknown_tool_stays_protocol_error_with_structured_data() {
+    let error = unknown_tool_error("bad_tool");
+
+    assert!(error.message.contains("unknown tool"));
+    let data = error
+        .data
+        .expect("unknown tool should include structured data");
+    assert_eq!(data["kind"], "mcp_protocol_error");
+    assert_eq!(data["code"], "unknown_tool");
+    assert_eq!(data["tool"], "bad_tool");
+    assert_eq!(data["available_tools"], json!(["example"]));
+}
+
+#[test]
+fn execution_errors_do_not_expose_raw_error_text() {
+    let raw_error = anyhow::anyhow!("upstream timeout talking to secret-api-key");
+    let payload = execution_error_payload("example", Some("status"), &raw_error);
+
+    assert_eq!(
+        payload,
+        json!({
+            "kind": "mcp_tool_error",
+            "schema_version": 1,
+            "code": "execution_error",
+            "reason_kind": "timeout",
+            "tool": "example",
+            "action": "status",
+            "message": "Tool execution failed. Check server logs for details.",
+            "retryable": true,
+            "remediation": "Check service configuration and upstream availability, then retry. Use action=status or action=help for diagnostics.",
+        })
+    );
+    assert!(!payload.to_string().contains("secret-api-key"));
+}
+
+#[test]
+fn insufficient_scope_uses_structured_protocol_error_data() {
+    let auth = rtemplate_auth::AuthContext {
+        sub: "agent-subject".to_owned(),
+        actor_key: None,
+        scopes: scopes(&[READ_SCOPE]),
+        issuer: "test".to_owned(),
+        via_session: false,
+        csrf_token: None,
+        email: None,
+    };
+
+    let error = check_scope(&auth, WRITE_SCOPE, "echo").expect_err("write scope should be denied");
+    let data = error
+        .data
+        .expect("insufficient scope should include structured data");
+    assert_eq!(data["kind"], "mcp_auth_error");
+    assert_eq!(data["code"], "insufficient_scope");
+    assert_eq!(data["action"], "echo");
+    assert_eq!(data["required_scope"], WRITE_SCOPE);
+    assert_eq!(data["granted_scopes"], json!([READ_SCOPE]));
+    assert_eq!(data["retryable"], false);
+}

@@ -1,0 +1,19 @@
+[package]
+name = "rtemplate-service"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.90"
+description = "Business service and upstream client for rmcp-template"
+publish = false
+
+[dependencies]
+anyhow = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rtemplate-contracts = { path = "../rtemplate-contracts" }
+rtemplate-observability = { path = "../rtemplate-observability" }
+serde_json = "1"
+url = "2"
+
+[dev-dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }

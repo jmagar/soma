@@ -11,26 +11,35 @@
 //!   [`server`]  — `AppState`, `AuthPolicy`, HTTP router (enabled by `cli`, `mcp`, or `api`)
 //!   [`api`]     — REST API handlers (enabled by `api`)
 
-pub mod actions;
 #[cfg(feature = "api")]
-pub mod api;
-pub mod app;
-pub mod binary_status;
+pub use rtemplate_api::api;
 #[cfg(feature = "cli")]
-pub mod cli;
-pub mod config;
-pub mod env_registry;
-pub mod example;
-pub mod logging;
+pub use rtemplate_cli as cli;
+pub use rtemplate_contracts::actions;
+pub use rtemplate_contracts::config;
+pub use rtemplate_contracts::env_registry;
 #[cfg(feature = "mcp")]
-pub mod mcp;
+pub use rtemplate_mcp as mcp;
+pub use rtemplate_observability::binary_status;
+pub use rtemplate_observability::logging;
+pub use rtemplate_service::app;
+pub use rtemplate_service::example;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 pub mod runtime;
-#[cfg(any(feature = "cli", feature = "mcp", feature = "api"))]
-pub mod server;
-pub mod token_limit;
+pub use rtemplate_contracts::token_limit;
 #[cfg(feature = "web")]
-pub mod web;
+pub use rtemplate_web as web;
+
+#[cfg(feature = "mcp-http")]
+mod routes;
+
+#[cfg(any(feature = "cli", feature = "mcp", feature = "api"))]
+pub mod server {
+    pub use rtemplate_runtime::server::*;
+
+    #[cfg(feature = "mcp-http")]
+    pub use crate::routes::router;
+}
 
 /// Test helpers — available when `features = ["test-support"]` or in `cfg(test)`.
 ///
@@ -86,7 +95,7 @@ pub mod testing {
         let auth_state = build_auth_state(data_dir).await;
         AppState {
             config: McpConfig {
-                auth: crate::config::AuthConfig {
+                auth: rtemplate_contracts::config::AuthConfig {
                     public_url: Some("https://example.example.com".to_string()),
                     ..Default::default()
                 },
@@ -100,7 +109,7 @@ pub mod testing {
         }
     }
 
-    pub async fn build_auth_state(data_dir: &std::path::Path) -> lab_auth::state::AuthState {
+    pub async fn build_auth_state(data_dir: &std::path::Path) -> rtemplate_auth::state::AuthState {
         let vars: Vec<(String, String)> = vec![
             ("RTEMPLATE_MCP_AUTH_MODE".into(), "oauth".into()),
             (
@@ -129,19 +138,19 @@ pub mod testing {
             ),
         ];
 
-        let auth_config = lab_auth::config::AuthConfigBuilder::new()
+        let auth_config = rtemplate_auth::config::AuthConfigBuilder::new()
             .env_prefix("RTEMPLATE_MCP")
             .session_cookie_name("example_mcp_session")
             .scopes_supported(vec![
-                crate::actions::READ_SCOPE.into(),
-                crate::actions::WRITE_SCOPE.into(),
+                rtemplate_contracts::actions::READ_SCOPE.into(),
+                rtemplate_contracts::actions::WRITE_SCOPE.into(),
             ])
             .default_scope("example:read")
             .resource_path("/mcp")
             .build_from_sources(vars)
             .expect("test auth config should build");
 
-        lab_auth::state::AuthState::new(auth_config)
+        rtemplate_auth::state::AuthState::new(auth_config)
             .await
             .expect("test auth state should init")
     }

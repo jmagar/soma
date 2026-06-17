@@ -1,0 +1,14 @@
+[package]
+name = "rtemplate-test-support"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.90"
+description = "Test helpers for rmcp-template crates"
+publish = false
+
+[dependencies]
+rtemplate-api = { path = "../rtemplate-api" }
+rtemplate-auth = { path = "../rtemplate-auth" }
+rtemplate-contracts = { path = "../rtemplate-contracts" }
+rtemplate-service = { path = "../rtemplate-service" }
+

@@ -11,17 +11,17 @@ use super::{
 };
 
 const REQUIRED_PATTERN_FILES: &[&str] = &[
-    "src/example.rs",
-    "src/app.rs",
-    "src/actions.rs",
-    "src/mcp.rs",
-    "src/mcp/tools.rs",
-    "src/mcp/schemas.rs",
-    "src/mcp/rmcp_server.rs",
-    "src/server/routes.rs",
-    "src/mcp/prompts.rs",
-    "src/config.rs",
-    "src/cli.rs",
+    "crates/rtemplate-service/src/example.rs",
+    "crates/rtemplate-service/src/app.rs",
+    "crates/rtemplate-contracts/src/actions.rs",
+    "crates/rtemplate-mcp/src/lib.rs",
+    "crates/rtemplate-mcp/src/tools.rs",
+    "crates/rtemplate-mcp/src/schemas.rs",
+    "crates/rtemplate-mcp/src/rmcp_server.rs",
+    "src/routes.rs",
+    "crates/rtemplate-mcp/src/prompts.rs",
+    "crates/rtemplate-contracts/src/config.rs",
+    "crates/rtemplate-cli/src/lib.rs",
     "src/main.rs",
     "src/lib.rs",
     "tests/tool_dispatch.rs",
@@ -93,6 +93,9 @@ pub(super) fn file_sizes(reporter: &mut PatternReporter) -> Result<()> {
 
     for line in output.lines().filter(|line| !line.trim().is_empty()) {
         let path = Path::new(line);
+        if !path.exists() {
+            continue;
+        }
         if is_test_file(path) {
             continue;
         }
@@ -144,12 +147,12 @@ pub(super) fn file_sizes(reporter: &mut PatternReporter) -> Result<()> {
 pub(super) fn thin_shims(reporter: &mut PatternReporter) {
     let policies = [
         (
-            "src/mcp/tools.rs",
+            "crates/rtemplate-mcp/src/tools.rs",
             &["state.service", "execute_service_action"][..],
             FORBIDDEN_SHIM_TOKENS,
         ),
         (
-            "src/cli.rs",
+            "crates/rtemplate-cli/src/lib.rs",
             &["ExampleService::new", "service."][..],
             &["reqwest::", "hyper::Client", "sqlx::", "rusqlite::"][..],
         ),
@@ -193,7 +196,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
 }
 
 pub(super) fn routes(reporter: &mut PatternReporter) {
-    let routes = read_file("src/server/routes.rs");
+    let routes = read_file("src/routes.rs");
     let missing = ["\"/mcp\"", "\"/health\"", "\"/status\""]
         .iter()
         .copied()
@@ -271,8 +274,8 @@ pub(super) fn config_and_auth(reporter: &mut PatternReporter) {
         reporter.fail("config", ".gitignore should ignore .env secrets");
     }
 
-    let server = read_file("src/server.rs");
-    let config = read_file("src/config.rs");
+    let server = read_file("crates/rtemplate-runtime/src/server.rs");
+    let config = read_file("crates/rtemplate-contracts/src/config.rs");
     if !server.contains("LoopbackDev") || !server.contains("Mounted") {
         reporter.fail(
             "auth",

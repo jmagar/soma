@@ -116,6 +116,19 @@ curl -s -X POST http://localhost:40060/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"greet","name":"Alice"}}}'
 ```
 
+## Generate a New Server
+
+Use [cargo-generate](docs/CARGO_GENERATE.md) when starting a new rmcp-family
+server:
+
+```bash
+cargo install cargo-generate
+cargo generate --git https://github.com/jmagar/rtemplate-mcp --name myservice-mcp --allow-commands
+```
+
+The generator prompts for the crate name, binary names, env prefix, scope
+prefix, default port, and Rust type prefix, then rewrites the generated copy.
+
 ## Step-by-step: build your own MCP server from this template
 
 ### 1. Clone and rename

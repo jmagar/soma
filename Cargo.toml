@@ -11,7 +11,21 @@
 
 [workspace]
 # TEMPLATE: Add any additional crates here (e.g. a shared types crate).
-members = [".", "xtask"]
+members = [
+  ".",
+  "crates/rtemplate-api",
+  "crates/rtemplate-auth",
+  "crates/rtemplate-cli",
+  "crates/rtemplate-contracts",
+  "crates/rtemplate-mcp",
+  "crates/rtemplate-observability",
+  "crates/rtemplate-plugin-support",
+  "crates/rtemplate-runtime",
+  "crates/rtemplate-service",
+  "crates/rtemplate-test-support",
+  "crates/rtemplate-web",
+  "xtask",
+]
 resolver = "2"
 
 [package]
@@ -33,69 +47,37 @@ path = "src/main.rs"
 required-features = ["server"]
 
 [dependencies]
-# Async runtime
 tokio = { version = "1", features = ["full"] }
-
-# HTTP / MCP transport
-axum = { version = "0.8", optional = true }
-http = { version = "1", optional = true }
-rmcp = { version = "1.7.0", default-features = false, features = [
-], optional = true }
-tower-http = { version = "0.6", features = ["cors", "limit", "trace"], optional = true }
-
-# Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-schemars = "1.2.1"
-
-# Time
-chrono = { version = "0.4", features = ["serde"] }
-
-# Config
-toml = "1.1"
-
-# OAuth + JWT
-lab-auth = { git = "https://github.com/jmagar/lab.git", rev = "87cec3241f9baef22335de9cc8629ebbcd8ba047", package = "lab-auth", optional = true }
-url = "2"
-
-# Logging
+anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
-# HTTP client (stub — replace with your real transport: GraphQL, REST, gRPC, etc.)
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-
-# Platform dirs — for default_data_dir() (~/.example detection)
-# TEMPLATE: Used in config.rs default_data_dir(). Keep this dep.
-dirs = "6"
-
-# Errors
-anyhow = "1"
-
-# Static asset embedding (web UI)
-include_dir = { version = "0.7", optional = true }
-dotenvy = "0.15.7"
+axum = { version = "0.8", optional = true }
+rtemplate-runtime = { path = "crates/rtemplate-runtime" }
+rtemplate-api = { path = "crates/rtemplate-api", optional = true }
+rtemplate-auth = { path = "crates/rtemplate-auth", optional = true }
+rtemplate-cli = { path = "crates/rtemplate-cli", optional = true }
+rtemplate-contracts = { path = "crates/rtemplate-contracts" }
+rtemplate-mcp = { path = "crates/rtemplate-mcp", optional = true }
+rtemplate-observability = { path = "crates/rtemplate-observability" }
+rtemplate-plugin-support = { path = "crates/rtemplate-plugin-support", optional = true }
+rtemplate-service = { path = "crates/rtemplate-service" }
+rtemplate-web = { path = "crates/rtemplate-web", optional = true }
+rmcp = { version = "1.7.0", default-features = false, optional = true }
+serde_json = { version = "1", optional = true }
+tower-http = { version = "0.6", features = ["cors", "limit", "trace"], optional = true }
 
 [features]
 default = ["full"]
-cli = ["dep:lab-auth"]
-mcp = [
-  "dep:http",
-  "dep:lab-auth",
-  "dep:rmcp",
-  "rmcp/server",
-  "rmcp/macros",
-  "rmcp/elicitation",
-  "rmcp/schemars",
-]
-mcp-stdio = ["mcp", "rmcp/transport-io"]
-api = ["dep:axum", "dep:lab-auth", "dep:tower-http"]
-mcp-http = ["api", "mcp", "rmcp/transport-streamable-http-server"]
-web = ["api", "dep:include_dir"]
+cli = ["dep:rtemplate-cli", "dep:rtemplate-plugin-support"]
+mcp = ["dep:rtemplate-mcp"]
+mcp-stdio = ["mcp", "dep:rmcp", "rmcp/transport-io", "rtemplate-mcp/stdio"]
+api = ["dep:rtemplate-api", "dep:rtemplate-auth"]
+mcp-http = ["api", "mcp", "dep:axum", "dep:serde_json", "dep:tower-http", "rtemplate-mcp/http"]
+web = ["api", "dep:rtemplate-web"]
 local-adapter = ["cli", "mcp-stdio"]
 server = ["cli", "api", "mcp-http", "mcp-stdio"]
 full = ["local-adapter", "server", "web"]
-test-support = []
+test-support = ["rtemplate-mcp?/test-support"]
 
 [dev-dependencies]
 rmcp-template = { path = ".", features = ["test-support"] }

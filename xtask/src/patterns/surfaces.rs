@@ -125,7 +125,9 @@ fn check_core_rust_surface(
 
     let is_dispatch_surface = matches!(
         file.path.as_str(),
-        "src/api.rs" | "src/mcp/tools.rs" | "src/cli.rs"
+        "crates/rtemplate-api/src/api.rs"
+            | "crates/rtemplate-mcp/src/tools.rs"
+            | "crates/rtemplate-cli/src/lib.rs"
     );
     if is_dispatch_surface
         && !RUST_DELEGATION_TOKENS
@@ -148,7 +150,9 @@ fn check_core_rust_surface(
 }
 
 fn core_token_applies(file: &SurfaceFile, token: &str) -> bool {
-    if file.path == "src/cli.rs" && matches!(token, "std::fs" | "ExampleClient::new") {
+    if file.path == "crates/rtemplate-cli/src/lib.rs"
+        && matches!(token, "std::fs" | "ExampleClient::new")
+    {
         return false;
     }
     true
@@ -156,8 +160,8 @@ fn core_token_applies(file: &SurfaceFile, token: &str) -> bool {
 
 fn check_operational_surface(file: &SurfaceFile, text: &str, warnings: &mut Vec<String>) {
     // doctor/ and watch.rs use reqwest for health/connectivity pings — explicitly diagnostics-only.
-    let is_diagnostics =
-        file.path.starts_with("src/cli/doctor/") || file.path == "src/cli/watch.rs";
+    let is_diagnostics = file.path.starts_with("crates/rtemplate-cli/src/doctor/")
+        || file.path == "crates/rtemplate-cli/src/watch.rs";
     for token in ["reqwest::", "sqlx::", "rusqlite::"] {
         if text.contains(token) && !(token == "reqwest::" && is_diagnostics) {
             warnings.push(format!(
@@ -220,16 +224,16 @@ fn surface_files() -> Result<Vec<SurfaceFile>> {
 fn surface_file(path: &str) -> Option<SurfaceFile> {
     let kind = if matches!(
         path,
-        "src/api.rs"
-            | "src/server/routes.rs"
-            | "src/mcp/tools.rs"
-            | "src/mcp/rmcp_server.rs"
-            | "src/mcp/schemas.rs"
-            | "src/mcp/prompts.rs"
-            | "src/cli.rs"
+        "crates/rtemplate-api/src/api.rs"
+            | "src/routes.rs"
+            | "crates/rtemplate-mcp/src/tools.rs"
+            | "crates/rtemplate-mcp/src/rmcp_server.rs"
+            | "crates/rtemplate-mcp/src/schemas.rs"
+            | "crates/rtemplate-mcp/src/prompts.rs"
+            | "crates/rtemplate-cli/src/lib.rs"
     ) {
         SurfaceKind::CoreRust
-    } else if path.starts_with("src/cli/") && path.ends_with(".rs") {
+    } else if path.starts_with("crates/rtemplate-cli/src/") && path.ends_with(".rs") {
         SurfaceKind::OperationalRust
     } else if is_web_surface(path) {
         SurfaceKind::Web
@@ -259,13 +263,15 @@ mod tests {
 
     #[test]
     fn classifies_core_rust_surfaces() {
-        let file = surface_file("src/mcp/tools.rs").expect("tools should be a surface");
+        let file = surface_file("crates/rtemplate-mcp/src/tools.rs")
+            .expect("tools should be a surface");
         assert_eq!(file.kind, SurfaceKind::CoreRust);
     }
 
     #[test]
     fn classifies_operational_cli_surfaces() {
-        let file = surface_file("src/cli/doctor.rs").expect("doctor should be a surface");
+        let file = surface_file("crates/rtemplate-cli/src/doctor.rs")
+            .expect("doctor should be a surface");
         assert_eq!(file.kind, SurfaceKind::OperationalRust);
     }
 

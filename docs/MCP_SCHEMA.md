@@ -1,6 +1,6 @@
 # MCP Schema Contract
 
-Generated from `src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.
+Generated from `crates/rtemplate-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.
 
 Run:
 
@@ -30,26 +30,26 @@ python3 scripts/check-schema-docs.py --check
 
 ## Drift Rules
 
-- `ACTION_SPECS` in `src/actions.rs` is the canonical action and scope list.
+- `ACTION_SPECS` in `crates/rtemplate-contracts/src/actions.rs` is the canonical action and scope list.
 - Action cost is planner metadata. Use `cheap` for first-pass reads, `moderate` for bounded workflow setup, `expensive` for broad scans or long-running work, and `write` for mutating operations.
-- `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.
+- `crates/rtemplate-mcp/src/schemas.rs` must derive its enum from `ACTION_SPECS`.
 - The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.
 - `help` is intentionally public and must have no required scope.
-- `src/mcp/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.
-- `src/mcp/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.
-- `src/mcp/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.
+- `crates/rtemplate-mcp/src/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.
+- `crates/rtemplate-mcp/src/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.
+- `crates/rtemplate-mcp/src/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.
 
 ## Resources
 
 | URI | Source | Contract |
 |---|---|---|
-| `example://schema/mcp-tool` | `src/mcp/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |
+| `example://schema/mcp-tool` | `crates/rtemplate-mcp/src/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |
 
 ## Prompts
 
 | Prompt | Source | Contract |
 |---|---|---|
-| `quick_start` | `src/mcp/prompts.rs` | Guides a client to call `status` and `greet`. |
+| `quick_start` | `crates/rtemplate-mcp/src/prompts.rs` | Guides a client to call `status` and `greet`. |
 
 ## Input Validation
 

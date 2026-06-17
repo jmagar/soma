@@ -1,0 +1,15 @@
+[package]
+name = "rtemplate-web"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.90"
+description = "Embedded static web UI adapter for rmcp-template"
+publish = false
+
+[features]
+default = ["web"]
+web = []
+
+[dependencies]
+axum = "0.8"
+include_dir = "0.7"

@@ -6,7 +6,7 @@ const ACTION_TEST_COVERAGE_EXCEPTIONS: &[&str] = &[
 ];
 
 pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
-    let actions_text = read_file("src/actions.rs");
+    let actions_text = read_file("crates/rtemplate-contracts/src/actions.rs");
     let action_specs = action_specs_body(&actions_text).unwrap_or(&actions_text);
     let action_names = extract_action_names(action_specs);
     let mcp_only = extract_mcp_only_actions(action_specs);
@@ -14,15 +14,15 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
     if action_names.is_empty() {
         reporter.fail(
             "actions",
-            "could not parse ACTION_SPECS from src/actions.rs",
+            "could not parse ACTION_SPECS from crates/rtemplate-contracts/src/actions.rs",
         );
         return;
     }
 
-    let schema = read_file("src/mcp/schemas.rs");
-    let tools = read_file("src/mcp/tools.rs");
+    let schema = read_file("crates/rtemplate-mcp/src/schemas.rs");
+    let tools = read_file("crates/rtemplate-mcp/src/tools.rs");
     let tests = read_file("tests/tool_dispatch.rs");
-    let cli = read_file("src/cli.rs");
+    let cli = read_file("crates/rtemplate-cli/src/lib.rs");
 
     let schema_uses_metadata = schema.contains("action_names()");
     let missing_schema = if schema_uses_metadata {

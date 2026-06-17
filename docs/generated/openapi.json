@@ -431,7 +431,7 @@
           "status",
           "help"
         ],
-        "description": "REST-capable action names from src/actions.rs."
+        "description": "REST-capable action names from crates/rtemplate-contracts/src/actions.rs."
       },
       "ActionRequest": {
         "type": "object",
@@ -743,7 +743,7 @@
   },
   "x-template": {
     "source": "scripts/check-openapi.py",
-    "action_metadata": "src/actions.rs",
+    "action_metadata": "crates/rtemplate-contracts/src/actions.rs",
     "preferred_rest_style": "direct_routes",
     "rest_actions": [
       "greet",

@@ -10,11 +10,11 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMAS_RS = ROOT / "src/mcp/schemas.rs"
-ACTION_RS = ROOT / "src/actions.rs"
-TOOLS_RS = ROOT / "src/mcp/tools.rs"
-PROMPTS_RS = ROOT / "src/mcp/prompts.rs"
-RMCP_SERVER_RS = ROOT / "src/mcp/rmcp_server.rs"
+SCHEMAS_RS = ROOT / "crates/rtemplate-mcp/src/schemas.rs"
+ACTION_RS = ROOT / "crates/rtemplate-contracts/src/actions.rs"
+TOOLS_RS = ROOT / "crates/rtemplate-mcp/src/tools.rs"
+PROMPTS_RS = ROOT / "crates/rtemplate-mcp/src/prompts.rs"
+RMCP_SERVER_RS = ROOT / "crates/rtemplate-mcp/src/rmcp_server.rs"
 README = ROOT / "README.md"
 SKILL = ROOT / "plugins/rtemplate/skills/rtemplate/SKILL.md"
 DOC = ROOT / "docs/MCP_SCHEMA.md"
@@ -87,7 +87,7 @@ def render() -> str:
     lines = [
         "# MCP Schema Contract",
         "",
-        "Generated from `src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.",
+        "Generated from `crates/rtemplate-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.",
         "",
         "Run:",
         "",
@@ -118,26 +118,26 @@ def render() -> str:
             "",
             "## Drift Rules",
             "",
-            "- `ACTION_SPECS` in `src/actions.rs` is the canonical action and scope list.",
+            "- `ACTION_SPECS` in `crates/rtemplate-contracts/src/actions.rs` is the canonical action and scope list.",
             "- Action cost is planner metadata. Use `cheap` for first-pass reads, `moderate` for bounded workflow setup, `expensive` for broad scans or long-running work, and `write` for mutating operations.",
-            "- `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.",
+            "- `crates/rtemplate-mcp/src/schemas.rs` must derive its enum from `ACTION_SPECS`.",
             "- The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.",
             "- `help` is intentionally public and must have no required scope.",
-            "- `src/mcp/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.",
-            "- `src/mcp/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.",
-            "- `src/mcp/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.",
+            "- `crates/rtemplate-mcp/src/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.",
+            "- `crates/rtemplate-mcp/src/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.",
+            "- `crates/rtemplate-mcp/src/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.",
             "",
             "## Resources",
             "",
             "| URI | Source | Contract |",
             "|---|---|---|",
-            "| `example://schema/mcp-tool` | `src/mcp/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |",
+            "| `example://schema/mcp-tool` | `crates/rtemplate-mcp/src/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |",
             "",
             "## Prompts",
             "",
             "| Prompt | Source | Contract |",
             "|---|---|---|",
-            "| `quick_start` | `src/mcp/prompts.rs` | Guides a client to call `status` and `greet`. |",
+            "| `quick_start` | `crates/rtemplate-mcp/src/prompts.rs` | Guides a client to call `status` and `greet`. |",
             "",
             "## Input Validation",
             "",
@@ -176,7 +176,7 @@ def check_mentions(actions: list[str]) -> list[str]:
                 failures.append(f"{label} does not mention action `{action}`")
     tools_text = read(TOOLS_RS)
     if "ACTION_SPECS" not in tools_text or "build_help_text" not in tools_text:
-        failures.append("src/mcp/tools.rs HELP_TEXT must be derived from ACTION_SPECS")
+        failures.append("crates/rtemplate-mcp/src/tools.rs HELP_TEXT must be derived from ACTION_SPECS")
     return failures
 
 
@@ -195,17 +195,17 @@ def check_scope(actions: list[str]) -> list[str]:
             failures.append(f"action `{action}` must declare a required scope")
     schema_text = read(SCHEMAS_RS)
     if "action_names()" not in schema_text:
-        failures.append("src/mcp/schemas.rs must derive action enum from action_names()")
+        failures.append("crates/rtemplate-mcp/src/schemas.rs must derive action enum from action_names()")
     if '"additionalProperties": false' not in schema_text:
-        failures.append("src/mcp/schemas.rs must reject unknown top-level properties")
+        failures.append("crates/rtemplate-mcp/src/schemas.rs must reject unknown top-level properties")
     if "required_param_conditionals()" not in schema_text or '"then": { "required": required }' not in schema_text:
-        failures.append("src/mcp/schemas.rs must derive required action parameters from ACTION_SPECS")
+        failures.append("crates/rtemplate-mcp/src/schemas.rs must derive required action parameters from ACTION_SPECS")
     rmcp_server_text = read(RMCP_SERVER_RS)
     if "example://schema/mcp-tool" not in rmcp_server_text or "tool_definitions()" not in rmcp_server_text:
-        failures.append("src/mcp/rmcp_server.rs must expose the schema resource from tool_definitions()")
+        failures.append("crates/rtemplate-mcp/src/rmcp_server.rs must expose the schema resource from tool_definitions()")
     prompts_text = read(PROMPTS_RS)
     if "quick_start" not in prompts_text:
-        failures.append("src/mcp/prompts.rs must expose quick_start prompt")
+        failures.append("crates/rtemplate-mcp/src/prompts.rs must expose quick_start prompt")
     return failures
 
 

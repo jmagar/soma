@@ -12,7 +12,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 CARGO = ROOT / "Cargo.toml"
-ACTIONS = ROOT / "src/actions.rs"
+ACTIONS = ROOT / "crates/rtemplate-contracts/src/actions.rs"
 OUT = ROOT / "docs/generated/openapi.json"
 
 LEGACY_REST_ENDPOINT = "/v1/example"
@@ -274,7 +274,7 @@ def render() -> dict[str, Any]:
                 "ActionName": {
                     "type": "string",
                     "enum": action_names,
-                    "description": "REST-capable action names from src/actions.rs.",
+                    "description": "REST-capable action names from crates/rtemplate-contracts/src/actions.rs.",
                 },
                 "ActionRequest": {
                     "type": "object",
@@ -447,7 +447,7 @@ def render() -> dict[str, Any]:
         },
         "x-template": {
             "source": "scripts/check-openapi.py",
-            "action_metadata": "src/actions.rs",
+            "action_metadata": "crates/rtemplate-contracts/src/actions.rs",
             "preferred_rest_style": "direct_routes",
             "rest_actions": action_names,
             "direct_rest_routes": {

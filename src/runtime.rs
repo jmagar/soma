@@ -13,21 +13,20 @@ use rmcp::{transport::stdio, ServiceExt};
 use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use crate::config::Config;
+use rtemplate_contracts::config::Config;
 #[cfg(any(feature = "mcp-stdio", feature = "mcp-http"))]
-use crate::{app::ExampleService, example::ExampleClient};
+use rtemplate_service::{ExampleClient, ExampleService};
 
 #[cfg(feature = "cli")]
-use crate::cli;
-#[cfg(feature = "mcp-http")]
-use crate::server::{self, resolve_auth_policy_kind, AuthPolicyKind};
-#[cfg(all(feature = "mcp", not(feature = "mcp-stdio")))]
-use crate::server::{AppState, AuthPolicy};
+use rtemplate_cli as cli;
 #[cfg(feature = "mcp-stdio")]
-use crate::{
-    mcp,
-    server::{AppState, AuthPolicy},
-};
+use rtemplate_mcp as mcp;
+#[cfg(feature = "mcp-http")]
+use rtemplate_runtime::server::{resolve_auth_policy_kind, AuthPolicyKind};
+#[cfg(all(feature = "mcp", not(feature = "mcp-stdio")))]
+use rtemplate_runtime::server::{AppState, AuthPolicy};
+#[cfg(feature = "mcp-stdio")]
+use rtemplate_runtime::server::{AppState, AuthPolicy};
 
 pub fn init_logging(stdio_mode: bool, serve_mode: bool) {
     let log_level = if stdio_mode || !serve_mode {
@@ -58,7 +57,7 @@ pub async fn serve_http_mcp() -> Result<()> {
     );
 
     let bind = state.config.bind_addr();
-    let app = server::router(state).layer(tower_http::trace::TraceLayer::new_for_http());
+    let app = crate::routes::router(state).layer(tower_http::trace::TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     info!(bind = %bind, "MCP HTTP server listening");
 
@@ -134,19 +133,19 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
         AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
         AuthPolicyKind::MountedBearer => Ok(AuthPolicy::Mounted { auth_state: None }),
         AuthPolicyKind::MountedOAuth => {
-            let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
+            let auth_cfg = rtemplate_auth::config::AuthConfigBuilder::new()
                 .env_prefix("RTEMPLATE_MCP")
                 .session_cookie_name("example_mcp_session")
                 .scopes_supported(vec![
-                    crate::actions::READ_SCOPE.into(),
-                    crate::actions::WRITE_SCOPE.into(),
+                    rtemplate_contracts::actions::READ_SCOPE.into(),
+                    rtemplate_contracts::actions::WRITE_SCOPE.into(),
                 ])
                 .default_scope("example:read")
                 .resource_path("/mcp")
                 .enable_dynamic_registration(true)
                 .build_from_sources(std::env::vars())
                 .map_err(|e| anyhow::anyhow!("OAuth config error: {e}"))?;
-            let auth_state = lab_auth::state::AuthState::new(auth_cfg)
+            let auth_state = rtemplate_auth::state::AuthState::new(auth_cfg)
                 .await
                 .map_err(|e| anyhow::anyhow!("OAuth state init error: {e}"))?;
             Ok(AuthPolicy::Mounted {

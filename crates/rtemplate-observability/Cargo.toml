@@ -1,0 +1,17 @@
+[package]
+name = "rtemplate-observability"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.90"
+description = "Logging, status, and stale-binary helpers for rmcp-template"
+publish = false
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+tempfile = "3"

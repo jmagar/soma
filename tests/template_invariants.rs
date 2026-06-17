@@ -113,8 +113,8 @@ fn plugin_manifests_do_not_have_version_fields() {
 #[test]
 fn schema_contract_doc_tracks_known_actions() {
     let doc = read("docs/MCP_SCHEMA.md");
-    let actions = read("src/actions.rs");
-    let schemas = read("src/mcp/schemas.rs");
+    let actions = read("crates/rtemplate-contracts/src/actions.rs");
+    let schemas = read("crates/rtemplate-mcp/src/schemas.rs");
     for action in ["greet", "echo", "status", "elicit_name", "help"] {
         assert!(actions.contains(action), "actions.rs missing {action}");
         assert!(
