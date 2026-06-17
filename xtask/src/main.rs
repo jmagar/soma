@@ -9,6 +9,7 @@
 //!   check-env    Validate required environment variables are set
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
+//!   cargo-generate Smoke-test cargo-generate output
 //!
 //! TEMPLATE: Add your own commands by adding arms to the match block below.
 //!           Keep each command as a separate `fn` for readability.
@@ -22,6 +23,7 @@ use anyhow::{bail, Context, Result};
 use std::process::{Command, Stdio};
 use walkdir::WalkDir;
 
+mod cargo_generate;
 mod patterns;
 
 fn main() -> Result<()> {
@@ -44,6 +46,7 @@ fn main() -> Result<()> {
         Some("check-env") => check_env(),
         Some("patterns") => patterns_cmd(&args[1..]),
         Some("contract-audit") => contract_audit(),
+        Some("cargo-generate") => cargo_generate(&args[1..]),
         Some("check-test-siblings") => check_test_siblings(),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
@@ -53,6 +56,14 @@ fn main() -> Result<()> {
             bail!("Unknown xtask command: {unknown:?}\nRun `cargo xtask --help` for usage.")
         }
     }
+}
+
+// =============================================================================
+// cargo-generate — Smoke-test generated template output
+// =============================================================================
+
+fn cargo_generate(args: &[String]) -> Result<()> {
+    cargo_generate::run(args)
 }
 
 // =============================================================================
@@ -447,12 +458,12 @@ fn check_env() -> Result<()> {
 // =============================================================================
 
 /// Run a `cargo` subcommand, forwarding stdout/stderr.
-fn run_cargo(args: &[&str]) -> Result<()> {
+pub(crate) fn run_cargo(args: &[&str]) -> Result<()> {
     run_cmd("cargo", args)
 }
 
 /// Run an arbitrary command, forwarding stdout/stderr. Fails if exit code != 0.
-fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
+pub(crate) fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     let status = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
@@ -485,7 +496,7 @@ pub(crate) fn run_cmd_output(program: &str, args: &[&str]) -> Result<String> {
 /// Check whether a cargo subcommand (or standalone binary) is installed.
 ///
 /// Checks for both `cargo-nextest` (cargo subcommand) and `nextest` in PATH.
-fn command_exists(name: &str) -> bool {
+pub(crate) fn command_exists(name: &str) -> bool {
     Command::new(name)
         .arg("--version")
         .stdout(Stdio::null())
@@ -511,6 +522,7 @@ COMMANDS:
   check-test-siblings   Verify every src/*.rs has a sibling *_tests.rs
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
   contract-audit        Run local static/spec checks without live upstream calls
+  cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
   help                  Show this help
 
 TEMPLATE:

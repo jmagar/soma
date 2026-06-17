@@ -148,8 +148,14 @@ fn plugin_hook_standard_is_documented() {
     }
 }
 
-fn example_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_rtemplate")
+fn example_bin() -> std::path::PathBuf {
+    const BIN_NAME: &str = "rtemplate";
+    let key = format!("CARGO_BIN_EXE_{BIN_NAME}");
+    let alt_key = format!("CARGO_BIN_EXE_{}", BIN_NAME.replace('-', "_"));
+    std::env::var_os(&key)
+        .or_else(|| std::env::var_os(&alt_key))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(BIN_NAME))
 }
 
 fn setup_command(data_dir: &std::path::Path) -> Command {

@@ -9,6 +9,7 @@ temporary template directory before moving the generated project into place.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -59,15 +60,21 @@ def snake(value: str) -> str:
     return value.replace("-", "_")
 
 
-def shouty_snake(value: str) -> str:
-    return snake(value).upper()
+def validate_identifier(name: str, value: str) -> None:
+    if not re.fullmatch(r"[a-z][a-z0-9_]*", value):
+        raise ValueError(f"{name} must be Rust identifier-safe: {value!r}")
 
 
-def title_words(value: str) -> str:
-    return value.replace("-", " ").replace("_", " ").title()
+def validate_port(value: str) -> None:
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise ValueError(f"default_port must be an integer: {value!r}") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"default_port must be between 1 and 65535: {value!r}")
 
 
-def replacements(args: list[str]) -> list[tuple[str, str]]:
+def parse_args(args: list[str]) -> dict[str, str]:
     (
         crate_name,
         crate_prefix,
@@ -82,22 +89,65 @@ def replacements(args: list[str]) -> list[tuple[str, str]]:
         github_repo,
     ) = args
 
-    crate_prefix_snake = snake(crate_prefix)
-    mcp_surface_crate = f"{crate_prefix}-mcp-surface"
-    mcp_surface_crate_snake = snake(mcp_surface_crate)
-    service_slug_snake = snake(service_slug)
-    binary_snake = snake(binary_name)
+    validate_identifier("service_slug", service_slug)
+    validate_port(default_port)
+
+    return {
+        "crate_name": crate_name,
+        "crate_name_snake": snake(crate_name),
+        "crate_prefix": crate_prefix,
+        "crate_prefix_snake": snake(crate_prefix),
+        "binary_name": binary_name,
+        "server_binary_name": server_binary_name,
+        "service_slug": service_slug,
+        "type_prefix": type_prefix,
+        "env_prefix": env_prefix,
+        "scope_prefix": scope_prefix,
+        "default_port": default_port,
+        "github_owner": github_owner,
+        "github_repo": github_repo,
+        "github_slug": f"{github_owner}/{github_repo}",
+        "github_url": f"https://github.com/{github_owner}/{github_repo}",
+        "github_ssh": f"github.com:{github_owner}/{github_repo}.git",
+        "mcp_surface_crate": f"{crate_prefix}-mcp-surface",
+        "mcp_surface_crate_snake": snake(f"{crate_prefix}-mcp-surface"),
+    }
+
+
+def replacements(values: dict[str, str]) -> list[tuple[str, str]]:
+    crate_name = values["crate_name"]
+    crate_name_snake = values["crate_name_snake"]
+    crate_prefix = values["crate_prefix"]
+    crate_prefix_snake = values["crate_prefix_snake"]
+    binary_name = values["binary_name"]
+    server_binary_name = values["server_binary_name"]
+    service_slug = values["service_slug"]
+    type_prefix = values["type_prefix"]
+    env_prefix = values["env_prefix"]
+    scope_prefix = values["scope_prefix"]
+    default_port = values["default_port"]
+    github_slug = values["github_slug"]
+    github_url = values["github_url"]
+    github_ssh = values["github_ssh"]
+    mcp_surface_crate = values["mcp_surface_crate"]
+    mcp_surface_crate_snake = values["mcp_surface_crate_snake"]
 
     return [
+        ("https://github.com/your-org/rtemplate-mcp", github_url),
+        ("https://github.com/jmagar/rmcp-template", github_url),
+        ("https://github.com/jmagar/rtemplate-mcp", github_url),
+        ("github.com:jmagar/rtemplate-mcp.git", github_ssh),
+        ("jmagar/rmcp-template", github_slug),
+        ("jmagar/rtemplate-mcp", github_slug),
+        ('"name": "rtemplate-mcp"', f'"name": "{crate_name}"'),
         ("rtemplate-server", server_binary_name),
-        ("rmcp_template", snake(crate_name)),
+        ("rmcp_template", crate_name_snake),
         ("rtemplate_mcp", mcp_surface_crate_snake),
         ("rtemplate-mcp", mcp_surface_crate),
         ("rtemplate_", f"{crate_prefix_snake}_"),
         ("rtemplate-", f"{crate_prefix}-"),
         ("rtemplate", binary_name),
         ("rmcp-template", crate_name),
-        ("rtemplate-mcp", crate_name),
         ("RTEMPLATE", env_prefix),
         ("ExampleRmcpServer", f"{type_prefix}RmcpServer"),
         ("ExampleService", f"{type_prefix}Service"),
@@ -105,21 +155,17 @@ def replacements(args: list[str]) -> list[tuple[str, str]]:
         ("ExampleConfig", f"{type_prefix}Config"),
         ("ExampleAction", f"{type_prefix}Action"),
         ("example-server", server_binary_name),
-        ("example_mcp_session", f"{service_slug_snake}_mcp_session"),
+        ("src/bin/example.rs", f"src/bin/{binary_name}.rs"),
+        ("example_mcp_session", f"{service_slug}_mcp_session"),
         ("example:read", f"{scope_prefix}:read"),
         ("example:write", f"{scope_prefix}:write"),
         ("example:__deny__", f"{scope_prefix}:__deny__"),
-        ("example_mcp", f"{service_slug_snake}_mcp"),
+        ("example_mcp", f"{service_slug}_mcp"),
         ("example-mcp", f"{service_slug}-mcp"),
         ("example", service_slug),
         ("Example", type_prefix),
         ("40060", default_port),
         ("40000", default_port),
-        ("jmagar/rtemplate-mcp", f"{github_owner}/{github_repo}"),
-        ("jmagar/rmcp-template", f"{github_owner}/{github_repo}"),
-        ("github.com:jmagar/rtemplate-mcp.git", f"github.com:{github_owner}/{github_repo}.git"),
-        ("github.com/jmagar/rmcp-template", f"github.com/{github_owner}/{github_repo}"),
-        ("github.com/jmagar/rtemplate-mcp", f"github.com/{github_owner}/{github_repo}"),
         ("MyService", type_prefix),
         ("myservice-server", server_binary_name),
         ("myservice-mcp", crate_name),
@@ -166,7 +212,9 @@ def rewrite_tree(root: Path, pairs: list[tuple[str, str]]) -> None:
             path.write_text(updated)
 
 
-def rename_paths(root: Path, crate_prefix: str, crate_name: str, binary_name: str) -> None:
+def rename_paths(
+    root: Path, crate_prefix: str, crate_name: str, binary_name: str, service_slug: str
+) -> None:
     renames = []
     for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
         rel = path.relative_to(root)
@@ -177,7 +225,8 @@ def rename_paths(root: Path, crate_prefix: str, crate_name: str, binary_name: st
         new_name = new_name.replace("rtemplate-mcp", f"{crate_prefix}-mcp-surface")
         new_name = new_name.replace("rtemplate", crate_prefix)
         new_name = new_name.replace("rmcp-template", crate_name)
-        new_name = new_name.replace("example", binary_name)
+        replacement = binary_name if rel.as_posix() == "src/bin/example.rs" else service_slug
+        new_name = new_name.replace("example", replacement)
         if new_name != name:
             renames.append((path, path.with_name(new_name)))
     for src, dst in renames:
@@ -186,23 +235,49 @@ def rename_paths(root: Path, crate_prefix: str, crate_name: str, binary_name: st
 
 
 def cleanup_template_files(root: Path) -> None:
-    for path in [root / "cargo-generate.toml", root / "template"]:
+    for path in [root / "cargo-generate.toml", root / "template", root / "docs/CARGO_GENERATE.md"]:
         if path.is_dir():
             shutil.rmtree(path)
         elif path.exists():
             path.unlink()
 
 
+def cleanup_generated_readme(root: Path) -> None:
+    readme = root / "README.md"
+    if not readme.exists():
+        return
+    text = readme.read_text()
+    text = re.sub(
+        r"\n## Generate a New Server\n.*?(?=\n## )",
+        "\n",
+        text,
+        count=1,
+        flags=re.S,
+    )
+    readme.write_text(text)
+
+
 def main() -> int:
-    if len(sys.argv) != 12:
-        print("expected 11 cargo-generate arguments", file=sys.stderr)
+    if len(sys.argv) != 13:
+        print("expected generated root plus 11 cargo-generate arguments", file=sys.stderr)
         return 2
-    root = Path(os.getcwd())
-    args = sys.argv[1:]
-    pairs = replacements(args)
-    rewrite_tree(root, pairs)
-    rename_paths(root, crate_prefix=args[1], crate_name=args[0], binary_name=args[2])
-    cleanup_template_files(root)
+    root = Path(sys.argv[1])
+    try:
+        values = parse_args(sys.argv[2:])
+        pairs = replacements(values)
+        rewrite_tree(root, pairs)
+        rename_paths(
+            root,
+            crate_prefix=values["crate_prefix"],
+            crate_name=values["crate_name"],
+            binary_name=values["binary_name"],
+            service_slug=values["service_slug"],
+        )
+        cleanup_template_files(root)
+        cleanup_generated_readme(root)
+    except ValueError as exc:
+        print(f"cargo-generate rewrite failed: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 

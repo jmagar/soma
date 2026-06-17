@@ -1,4 +1,4 @@
-let crate_name = variable::get("crate_name");
+let package_name = variable::get("package_name");
 let crate_prefix = variable::get("crate_prefix");
 let binary_name = variable::get("binary_name");
 let server_binary_name = variable::get("server_binary_name");
@@ -9,10 +9,13 @@ let scope_prefix = variable::get("scope_prefix");
 let default_port = variable::get("default_port");
 let github_owner = variable::get("github_owner");
 let github_repo = variable::get("github_repo");
+let rewrite_script = env::working_directory + "/template/cargo-generate/rewrite.py";
+let generated_root = env::working_directory;
 
 system::command("python3", [
-    "template/cargo-generate/rewrite.py",
-    crate_name,
+    rewrite_script,
+    generated_root,
+    package_name,
     crate_prefix,
     binary_name,
     server_binary_name,
@@ -24,4 +27,3 @@ system::command("python3", [
     github_owner,
     github_repo,
 ]);
-

@@ -1,5 +1,13 @@
 [template]
 cargo_generate_version = ">=0.23.0"
+# This repo remains valid Rust/TOML rather than embedding Liquid placeholders.
+# The post hook performs all rewrites after cargo-generate copies the tree, so
+# cargo-generate should not try to Liquid-process source/docs assets.
+include = [
+  "cargo-generate.toml",
+  "template/cargo-generate/post.rhai",
+  "template/cargo-generate/rewrite.py",
+]
 ignore = [
   ".beads",
   ".cache",
@@ -13,19 +21,21 @@ ignore = [
   ".worktrees",
   "apps/web/.next",
   "apps/web/node_modules",
-  "apps/web/out/*",
   "target",
   "dist",
+  "storage",
+  "**/__pycache__",
+  "*.pyc",
   "docs/references",
   "mcp-server-inventory.md",
 ]
 
 [placeholders]
-crate_name = { type = "string", prompt = "Cargo package/repo name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice-mcp" }
+package_name = { type = "string", prompt = "Cargo package/repo name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice-mcp" }
 crate_prefix = { type = "string", prompt = "Workspace crate prefix", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
 binary_name = { type = "string", prompt = "Local CLI/stdin MCP binary name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
 server_binary_name = { type = "string", prompt = "Server binary name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice-server" }
-service_slug = { type = "string", prompt = "MCP tool/action service slug", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
+service_slug = { type = "string", prompt = "MCP tool/action service slug (Rust identifier-safe)", regex = "^[a-z][a-z0-9_]*$", default = "myservice" }
 type_prefix = { type = "string", prompt = "Rust type prefix", regex = "^[A-Z][A-Za-z0-9]*$", default = "MyService" }
 env_prefix = { type = "string", prompt = "Environment variable prefix", regex = "^[A-Z][A-Z0-9_]*$", default = "MYSERVICE" }
 scope_prefix = { type = "string", prompt = "OAuth/MCP scope prefix", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
@@ -35,4 +45,3 @@ github_repo = { type = "string", prompt = "GitHub repo name for docs", regex = "
 
 [hooks]
 post = ["template/cargo-generate/post.rhai"]
-

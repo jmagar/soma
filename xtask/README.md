@@ -110,6 +110,24 @@ just contract-audit
 
 ---
 
+### `cargo xtask cargo-generate`
+
+Smoke-test real `cargo-generate` output using the repo's post-generation hook.
+The command stages a clean template copy, generates both a simple server and a
+hyphenated-package server, checks plugin/repository metadata, verifies
+template-only files were removed, and runs `cargo check --workspace --all-targets`
+inside each generated project.
+
+```bash
+cargo xtask cargo-generate
+cargo xtask cargo-generate --no-cargo-check
+```
+
+Use `--no-cargo-check` for a faster shape-only check while iterating on the
+generator.
+
+---
+
 ### `cargo xtask check-env`
 
 Validate environment variables before starting the server. Prints the status of every required and optional variable, then exits non-zero if any required variable is missing.

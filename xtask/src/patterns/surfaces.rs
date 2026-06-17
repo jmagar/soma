@@ -263,15 +263,15 @@ mod tests {
 
     #[test]
     fn classifies_core_rust_surfaces() {
-        let file = surface_file("crates/rtemplate-mcp/src/tools.rs")
-            .expect("tools should be a surface");
+        let file =
+            surface_file("crates/rtemplate-mcp/src/tools.rs").expect("tools should be a surface");
         assert_eq!(file.kind, SurfaceKind::CoreRust);
     }
 
     #[test]
     fn classifies_operational_cli_surfaces() {
-        let file = surface_file("crates/rtemplate-cli/src/doctor.rs")
-            .expect("doctor should be a surface");
+        let file =
+            surface_file("crates/rtemplate-cli/src/doctor.rs").expect("doctor should be a surface");
         assert_eq!(file.kind, SurfaceKind::OperationalRust);
     }
 
