@@ -1,8 +1,8 @@
 /**
  * Typed client for the rmcp-template REST API.
  *
- * All actions are dispatched via POST /v1/example with:
- *   { "action": "<action>", "params": { ... } }
+ * Business actions use direct REST routes such as POST /v1/echo and
+ * GET /v1/status. POST /v1/example remains a deprecated compatibility envelope.
  *
  * The base URL is relative (empty string) so the same binary serves
  * both the API and the web UI — no CORS or cross-origin config needed.
@@ -27,7 +27,6 @@ export interface EchoResult {
 
 export interface StatusResult {
   status: string;
-  api_url?: string;
   note?: string;
 }
 
@@ -65,16 +64,31 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** POST /v1/example — dispatch an action */
+function postJson<T>(path: string, body: Record<string, unknown>): Promise<ApiResponse<T>> {
+  return apiFetch<T>(endpoint(path), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/** Dispatch a template REST action through its direct route. */
 export function callAction<T = unknown>(
   action: string,
   params: Record<string, unknown> = {},
 ): Promise<ApiResponse<T>> {
-  return apiFetch<T>(endpoint(WEB_APP_CONFIG.restEndpoint), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, params }),
-  });
+  switch (action) {
+    case "greet":
+      return postJson<T>("/v1/greet", params);
+    case "echo":
+      return postJson<T>("/v1/echo", params);
+    case "status":
+      return apiFetch<T>(endpoint("/v1/status"));
+    case "help":
+      return apiFetch<T>(endpoint("/v1/help"));
+    default:
+      return Promise.resolve({ error: `Unknown REST action: ${action}` });
+  }
 }
 
 /** GET /health */
@@ -87,8 +101,8 @@ export function getStatus(): Promise<ApiResponse<StatusResult>> {
   return apiFetch<StatusResult>(endpoint(WEB_APP_CONFIG.statusEndpoint));
 }
 
-export const greet = (name?: string) => callAction<GreetResult>("greet", name ? { name } : {});
+export const greet = (name?: string) => postJson<GreetResult>("/v1/greet", name ? { name } : {});
 
-export const echo = (message: string) => callAction<EchoResult>("echo", { message });
+export const echo = (message: string) => postJson<EchoResult>("/v1/echo", { message });
 
-export const status = () => callAction<StatusResult>("status");
+export const status = () => apiFetch<StatusResult>(endpoint("/v1/status"));

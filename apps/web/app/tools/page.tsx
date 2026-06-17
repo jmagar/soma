@@ -6,12 +6,7 @@ import { ResponsePanel } from "@/components/tools/response-panel";
 import { SubmitButton } from "@/components/tools/submit-button";
 import { Button } from "@/components/ui/button";
 import { callAction } from "@/lib/api";
-import {
-  DEFAULT_REST_ACTION,
-  REST_ACTIONS,
-  type RestActionId,
-  WEB_APP_CONFIG,
-} from "@/lib/template";
+import { DEFAULT_REST_ACTION, REST_ACTIONS, type RestActionId } from "@/lib/template";
 
 export default function ToolsPage() {
   const [selectedAction, setSelectedAction] = useState<RestActionId>(DEFAULT_REST_ACTION.id);
@@ -76,7 +71,7 @@ export default function ToolsPage() {
               fontSize: "0.8em",
             }}
           >
-            POST {WEB_APP_CONFIG.restEndpoint}
+            {action.method} {action.path}
           </code>
         </p>
       </div>
@@ -245,11 +240,24 @@ export default function ToolsPage() {
                 whiteSpace: "pre-wrap",
               }}
             >
-              {`POST ${WEB_APP_CONFIG.restEndpoint}\nContent-Type: application/json\n\n${JSON.stringify({ action: selectedAction, params: Object.fromEntries(Object.entries(paramValues).filter(([, v]) => v.trim())) }, null, 2)}`}
+              {requestPreview(action, paramValues)}
             </pre>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function requestPreview(
+  action: typeof DEFAULT_REST_ACTION,
+  paramValues: Record<string, string>,
+): string {
+  const method = action.method ?? "POST";
+  const path = action.path ?? "/v1/example";
+  if (method === "GET") {
+    return `GET ${path}`;
+  }
+  const body = Object.fromEntries(Object.entries(paramValues).filter(([, value]) => value.trim()));
+  return `${method} ${path}\nContent-Type: application/json\n\n${JSON.stringify(body, null, 2)}`;
 }

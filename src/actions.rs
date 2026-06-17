@@ -126,6 +126,25 @@ impl ActionTransport {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionCost {
+    Cheap,
+    Moderate,
+    Expensive,
+    Write,
+}
+
+impl ActionCost {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cheap => "cheap",
+            Self::Moderate => "moderate",
+            Self::Expensive => "expensive",
+            Self::Write => "write",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParamSpec {
     pub name: &'static str,
     pub ty: &'static str,
@@ -141,6 +160,7 @@ pub struct ActionSpec {
     pub transport: ActionTransport,
     pub destructive: bool,
     pub requires_admin: bool,
+    pub cost: ActionCost,
     pub params: &'static [ParamSpec],
     pub returns: &'static str,
 }
@@ -167,6 +187,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::Any,
         destructive: false,
         requires_admin: false,
+        cost: ActionCost::Cheap,
         params: GREET_PARAMS,
         returns: "Greeting",
     },
@@ -177,6 +198,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::Any,
         destructive: false,
         requires_admin: false,
+        cost: ActionCost::Cheap,
         params: ECHO_PARAMS,
         returns: "EchoResult",
     },
@@ -187,6 +209,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::Any,
         destructive: false,
         requires_admin: false,
+        cost: ActionCost::Cheap,
         params: &[],
         returns: "Status",
     },
@@ -197,6 +220,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::McpOnly,
         destructive: false,
         requires_admin: false,
+        cost: ActionCost::Cheap,
         params: &[],
         returns: "Greeting",
     },
@@ -207,6 +231,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::McpOnly,
         destructive: false,
         requires_admin: false,
+        cost: ActionCost::Moderate,
         params: &[],
         returns: "ScaffoldIntentReport",
     },
@@ -217,6 +242,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         transport: ActionTransport::Any,
         destructive: false,
         requires_admin: false,
+        cost: ActionCost::Cheap,
         params: &[],
         returns: "HelpPayload",
     },
@@ -285,6 +311,7 @@ pub struct ActionDoc {
     pub description: String,
     pub destructive: bool,
     pub requires_admin: bool,
+    pub cost: String,
     pub required_scope: Option<String>,
     pub params: Vec<ParamDoc>,
     pub returns: String,
@@ -302,6 +329,7 @@ pub fn action_catalog() -> Vec<ActionDoc> {
             description: spec.description.to_owned(),
             destructive: spec.destructive,
             requires_admin: spec.requires_admin,
+            cost: spec.cost.as_str().to_owned(),
             required_scope: spec.required_scope.map(ToOwned::to_owned),
             params: spec
                 .params
@@ -424,11 +452,13 @@ pub fn rest_help() -> Value {
         "actions": rest_action_names(),
         "mcp_only_actions": mcp_only_action_names(),
         "catalog": action_catalog(),
-        "usage": "POST /v1/example with {\"action\": \"<action>\", \"params\": {...}}",
+        "preferred_rest_style": "direct_routes",
+        "usage": "Use direct REST routes such as POST /v1/echo or GET /v1/status. POST /v1/example remains as a deprecated compatibility action envelope.",
         "examples": {
-            "greet":  {"action": "greet",  "params": {"name": "Alice"}},
-            "echo":   {"action": "echo",   "params": {"message": "Hello!"}},
-            "status": {"action": "status", "params": {}},
+            "greet":  {"method": "POST", "path": "/v1/greet",  "body": {"name": "Alice"}},
+            "echo":   {"method": "POST", "path": "/v1/echo",   "body": {"message": "Hello!"}},
+            "status": {"method": "GET", "path": "/v1/status"},
+            "legacy_envelope": {"method": "POST", "path": "/v1/example", "body": {"action": "echo", "params": {"message": "Hello!"}}},
         }
     })
 }

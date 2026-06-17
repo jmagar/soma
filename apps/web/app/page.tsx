@@ -117,7 +117,7 @@ export default function DashboardPage() {
           </p>
         </Card>
 
-        <Card title="API URL">
+        <Card title="API Mode">
           <p
             style={{
               color: "var(--aurora-accent-primary)",
@@ -126,7 +126,7 @@ export default function DashboardPage() {
               wordBreak: "break-all",
             }}
           >
-            {serverStatus?.api_url ?? "—"}
+            {serverStatus?.note ?? "redacted"}
           </p>
         </Card>
 

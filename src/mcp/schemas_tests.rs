@@ -16,6 +16,28 @@ fn schema_action_enum_comes_from_action_metadata() {
 }
 
 #[test]
+fn schema_advertises_action_costs_and_agent_guidance() {
+    let tools = tool_definitions();
+    let metadata = tools[0]["x-template-action-metadata"]
+        .as_array()
+        .expect("action metadata should be an array");
+    let status = metadata
+        .iter()
+        .find(|entry| entry["name"] == "status")
+        .expect("status metadata should be present");
+
+    assert_eq!(status["cost"], "cheap");
+    assert_eq!(
+        tools[0]["x-template-agent-guidance"]["cost_order"],
+        serde_json::json!(["cheap", "moderate", "expensive", "write"])
+    );
+    assert!(tools[0]["x-template-agent-guidance"]["first_pass"]
+        .as_array()
+        .expect("first_pass should be an array")
+        .contains(&serde_json::json!("status")));
+}
+
+#[test]
 fn echo_message_schema_requires_non_empty_string() {
     let tools = tool_definitions();
     assert_eq!(

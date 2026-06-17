@@ -115,7 +115,12 @@ Port 40060
   ├── /health               → Unauthenticated liveness probe
   ├── /status               → Public redacted runtime state
   ├── /openapi.json         → Public generated REST OpenAPI schema
-  ├── /v1/example           → REST API action dispatch
+  ├── /v1/capabilities      → REST route inventory
+  ├── /v1/greet             → Direct REST action route
+  ├── /v1/echo              → Direct REST action route
+  ├── /v1/status            → Direct REST action route
+  ├── /v1/help              → Direct REST action route
+  ├── /v1/example           → Deprecated compatibility action envelope
   ├── /.well-known/*        → OAuth metadata (when auth_mode=oauth)
   └── /*                    → SPA fallback (serves embedded web UI)
 ```
@@ -128,6 +133,11 @@ pub fn router(state: AppState) -> Router {
         .route("/status", get(status));
 
     let api = Router::new()
+        .route("/v1/capabilities", get(v1_capabilities))
+        .route("/v1/greet", post(v1_greet))
+        .route("/v1/echo", post(v1_echo))
+        .route("/v1/status", get(v1_service_status))
+        .route("/v1/help", get(v1_help))
         .route("/v1/example", post(api_dispatch))
         .route_layer(auth_layer.clone());
 

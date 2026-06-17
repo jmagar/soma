@@ -50,7 +50,7 @@ Current checks assert semantic behavior for `greet`, `echo`, `status`, schema/ac
 
 ### `api_routes.rs` — REST and route behavior
 
-Tests REST action dispatch, validation errors, `/status`, and auth policy behavior at the Axum route layer.
+Tests direct REST routes, legacy envelope compatibility, validation errors, `/status`, and auth policy behavior at the Axum route layer.
 
 This is the right place for HTTP status-code behavior and REST/MCP action surface differences, such as REST excluding MCP-only elicitation actions.
 

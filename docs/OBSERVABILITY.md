@@ -24,7 +24,8 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 | `GET /health` | Public | Fast liveness + upstream connectivity. |
 | `GET /status` | Public | Local redacted runtime metadata. |
 | `/mcp` | Auth policy | MCP Streamable HTTP endpoint. |
-| `/v1/example` | Auth policy | REST action dispatch. |
+| `/v1/*` | Auth policy | Direct REST business routes. |
+| `/v1/example` | Auth policy | Deprecated REST action envelope. |
 
 `/health` must remain fast (no database calls). Return HTTP 200 even when upstream is down — use `"status": "degraded"` to signal partial failure.
 

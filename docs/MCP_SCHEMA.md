@@ -19,18 +19,19 @@ python3 scripts/check-schema-docs.py --check
 
 ## Actions
 
-| Action | Scope | Description |
-|---|---|---|
-| `greet` | `example:read` | Return a greeting. Optional `name` string. |
-| `echo` | `example:read` | Echo a required `message` string. |
-| `status` | `example:read` | Return server status and configuration summary. |
-| `elicit_name` | `example:read` | Ask the MCP client to elicit a name and return a personalized greeting. |
-| `scaffold_intent` | `example:read` | Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files. |
-| `help` | public | Return the in-tool action reference. Public; no scope required. |
+| Action | Scope | Cost | Description |
+|---|---|---|---|
+| `greet` | `example:read` | `cheap` | Return a greeting. Optional `name` string. |
+| `echo` | `example:read` | `cheap` | Echo a required `message` string. |
+| `status` | `example:read` | `cheap` | Return server status and configuration summary. |
+| `elicit_name` | `example:read` | `cheap` | Ask the MCP client to elicit a name and return a personalized greeting. |
+| `scaffold_intent` | `example:read` | `moderate` | Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files. |
+| `help` | public | `cheap` | Return the in-tool action reference. Public; no scope required. |
 
 ## Drift Rules
 
 - `ACTION_SPECS` in `src/actions.rs` is the canonical action and scope list.
+- Action cost is planner metadata. Use `cheap` for first-pass reads, `moderate` for bounded workflow setup, `expensive` for broad scans or long-running work, and `write` for mutating operations.
 - `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.
 - The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.
 - `help` is intentionally public and must have no required scope.

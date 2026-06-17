@@ -16,7 +16,7 @@ TOOLS_RS = ROOT / "src/mcp/tools.rs"
 PROMPTS_RS = ROOT / "src/mcp/prompts.rs"
 RMCP_SERVER_RS = ROOT / "src/mcp/rmcp_server.rs"
 README = ROOT / "README.md"
-SKILL = ROOT / "plugins/rtemplate/skills/example/SKILL.md"
+SKILL = ROOT / "plugins/rtemplate/skills/rtemplate/SKILL.md"
 DOC = ROOT / "docs/MCP_SCHEMA.md"
 
 
@@ -26,7 +26,12 @@ def read(path: Path) -> str:
 
 def extract_actions() -> list[str]:
     text = read(ACTION_RS)
-    return re.findall(r'name:\s*"([^"]+)"', text)
+    actions: list[str] = []
+    for entry in re.findall(r"ActionSpec\s*\{(.*?)\}", text, re.S):
+        name_match = re.search(r'name:\s*"([^"]+)"', entry)
+        if name_match:
+            actions.append(name_match.group(1))
+    return actions
 
 
 def extract_scope_for_actions() -> dict[str, str]:
@@ -51,6 +56,18 @@ def extract_scope_for_actions() -> dict[str, str]:
     return scopes
 
 
+def extract_cost_for_actions() -> dict[str, str]:
+    text = read(ACTION_RS)
+    entries = re.findall(r"ActionSpec\s*\{(.*?)\}", text, re.S)
+    costs: dict[str, str] = {}
+    for entry in entries:
+        name_match = re.search(r'name:\s*"([^"]+)"', entry)
+        cost_match = re.search(r"cost:\s*ActionCost::([A-Za-z]+)", entry)
+        if name_match and cost_match:
+            costs[name_match.group(1)] = cost_match.group(1).lower()
+    return costs
+
+
 def action_description(action: str) -> str:
     descriptions = {
         "greet": "Return a greeting. Optional `name` string.",
@@ -66,6 +83,7 @@ def action_description(action: str) -> str:
 def render() -> str:
     actions = extract_actions()
     scopes = extract_scope_for_actions()
+    costs = extract_cost_for_actions()
     lines = [
         "# MCP Schema Contract",
         "",
@@ -88,18 +106,20 @@ def render() -> str:
         "",
         "## Actions",
         "",
-        "| Action | Scope | Description |",
-        "|---|---|---|",
+        "| Action | Scope | Cost | Description |",
+        "|---|---|---|---|",
     ]
     for action in actions:
         scope = scopes[action]
-        lines.append(f"| `{action}` | {scope} | {action_description(action)} |")
+        cost = costs[action]
+        lines.append(f"| `{action}` | {scope} | `{cost}` | {action_description(action)} |")
     lines.extend(
         [
             "",
             "## Drift Rules",
             "",
             "- `ACTION_SPECS` in `src/actions.rs` is the canonical action and scope list.",
+            "- Action cost is planner metadata. Use `cheap` for first-pass reads, `moderate` for bounded workflow setup, `expensive` for broad scans or long-running work, and `write` for mutating operations.",
             "- `src/mcp/schemas.rs` must derive its enum from `ACTION_SPECS`.",
             "- The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.",
             "- `help` is intentionally public and must have no required scope.",
@@ -148,21 +168,26 @@ def check_mentions(actions: list[str]) -> list[str]:
     failures: list[str] = []
     surfaces = {
         "README.md": read(README),
-        "plugins/rtemplate/skills/example/SKILL.md": read(SKILL),
-        "src/mcp/tools.rs HELP_TEXT": read(TOOLS_RS),
+        "plugins/rtemplate/skills/rtemplate/SKILL.md": read(SKILL),
     }
     for label, text in surfaces.items():
         for action in actions:
             if action not in text:
                 failures.append(f"{label} does not mention action `{action}`")
+    tools_text = read(TOOLS_RS)
+    if "ACTION_SPECS" not in tools_text or "build_help_text" not in tools_text:
+        failures.append("src/mcp/tools.rs HELP_TEXT must be derived from ACTION_SPECS")
     return failures
 
 
 def check_scope(actions: list[str]) -> list[str]:
     failures: list[str] = []
     scopes = extract_scope_for_actions()
+    costs = extract_cost_for_actions()
     if set(scopes) != set(actions):
         failures.append("ACTION_SPECS action names and scope entries are out of sync")
+    if set(costs) != set(actions):
+        failures.append("ACTION_SPECS action names and cost entries are out of sync")
     if scopes.get("help") != "public":
         failures.append("help must be public")
     for action in set(actions) - {"help"}:
@@ -173,8 +198,8 @@ def check_scope(actions: list[str]) -> list[str]:
         failures.append("src/mcp/schemas.rs must derive action enum from action_names()")
     if '"additionalProperties": false' not in schema_text:
         failures.append("src/mcp/schemas.rs must reject unknown top-level properties")
-    if '"const": "echo"' not in schema_text or '"required": ["message"]' not in schema_text:
-        failures.append("src/mcp/schemas.rs must conditionally require message for echo")
+    if "required_param_conditionals()" not in schema_text or '"then": { "required": required }' not in schema_text:
+        failures.append("src/mcp/schemas.rs must derive required action parameters from ACTION_SPECS")
     rmcp_server_text = read(RMCP_SERVER_RS)
     if "example://schema/mcp-tool" not in rmcp_server_text or "tool_definitions()" not in rmcp_server_text:
         failures.append("src/mcp/rmcp_server.rs must expose the schema resource from tool_definitions()")

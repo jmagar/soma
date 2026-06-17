@@ -4,7 +4,8 @@ export const WEB_APP_CONFIG = {
   dashboardTitle: "Operator Dashboard",
   description: "MCP server operator dashboard",
   apiBaseUrl: process.env.NEXT_PUBLIC_RTEMPLATE_API_BASE_URL ?? "",
-  restEndpoint: "/v1/example",
+  legacyRestEndpoint: "/v1/example",
+  capabilitiesEndpoint: "/v1/capabilities",
   healthEndpoint: "/health",
   statusEndpoint: "/status",
   mcpEndpoint: "/mcp",
@@ -25,6 +26,8 @@ export type ActionSpec = {
   description: string;
   scope: "example:read" | "example:write" | "public";
   transport: "rest" | "mcp-only";
+  method?: "GET" | "POST";
+  path?: string;
   params: readonly ActionParam[];
   example: {
     action: string;
@@ -40,6 +43,8 @@ export const ACTIONS = [
     description: "Return a personalized greeting for the given name.",
     scope: "example:read",
     transport: "rest",
+    method: "POST",
+    path: "/v1/greet",
     params: [
       {
         name: "name",
@@ -59,6 +64,8 @@ export const ACTIONS = [
     description: "Echo a message back unchanged.",
     scope: "example:read",
     transport: "rest",
+    method: "POST",
+    path: "/v1/echo",
     params: [
       {
         name: "message",
@@ -78,9 +85,11 @@ export const ACTIONS = [
     description: "Return server status and configuration info.",
     scope: "example:read",
     transport: "rest",
+    method: "GET",
+    path: "/v1/status",
     params: [],
     example: { action: "status", params: {} },
-    response: { status: "ok", api_url: "http://...", note: "stub" },
+    response: { status: "ok", note: "stub" },
   },
   {
     id: "help",
@@ -88,12 +97,15 @@ export const ACTIONS = [
     description: "Show all available REST actions and usage documentation.",
     scope: "public",
     transport: "rest",
+    method: "GET",
+    path: "/v1/help",
     params: [],
     example: { action: "help", params: {} },
     response: {
       actions: ["greet", "echo", "status", "help"],
       mcp_only_actions: ["elicit_name", "scaffold_intent"],
-      usage: 'POST /v1/example with {"action":"<action>","params":{...}}',
+      preferred_rest_style: "direct_routes",
+      usage: "Use direct REST routes such as POST /v1/echo or GET /v1/status.",
     },
   },
   {

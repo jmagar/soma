@@ -43,14 +43,14 @@ All API calls go through `lib/api.ts`. Template-facing service names, endpoints,
 
 By default, the base URL is empty (relative) — the Rust server serves both the static files and the API from the same origin, so no CORS configuration is needed. For local `pnpm dev` against a separately running backend, copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_RTEMPLATE_API_BASE_URL` (for example, `http://localhost:3100`).
 
-Every action is dispatched as:
+Business actions use direct REST routes:
 
 ```
-POST /v1/example
-{ "action": "<action>", "params": { ... } }
+POST /v1/echo
+{ "message": "hello" }
 ```
 
-Helper functions (`greet`, `echo`, `status`, `callAction`) wrap the fetch call with typed `ApiResponse<T>` returns. Health and status use `GET /health` and `GET /status`.
+Helper functions (`greet`, `echo`, `status`) wrap the fetch calls with typed `ApiResponse<T>` returns. Health and public status use `GET /health` and `GET /status`.
 
 ## Design system (Aurora)
 

@@ -2992,9 +2992,14 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/status", get(status));  // returns degraded if auth absent
 
-    // 2. REST API — action dispatch (same methods as MCP tools)
+    // 2. REST API — direct routes over the same service methods as MCP tools
     let api = Router::new()
-        .route("/v1/example", post(api_dispatch))  // see §A2
+        .route("/v1/capabilities", get(v1_capabilities))
+        .route("/v1/greet", post(v1_greet))
+        .route("/v1/echo", post(v1_echo))
+        .route("/v1/status", get(v1_service_status))
+        .route("/v1/help", get(v1_help))
+        .route("/v1/example", post(api_dispatch))  // deprecated compatibility envelope
         .route_layer(auth_layer.clone());
 
     // 3. MCP transport
@@ -3089,7 +3094,7 @@ async fn api_dispatch(
 | Surface | Call pattern |
 |---|---|
 | MCP | `example(action="greet", name="Alice")` |
-| REST | `POST /v1/example {"action":"greet","params":{"name":"Alice"}}` |
+| REST | `POST /v1/greet {"name":"Alice"}` |
 | CLI | `example greet --name Alice` |
 
 All three call `state.service.greet(Some("Alice"))`.
@@ -3326,7 +3331,8 @@ template.
 For application/platform servers, the local `example` profile is an adapter to
 the deployed platform API. Set `RTEMPLATE_API_URL=https://service.example.com/`
 and optional `RTEMPLATE_API_KEY=<token>`; local CLI and stdio MCP actions forward
-to `POST {RTEMPLATE_API_URL}/v1/example`. Leaving `RTEMPLATE_API_URL` empty keeps the
+to direct business routes such as `POST {RTEMPLATE_API_URL}/v1/echo` and
+`GET {RTEMPLATE_API_URL}/v1/status`. Leaving `RTEMPLATE_API_URL` empty keeps the
 offline template stub active for tests and first-run scaffolds.
 
 ```toml

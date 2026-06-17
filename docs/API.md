@@ -10,12 +10,14 @@ scope: "template"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-06-17"
 ---
 
 # API
 
-The server exposes HTTP endpoints alongside MCP. All surfaces (MCP, REST, CLI) call the same `ExampleService` methods — no logic is duplicated.
+The server exposes HTTP endpoints alongside MCP when a scaffolded server uses the application/platform profile. All surfaces (MCP, REST, CLI) call the same `ExampleService` methods — no logic is duplicated.
+
+Upstream-client MCP servers do not need a local REST mirror by default. They should ship MCP + CLI, and add REST/Web only when they own state, workflows, dashboards, or other non-MCP consumers. Application/platform servers should expose direct product REST routes, not MCP protocol-shaped action envelopes.
 
 ## Endpoints
 
@@ -25,59 +27,37 @@ The server exposes HTTP endpoints alongside MCP. All surfaces (MCP, REST, CLI) c
 | `/status` | GET | Public | Local-only redacted runtime status; see `docs/OBSERVABILITY.md`. |
 | `/openapi.json` | GET | Public | Generated REST OpenAPI schema. |
 | `/mcp` | POST/stream | Auth policy | Streamable HTTP MCP endpoint. |
-| `/v1/example` | POST | Auth policy | REST action dispatch. |
+| `/v1/capabilities` | GET | Auth policy | Route inventory and server metadata. |
+| `/v1/greet` | POST | Auth policy | Direct `greet` action route. |
+| `/v1/echo` | POST | Auth policy | Direct `echo` action route. |
+| `/v1/status` | GET | Auth policy | Authenticated service-status action route. |
+| `/v1/help` | GET | Auth policy | Action catalog and route help. |
+| `/v1/example` | POST | Auth policy | Deprecated compatibility action envelope. |
 
-## REST action request
+## Direct REST requests
 
-The REST API uses the same `action` + `params` pattern as MCP tools:
+Preferred REST routes use ordinary product-shaped request bodies:
 
 ```json
 {
-  "action": "echo",
-  "params": {
-    "message": "hello"
-  }
+  "message": "hello"
 }
 ```
 
-`params` may be omitted or empty for no-argument actions.
+`GET` routes such as `/v1/status` and `/v1/help` do not require a body. The deprecated `/v1/example` route still accepts the legacy `{ "action": "...", "params": { ... } }` envelope for compatibility.
 
 ## REST handler
 
 ```rust
 // src/api.rs
-async fn api_dispatch(
+async fn v1_echo(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
-    Json(body): Json<ActionRequest>,
-) -> impl IntoResponse {
-    let result = match ExampleAction::from_rest(&body.action, &body.params) {
-        Ok(action) => {
-            if let Some(response) = enforce_rest_scope(
-                &state,
-                auth.as_ref().map(|Extension(auth)| auth),
-                &body.action,
-            ) {
-                return response;
-            }
-            execute_service_action(&state.service, &action).await
-        }
-        Err(error) => Err(error),
-    };
-
-    match result {
-        Ok(value) => Json(cap_rest_response(value)).into_response(),
-        Err(e) if crate::actions::is_validation_error(&e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e.to_string()})),
-        ).into_response(),
-        Err(e) => {
-            tracing::error!(error = %e, action = %body.action, "REST action execution failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            ).into_response()
-        }
+    Json(body): Json<Value>,
+) -> axum::response::Response {
+    match ExampleAction::from_rest("echo", &body) {
+        Ok(action) => run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await,
+        Err(error) => rest_error_response(error, "echo"),
     }
 }
 ```
@@ -87,7 +67,7 @@ async fn api_dispatch(
 | Surface | Call pattern |
 |---|---|
 | MCP | `example(action="greet", name="Alice")` |
-| REST | `POST /v1/example {"action":"greet","params":{"name":"Alice"}}` |
+| REST | `POST /v1/greet {"name":"Alice"}` |
 | CLI | `example greet --name Alice` |
 
 All three call `state.service.greet(Some("Alice"))`.
@@ -103,7 +83,7 @@ All three call `state.service.greet(Some("Alice"))`.
 ```
 
 Responses are JSON values produced by `ExampleService` via `src/actions.rs`.
-If a REST action result exceeds the response cap, the route returns a valid JSON
+If a REST result exceeds the response cap, the route returns a valid JSON
 truncation envelope instead of raw truncated JSON.
 
 ## MCP-only actions

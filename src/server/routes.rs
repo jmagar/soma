@@ -5,7 +5,9 @@
 //!   `GET  /health`      — Health check (unauthenticated)
 //!   `GET  /status`      — Runtime status (unauthenticated, redacts secrets)
 //!   `GET  /openapi.json` — Generated REST OpenAPI schema (unauthenticated)
-//!   `POST /v1/example`  — REST API action dispatch (see `crate::api`)
+//!   `GET  /v1/capabilities` — Direct REST route inventory
+//!   `/v1/*`            — Direct REST API routes (see `crate::api`)
+//!   `POST /v1/example` — Deprecated REST action-dispatch compatibility route
 //!   `/*`                — SPA fallback for embedded web UI (when web feature enabled)
 
 use std::sync::Arc;
@@ -19,7 +21,10 @@ use axum::{
 use serde_json::json;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
-use crate::api::{api_dispatch, health, openapi_json, status};
+use crate::api::{
+    api_dispatch, health, openapi_json, status, v1_capabilities, v1_echo, v1_greet, v1_help,
+    v1_service_status,
+};
 use crate::mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use crate::server::{build_auth_layer, AppState, AuthPolicy};
 
@@ -38,7 +43,7 @@ pub fn router(state: AppState) -> Router {
         AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => None,
     };
 
-    // Auth layer applied to both /mcp and /v1/example.
+    // Auth layer applied to MCP and direct /v1 REST routes.
     let auth_layer = build_auth_layer(
         &state.auth_policy,
         state.config.api_token.as_deref().map(Arc::<str>::from),
@@ -47,6 +52,11 @@ pub fn router(state: AppState) -> Router {
 
     let api_and_mcp: Router<AppState> = Router::new()
         .nest_service("/mcp", streamable_http_service(state.clone(), rmcp_config))
+        .route("/v1/capabilities", get(v1_capabilities))
+        .route("/v1/greet", post(v1_greet))
+        .route("/v1/echo", post(v1_echo))
+        .route("/v1/status", get(v1_service_status))
+        .route("/v1/help", get(v1_help))
         .route("/v1/example", post(api_dispatch));
 
     let api_and_mcp_resolved: Router<()> = api_and_mcp.with_state(state.clone());

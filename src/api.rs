@@ -1,4 +1,4 @@
-//! REST API handlers — `POST /v1/example`, `GET /health`, `GET /status`, `GET /openapi.json`.
+//! REST API handlers — direct `/v1/*` routes plus public health/status docs.
 //!
 //! All handlers are thin: parse the request, call the service, return JSON.
 //! Business logic lives in `app.rs`.
@@ -10,14 +10,98 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use lab_auth::AuthContext;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::actions::{execute_service_action, required_scope_for_action, ExampleAction};
 use crate::server::{AppState, AuthPolicy};
 use crate::token_limit::MAX_RESPONSE_BYTES;
 
-/// Request body for `POST /v1/example`.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct RestRoute {
+    pub method: &'static str,
+    pub path: &'static str,
+    pub action: Option<&'static str>,
+    pub auth: &'static str,
+    pub description: &'static str,
+}
+
+pub const REST_ROUTES: &[RestRoute] = &[
+    RestRoute {
+        method: "GET",
+        path: "/health",
+        action: None,
+        auth: "public",
+        description: "Fast liveness probe.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/status",
+        action: None,
+        auth: "public",
+        description: "Local redacted runtime status.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/openapi.json",
+        action: None,
+        auth: "public",
+        description: "Generated OpenAPI schema.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/v1/capabilities",
+        action: None,
+        auth: "mounted auth policy",
+        description: "Direct REST route inventory and server metadata.",
+    },
+    RestRoute {
+        method: "POST",
+        path: "/v1/greet",
+        action: Some("greet"),
+        auth: "mounted auth policy; requires example:read when scoped",
+        description: "Return a greeting.",
+    },
+    RestRoute {
+        method: "POST",
+        path: "/v1/echo",
+        action: Some("echo"),
+        auth: "mounted auth policy; requires example:read when scoped",
+        description: "Echo a message back unchanged.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/v1/status",
+        action: Some("status"),
+        auth: "mounted auth policy; requires example:read when scoped",
+        description: "Return authenticated service status.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/v1/help",
+        action: Some("help"),
+        auth: "mounted auth policy",
+        description: "Return the action catalog and route help.",
+    },
+    RestRoute {
+        method: "POST",
+        path: "/v1/example",
+        action: None,
+        auth: "mounted auth policy",
+        description: "Deprecated compatibility action envelope.",
+    },
+];
+
+#[derive(Debug, Serialize)]
+pub struct CapabilitiesResponse {
+    pub server: &'static str,
+    pub version: &'static str,
+    pub preferred_rest_style: &'static str,
+    pub supported_routes: Vec<String>,
+    pub routes: &'static [RestRoute],
+}
+
+/// Request body for deprecated `POST /v1/example`.
 ///
 /// REST uses an explicit `{ action, params }` envelope. MCP uses a flat
 /// argument object such as `{ action, message }`. Both convert into the same
@@ -30,34 +114,109 @@ pub struct ActionRequest {
     pub params: Value,
 }
 
-/// `POST /v1/example` — dispatches an action by name.
-///
-/// Request:  `{"action": "greet", "params": {"name": "Alice"}}`
-/// Response: `{"greeting": "Hello, Alice!", ...}`
+#[derive(Deserialize)]
+pub struct GreetRequest {
+    pub name: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct EchoRequest {
+    pub message: String,
+}
+
+/// Deprecated compatibility route. New platform servers should prefer direct
+/// product routes such as `POST /v1/echo` over an action envelope.
 pub async fn api_dispatch(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
-    let result = match ExampleAction::from_rest(&body.action, &body.params) {
-        Ok(action) => {
-            if let Some(response) = enforce_rest_scope(
-                &state,
-                auth.as_ref().map(|Extension(auth)| auth),
-                &body.action,
-            ) {
-                return response;
-            }
-            execute_service_action(&state.service, &action).await
-        }
-        Err(error) => Err(error),
-    };
+    match ExampleAction::from_rest(&body.action, &body.params) {
+        Ok(action) => run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action)
+            .await
+            .into_response(),
+        Err(error) => rest_error_response(error, &body.action),
+    }
+}
 
-    match result {
+pub async fn v1_capabilities() -> impl IntoResponse {
+    Json(CapabilitiesResponse {
+        server: "rtemplate-mcp",
+        version: env!("CARGO_PKG_VERSION"),
+        preferred_rest_style: "direct_routes",
+        supported_routes: REST_ROUTES
+            .iter()
+            .map(|route| format!("{} {}", route.method, route.path))
+            .collect(),
+        routes: REST_ROUTES,
+    })
+}
+
+pub async fn v1_greet(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+    Json(body): Json<Value>,
+) -> axum::response::Response {
+    match ExampleAction::from_rest("greet", &body) {
+        Ok(action) => {
+            run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await
+        }
+        Err(error) => rest_error_response(error, "greet"),
+    }
+}
+
+pub async fn v1_echo(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+    Json(body): Json<Value>,
+) -> axum::response::Response {
+    match ExampleAction::from_rest("echo", &body) {
+        Ok(action) => {
+            run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await
+        }
+        Err(error) => rest_error_response(error, "echo"),
+    }
+}
+
+pub async fn v1_service_status(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+) -> axum::response::Response {
+    run_rest_action(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        ExampleAction::Status,
+    )
+    .await
+}
+
+pub async fn v1_help(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+) -> axum::response::Response {
+    run_rest_action(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        ExampleAction::Help,
+    )
+    .await
+}
+
+async fn run_rest_action(
+    state: AppState,
+    auth: Option<&AuthContext>,
+    action: ExampleAction,
+) -> axum::response::Response {
+    let action_name = action.name();
+    if let Some(response) = enforce_rest_scope(&state, auth, action_name) {
+        return response;
+    }
+
+    match execute_service_action(&state.service, &action).await {
         Ok(value) => match cap_rest_response(value) {
             Ok(value) => Json(value).into_response(),
             Err(e) => {
-                tracing::error!(error = %e, action = %body.action, "REST response serialization failed");
+                tracing::error!(error = %e, action = %action_name, "REST response serialization failed");
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({"error": "internal server error"})),
@@ -65,20 +224,24 @@ pub async fn api_dispatch(
                     .into_response()
             }
         },
-        Err(e) if crate::actions::is_validation_error(&e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
-        Err(e) => {
-            tracing::error!(error = %e, action = %body.action, "REST action execution failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "internal server error"})),
-            )
-                .into_response()
-        }
+        Err(e) => rest_error_response(e, action_name),
     }
+}
+
+fn rest_error_response(error: anyhow::Error, action: &str) -> axum::response::Response {
+    if crate::actions::is_validation_error(&error) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": error.to_string()})),
+        )
+            .into_response();
+    }
+    tracing::error!(error = %error, action = %action, "REST action execution failed");
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"error": "internal server error"})),
+    )
+        .into_response()
 }
 
 fn cap_rest_response(value: Value) -> Result<Value> {

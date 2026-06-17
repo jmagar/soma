@@ -54,7 +54,8 @@ The stdio adapter should expose MCP-native behavior and delegate business
 actions to the deployed platform API. The REST API should expose business
 actions, not MCP protocol semantics. In this template, leaving `RTEMPLATE_API_URL`
 empty selects offline stub mode; setting it forwards local CLI/stdio calls to
-`{RTEMPLATE_API_URL}/v1/example` with `RTEMPLATE_API_KEY` as bearer auth when set.
+direct `{RTEMPLATE_API_URL}/v1/*` business routes with `RTEMPLATE_API_KEY` as
+bearer auth when set.
 The accepted decision is recorded in
 [ADR 0001](docs/adr/0001-stdio-first-plugin-adapter.md); the testable adapter
 contract lives in

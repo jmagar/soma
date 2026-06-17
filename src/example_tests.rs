@@ -24,7 +24,12 @@
 
 use super::*;
 use crate::config::ExampleConfig;
-use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    http::HeaderMap,
+    routing::{get, post},
+    Json, Router,
+};
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
@@ -143,16 +148,16 @@ fn test_api_action_url_preserves_base_path() {
     let nested_slash = Url::parse("https://example.test/api/").unwrap();
 
     assert_eq!(
-        api_action_url(&root).unwrap().as_str(),
-        "https://example.test/v1/example"
+        api_url(&root, "v1/status").unwrap().as_str(),
+        "https://example.test/v1/status"
     );
     assert_eq!(
-        api_action_url(&nested).unwrap().as_str(),
-        "https://example.test/api/v1/example"
+        api_url(&nested, "v1/echo").unwrap().as_str(),
+        "https://example.test/api/v1/echo"
     );
     assert_eq!(
-        api_action_url(&nested_slash).unwrap().as_str(),
-        "https://example.test/api/v1/example"
+        api_url(&nested_slash, "v1/greet").unwrap().as_str(),
+        "https://example.test/api/v1/greet"
     );
 }
 
@@ -189,17 +194,18 @@ async fn test_client_forwards_actions_to_deployed_api_when_configured() {
     assert!(observed
         .iter()
         .all(|request| request.bearer == "Bearer secret-token"));
-    assert_eq!(observed[0].action, "greet");
-    assert_eq!(observed[0].params["name"], "Ada");
-    assert_eq!(observed[1].action, "echo");
-    assert_eq!(observed[1].params["message"], "hello");
-    assert_eq!(observed[2].action, "status");
+    assert_eq!(observed[0].path, "/v1/greet");
+    assert_eq!(observed[0].body["name"], "Ada");
+    assert_eq!(observed[1].path, "/v1/echo");
+    assert_eq!(observed[1].body["message"], "hello");
+    assert_eq!(observed[2].path, "/v1/status");
+    assert!(observed[2].body.is_null());
 }
 
 #[derive(Debug, Clone)]
 struct ObservedRequest {
-    action: String,
-    params: Value,
+    path: String,
+    body: Value,
     bearer: String,
 }
 
@@ -209,7 +215,9 @@ async fn mock_deployed_api(
     observed: ObservedRequests,
 ) -> (String, tokio::task::JoinHandle<std::io::Result<()>>) {
     let app = Router::new()
-        .route("/v1/example", post(mock_action))
+        .route("/v1/greet", post(mock_greet))
+        .route("/v1/echo", post(mock_echo))
+        .route("/v1/status", get(mock_status))
         .with_state(observed);
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -219,13 +227,33 @@ async fn mock_deployed_api(
     (format!("http://{addr}/"), handle)
 }
 
-async fn mock_action(
+async fn mock_greet(
     State(observed): State<ObservedRequests>,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Json<Value> {
-    let action = body["action"].as_str().unwrap_or_default().to_owned();
-    let params = body["params"].clone();
+    push_observed(&observed, &headers, "/v1/greet", body.clone());
+    Json(json!({
+        "source": "deployed-api",
+        "greeting": format!("Hello, {}!", body["name"].as_str().unwrap_or("World")),
+    }))
+}
+
+async fn mock_echo(
+    State(observed): State<ObservedRequests>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    push_observed(&observed, &headers, "/v1/echo", body.clone());
+    Json(json!({ "echo": body["message"] }))
+}
+
+async fn mock_status(State(observed): State<ObservedRequests>, headers: HeaderMap) -> Json<Value> {
+    push_observed(&observed, &headers, "/v1/status", Value::Null);
+    Json(json!({ "status": "remote-ok" }))
+}
+
+fn push_observed(observed: &ObservedRequests, headers: &HeaderMap, path: &str, body: Value) {
     let bearer = headers
         .get("authorization")
         .and_then(|value| value.to_str().ok())
@@ -235,18 +263,8 @@ async fn mock_action(
         .lock()
         .expect("observed requests should lock")
         .push(ObservedRequest {
-            action: action.clone(),
-            params: params.clone(),
+            path: path.to_owned(),
+            body,
             bearer,
         });
-
-    match action.as_str() {
-        "greet" => Json(json!({
-            "source": "deployed-api",
-            "greeting": format!("Hello, {}!", params["name"].as_str().unwrap_or("World")),
-        })),
-        "echo" => Json(json!({ "echo": params["message"] })),
-        "status" => Json(json!({ "status": "remote-ok" })),
-        _ => Json(json!({ "error": "unknown action" })),
-    }
 }

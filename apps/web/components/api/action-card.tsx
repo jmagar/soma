@@ -3,9 +3,13 @@ import { CodeBlock } from "./code-block";
 
 export function ActionCard({ action }: { action: (typeof ACTIONS)[number] }) {
   const isRestAction = action.transport === "rest";
-  const curlExample = `curl -X POST http://localhost:3100${WEB_APP_CONFIG.restEndpoint} \\
+  const curlExample = isRestAction
+    ? action.method === "GET"
+      ? `curl http://localhost:3100${action.path}`
+      : `curl -X ${action.method} http://localhost:3100${action.path} \\
   -H "Content-Type: application/json" \\
-  -d '${JSON.stringify(action.example)}'`;
+  -d '${JSON.stringify(action.example.params)}'`
+    : "";
 
   return (
     <div

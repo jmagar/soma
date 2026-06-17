@@ -115,7 +115,7 @@ Agents may use:
 
 1. **MCP tool calls** through `/mcp` or stdio (preferred — full tool schema, scope enforcement)
 2. **CLI commands** for local shell workflows (`example greet --name Alice`)
-3. **REST `/v1/example`** when MCP tooling is unavailable (`POST {"action":"greet","params":{"name":"Alice"}}`)
+3. **Direct REST routes** when MCP tooling is unavailable (`POST /v1/greet {"name":"Alice"}`)
 4. **Plugin skills** as human/agent guidance
 
 The action metadata in `src/actions.rs` keeps these surfaces aligned. Every action that the MCP tool exposes must also be reachable from the CLI (with the exception of MCP-only features like elicitation).

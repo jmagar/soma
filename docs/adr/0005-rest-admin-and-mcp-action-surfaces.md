@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "family"
 source_of_truth: true
-last_reviewed: "2026-05-26"
+last_reviewed: "2026-06-17"
 ---
 
 # ADR 0005: Separate REST admin APIs from MCP action dispatch
@@ -39,7 +39,9 @@ product runtime/domain logic
 ```
 
 REST/admin HTTP is the primary surface for web apps and generated TypeScript
-clients. It should use resource-shaped routes and product OpenAPI documents.
+clients. It should use direct resource- or action-specific routes, typed request
+and response DTOs, and product OpenAPI documents. The template keeps
+`POST /v1/example` only as a deprecated compatibility envelope.
 
 MCP action dispatch remains the primary compact agent/tool surface.
 `ActionSpec` remains the source of truth for MCP discovery, action help, action
@@ -65,4 +67,3 @@ metadata as MCP.
   `docs/adr/0004-rest-admin-and-mcp-action-surfaces.md`.
 - [`docs/adr/0001-stdio-first-plugin-adapter.md`](./0001-stdio-first-plugin-adapter.md)
 - [`docs/adr/0006-typescript-client-generation-from-openapi.md`](./0006-typescript-client-generation-from-openapi.md)
-

@@ -46,6 +46,16 @@ fn build_tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": "example",
         "description": "Example MCP tool demonstrating the action-based dispatch pattern. Use action=help for full documentation.",
+        "x-template-action-metadata": action_metadata(),
+        "x-template-agent-guidance": {
+            "cost_order": ["cheap", "moderate", "expensive", "write"],
+            "first_pass": ["status", "help"],
+            "escalate_only_when_scoped": [],
+            "default_bounds": {
+                "limit": 10,
+                "offset": 0
+            }
+        },
         "inputSchema": {
             "type": "object",
             "properties": properties,
@@ -54,6 +64,21 @@ fn build_tool_definitions() -> Vec<Value> {
             "allOf": all_of
         }
     })]
+}
+
+fn action_metadata() -> Vec<Value> {
+    ACTION_SPECS
+        .iter()
+        .map(|spec| {
+            json!({
+                "name": spec.name,
+                "cost": spec.cost.as_str(),
+                "description": spec.description,
+                "destructive": spec.destructive,
+                "requires_admin": spec.requires_admin,
+            })
+        })
+        .collect()
 }
 
 fn build_input_properties() -> Map<String, Value> {

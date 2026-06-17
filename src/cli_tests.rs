@@ -1,4 +1,4 @@
-use crate::actions::{ActionSpec, ActionTransport};
+use crate::actions::{ActionCost, ActionSpec, ActionTransport};
 
 use super::{
     confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from, usage,
@@ -12,6 +12,7 @@ const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
     transport: ActionTransport::Any,
     destructive: true,
     requires_admin: false,
+    cost: ActionCost::Write,
     params: &[],
     returns: "DeleteResult",
 }];

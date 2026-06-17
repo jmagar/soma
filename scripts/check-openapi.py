@@ -15,7 +15,13 @@ CARGO = ROOT / "Cargo.toml"
 ACTIONS = ROOT / "src/actions.rs"
 OUT = ROOT / "docs/generated/openapi.json"
 
-REST_ENDPOINT = "/v1/example"
+LEGACY_REST_ENDPOINT = "/v1/example"
+DIRECT_REST_ROUTES = {
+    "greet": ("post", "/v1/greet", "GreetRequest", "GreetResponse"),
+    "echo": ("post", "/v1/echo", "EchoRequest", "EchoResponse"),
+    "status": ("get", "/v1/status", None, "StatusResponse"),
+    "help": ("get", "/v1/help", None, "HelpResponse"),
+}
 
 # Action-specific param examples. Actions not listed here get an empty params object.
 _PARAM_EXAMPLES: dict[str, dict] = {
@@ -44,7 +50,8 @@ def action_entries() -> list[dict[str, str]]:
         name_match = re.search(r'name:\s*"([^"]+)"', entry)
         scope_match = re.search(r"required_scope:\s*([^,\n]+)", entry)
         transport_match = re.search(r"transport:\s*ActionTransport::(\w+)", entry)
-        if not name_match or not scope_match or not transport_match:
+        cost_match = re.search(r"cost:\s*ActionCost::(\w+)", entry)
+        if not name_match or not scope_match or not transport_match or not cost_match:
             continue
         scope_expr = scope_match.group(1).strip()
         if scope_expr == "None":
@@ -60,6 +67,7 @@ def action_entries() -> list[dict[str, str]]:
                 "name": name_match.group(1),
                 "scope": scope,
                 "transport": transport_match.group(1),
+                "cost": cost_match.group(1).lower(),
             }
         )
     return actions
@@ -81,13 +89,159 @@ def render() -> dict[str, Any]:
     actions = rest_actions()
     action_names = [action["name"] for action in actions]
     version = package_version()
+    paths = {
+        "/health": {
+            "get": {
+                "tags": ["health"],
+                "summary": "Liveness probe",
+                "operationId": "getHealth",
+                "security": [],
+                "responses": {
+                    "200": {
+                        "description": "Server is alive",
+                        "content": {
+                            "application/json": {
+                                "schema": schema_ref("HealthResponse"),
+                                "examples": {"ok": {"value": {"status": "ok"}}},
+                            }
+                        },
+                    }
+                },
+            }
+        },
+        "/openapi.json": {
+            "get": {
+                "tags": ["health"],
+                "summary": "OpenAPI schema",
+                "operationId": "getOpenApiSchema",
+                "security": [],
+                "responses": {
+                    "200": {
+                        "description": "Generated OpenAPI schema for the REST surface",
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "object", "additionalProperties": True}
+                            }
+                        },
+                    }
+                },
+            }
+        },
+        "/status": {
+            "get": {
+                "tags": ["health"],
+                "summary": "Local runtime status",
+                "operationId": "getLocalStatus",
+                "security": [],
+                "responses": {
+                    "200": {
+                        "description": "Runtime status with secrets redacted",
+                        "content": {"application/json": {"schema": schema_ref("StatusResponse")}},
+                    },
+                    "500": {"$ref": "#/components/responses/InternalError"},
+                },
+            }
+        },
+        "/v1/capabilities": {
+            "get": {
+                "tags": ["capabilities"],
+                "summary": "Direct REST route inventory",
+                "operationId": "getCapabilities",
+                "security": [{"BearerAuth": []}, {}],
+                "responses": {
+                    "200": {
+                        "description": "Supported direct REST routes and metadata",
+                        "content": {"application/json": {"schema": schema_ref("CapabilitiesResponse")}},
+                    },
+                    "401": {"$ref": "#/components/responses/Unauthorized"},
+                },
+            }
+        },
+    }
+    for action in actions:
+        route = DIRECT_REST_ROUTES.get(action["name"])
+        if route is None:
+            continue
+        method, path, request_schema, response_schema = route
+        operation: dict[str, Any] = {
+            "tags": ["direct-rest"],
+            "summary": f"Run {action['name']}",
+            "description": "Direct REST route over the shared service layer.",
+            "operationId": f"{method}{action['name'].title().replace('_', '')}",
+            "security": [{"BearerAuth": []}, {}],
+            "responses": {
+                "200": {
+                    "description": f"{action['name']} result",
+                    "content": {"application/json": {"schema": schema_ref(response_schema)}},
+                },
+                "400": {"$ref": "#/components/responses/BadRequest"},
+                "401": {"$ref": "#/components/responses/Unauthorized"},
+                "403": {"$ref": "#/components/responses/Forbidden"},
+                "500": {"$ref": "#/components/responses/InternalError"},
+            },
+        }
+        if request_schema is not None:
+            operation["requestBody"] = {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": schema_ref(request_schema),
+                        "examples": {
+                            action["name"]: {
+                                "value": _PARAM_EXAMPLES.get(action["name"], {}),
+                            }
+                        },
+                    }
+                },
+            }
+        paths[path] = {method: operation}
+    paths[LEGACY_REST_ENDPOINT] = {
+        "post": {
+            "tags": ["legacy-actions"],
+            "summary": "Deprecated action-envelope dispatch",
+            "description": (
+                "Compatibility shim for older clients. New application/platform servers "
+                "should expose direct product REST routes and reserve action dispatch for MCP."
+            ),
+            "operationId": "dispatchExampleActionDeprecated",
+            "deprecated": True,
+            "security": [{"BearerAuth": []}, {}],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": schema_ref("ActionRequest"),
+                        "examples": {
+                            action["name"]: {
+                                "value": {
+                                    "action": action["name"],
+                                    "params": _PARAM_EXAMPLES.get(action["name"], {}),
+                                }
+                            }
+                            for action in actions
+                        },
+                    }
+                },
+            },
+            "responses": {
+                "200": {
+                    "description": "Action result. Shape depends on the requested action.",
+                    "content": {"application/json": {"schema": schema_ref("ActionResponse")}},
+                },
+                "400": {"$ref": "#/components/responses/BadRequest"},
+                "401": {"$ref": "#/components/responses/Unauthorized"},
+                "403": {"$ref": "#/components/responses/Forbidden"},
+                "500": {"$ref": "#/components/responses/InternalError"},
+            },
+        }
+    }
     return {
         "openapi": "3.1.0",
         "info": {
             "title": "Example MCP REST API",
             "version": version,
             "description": (
-                "Generated OpenAPI schema for rmcp-template's REST surface. "
+                "Generated OpenAPI schema for rmcp-template's direct REST surface. "
                 "TEMPLATE: rename Example identifiers and action schemas when adapting. "
                 "Auth modes: loopback/trusted-gateway deployments may have no local auth; "
                 "mounted bearer mode uses RTEMPLATE_MCP_TOKEN; OAuth mode uses bearer JWTs. "
@@ -102,103 +256,11 @@ def render() -> dict[str, Any]:
         ],
         "tags": [
             {"name": "health", "description": "Unauthenticated runtime probes"},
-            {"name": "actions", "description": "REST action dispatch"},
+            {"name": "capabilities", "description": "REST route inventory"},
+            {"name": "direct-rest", "description": "Preferred typed REST routes"},
+            {"name": "legacy-actions", "description": "Deprecated action-envelope compatibility"},
         ],
-        "paths": {
-            "/health": {
-                "get": {
-                    "tags": ["health"],
-                    "summary": "Liveness probe",
-                    "operationId": "getHealth",
-                    "security": [],
-                    "responses": {
-                        "200": {
-                            "description": "Server is alive",
-                            "content": {
-                                "application/json": {
-                                    "schema": schema_ref("HealthResponse"),
-                                    "examples": {"ok": {"value": {"status": "ok"}}},
-                                }
-                            },
-                        }
-                    },
-                }
-            },
-            "/openapi.json": {
-                "get": {
-                    "tags": ["health"],
-                    "summary": "OpenAPI schema",
-                    "operationId": "getOpenApiSchema",
-                    "security": [],
-                    "responses": {
-                        "200": {
-                            "description": "Generated OpenAPI schema for the REST surface",
-                            "content": {
-                                "application/json": {
-                                    "schema": {"type": "object", "additionalProperties": True}
-                                }
-                            },
-                        }
-                    },
-                }
-            },
-            "/status": {
-                "get": {
-                    "tags": ["health"],
-                    "summary": "Runtime status",
-                    "operationId": "getStatus",
-                    "security": [],
-                    "responses": {
-                        "200": {
-                            "description": "Runtime status with secrets redacted",
-                            "content": {"application/json": {"schema": schema_ref("StatusResponse")}},
-                        },
-                        "500": {"$ref": "#/components/responses/InternalError"},
-                    },
-                }
-            },
-            REST_ENDPOINT: {
-                "post": {
-                    "tags": ["actions"],
-                    "summary": "Dispatch a REST action",
-                    "description": (
-                        "Thin REST shim over the shared service layer. MCP-only actions are "
-                        "not exposed here. Current REST actions: " + ", ".join(action_names) + ". "
-                        "When auth is mounted, each action requires its declared scope; "
-                        "example:write satisfies example:read."
-                    ),
-                    "operationId": "dispatchExampleAction",
-                    "security": [{"BearerAuth": []}, {}],
-                    "requestBody": {
-                        "required": True,
-                        "content": {
-                            "application/json": {
-                                "schema": schema_ref("ActionRequest"),
-                                "examples": {
-                                    action["name"]: {
-                                        "value": {
-                                            "action": action["name"],
-                                            "params": _PARAM_EXAMPLES.get(action["name"], {}),
-                                        }
-                                    }
-                                    for action in actions
-                                },
-                            }
-                        },
-                    },
-                    "responses": {
-                        "200": {
-                            "description": "Action result. Shape depends on the requested action.",
-                            "content": {"application/json": {"schema": schema_ref("ActionResponse")}},
-                        },
-                        "400": {"$ref": "#/components/responses/BadRequest"},
-                        "401": {"$ref": "#/components/responses/Unauthorized"},
-                        "403": {"$ref": "#/components/responses/Forbidden"},
-                        "500": {"$ref": "#/components/responses/InternalError"},
-                    },
-                }
-            },
-        },
+        "paths": paths,
         "components": {
             "securitySchemes": {
                 "BearerAuth": {
@@ -226,6 +288,28 @@ def render() -> dict[str, Any]:
                             "additionalProperties": True,
                             "default": {},
                         },
+                    },
+                },
+                "GreetRequest": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Name to greet. Omit to greet the world.",
+                        }
+                    },
+                },
+                "EchoRequest": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["message"],
+                    "properties": {
+                        "message": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Message to echo back. Must not be empty.",
+                        }
                     },
                 },
                 "ActionResponse": {
@@ -269,6 +353,45 @@ def render() -> dict[str, Any]:
                     "type": "object",
                     "required": ["status"],
                     "properties": {"status": {"type": "string", "const": "ok"}},
+                    "additionalProperties": False,
+                },
+                "CapabilitiesResponse": {
+                    "type": "object",
+                    "required": [
+                        "server",
+                        "version",
+                        "preferred_rest_style",
+                        "supported_routes",
+                        "routes",
+                    ],
+                    "properties": {
+                        "server": {"type": "string"},
+                        "version": {"type": "string"},
+                        "preferred_rest_style": {
+                            "type": "string",
+                            "const": "direct_routes",
+                        },
+                        "supported_routes": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "routes": {
+                            "type": "array",
+                            "items": schema_ref("RestRoute"),
+                        },
+                    },
+                    "additionalProperties": False,
+                },
+                "RestRoute": {
+                    "type": "object",
+                    "required": ["method", "path", "auth", "description"],
+                    "properties": {
+                        "method": {"type": "string"},
+                        "path": {"type": "string"},
+                        "action": {"type": ["string", "null"]},
+                        "auth": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
                     "additionalProperties": False,
                 },
                 "HelpResponse": {
@@ -325,7 +448,14 @@ def render() -> dict[str, Any]:
         "x-template": {
             "source": "scripts/check-openapi.py",
             "action_metadata": "src/actions.rs",
+            "preferred_rest_style": "direct_routes",
             "rest_actions": action_names,
+            "direct_rest_routes": {
+                name: {"method": route[0].upper(), "path": route[1]}
+                for name, route in DIRECT_REST_ROUTES.items()
+                if name in action_names
+            },
+            "action_costs": {action["name"]: action["cost"] for action in action_entries()},
             "mcp_only_actions": [action["name"] for action in action_entries() if action["transport"] == "McpOnly"],
         },
     }
@@ -339,7 +469,15 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     failures: list[str] = []
     if value.get("openapi") != "3.1.0":
         failures.append("OpenAPI version must be 3.1.0")
-    for path in ["/health", "/openapi.json", "/status", REST_ENDPOINT]:
+    required_paths = [
+        "/health",
+        "/openapi.json",
+        "/status",
+        "/v1/capabilities",
+        *[route[1] for route in DIRECT_REST_ROUTES.values()],
+        LEGACY_REST_ENDPOINT,
+    ]
+    for path in required_paths:
         if path not in value.get("paths", {}):
             failures.append(f"missing path {path}")
     for path, methods in value.get("paths", {}).items():
@@ -369,11 +507,31 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     ]
     if x_template.get("mcp_only_actions") != expected_mcp_only:
         failures.append("x-template mcp_only_actions drifted")
-    rest_security = value.get("paths", {}).get(REST_ENDPOINT, {}).get("post", {}).get("security")
+    for name, (method, path, _request_schema, _response_schema) in DIRECT_REST_ROUTES.items():
+        if name not in expected:
+            continue
+        if method not in value.get("paths", {}).get(path, {}):
+            failures.append(f"missing direct REST operation {method.upper()} {path}")
+    legacy_operation = value.get("paths", {}).get(LEGACY_REST_ENDPOINT, {}).get("post", {})
+    if legacy_operation.get("deprecated") is not True:
+        failures.append(f"{LEGACY_REST_ENDPOINT} must be marked deprecated")
+    rest_security = legacy_operation.get("security")
     if rest_security != [{"BearerAuth": []}, {}]:
         failures.append(
-            f"{REST_ENDPOINT} security must document bearer auth and no-local-auth modes"
+            f"{LEGACY_REST_ENDPOINT} security must document bearer auth and no-local-auth modes"
         )
+    capabilities_schema = (
+        value.get("paths", {})
+        .get("/v1/capabilities", {})
+        .get("get", {})
+        .get("responses", {})
+        .get("200", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+    )
+    if capabilities_schema != schema_ref("CapabilitiesResponse"):
+        failures.append("/v1/capabilities must return CapabilitiesResponse")
     status_props = (
         value.get("components", {})
         .get("schemas", {})

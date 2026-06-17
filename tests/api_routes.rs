@@ -41,14 +41,14 @@ async fn request_json(
 }
 
 #[tokio::test]
-async fn rest_echo_accepts_nested_params() {
+async fn direct_rest_echo_accepts_typed_body() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(
         app,
         Method::POST,
-        "/v1/example",
+        "/v1/echo",
         None,
-        Some(json!({"action": "echo", "params": {"message": "hello"}})),
+        Some(json!({"message": "hello"})),
     )
     .await;
 
@@ -57,36 +57,18 @@ async fn rest_echo_accepts_nested_params() {
 }
 
 #[tokio::test]
-async fn rest_validation_errors_are_bad_requests() {
+async fn direct_rest_validation_errors_are_bad_requests() {
     let app = server::router(loopback_state());
-    for (body, expected_error) in [
-        json!({"action": "echo", "params": {}}),
-        json!({"action": "echo", "params": {"message": ""}}),
-        json!({"action": "echo", "params": {"message": 42}}),
-        json!({"action": "missing", "params": {}}),
-        json!({"params": {}}),
-    ]
-    .into_iter()
-    .map(|body| {
-        let expected_error = if body.get("action").is_none() {
-            Some("action is required")
-        } else {
-            None
-        };
-        (body, expected_error)
-    }) {
+    for body in [json!({}), json!({"message": ""}), json!({"message": 42})] {
         let (status, response) =
-            request_json(app.clone(), Method::POST, "/v1/example", None, Some(body)).await;
+            request_json(app.clone(), Method::POST, "/v1/echo", None, Some(body)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
         assert!(response.get("error").is_some(), "{response}");
-        if let Some(expected_error) = expected_error {
-            assert_eq!(response["error"], expected_error);
-        }
     }
 }
 
 #[tokio::test]
-async fn rest_rejects_mcp_only_actions_as_bad_requests() {
+async fn legacy_rest_envelope_rejects_mcp_only_actions_as_bad_requests() {
     let app = server::router(loopback_state());
     for action in ["elicit_name", "scaffold_intent"] {
         let (status, response) = request_json(
@@ -106,16 +88,9 @@ async fn rest_rejects_mcp_only_actions_as_bad_requests() {
 }
 
 #[tokio::test]
-async fn rest_help_excludes_mcp_only_actions_from_rest_actions() {
+async fn direct_rest_help_excludes_mcp_only_actions_from_rest_actions() {
     let app = server::router(loopback_state());
-    let (status, body) = request_json(
-        app,
-        Method::POST,
-        "/v1/example",
-        None,
-        Some(json!({"action": "help", "params": {}})),
-    )
-    .await;
+    let (status, body) = request_json(app, Method::GET, "/v1/help", None, None).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["actions"], json!(["greet", "echo", "status", "help"]));
@@ -126,20 +101,33 @@ async fn rest_help_excludes_mcp_only_actions_from_rest_actions() {
 }
 
 #[tokio::test]
-async fn openapi_json_is_public_and_excludes_mcp_only_actions() {
+async fn capabilities_advertises_direct_rest_routes() {
+    let app = server::router(loopback_state());
+    let (status, body) = request_json(app, Method::GET, "/v1/capabilities", None, None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["preferred_rest_style"], "direct_routes");
+    assert!(body["supported_routes"]
+        .as_array()
+        .expect("supported_routes should be an array")
+        .contains(&json!("POST /v1/echo")));
+    assert!(body["supported_routes"]
+        .as_array()
+        .expect("supported_routes should be an array")
+        .contains(&json!("POST /v1/example")));
+}
+
+#[tokio::test]
+async fn openapi_json_is_public_and_lists_direct_routes() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(app, Method::GET, "/openapi.json", None, None).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["openapi"], "3.1.0");
-    assert_eq!(
-        body["components"]["schemas"]["ActionName"]["enum"],
-        json!(["greet", "echo", "status", "help"])
-    );
-    assert_eq!(
-        body["paths"]["/v1/example"]["post"]["security"],
-        json!([{"BearerAuth": []}, {}])
-    );
+    assert!(body["paths"].get("/v1/echo").is_some());
+    assert!(body["paths"].get("/v1/capabilities").is_some());
+    assert_eq!(body["paths"]["/v1/example"]["post"]["deprecated"], true);
+    assert_eq!(body["x-template"]["preferred_rest_style"], "direct_routes");
     assert!(
         body["components"]["schemas"]["StatusResponse"]["properties"]
             .get("api_url")
@@ -166,20 +154,13 @@ async fn status_returns_only_local_redacted_metadata() {
 #[tokio::test]
 async fn mounted_bearer_auth_protects_rest_endpoint() {
     let app = server::router(bearer_state("secret"));
-    let body = json!({"action": "status", "params": {}});
 
-    let (missing_status, _) = request_json(
-        app.clone(),
-        Method::POST,
-        "/v1/example",
-        None,
-        Some(body.clone()),
-    )
-    .await;
+    let (missing_status, _) =
+        request_json(app.clone(), Method::GET, "/v1/status", None, None).await;
     assert_eq!(missing_status, StatusCode::UNAUTHORIZED);
 
     let (valid_status, valid_body) =
-        request_json(app, Method::POST, "/v1/example", Some("secret"), Some(body)).await;
+        request_json(app, Method::GET, "/v1/status", Some("secret"), None).await;
     assert_eq!(valid_status, StatusCode::OK);
     assert_eq!(valid_body["status"], "ok");
 }
@@ -189,14 +170,7 @@ async fn trusted_gateway_unscoped_bypasses_local_auth() {
     let mut state = loopback_state();
     state.auth_policy = AuthPolicy::TrustedGatewayUnscoped;
     let app = server::router(state);
-    let (status, body) = request_json(
-        app,
-        Method::POST,
-        "/v1/example",
-        None,
-        Some(json!({"action": "status", "params": {}})),
-    )
-    .await;
+    let (status, body) = request_json(app, Method::GET, "/v1/status", None, None).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ok");
@@ -210,7 +184,7 @@ async fn oversized_body_returns_413() {
     let oversized_body = vec![b'x'; 65_537];
     let request = Request::builder()
         .method(Method::POST)
-        .uri("/v1/example")
+        .uri("/v1/echo")
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(oversized_body))
         .expect("request should build");

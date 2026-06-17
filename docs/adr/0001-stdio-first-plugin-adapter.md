@@ -51,8 +51,9 @@ server.
 - Empty `RTEMPLATE_API_URL` means template stub mode for local smoke tests and
   scaffolded examples.
 - Non-empty `RTEMPLATE_API_URL` makes the local adapter forward business actions
-  to `POST {RTEMPLATE_API_URL}/v1/example`; `RTEMPLATE_API_KEY` is sent as bearer
-  auth when set.
+  to direct REST routes such as `POST {RTEMPLATE_API_URL}/v1/echo` and
+  `GET {RTEMPLATE_API_URL}/v1/status`; `RTEMPLATE_API_KEY` is sent as bearer auth
+  when set.
 - HTTP MCP remains available from `example-server serve` for Docker, remote
   clients, gateway catalogs, and full platform deployments.
 - Plugin manifests must not auto-register HTTP health monitors by default.
@@ -67,8 +68,9 @@ The normative profile contract lives in
 The short version:
 
 - `example` must provide CLI commands and `example mcp`.
-- `example-server` must provide `/v1/example`, `/mcp`, `/health`, `/status`,
-  and the optional web/static surface.
+- `example-server` must provide direct `/v1/*` business routes, `/v1/capabilities`,
+  `/mcp`, `/health`, `/status`, `/openapi.json`, and the optional web/static
+  surface. `/v1/example` is retained only as a deprecated compatibility envelope.
 - The stdio adapter calls the business REST API, not the MCP protocol endpoint.
 - Shared plugin validation must assert the stdio config and run a stdio smoke
   test.
@@ -87,7 +89,7 @@ Tradeoffs:
 
 - Platform-style plugin installs depend on the deployed API URL when they need
   real data.
-- The REST action endpoint becomes part of the adapter contract.
+- Direct REST business routes become part of the adapter contract.
 - Gemini and Claude/Codex use different variable interpolation syntax, so the
   validator must check both manifests.
 

@@ -9,7 +9,7 @@
 //!   [`example`] — `ExampleClient` (transport stub)
 //!   [`mcp`]     — MCP protocol layer (tools, schemas, prompts, server handler)
 //!   [`server`]  — `AppState`, `AuthPolicy`, HTTP router
-//!   [`api`]     — REST API handlers (`POST /v1/example`, health, status)
+//!   [`api`]     — REST API handlers (direct `/v1/*` routes, health, status)
 
 pub mod actions;
 pub mod api;

@@ -28,6 +28,7 @@ fn action_metadata_is_the_action_source_of_truth() {
     let echo = action_spec("echo").expect("echo spec should exist");
     assert_eq!(echo.description, "Echo a message back unchanged.");
     assert_eq!(echo.returns, "EchoResult");
+    assert_eq!(echo.cost, ActionCost::Cheap);
     assert_eq!(echo.params[0].name, "message");
     assert!(echo.params[0].required);
     assert!(!echo.destructive);
@@ -47,6 +48,7 @@ fn action_catalog_projects_surfaces_and_auth_posture() {
     assert!(greet.surface_availability.rest);
     assert!(!greet.surface_availability.web_ui);
     assert_eq!(greet.required_scope.as_deref(), Some(READ_SCOPE));
+    assert_eq!(greet.cost, "cheap");
     assert!(greet.auth_posture.contains(READ_SCOPE));
 
     let scaffold = catalog

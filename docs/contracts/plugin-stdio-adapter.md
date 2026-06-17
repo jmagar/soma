@@ -78,12 +78,21 @@ The local adapter resolves its runtime mode from `RTEMPLATE_API_URL`:
 When forwarding, the adapter must:
 
 - preserve any base path in `RTEMPLATE_API_URL`;
-- call `POST {RTEMPLATE_API_URL}/v1/example`;
+- call the action's direct REST route, such as `POST {RTEMPLATE_API_URL}/v1/echo` or `GET {RTEMPLATE_API_URL}/v1/status`;
 - send `RTEMPLATE_API_KEY` as `Authorization: Bearer <token>` when set;
 - send business-action JSON, not MCP protocol JSON;
 - surface execution failures through the existing CLI/MCP error policy.
 
-The REST body shape is:
+Direct REST body shapes are action-specific:
+
+```json
+{
+  "message": "hello"
+}
+```
+
+`POST {RTEMPLATE_API_URL}/v1/example` remains a deprecated compatibility
+envelope for older adapters:
 
 ```json
 {

@@ -2,7 +2,7 @@
 //!
 //! **Template note**: this client has two modes:
 //!   - empty `RTEMPLATE_API_URL` keeps the offline template stub working;
-//!   - non-empty `RTEMPLATE_API_URL` forwards actions to a deployed `example-server`
+//!   - non-empty `RTEMPLATE_API_URL` forwards operations to a deployed `example-server`
 //!     REST API, which is the local CLI/stdio adapter shape for platform servers.
 //!
 //! The pattern:
@@ -51,7 +51,7 @@ impl ExampleClient {
     ///
     /// If `RTEMPLATE_API_URL` is empty, the template uses local stub responses so
     /// tests and first-run scaffolds work without a deployed service. If it is
-    /// set, actions are forwarded to `{RTEMPLATE_API_URL}/v1/example`.
+    /// set, operations are forwarded to direct `{RTEMPLATE_API_URL}/v1/*` routes.
     pub fn new(cfg: &ExampleConfig) -> Result<Self> {
         let api_url = cfg.api_url.trim();
         let target = if api_url.is_empty() {
@@ -75,10 +75,8 @@ impl ExampleClient {
 
     /// Say hello to `name`, or "World" if not provided.
     pub async fn greet(&self, name: Option<&str>) -> Result<Value> {
-        if let Some(value) = self
-            .call_deployed_api("greet", json!({ "name": name }))
-            .await?
-        {
+        let body = name.map_or_else(|| json!({}), |name| json!({ "name": name }));
+        if let Some(value) = self.post_deployed_api("greet", "v1/greet", body).await? {
             return Ok(value);
         }
 
@@ -93,7 +91,7 @@ impl ExampleClient {
     /// Echo a message back unchanged.
     pub async fn echo(&self, message: &str) -> Result<Value> {
         if let Some(value) = self
-            .call_deployed_api("echo", json!({ "message": message }))
+            .post_deployed_api("echo", "v1/echo", json!({ "message": message }))
             .await?
         {
             return Ok(value);
@@ -108,7 +106,7 @@ impl ExampleClient {
     /// so it must not include secrets or sensitive topology (e.g. `api_url`).
     /// TEMPLATE: Add non-sensitive runtime metrics (uptime, version, etc.).
     pub async fn status(&self) -> Result<Value> {
-        if let Some(value) = self.call_deployed_api("status", json!({})).await? {
+        if let Some(value) = self.get_deployed_api("status", "v1/status").await? {
             return Ok(value);
         }
 
@@ -123,7 +121,26 @@ impl ExampleClient {
         Ok(status)
     }
 
-    async fn call_deployed_api(&self, action: &str, params: Value) -> Result<Option<Value>> {
+    async fn post_deployed_api(
+        &self,
+        action: &str,
+        relative_path: &str,
+        body: Value,
+    ) -> Result<Option<Value>> {
+        self.call_deployed_api(action, relative_path, Some(body))
+            .await
+    }
+
+    async fn get_deployed_api(&self, action: &str, relative_path: &str) -> Result<Option<Value>> {
+        self.call_deployed_api(action, relative_path, None).await
+    }
+
+    async fn call_deployed_api(
+        &self,
+        action: &str,
+        relative_path: &str,
+        body: Option<Value>,
+    ) -> Result<Option<Value>> {
         let ExampleTarget::DeployedApi {
             base_url,
             bearer_token,
@@ -132,11 +149,12 @@ impl ExampleClient {
             return Ok(None);
         };
 
-        let url = api_action_url(base_url)?;
-        let mut request = self.client.post(url).json(&json!({
-            "action": action,
-            "params": params,
-        }));
+        let url = api_url(base_url, relative_path)?;
+        let mut request = if let Some(body) = body {
+            self.client.post(url).json(&body)
+        } else {
+            self.client.get(url)
+        };
         if let Some(token) = bearer_token {
             request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
         }
@@ -161,15 +179,18 @@ impl ExampleClient {
     }
 }
 
-fn api_action_url(base_url: &Url) -> Result<Url> {
+fn api_url(base_url: &Url, relative_path: &str) -> Result<Url> {
     let mut url = base_url.clone();
     {
         let mut segments = url
             .path_segments_mut()
             .map_err(|_| anyhow::anyhow!("RTEMPLATE_API_URL cannot be a base for REST paths"))?;
         segments.pop_if_empty();
-        segments.push("v1");
-        segments.push("example");
+        for segment in relative_path.split('/') {
+            if !segment.is_empty() {
+                segments.push(segment);
+            }
+        }
     }
     Ok(url)
 }

@@ -46,10 +46,23 @@ export default function ApiPage() {
           Endpoint
         </h2>
         <div className="space-y-2">
+          <EndpointRow method="POST" path="/v1/greet" description="Direct REST greeting action" />
+          <EndpointRow method="POST" path="/v1/echo" description="Direct REST echo action" />
+          <EndpointRow
+            method="GET"
+            path="/v1/status"
+            description="Authenticated service status action"
+          />
+          <EndpointRow method="GET" path="/v1/help" description="Action catalog and route help" />
+          <EndpointRow
+            method="GET"
+            path={WEB_APP_CONFIG.capabilitiesEndpoint}
+            description="REST route inventory"
+          />
           <EndpointRow
             method="POST"
-            path={WEB_APP_CONFIG.restEndpoint}
-            description="REST action dispatch"
+            path={WEB_APP_CONFIG.legacyRestEndpoint}
+            description="Deprecated action envelope"
           />
           <EndpointRow
             method="GET"
@@ -127,10 +140,7 @@ export default function ApiPage() {
             <tbody>
               {[
                 ["MCP", `${WEB_APP_CONFIG.serviceName}(action="greet", name="Alice")`],
-                [
-                  "REST",
-                  `POST ${WEB_APP_CONFIG.restEndpoint} {"action":"greet","params":{"name":"Alice"}}`,
-                ],
+                ["REST", `POST /v1/greet {"name":"Alice"}`],
                 ["CLI", `${WEB_APP_CONFIG.serviceName} greet --name Alice`],
               ].map(([surface, pattern]) => (
                 <tr
