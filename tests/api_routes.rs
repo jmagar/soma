@@ -57,9 +57,23 @@ async fn direct_rest_echo_accepts_typed_body() {
 }
 
 #[tokio::test]
+async fn direct_rest_greet_accepts_empty_typed_body() {
+    let app = server::router(loopback_state());
+    let (status, body) = request_json(app, Method::POST, "/v1/greet", None, Some(json!({}))).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["target"], "World");
+}
+
+#[tokio::test]
 async fn direct_rest_validation_errors_are_bad_requests() {
     let app = server::router(loopback_state());
-    for body in [json!({}), json!({"message": ""}), json!({"message": 42})] {
+    for body in [
+        json!({}),
+        json!({"message": ""}),
+        json!({"message": 42}),
+        json!({"message": "hello", "extra": true}),
+    ] {
         let (status, response) =
             request_json(app.clone(), Method::POST, "/v1/echo", None, Some(body)).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");

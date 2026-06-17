@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use axum::{
-    extract::{Extension, State},
+    extract::{rejection::JsonRejection, Extension, State},
     http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
@@ -114,12 +114,14 @@ pub struct ActionRequest {
     pub params: Value,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct GreetRequest {
     pub name: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct EchoRequest {
     pub message: String,
 }
@@ -155,22 +157,30 @@ pub async fn v1_capabilities() -> impl IntoResponse {
 pub async fn v1_greet(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
-    Json(body): Json<Value>,
+    body: Result<Json<GreetRequest>, JsonRejection>,
 ) -> axum::response::Response {
-    match ExampleAction::from_rest("greet", &body) {
-        Ok(action) => {
-            run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await
-        }
-        Err(error) => rest_error_response(error, "greet"),
-    }
+    let Json(body) = match body {
+        Ok(body) => body,
+        Err(error) => return rest_json_rejection_response(error),
+    };
+    run_rest_action(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        ExampleAction::Greet { name: body.name },
+    )
+    .await
 }
 
 pub async fn v1_echo(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
-    Json(body): Json<Value>,
+    body: Result<Json<EchoRequest>, JsonRejection>,
 ) -> axum::response::Response {
-    match ExampleAction::from_rest("echo", &body) {
+    let Json(body) = match body {
+        Ok(body) => body,
+        Err(error) => return rest_json_rejection_response(error),
+    };
+    match ExampleAction::from_rest("echo", &json!({ "message": body.message })) {
         Ok(action) => {
             run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await
         }
@@ -230,11 +240,7 @@ async fn run_rest_action(
 
 fn rest_error_response(error: anyhow::Error, action: &str) -> axum::response::Response {
     if crate::actions::is_validation_error(&error) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": error.to_string()})),
-        )
-            .into_response();
+        return rest_bad_request(error.to_string());
     }
     tracing::error!(error = %error, action = %action, "REST action execution failed");
     (
@@ -242,6 +248,19 @@ fn rest_error_response(error: anyhow::Error, action: &str) -> axum::response::Re
         Json(json!({"error": "internal server error"})),
     )
         .into_response()
+}
+
+fn rest_bad_request(error: String) -> axum::response::Response {
+    (StatusCode::BAD_REQUEST, Json(json!({"error": error}))).into_response()
+}
+
+fn rest_json_rejection_response(error: JsonRejection) -> axum::response::Response {
+    let status = if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        StatusCode::PAYLOAD_TOO_LARGE
+    } else {
+        StatusCode::BAD_REQUEST
+    };
+    (status, Json(json!({"error": error.to_string()}))).into_response()
 }
 
 fn cap_rest_response(value: Value) -> Result<Value> {

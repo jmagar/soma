@@ -15,6 +15,7 @@ type OpenApiActionMetadata = {
   "x-template": {
     rest_actions: string[];
     mcp_only_actions: string[];
+    direct_rest_routes: Record<string, { method: "GET" | "POST"; path: string }>;
   };
 };
 
@@ -28,6 +29,19 @@ describe("template action metadata", () => {
     const webRestActions = REST_ACTIONS.map((action) => action.id);
     expect(webRestActions).toEqual(openApi.components.schemas.ActionName.enum);
     expect(webRestActions).toEqual(openApi["x-template"].rest_actions);
+  });
+
+  it("keeps direct REST route metadata aligned with generated OpenAPI metadata", () => {
+    const webRoutes = Object.fromEntries(
+      REST_ACTIONS.map((action) => [
+        action.id,
+        {
+          method: action.method,
+          path: action.path,
+        },
+      ]),
+    );
+    expect(webRoutes).toEqual(openApi["x-template"].direct_rest_routes);
   });
 
   it("keeps MCP-only actions aligned with generated OpenAPI metadata", () => {

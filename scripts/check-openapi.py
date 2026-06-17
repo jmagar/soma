@@ -493,6 +493,18 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     expected = [action["name"] for action in entries if action["transport"] == "Any"]
     if action_enum != expected:
         failures.append(f"ActionName enum drifted: expected {expected}, got {action_enum}")
+    direct_route_names = set(DIRECT_REST_ROUTES)
+    expected_route_names = set(expected)
+    missing_direct_routes = sorted(expected_route_names - direct_route_names)
+    extra_direct_routes = sorted(direct_route_names - expected_route_names)
+    if missing_direct_routes:
+        failures.append(
+            f"DIRECT_REST_ROUTES is missing REST actions: {missing_direct_routes}"
+        )
+    if extra_direct_routes:
+        failures.append(
+            f"DIRECT_REST_ROUTES contains non-REST actions: {extra_direct_routes}"
+        )
     mcp_only = {a["name"] for a in entries if a["transport"] == "McpOnly"}
     for name in sorted(mcp_only):
         if name in (action_enum or []):
