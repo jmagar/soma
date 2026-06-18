@@ -11,7 +11,6 @@
     "homelab"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Example MCP",
     "shortDescription": "TEMPLATE: Short tagline shown in Codex plugin listings (50 chars max). E.g.: 'Query and manage Example service'.",

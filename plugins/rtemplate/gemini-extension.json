@@ -11,20 +11,6 @@
     "homelab"
   ],
   "contextFileName": "GEMINI.md",
-  "mcpServers": {
-    "rtemplate": {
-      "type": "stdio",
-      "command": "rtemplate",
-      "args": [
-        "mcp"
-      ],
-      "env": {
-        "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}",
-        "RTEMPLATE_API_KEY": "${settings.rtemplate_api_key}",
-        "RUST_LOG": "warn"
-      }
-    }
-  },
   "skills": "./skills",
   "hooks": "./hooks/hooks.json",
   "settings": [
