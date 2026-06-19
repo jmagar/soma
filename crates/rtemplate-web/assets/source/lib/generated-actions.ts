@@ -3,133 +3,129 @@ import type { ActionSpec } from "./template";
 
 export const ACTIONS = [
   {
-    "id": "greet",
-    "label": "greet",
-    "description": "Return a greeting.",
-    "scope": "example:read",
-    "transport": "rest",
-    "method": "POST",
-    "path": "/v1/greet",
-    "params": [
+    id: "greet",
+    label: "greet",
+    description: "Return a greeting.",
+    scope: "example:read",
+    transport: "rest",
+    method: "POST",
+    path: "/v1/greet",
+    params: [
       {
-        "name": "name",
-        "label": "Name",
-        "type": "text",
-        "placeholder": "Alice",
-        "required": false,
-        "description": "Name to greet. Omit to greet the world."
-      }
+        name: "name",
+        label: "Name",
+        type: "text",
+        placeholder: "Alice",
+        required: false,
+        description: "Name to greet. Omit to greet the world.",
+      },
     ],
-    "example": {
-      "action": "greet",
-      "params": {
-        "name": "Alice"
-      }
+    example: {
+      action: "greet",
+      params: {
+        name: "Alice",
+      },
     },
-    "response": {
-      "greeting": "Hello, Alice!",
-      "target": "Alice"
-    }
+    response: {
+      greeting: "Hello, Alice!",
+      target: "Alice",
+    },
   },
   {
-    "id": "echo",
-    "label": "echo",
-    "description": "Echo a message back unchanged.",
-    "scope": "example:read",
-    "transport": "rest",
-    "method": "POST",
-    "path": "/v1/echo",
-    "params": [
+    id: "echo",
+    label: "echo",
+    description: "Echo a message back unchanged.",
+    scope: "example:read",
+    transport: "rest",
+    method: "POST",
+    path: "/v1/echo",
+    params: [
       {
-        "name": "message",
-        "label": "Message",
-        "type": "text",
-        "placeholder": "Hello!",
-        "required": true,
-        "description": "Message to echo back. Must not be empty."
-      }
+        name: "message",
+        label: "Message",
+        type: "text",
+        placeholder: "Hello!",
+        required: true,
+        description: "Message to echo back. Must not be empty.",
+      },
     ],
-    "example": {
-      "action": "echo",
-      "params": {
-        "message": "Hello!"
-      }
+    example: {
+      action: "echo",
+      params: {
+        message: "Hello!",
+      },
     },
-    "response": {
-      "echo": "Hello!"
-    }
+    response: {
+      echo: "Hello!",
+    },
   },
   {
-    "id": "status",
-    "label": "status",
-    "description": "Return server status and configuration info.",
-    "scope": "example:read",
-    "transport": "rest",
-    "method": "GET",
-    "path": "/v1/status",
-    "params": [],
-    "example": {
-      "action": "status",
-      "params": {}
+    id: "status",
+    label: "status",
+    description: "Return server status and configuration info.",
+    scope: "example:read",
+    transport: "rest",
+    method: "GET",
+    path: "/v1/status",
+    params: [],
+    example: {
+      action: "status",
+      params: {},
     },
-    "response": {
-      "status": "ok",
-      "note": "stub"
-    }
+    response: {
+      status: "ok",
+      note: "stub",
+    },
   },
   {
-    "id": "elicit_name",
-    "label": "elicit_name",
-    "description": "Ask the MCP client to collect a name, then return a personalised greeting.",
-    "scope": "example:read",
-    "transport": "mcp-only",
-    "params": [],
-    "example": {
-      "action": "elicit_name",
-      "params": {}
+    id: "elicit_name",
+    label: "elicit_name",
+    description: "Ask the MCP client to collect a name, then return a personalised greeting.",
+    scope: "example:read",
+    transport: "mcp-only",
+    params: [],
+    example: {
+      action: "elicit_name",
+      params: {},
     },
-    "response": {
-      "greeting": "Hello, Alice!",
-      "target": "Alice",
-      "elicited": true
-    }
+    response: {
+      greeting: "Hello, Alice!",
+      target: "Alice",
+      elicited: true,
+    },
   },
   {
-    "id": "scaffold_intent",
-    "label": "scaffold_intent",
-    "description": "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
-    "scope": "example:read",
-    "transport": "mcp-only",
-    "params": [],
-    "example": {
-      "action": "scaffold_intent",
-      "params": {}
+    id: "scaffold_intent",
+    label: "scaffold_intent",
+    description:
+      "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
+    scope: "example:read",
+    transport: "mcp-only",
+    params: [],
+    example: {
+      action: "scaffold_intent",
+      params: {},
     },
-    "response": {
-      "kind": "rmcp_template_scaffold_intent",
-      "schema_version": 1
-    }
+    response: {
+      kind: "rmcp_template_scaffold_intent",
+      schema_version: 1,
+    },
   },
   {
-    "id": "help",
-    "label": "help",
-    "description": "Show the action reference.",
-    "scope": "public",
-    "transport": "rest",
-    "method": "GET",
-    "path": "/v1/help",
-    "params": [],
-    "example": {
-      "action": "help",
-      "params": {}
+    id: "help",
+    label: "help",
+    description: "Show the action reference.",
+    scope: "public",
+    transport: "rest",
+    method: "GET",
+    path: "/v1/help",
+    params: [],
+    example: {
+      action: "help",
+      params: {},
     },
-    "response": {
-      "actions": [
-        "greet",
-        "echo",
-        "status",
-        "help"
-      ]
-    }
-  }
+    response: {
+      actions: ["greet", "echo", "status", "help"],
+    },
+  },
 ] as const satisfies readonly ActionSpec[];
