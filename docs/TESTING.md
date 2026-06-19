@@ -44,19 +44,19 @@ retries = 2
 
 | File | Purpose |
 |---|---|
-| `tests/cli_parse.rs` | CLI parser behavior. |
-| `tests/tool_dispatch.rs` | Service/action semantics without live credentials. |
-| `tests/api_routes.rs` | REST and mounted auth route behavior. |
-| `tests/plugin_contract.rs` | Plugin package and hook contracts. |
-| `tests/template_invariants.rs` | Automation/template invariants. |
-| `src/app_tests.rs` | Private service-layer unit tests (sidecar to `app.rs`). |
+| `crates/rmcp-template/tests/cli_parse.rs` | CLI parser behavior. |
+| `crates/rmcp-template/tests/tool_dispatch.rs` | Service/action semantics without live credentials. |
+| `crates/rmcp-template/tests/api_routes.rs` | REST and mounted auth route behavior. |
+| `crates/rmcp-template/tests/plugin_contract.rs` | Plugin package and hook contracts. |
+| `crates/rmcp-template/tests/template_invariants.rs` | Automation/template invariants. |
+| `crates/rtemplate-service/src/app_tests.rs` | Private service-layer unit tests (sidecar to `app.rs`). |
 
 ## Test sidecars
 
 All tests that need access to private functions live in `_tests.rs` sidecar files, not inline:
 
 ```rust
-// src/app.rs
+// crates/rtemplate-service/src/app.rs
 pub struct ExampleService { ... }
 impl ExampleService { ... }
 
@@ -64,7 +64,7 @@ impl ExampleService { ... }
 #[path = "app_tests.rs"]
 mod tests;
 
-// src/app_tests.rs
+// crates/rtemplate-service/src/app_tests.rs
 use super::*;  // access to private items
 
 #[test]
@@ -83,7 +83,7 @@ fn destructive_gate_allows_with_confirm() {
 
 ## Test helpers
 
-`src/lib.rs` exports helpers for integration tests. Prefer the helper over
+`crates/rmcp-template/src/lib.rs` exports helpers for integration tests. Prefer the helper over
 hand-constructing `AppState` in integration tests:
 
 ```rust
@@ -99,7 +99,7 @@ async fn tool_path_uses_loopback_state() {
 Use `loopback_state()` in integration tests:
 
 ```rust
-// tests/tool_dispatch.rs
+// crates/rmcp-template/tests/tool_dispatch.rs
 use example_mcp::testing::loopback_state;
 
 #[tokio::test]
@@ -115,7 +115,7 @@ async fn help_returns_help_key() {
 
 ```bash
 just dev
-bash tests/mcporter/test-mcp.sh
+bash crates/rmcp-template/tests/mcporter/test-mcp.sh
 just test-mcporter
 ```
 

@@ -193,7 +193,7 @@ Checks changed paths and reports likely documentation or automation drift:
 
 - `Justfile` without `lefthook.yml`, or vice versa.
 - `scripts/*` without `scripts/README.md`.
-- `src/mcp/schemas.rs` without `docs/MCP_SCHEMA.md`.
+- `crates/rtemplate-mcp/src/schemas.rs` without `docs/MCP_SCHEMA.md`.
 - plugin package changes without `docs/PLUGINS.md`.
 
 Used in CI as a guardrail. It intentionally reports coupled-file concerns rather

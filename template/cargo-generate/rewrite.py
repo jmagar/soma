@@ -193,7 +193,10 @@ def replacements(values: dict[str, str]) -> list[tuple[str, str]]:
         ("ExampleConfig", f"{type_prefix}Config"),
         ("ExampleAction", f"{type_prefix}Action"),
         ("example-server", server_binary_name),
-        ("src/bin/example.rs", f"src/bin/{binary_name}.rs"),
+        (
+            "crates/rmcp-template/src/bin/example.rs",
+            f"crates/{crate_name}/src/bin/{binary_name}.rs",
+        ),
         ("example_mcp_session", f"{service_slug}_mcp_session"),
         ("example:read", f"{scope_prefix}:read"),
         ("example:write", f"{scope_prefix}:write"),
@@ -263,8 +266,7 @@ def rename_paths(
         new_name = new_name.replace("rtemplate-mcp", f"{crate_prefix}-mcp-surface")
         new_name = new_name.replace("rtemplate", crate_prefix)
         new_name = new_name.replace("rmcp-template", crate_name)
-        replacement = binary_name if rel.as_posix() == "src/bin/example.rs" else service_slug
-        new_name = new_name.replace("example", replacement)
+        new_name = new_name.replace("example", service_slug)
         if new_name != name:
             renames.append((path, path.with_name(new_name)))
     for src, dst in renames:

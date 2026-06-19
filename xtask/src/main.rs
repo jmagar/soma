@@ -10,6 +10,9 @@
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
 //!   cargo-generate Smoke-test cargo-generate output
+//!   sync-web-source Copy apps/web into the bundled rtemplate-web scaffold source
+//!   check-web-source-sync Validate bundled web source matches apps/web
+//!   update-aurora-web Refresh Aurora components, validate apps/web, then sync bundle
 //!   check-release-versions Validate release component version policy
 //!   release-plan Print changed release components and candidate tags
 //!   bump-version Bump a release component version
@@ -29,6 +32,7 @@ use walkdir::WalkDir;
 mod cargo_generate;
 mod patterns;
 mod release_versions;
+mod web_source;
 
 fn main() -> Result<()> {
     // Cargo sets CARGO_MANIFEST_DIR for the workspace root when invoked as
@@ -51,6 +55,9 @@ fn main() -> Result<()> {
         Some("patterns") => patterns_cmd(&args[1..]),
         Some("contract-audit") => contract_audit(),
         Some("cargo-generate") => cargo_generate(&args[1..]),
+        Some("sync-web-source") => web_source::sync(),
+        Some("check-web-source-sync") => web_source::check(),
+        Some("update-aurora-web") => web_source::update_aurora(),
         Some("check-test-siblings") => check_test_siblings(),
         Some("check-version-sync") => release_versions::check_version_sync(workspace_root),
         Some("check-release-versions") => check_release_versions_cmd(workspace_root, &args[1..]),
@@ -245,13 +252,13 @@ fn dist() -> Result<()> {
 ///
 /// TEMPLATE: Add or remove steps to match your CI pipeline.
 fn ci() -> Result<()> {
-    println!("==> [1/7] cargo fmt --check");
+    println!("==> [1/8] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/7] cargo clippy");
+    println!("==> [2/8] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [3/7] cargo nextest run --profile ci");
+    println!("==> [3/8] cargo nextest run --profile ci");
     // Falls back to cargo test if nextest isn't installed.
     // TEMPLATE: Remove the fallback once nextest is in your CI environment.
     if command_exists("cargo-nextest") {
@@ -261,7 +268,7 @@ fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [4/7] taplo check");
+    println!("==> [4/8] taplo check");
     // TEMPLATE: Remove this step if you don't use taplo.
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
@@ -269,14 +276,17 @@ fn ci() -> Result<()> {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/7] cargo xtask patterns");
+    println!("==> [5/8] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [6/7] cargo xtask check-test-siblings");
+    println!("==> [6/8] cargo xtask check-test-siblings");
     check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [7/7] cargo audit");
+    println!("==> [7/8] cargo xtask check-web-source-sync");
+    web_source::check().context("web source bundle drifted from apps/web")?;
+
+    println!("==> [8/8] cargo audit");
     // TEMPLATE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
@@ -294,7 +304,8 @@ fn ci() -> Result<()> {
 // check-test-siblings — Verify every src/*.rs has a sibling *_tests.rs
 // =============================================================================
 
-/// Walk `src/` and report any `.rs` file missing a sibling `{stem}_tests.rs`.
+/// Walk crate `src/` trees and report any `.rs` file missing a sibling
+/// `{stem}_tests.rs`.
 ///
 /// Files excluded from the check:
 ///   - Files whose name already ends in `_tests.rs` (they ARE the test sibling)
@@ -303,51 +314,59 @@ fn ci() -> Result<()> {
 /// Exits non-zero if any sibling is missing, so it can gate CI.
 fn check_test_siblings() -> Result<()> {
     const EXEMPT: &[&str] = &["main.rs", "lib.rs"];
+    const ORPHAN_EXEMPT: &[&str] = &["cli_tests.rs", "mcp_tests.rs"];
 
     let mut missing: Vec<std::path::PathBuf> = Vec::new();
 
-    for entry in WalkDir::new("src")
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-    {
-        let path = entry.path();
-        let name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n,
-            None => continue,
-        };
+    for root in crate_src_roots() {
+        for entry in WalkDir::new(root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.path();
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
 
-        if !name.ends_with(".rs") || name.ends_with("_tests.rs") || EXEMPT.contains(&name) {
-            continue;
-        }
+            if !name.ends_with(".rs") || name.ends_with("_tests.rs") || EXEMPT.contains(&name) {
+                continue;
+            }
 
-        let stem = name.strip_suffix(".rs").unwrap();
-        let sibling = path.parent().unwrap().join(format!("{stem}_tests.rs"));
+            let stem = name.strip_suffix(".rs").unwrap();
+            let sibling = path.parent().unwrap().join(format!("{stem}_tests.rs"));
 
-        if !sibling.exists() {
-            missing.push(path.to_owned());
+            if !sibling.exists() {
+                missing.push(path.to_owned());
+            }
         }
     }
 
     // Reverse check: _tests.rs files with no corresponding source are orphans.
     let mut orphans: Vec<std::path::PathBuf> = Vec::new();
-    for entry in WalkDir::new("src")
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_file())
-    {
-        let path = entry.path();
-        let name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n,
-            None => continue,
-        };
-        if !name.ends_with("_tests.rs") {
-            continue;
-        }
-        let stem = name.strip_suffix("_tests.rs").unwrap();
-        let source = path.parent().unwrap().join(format!("{stem}.rs"));
-        if !source.exists() {
-            orphans.push(path.to_owned());
+    for root in crate_src_roots() {
+        for entry in WalkDir::new(root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+        {
+            let path = entry.path();
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+            if !name.ends_with("_tests.rs") {
+                continue;
+            }
+            if ORPHAN_EXEMPT.contains(&name) {
+                continue;
+            }
+            let stem = name.strip_suffix("_tests.rs").unwrap();
+            let source = path.parent().unwrap().join(format!("{stem}.rs"));
+            if !source.exists() {
+                orphans.push(path.to_owned());
+            }
         }
     }
 
@@ -381,6 +400,23 @@ fn check_test_siblings() -> Result<()> {
         return Ok(());
     }
     bail!("{} missing, {} orphaned", missing.len(), orphans.len());
+}
+
+fn crate_src_roots() -> Vec<std::path::PathBuf> {
+    [
+        "crates/rmcp-template/src",
+        "crates/rtemplate-api/src",
+        "crates/rtemplate-cli/src",
+        "crates/rtemplate-contracts/src",
+        "crates/rtemplate-mcp/src",
+        "crates/rtemplate-observability/src",
+        "crates/rtemplate-runtime/src",
+        "crates/rtemplate-service/src",
+        "crates/rtemplate-web/src",
+    ]
+    .into_iter()
+    .map(std::path::PathBuf::from)
+    .collect()
 }
 
 // =============================================================================
@@ -625,6 +661,9 @@ COMMANDS:
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
   contract-audit        Run local static/spec checks without live upstream calls
   cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
+  sync-web-source       Copy apps/web into crates/rtemplate-web/assets/source
+  check-web-source-sync Validate bundled web source matches apps/web
+  update-aurora-web     Refresh Aurora registry components, validate, then sync
   check-version-sync    Validate release manifest version-file parity
   check-release-versions [--base REF] [--head REF] [--mode pr|main] [--json]
                         Validate changed release components have fresh versions/tags

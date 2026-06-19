@@ -4,11 +4,17 @@ use std::fs;
 use std::{os::unix::fs::PermissionsExt, path::Path};
 
 fn read(path: &str) -> String {
-    fs::read_to_string(path).unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
+    fs::read_to_string(repo_path(path)).unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
 }
 
 fn json(path: &str) -> Value {
     serde_json::from_str(&read(path)).unwrap_or_else(|err| panic!("failed to parse {path}: {err}"))
+}
+
+fn repo_path(path: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(path)
 }
 
 #[test]
@@ -28,7 +34,7 @@ fn portable_scripts_are_executable_and_documented() {
         "scripts/check-schema-docs.py",
         "scripts/check-coupled-files.sh",
     ] {
-        let metadata = fs::metadata(path).unwrap_or_else(|err| panic!("{path}: {err}"));
+        let metadata = fs::metadata(repo_path(path)).unwrap_or_else(|err| panic!("{path}: {err}"));
         assert!(
             metadata.permissions().mode() & 0o111 != 0,
             "{path} should be executable"

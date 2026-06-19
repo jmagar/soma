@@ -126,11 +126,11 @@ Or use Streamable HTTP (server must be running):
 Use this when creating a real service from rmcp-template:
 
 - [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
-- [ ] Implement API client in `src/<service>.rs` (transport only — no logic)
-- [ ] Add service methods to `src/app.rs` (ALL logic here)
-- [ ] Add actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs` (thin shim only)
-- [ ] Add CLI commands to `src/cli.rs` (thin shim only)
-- [ ] Update `src/config.rs` with service-specific config fields
+- [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only — no logic)
+- [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (ALL logic here)
+- [ ] Add actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs` (thin shim only)
+- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs` (thin shim only)
+- [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific config fields
 - [ ] Add elicitation to destructive actions (or `confirm=true` flag fallback)
 - [ ] Set port in `config.toml`, `docker-compose.yml`, and Dockerfile `EXPOSE`
 - [ ] Implement central auth policy resolution in library code
@@ -141,8 +141,8 @@ Use this when creating a real service from rmcp-template:
 - [ ] Configure taplo (`taplo.toml`)
 - [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
 - [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
-- [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Write tests in `*_tests.rs` sidecars + `crates/rmcp-template/tests/` integration tests
+- [ ] Write `crates/rmcp-template/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
@@ -153,4 +153,4 @@ Use this when creating a real service from rmcp-template:
 - [ ] Add `.worktreeinclude` at the repo root with `.env` and `config.toml`
 - [ ] Run `cargo check` — must compile clean, zero warnings
 - [ ] Run `cargo nextest run` — all tests pass
-- [ ] Run `./tests/mcporter/test-mcp.sh` against a live server instance
+- [ ] Run `./crates/rmcp-template/tests/mcporter/test-mcp.sh` against a live server instance

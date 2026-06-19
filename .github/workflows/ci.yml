@@ -326,7 +326,7 @@ jobs:
         env:
           RTEMPLATE_MCP_HOST: 127.0.0.1
           RTEMPLATE_MCP_PORT: 40123
-        run: bash tests/mcporter/test-mcp.sh --timeout-ms 20000
+        run: bash crates/rmcp-template/tests/mcporter/test-mcp.sh --timeout-ms 20000
 
       - name: Upload MCP smoke logs
         if: always()

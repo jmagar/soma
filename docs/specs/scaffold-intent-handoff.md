@@ -321,9 +321,9 @@ The coding agent may mutate files only after the user approves the plan produced
 
 | Concern | File |
 |---|---|
-| Action metadata and parser | `src/actions.rs` |
-| Elicitation implementation | `src/mcp/tools.rs` |
-| MCP schema/action enum | `src/mcp/schemas.rs` via `action_names()` |
+| Action metadata and parser | `crates/rtemplate-contracts/src/actions.rs` |
+| Elicitation implementation | `crates/rtemplate-mcp/src/tools.rs` |
+| MCP schema/action enum | `crates/rtemplate-mcp/src/schemas.rs` via `action_names()` |
 | Generated schema docs | `docs/MCP_SCHEMA.md` |
 | Schema docs generator descriptions | `scripts/check-schema-docs.py` |
 | Tool skill reference | `plugins/rtemplate/skills/example/SKILL.md` |

@@ -18,13 +18,13 @@ const REQUIRED_PATTERN_FILES: &[&str] = &[
     "crates/rtemplate-mcp/src/tools.rs",
     "crates/rtemplate-mcp/src/schemas.rs",
     "crates/rtemplate-mcp/src/rmcp_server.rs",
-    "src/routes.rs",
+    "crates/rmcp-template/src/routes.rs",
     "crates/rtemplate-mcp/src/prompts.rs",
     "crates/rtemplate-contracts/src/config.rs",
     "crates/rtemplate-cli/src/lib.rs",
-    "src/main.rs",
-    "src/lib.rs",
-    "tests/tool_dispatch.rs",
+    "crates/rmcp-template/src/main.rs",
+    "crates/rmcp-template/src/lib.rs",
+    "crates/rmcp-template/tests/tool_dispatch.rs",
     "config.example.toml",
     "taplo.toml",
     "lefthook.yml",
@@ -196,7 +196,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
 }
 
 pub(super) fn routes(reporter: &mut PatternReporter) {
-    let routes = read_file("src/routes.rs");
+    let routes = read_file("crates/rmcp-template/src/routes.rs");
     let missing = ["\"/mcp\"", "\"/health\"", "\"/status\""]
         .iter()
         .copied()

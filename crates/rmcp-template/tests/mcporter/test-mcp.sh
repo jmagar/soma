@@ -36,7 +36,7 @@
 #   RTEMPLATE_MCP_TOKEN (optional; omit for no-auth dev mode)
 #
 # Usage:
-#   ./tests/mcporter/test-mcp.sh [--timeout-ms N] [--parallel] [--verbose]
+#   ./crates/rmcp-template/tests/mcporter/test-mcp.sh [--timeout-ms N] [--parallel] [--verbose]
 #
 # Options:
 #   --timeout-ms N   Per-call timeout in milliseconds (default: 15000)
@@ -175,7 +175,7 @@ smoke_test_server() {
     log_error "Health endpoint at ${base_url}/health did not return status=ok"
     # TEMPLATE: Replace "example" with your service name in the diagnostic messages.
     log_error "Is the rtemplate-mcp server running?  just dev   or   just docker-up"
-    log_error "Then retry:  ./tests/mcporter/test-mcp.sh"
+    log_error "Then retry:  ./crates/rmcp-template/tests/mcporter/test-mcp.sh"
     return 2
   fi
   log_info "Health endpoint OK (status=ok)"

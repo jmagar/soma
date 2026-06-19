@@ -33,6 +33,9 @@ xtask/
 | `cargo xtask symlink-docs` | Create `AGENTS.md` and `GEMINI.md` symlinks next to each `CLAUDE.md`. |
 | `cargo xtask check-env` | Validate required environment before server start. |
 | `cargo xtask patterns` | Check static contracts derived from `docs/PATTERNS.md`. |
+| `cargo xtask sync-web-source` | Copy editable `apps/web` source into `crates/rtemplate-web/assets/source` with generated artifacts excluded. |
+| `cargo xtask check-web-source-sync` | Fail if the bundled web source has drifted from `apps/web`. |
+| `cargo xtask update-aurora-web` | Refresh the known Aurora registry components, validate `apps/web`, then sync the bundle. |
 
 ## Justfile delegates to xtask
 
@@ -59,12 +62,37 @@ symlink-docs:
 ### What the pattern checker catches
 
 ```
-WARN  src/mcp/tools.rs  line 42: potential business logic in MCP shim
-WARN  src/cli.rs  line 87: potential business logic in CLI shim
-ERROR src/app/mod.rs: mod.rs files are banned
-ERROR src/mcp/tools.rs: action "new_action" in ACTION_SPECS missing from dispatch
-ERROR tests/tool_dispatch.rs: action "new_action" has no test
+WARN  crates/rtemplate-mcp/src/tools.rs  line 42: potential business logic in MCP shim
+WARN  crates/rtemplate-cli/src/lib.rs  line 87: potential business logic in CLI shim
+ERROR crates/rtemplate-service/src/app/mod.rs: mod.rs files are banned
+ERROR crates/rtemplate-mcp/src/tools.rs: action "new_action" in ACTION_SPECS missing from dispatch
+ERROR crates/rmcp-template/tests/tool_dispatch.rs: action "new_action" has no test
 ```
+
+## Web Source Sync
+
+`rtemplate-web` bundles editable Aurora frontend source for generated projects.
+The source of truth is `apps/web`; the bundled copy lives at
+`crates/rtemplate-web/assets/source`.
+
+```bash
+cargo xtask sync-web-source
+cargo xtask check-web-source-sync
+```
+
+The sync excludes generated artifacts: `.next`, `node_modules`, `out`,
+`tsconfig.tsbuildinfo`, and `.DS_Store`. `cargo xtask ci` runs
+`check-web-source-sync` so drift is caught before merge.
+
+To pull the current Aurora registry versions into the template web app:
+
+```bash
+cargo xtask update-aurora-web
+```
+
+That command refreshes the Aurora tokens plus the Aurora UI components currently
+used by the template, runs `pnpm --dir apps/web validate`, then syncs the bundled
+source.
 
 ## symlink-docs
 

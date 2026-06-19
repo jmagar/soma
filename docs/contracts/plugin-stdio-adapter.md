@@ -11,9 +11,9 @@ source_of_truth: true
 upstream_refs:
   - "plugins/rtemplate/.mcp.json"
   - "plugins/rtemplate/gemini-extension.json"
-  - "src/example.rs"
-  - "src/bin/example.rs"
-  - "src/main.rs"
+  - "crates/rtemplate-service/src/example.rs"
+  - "crates/rmcp-template/src/bin/example.rs"
+  - "crates/rmcp-template/src/main.rs"
 last_reviewed: "2026-05-26"
 ---
 

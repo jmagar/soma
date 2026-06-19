@@ -40,31 +40,18 @@ Allowed exceptions:
 ## 1. Module Architecture — Strict Layering
 
 ```
-src/
-  <service>.rs      ← HTTP/API transport ONLY (no business logic)
-  app/
-    errors.rs       ← domain-specific errors and shared Result aliases
-    common.rs       ← shared validation/helpers used across domain modules
-    read.rs         ← read/query use-cases
-    write.rs        ← create/update/delete use-cases
-    # add more focused modules as needed: auth.rs, sync.rs, cache.rs, etc.
-  config.rs         ← Config structs + env overrides
-  api.rs            ← REST API handlers (api_dispatch, health, status)
-  server.rs         ← AppState, AuthPolicy, build_auth_layer
-  server/
-    routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
-  mcp.rs            ← MCP module entry: submodule decls + re-exports only
-  mcp/
-    tools.rs        ← thin shim: parse args → call service facade → return Value
-    schemas.rs      ← tool JSON schema + ACTIONS const
-    rmcp_server.rs  ← ServerHandler impl (tools, resources, prompts)
-    prompts.rs      ← MCP prompts
-  cli.rs            ← thin shim: parse args → call service facade → format/print
-  lib.rs            ← pub modules + test helpers (testing::*)
-  main.rs           ← mode dispatch ONLY (serve_mcp / serve_stdio / run_cli)
+crates/
+  rmcp-template/        ← thin binary/facade package, routes, integration tests
+  rtemplate-service/    ← upstream client + ExampleService business layer
+  rtemplate-contracts/  ← action metadata, config, DTOs, token limits
+  rtemplate-api/        ← REST API handlers
+  rtemplate-mcp/        ← MCP schemas, tools, prompts, transport
+  rtemplate-cli/        ← CLI parser, doctor/setup/watch commands
+  rtemplate-runtime/    ← AppState, auth policy, shared runtime wiring
+  rtemplate-web/        ← static web asset serving and source bundle helpers
 
 Rule: keep business logic out of transports, but DO NOT force all logic into one giant file.
-The service layer may be split across multiple focused modules under `src/app/`; what matters
+The service layer may be split across multiple focused modules under `crates/rtemplate-service/src/`; what matters
 is that transports stay thin and all domain logic lives in the service layer.
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or
@@ -784,7 +771,7 @@ Adding an explicit version creates drift and requires manual bumping on every re
 
 ### plugin-hook responsibilities
 
-The hook now calls `<binary> setup plugin-hook` directly (no `plugin-setup.sh` wrapper). The binary's `apply_plugin_options()` (in `src/cli/setup.rs`), invoked before `Config::load()`, does what the script used to:
+The hook now calls `<binary> setup plugin-hook` directly (no `plugin-setup.sh` wrapper). The binary's `apply_plugin_options()` (in `crates/rtemplate-cli/src/setup.rs`), invoked before `Config::load()`, does what the script used to:
 
 1. Read `CLAUDE_PLUGIN_OPTION_*` env vars (set by plugin runtime from userConfig)
 2. Reject (skip) unsafe newline/CR-bearing option values
@@ -807,15 +794,17 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 
 # Cache dependencies
 COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked --bin example-server && rm -rf src
+    cargo build --release --locked --package rmcp-template --bin example-server
 
 # Build real binary
-COPY src/ src/
+COPY config/ config/
+COPY entrypoint.sh entrypoint.sh
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked --bin example-server --features full && \
+    cargo build --release --locked --package rmcp-template --bin example-server --features full && \
     cp target/release/example-server /usr/local/bin/example-server
 
 FROM debian:bookworm-slim
@@ -940,7 +929,7 @@ echo "  3. Or:  ${BINARY} mcp             (stdio mode for Claude Code)"
 
 ## 17. mcporter Integration Test Pattern
 
-Every server has `tests/mcporter/test-mcp.sh` and, when useful for named server workflows, `config/mcporter.json`. The live harness covers MCP tools and MCP resources; add prompt coverage when mcporter exposes first-class prompt testing.
+Every server has `crates/rmcp-template/tests/mcporter/test-mcp.sh` and, when useful for named server workflows, `config/mcporter.json`. The live harness covers MCP tools and MCP resources; add prompt coverage when mcporter exposes first-class prompt testing.
 
 ### Philosophy
 
@@ -1003,7 +992,7 @@ Prefer mcporter's resource command when available. Keep a JSON-RPC `resources/re
 
 ### Prompt validation
 
-When mcporter supports prompts directly, add a prompt suite beside tool/resource suites. Until then, prompt coverage should live in Rust tests for `src/mcp/prompts.rs` and in plugin/skill docs that demonstrate the expected prompt workflow.
+When mcporter supports prompts directly, add a prompt suite beside tool/resource suites. Until then, prompt coverage should live in Rust tests for `crates/rtemplate-mcp/src/prompts.rs` and in plugin/skill docs that demonstrate the expected prompt workflow.
 
 ### Non-destructive actions only
 
@@ -1074,21 +1063,21 @@ curl -H "Authorization: Bearer $RTEMPLATE_API_KEY" \
 Use this when creating a new server from rmcp-template:
 
 - [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
-- [ ] Implement API client in `src/<service>.rs` (transport only)
-- [ ] Add service methods to `src/app.rs` (all logic here)
-- [ ] Add tool actions to `src/mcp/tools.rs` and `src/mcp/schemas.rs`
-- [ ] Add CLI commands to `src/cli.rs`
-- [ ] Update `src/config.rs` with service-specific config fields
+- [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only)
+- [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (all logic here)
+- [ ] Add tool actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs`
+- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs`
+- [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific config fields
 - [ ] Set correct port in `config.toml` and `docker-compose.yml`
 - [ ] Update `EXPOSE` in `config/Dockerfile`
 - [ ] Update `plugin.json` userConfig for your service's credentials
-- [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Write tests in `*_tests.rs` sidecars + `crates/rmcp-template/tests/` integration tests
+- [ ] Write `crates/rmcp-template/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Update `install.sh` with correct binary/repo name
 - [ ] Run `cargo check` — must compile clean, zero warnings
 - [ ] Run `cargo nextest run` — all tests pass
-- [ ] Run `./tests/mcporter/test-mcp.sh` against a live server instance
+- [ ] Run `./crates/rmcp-template/tests/mcporter/test-mcp.sh` against a live server instance
 
 ---
 
@@ -1500,7 +1489,7 @@ Key `.dockerignore` rules:
 - `tests/`, `docs/`, `scripts/`, `*.md` excluded (not needed at runtime)
 - `.env`, `.env.*` excluded (injected at runtime)
 - `Justfile`, `lefthook.yml` excluded
-- Never exclude: `src/`, `Cargo.toml`, `Cargo.lock`, `config/`
+- Never exclude: `crates/`, `Cargo.toml`, `Cargo.lock`, `config/`
 
 ---
 
@@ -1535,11 +1524,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Updated Checklist for New Servers
 
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
-- [ ] Implement API client in `src/<service>.rs` (transport only)
-- [ ] Add service methods to `src/app.rs` (ALL logic here)
-- [ ] Add actions to `src/actions.rs`, `src/mcp/tools.rs`, and `src/mcp/schemas.rs` (thin shim ONLY)
-- [ ] Add CLI commands to `src/cli.rs` (thin shim ONLY)
-- [ ] Update `src/config.rs` with service-specific fields
+- [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only)
+- [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (ALL logic here)
+- [ ] Add actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs` (thin shim ONLY)
+- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs` (thin shim ONLY)
+- [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
 - [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
 - [ ] Implement central auth policy resolution in library code
@@ -1550,8 +1539,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Configure taplo (`taplo.toml`)
 - [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
 - [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
-- [ ] Write tests in `*_tests.rs` sidecars + `tests/` integration tests
-- [ ] Write `tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Write tests in `*_tests.rs` sidecars + `crates/rmcp-template/tests/` integration tests
+- [ ] Write `crates/rmcp-template/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
 - [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
@@ -1563,7 +1552,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Run `cargo check` — zero warnings
 - [ ] Run `cargo nextest run` — all pass
 - [ ] Run `taplo check` — all TOML valid
-- [ ] Run `./tests/mcporter/test-mcp.sh` against live server
+- [ ] Run `./crates/rmcp-template/tests/mcporter/test-mcp.sh` against live server
 
 ---
 
@@ -2373,7 +2362,7 @@ Use `<binary> setup plugin-hook` directly as the hook command (no shell wrapper)
 
 ### plugin-hook env-mapping responsibilities
 
-`apply_plugin_options()` (`src/cli/setup.rs`), run before `Config::load()` on the plugin-hook path, should only:
+`apply_plugin_options()` (`crates/rtemplate-cli/src/setup.rs`), run before `Config::load()` on the plugin-hook path, should only:
 
 - reject (skip) unsafe newline/CR-bearing plugin option values
 - map `CLAUDE_PLUGIN_OPTION_*` values to runtime env vars

@@ -66,6 +66,20 @@ if web_source_available() {
 The scaffold bundle contains source/config files only. It must not include
 `node_modules`, `.next`, `out`, or TypeScript build cache files.
 
+Keep the scaffold bundle synchronized with the editable source:
+
+```bash
+cargo xtask sync-web-source
+cargo xtask check-web-source-sync
+```
+
+`cargo xtask ci` runs the sync check. To refresh the template from the Aurora
+registry first, run:
+
+```bash
+cargo xtask update-aurora-web
+```
+
 ### Runtime assets
 
 ```rust
@@ -191,6 +205,10 @@ Install Aurora:
 cd apps/web
 pnpm dlx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
 ```
+
+Prefer `cargo xtask update-aurora-web` for template maintenance because it
+refreshes the known component set, validates the frontend, and updates the
+bundled scaffold source in one pass.
 
 ## Static export
 

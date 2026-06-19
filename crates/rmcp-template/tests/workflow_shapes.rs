@@ -25,7 +25,7 @@ fn workflow_job_block<'a>(workflow: &'a str, job_name: &str) -> &'a str {
 
 #[test]
 fn ci_runs_release_version_gate_before_merge() {
-    let workflow = include_str!("../.github/workflows/ci.yml");
+    let workflow = include_str!("../../../.github/workflows/ci.yml");
     let template = workflow_job_block(workflow, "template");
     assert!(
         template.contains(
@@ -41,7 +41,7 @@ fn ci_runs_release_version_gate_before_merge() {
 
 #[test]
 fn auto_tag_uses_xtask_release_plan() {
-    let workflow = include_str!("../.github/workflows/auto-tag.yml");
+    let workflow = include_str!("../../../.github/workflows/auto-tag.yml");
     let plan = workflow_job_block(workflow, "plan");
     let release = workflow_job_block(workflow, "release");
     assert!(

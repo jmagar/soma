@@ -128,6 +128,41 @@ generator.
 
 ---
 
+### `cargo xtask sync-web-source`
+
+Copy editable `apps/web` source into `crates/rtemplate-web/assets/source`.
+Generated artifacts are excluded: `.next`, `node_modules`, `out`,
+`tsconfig.tsbuildinfo`, and `.DS_Store`.
+
+```bash
+cargo xtask sync-web-source
+```
+
+---
+
+### `cargo xtask check-web-source-sync`
+
+Validate that the bundled source in `rtemplate-web` matches `apps/web`.
+This runs inside `cargo xtask ci`, so generated projects do not accidentally
+receive stale Aurora frontend source.
+
+```bash
+cargo xtask check-web-source-sync
+```
+
+---
+
+### `cargo xtask update-aurora-web`
+
+Refresh Aurora tokens/components in `apps/web`, run the frontend validation
+script, then sync the bundled source.
+
+```bash
+cargo xtask update-aurora-web
+```
+
+---
+
 ### `cargo xtask check-env`
 
 Validate environment variables before starting the server. Prints the status of every required and optional variable, then exits non-zero if any required variable is missing.

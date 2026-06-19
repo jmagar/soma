@@ -21,7 +21,7 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
 
     let schema = read_file("crates/rtemplate-mcp/src/schemas.rs");
     let tools = read_file("crates/rtemplate-mcp/src/tools.rs");
-    let tests = read_file("tests/tool_dispatch.rs");
+    let tests = read_file("crates/rmcp-template/tests/tool_dispatch.rs");
     let cli = read_file("crates/rtemplate-cli/src/lib.rs");
 
     let schema_uses_metadata = schema.contains("action_names()");
@@ -87,7 +87,7 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
         reporter.warn(
             "actions",
             format!(
-                "tests/tool_dispatch.rs may be missing action coverage: {}. Hint: add a direct dispatch/service test or an explicit exception.",
+                "crates/rmcp-template/tests/tool_dispatch.rs may be missing action coverage: {}. Hint: add a direct dispatch/service test or an explicit exception.",
                 missing_tests.join(", ")
             ),
         );

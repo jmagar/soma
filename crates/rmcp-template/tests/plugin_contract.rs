@@ -8,11 +8,17 @@ use tempfile::tempdir;
 use std::os::unix::fs::PermissionsExt;
 
 fn read(path: &str) -> String {
-    fs::read_to_string(path).unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
+    fs::read_to_string(repo_path(path)).unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
 }
 
 fn json(path: &str) -> Value {
     serde_json::from_str(&read(path)).unwrap_or_else(|err| panic!("failed to parse {path}: {err}"))
+}
+
+fn repo_path(path: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .join(path)
 }
 
 #[test]
@@ -25,7 +31,7 @@ fn plugin_manifests_exist_for_all_supported_hosts() {
         "plugins/rtemplate/hooks/hooks.json",
         "plugins/rtemplate/skills/rtemplate/SKILL.md",
     ] {
-        assert!(std::path::Path::new(path).exists(), "{path} should exist");
+        assert!(repo_path(path).exists(), "{path} should exist");
     }
 }
 

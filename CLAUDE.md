@@ -17,31 +17,32 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 
 | File | Role |
 |------|------|
-| `src/example.rs` | `ExampleClient` — HTTP/API transport stub; one method per remote operation |
-| `src/app.rs` | `ExampleService` — business layer; all logic lives here, never in shims |
-| `src/server.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` — HTTP server state and auth policy |
-| `src/server/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
-| `src/api.rs` | REST API handlers: `POST /v1/example`, `GET /health`, `GET /status` |
-| `src/mcp.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
-| `src/mcp/tools.rs` | MCP shim: parse JSON args → call service → return `Value` |
-| `src/mcp/schemas.rs` | Tool JSON schema derived from `ACTION_SPECS` |
-| `src/mcp/rmcp_server.rs` | `ServerHandler` impl: tools, resources, prompts, scope checks |
-| `src/mcp/prompts.rs` | MCP prompts (`quick_start`) |
-| `src/config.rs` | `Config`, `ExampleConfig`, `McpConfig`, `AuthConfig`, env loading |
-| `src/cli.rs` | CLI shim: parse args → call service → print |
-| `src/cli/doctor.rs` | Pre-flight checks: env, connectivity, config validation |
-| `src/cli/setup.rs` | Interactive first-run / plugin setup wizard |
-| `src/cli/watch.rs` | Polls `/health` and emits state-change lines for plugin monitor |
-| `src/mcp/transport.rs` | Streamable HTTP transport wiring and session lifecycle |
-| `src/token_limit.rs` | Token budget enforcement for MCP response payloads |
-| `src/main.rs` | Mode dispatch: HTTP server / stdio / CLI |
-| `src/lib.rs` | Public API + `testing` helpers for integration tests |
-| `tests/cli_parse.rs` | CLI argument parsing tests |
-| `tests/tool_dispatch.rs` | MCP tool dispatch tests (service-layer, no real credentials) |
+| `crates/rtemplate-service/src/example.rs` | `ExampleClient` — HTTP/API transport stub; one method per remote operation |
+| `crates/rtemplate-service/src/app.rs` | `ExampleService` — business layer; all logic lives here, never in shims |
+| `crates/rtemplate-runtime/src/server.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` — HTTP server state and auth policy |
+| `crates/rmcp-template/src/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
+| `crates/rtemplate-api/src/api.rs` | REST API handlers: `POST /v1/example`, `GET /health`, `GET /status` |
+| `crates/rtemplate-mcp/src/lib.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
+| `crates/rtemplate-mcp/src/tools.rs` | MCP shim: parse JSON args → call service → return `Value` |
+| `crates/rtemplate-mcp/src/schemas.rs` | Tool JSON schema derived from `ACTION_SPECS` |
+| `crates/rtemplate-mcp/src/rmcp_server.rs` | `ServerHandler` impl: tools, resources, prompts, scope checks |
+| `crates/rtemplate-mcp/src/prompts.rs` | MCP prompts (`quick_start`) |
+| `crates/rtemplate-contracts/src/config.rs` | `Config`, `ExampleConfig`, `McpConfig`, `AuthConfig`, env loading |
+| `crates/rtemplate-cli/src/lib.rs` | CLI shim: parse args → call service → print |
+| `crates/rtemplate-cli/src/doctor.rs` | Pre-flight checks: env, connectivity, config validation |
+| `crates/rtemplate-cli/src/setup.rs` | Interactive first-run / plugin setup wizard |
+| `crates/rtemplate-cli/src/watch.rs` | Polls `/health` and emits state-change lines for plugin monitor |
+| `crates/rtemplate-mcp/src/transport.rs` | Streamable HTTP transport wiring and session lifecycle |
+| `crates/rtemplate-contracts/src/token_limit.rs` | Token budget enforcement for MCP response payloads |
+| `crates/rmcp-template/src/main.rs` | Full server binary mode dispatch |
+| `crates/rmcp-template/src/bin/example.rs` | Local CLI + stdio MCP binary dispatch |
+| `crates/rmcp-template/src/lib.rs` | Public facade + `testing` helpers for integration tests |
+| `crates/rmcp-template/tests/cli_parse.rs` | CLI argument parsing tests |
+| `crates/rmcp-template/tests/tool_dispatch.rs` | MCP tool dispatch tests (service-layer, no real credentials) |
 
 ## The thin-shim rule — enforce this hard
 
-`src/mcp/tools.rs` and `src/cli.rs` contain **zero business logic**. They only:
+`crates/rtemplate-mcp/src/tools.rs` and `crates/rtemplate-cli/src/lib.rs` contain **zero business logic**. They only:
 1. Parse their input format (JSON args or CLI flags)
 2. Call the corresponding `ExampleService` method
 3. Return the result
@@ -50,19 +51,19 @@ If you find yourself computing, filtering, transforming, or validating data in `
 
 ## How to add an action
 
-1. **`src/example.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).
+1. **`crates/rtemplate-service/src/example.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).
 
-2. **`src/app.rs`** — add a delegating method: `pub async fn your_action(&self, ...) -> Result<Value> { self.client.your_action(...).await }`.
+2. **`crates/rtemplate-service/src/app.rs`** — add a delegating method: `pub async fn your_action(&self, ...) -> Result<Value> { self.client.your_action(...).await }`.
 
-3. **`src/actions.rs`** — add the action to `ACTION_SPECS`, including scope and transport.
+3. **`crates/rtemplate-contracts/src/actions.rs`** — add the action to `ACTION_SPECS`, including scope and transport.
 
-4. **`src/mcp/schemas.rs`** — add any new parameters to `tool_definitions()`; the action enum comes from `ACTION_SPECS`.
+4. **`crates/rtemplate-mcp/src/schemas.rs`** — add any new parameters to `tool_definitions()`; the action enum comes from `ACTION_SPECS`.
 
-5. **`src/mcp/tools.rs`** — add a match arm in `dispatch_example()`: `"your_action" => { ... state.service.your_action(...).await }`. Also add to `HELP_TEXT`.
+5. **`crates/rtemplate-mcp/src/tools.rs`** — add a match arm in `dispatch_example()`: `"your_action" => { ... state.service.your_action(...).await }`. Also add to `HELP_TEXT`.
 
-6. **`src/cli.rs`** — add a `Command` variant, a parse arm in `parse_args()`, and a dispatch arm in `run()`.
+6. **`crates/rtemplate-cli/src/lib.rs`** — add a `Command` variant, a parse arm in `parse_args()`, and a dispatch arm in `run()`.
 
-7. **`tests/tool_dispatch.rs`** — add a test.
+7. **`crates/rmcp-template/tests/tool_dispatch.rs`** — add a test.
 
 8. **`CHANGELOG.md`** — add an entry under `[Unreleased]` describing the new action.
 
@@ -136,7 +137,7 @@ just health               # curl http://localhost:40060/health | jq .
 
 ## Test helpers
 
-`src/lib.rs` exports `testing::loopback_state()` and `testing::bearer_state(token)` (behind `features = ["test-support"]` or `cfg(test)`). Use these in integration tests — they build `AppState` without real credentials.
+`crates/rmcp-template/src/lib.rs` exports `testing::loopback_state()` and `testing::bearer_state(token)` (behind `features = ["test-support"]` or `cfg(test)`). Use these in integration tests — they build `AppState` without real credentials.
 
 ## CLI ↔ MCP action parity
 
@@ -169,7 +170,7 @@ Plugin manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `ge
 
 ## Release versioning
 
-`release/components.toml` is the source of truth for versioning. This template currently has one shipped component, `template`, covering the Rust crate/binaries, embedded web assets, Docker/runtime files, MCP registry metadata, and plugin package files. `Cargo.toml` package `rmcp-template` is canonical; `Cargo.lock`, `server.json`, `docs/generated/openapi.json`, and `CHANGELOG.md` must stay in parity through the manifest. Plugin manifests are listed as `json_no_version` and must remain versionless.
+`release/components.toml` is the source of truth for versioning. This template currently has one shipped component, `template`, covering the Rust crate/binaries, embedded web assets, Docker/runtime files, MCP registry metadata, and plugin package files. `crates/rmcp-template/Cargo.toml` package `rmcp-template` is canonical; `Cargo.lock`, `server.json`, `docs/generated/openapi.json`, and `CHANGELOG.md` must stay in parity through the manifest. Plugin manifests are listed as `json_no_version` and must remain versionless.
 
 Use:
 

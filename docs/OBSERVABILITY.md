@@ -69,7 +69,7 @@ file logging support, but dual console+file logging is not wired by default.
 | Destination | Format | Writer |
 |---|---|---|
 | Console (stderr) | Human-readable | `tracing_subscriber::fmt` |
-| File (`~/.example/logs/example.log`) | Structured JSON | available in `src/logging.rs`; not enabled by default |
+| File (`~/.example/logs/example.log`) | Structured JSON | available through `rtemplate-observability`; not enabled by default |
 
 Use `RUST_LOG` to control log level:
 

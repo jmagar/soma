@@ -117,7 +117,7 @@ audience:
 scope: "template"          # template | service | family
 source_of_truth: false     # true only when this file IS the canonical record
 upstream_refs:             # optional: where authoritative info lives
-  - "src/config.rs"
+  - "crates/rtemplate-runtime/src/config.rs"
 last_reviewed: "2026-05-15"
 ---
 ```
@@ -173,7 +173,7 @@ just schema-docs
 just schema-docs-check
 ```
 
-The checker treats `src/actions.rs::ACTION_SPECS` as canonical. `docs/MCP_SCHEMA.md` and `docs/generated/openapi.json` must stay in sync with it.
+The checker treats `crates/rtemplate-contracts/src/actions.rs::ACTION_SPECS` as canonical. `docs/MCP_SCHEMA.md` and `docs/generated/openapi.json` must stay in sync with it.
 
 ### OpenAPI docs
 

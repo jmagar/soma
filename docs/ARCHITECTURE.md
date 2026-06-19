@@ -20,11 +20,11 @@ last_reviewed: "2026-05-15"
 ## Layer diagram
 
 ```
-ExampleClient  (src/example.rs)   → HTTP/API transport ONLY — network calls, no logic
-ExampleService (src/app.rs)       → ALL business logic, validation, enrichment
-MCP shim       (src/mcp/tools.rs) → parse JSON args → call service → return Value
-CLI shim       (src/cli.rs)       → parse argv → call service → print
-REST shim      (src/api.rs)       → parse HTTP JSON → call service → return JSON
+ExampleClient  (crates/rtemplate-service/src/example.rs) → HTTP/API transport ONLY — network calls, no logic
+ExampleService (crates/rtemplate-service/src/app.rs)     → ALL business logic, validation, enrichment
+MCP shim       (crates/rtemplate-mcp/src/tools.rs)       → parse JSON args → call service → return Value
+CLI shim       (crates/rtemplate-cli/src/lib.rs)         → parse argv → call service → print
+REST shim      (crates/rtemplate-api/src/api.rs)       → parse HTTP JSON → call service → return JSON
 ```
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or `main.rs`, you are doing it wrong. Move it to `app.rs`.
@@ -32,46 +32,36 @@ REST shim      (src/api.rs)       → parse HTTP JSON → call service → retur
 ## Module layout
 
 ```
-src/
-  <service>.rs      ← HTTP/API transport ONLY (no business logic)
-  app.rs            ← ALL business logic, validation, transformations
-  config.rs         ← Config structs + env overrides
-  api.rs            ← REST API handlers (api_dispatch, health, status)
-  server.rs         ← AppState, AuthPolicy, build_auth_layer
-  server/
-    routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
-  mcp.rs            ← MCP module entry: submodule decls + re-exports only
-  mcp/
-    tools.rs        ← thin shim: parse args → call service → return Value
-    schemas.rs      ← tool JSON schema + ACTIONS const
-    rmcp_server.rs  ← ServerHandler impl (tools, resources, prompts, scopes)
-    prompts.rs      ← MCP prompt definitions
-    transport.rs    ← Streamable HTTP transport wiring and session lifecycle
-  cli.rs            ← thin shim: parse args → call service → format/print
-  cli/
-    doctor.rs       ← pre-flight checks: env, connectivity, config validation
-    setup.rs        ← interactive first-run / plugin setup wizard
-    watch.rs        ← polls /health and emits state-change lines for plugin monitor
-  token_limit.rs    ← token budget enforcement for MCP response payloads
-  web.rs            ← optional static web UI: asset serving and SPA fallback
-  lib.rs            ← pub modules + test helpers (testing::*)
-  main.rs           ← mode dispatch ONLY (serve_mcp / serve_stdio / run_cli)
+crates/
+  rmcp-template/        ← thin binary/facade package
+    src/main.rs         ← full server binary mode dispatch
+    src/bin/example.rs  ← local CLI + stdio MCP binary dispatch
+    src/routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
+    src/lib.rs          ← public facade + test helpers (testing::*)
+    tests/              ← integration tests and mcporter harness
+  rtemplate-service/    ← ExampleClient + ExampleService business layer
+  rtemplate-contracts/  ← action metadata, config, DTOs, token limits
+  rtemplate-api/        ← REST API handlers
+  rtemplate-mcp/        ← MCP schemas, tools, prompts, transport
+  rtemplate-cli/        ← CLI parser, doctor/setup/watch commands
+  rtemplate-runtime/    ← AppState, auth policy, shared runtime wiring
+  rtemplate-web/        ← static web asset serving and source bundle helpers
 ```
 
 ## Core files
 
 | File | Responsibility |
 |---|---|
-| `src/example.rs` | Upstream/client transport stub. Replace with your service API client. |
-| `src/app.rs` | Service layer. All business rules live here. |
-| `src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
-| `src/mcp/tools.rs` | MCP tool dispatch and elicitation-only actions. |
-| `src/mcp/schemas.rs` | Tool input schema generated from action metadata. |
-| `src/mcp/rmcp_server.rs` | `ServerHandler`, scope enforcement, tools/resources/prompts. |
-| `src/server.rs` | Axum server startup, auth policy resolution, app state. |
-| `src/server/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
-| `src/config.rs` | Environment/config loading and safe defaults. |
-| `src/main.rs` | Mode dispatch: HTTP server, stdio MCP, CLI, setup commands. |
+| `crates/rtemplate-service/src/example.rs` | Upstream/client transport stub. Replace with your service API client. |
+| `crates/rtemplate-service/src/app.rs` | Service layer. All business rules live here. |
+| `crates/rtemplate-contracts/src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
+| `crates/rtemplate-mcp/src/tools.rs` | MCP tool dispatch and elicitation-only actions. |
+| `crates/rtemplate-mcp/src/schemas.rs` | Tool input schema generated from action metadata. |
+| `crates/rtemplate-mcp/src/rmcp_server.rs` | `ServerHandler`, scope enforcement, tools/resources/prompts. |
+| `crates/rtemplate-runtime/src/server.rs` | Shared auth policy resolution and app state. |
+| `crates/rmcp-template/src/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
+| `crates/rtemplate-contracts/src/config.rs` | Environment/config loading and safe defaults. |
+| `crates/rmcp-template/src/main.rs` | Full server binary mode dispatch. |
 
 ## AppState
 
@@ -126,7 +116,7 @@ Port 40060
 ```
 
 ```rust
-// src/server/routes.rs
+// crates/rmcp-template/src/routes.rs
 pub fn router(state: AppState) -> Router {
     let public = Router::new()
         .route("/health", get(health))
@@ -155,7 +145,7 @@ pub fn router(state: AppState) -> Router {
 
 ## CLI thin shim pattern
 
-`src/cli.rs` follows the same shim discipline as `mcp/tools.rs`. The canonical shape:
+`crates/rtemplate-cli/src/lib.rs` follows the same shim discipline as `crates/rtemplate-mcp/src/tools.rs`. The canonical shape:
 
 ```rust
 // cli.rs — binary module (uses `example_mcp::` not `crate::`)
@@ -242,7 +232,7 @@ Zero validation, zero defaults, zero error message crafting in shims. All of tha
 ## Invariants
 
 - Shims do not contain business logic.
-- All action metadata starts in `src/actions.rs`.
+- All action metadata starts in `crates/rtemplate-contracts/src/actions.rs`.
 - Read actions require `example:read`; write actions require `example:write`; `help` is public.
 - Stdio is local trusted transport; HTTP is protected unless in loopback or explicit trusted-gateway mode.
 - Plugin setup is binary-owned: hook scripts delegate to `example setup plugin-hook`.

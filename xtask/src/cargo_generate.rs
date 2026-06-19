@@ -225,7 +225,14 @@ fn generate_case(
         for features in case.feature_checks {
             run_cmd_in(
                 "cargo",
-                &["check", "--no-default-features", "--features", features],
+                &[
+                    "check",
+                    "-p",
+                    value(case, "package_name")?,
+                    "--no-default-features",
+                    "--features",
+                    features,
+                ],
                 &project,
                 cargo_home,
             )
@@ -260,7 +267,8 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
         bail!("generated README points at the internal MCP surface crate repo");
     }
 
-    let manifest = read_to_string(project.join("Cargo.toml"))?;
+    let package_crate = format!("crates/{}", value(case, "package_name")?);
+    let manifest = read_to_string(project.join(&package_crate).join("Cargo.toml"))?;
     let expected_default = format!(
         "default = [{}]",
         value(case, "default_features")?

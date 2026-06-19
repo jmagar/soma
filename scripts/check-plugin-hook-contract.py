@@ -98,7 +98,7 @@ SERVERS = [
         ROOT,
         "example",
         # Hook calls the binary directly now (no plugin-setup.sh wrapper); the
-        # env-var mapping lives in apply_plugin_options() in src/cli/setup.rs.
+        # env-var mapping lives in apply_plugin_options() in crates/rtemplate-cli/src/setup.rs.
         None,
         env=(
             ("RTEMPLATE_API_URL", "https://api.example.test"),

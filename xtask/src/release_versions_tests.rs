@@ -12,7 +12,7 @@ fn manifest_models_single_template_component() {
     assert_eq!(component.id, "template");
     assert_eq!(component.tag_prefix, "v");
     assert_eq!(component.release_workflow, "release.yml");
-    assert!(component.shipping_paths.contains(&"src".to_owned()));
+    assert!(component.shipping_paths.contains(&"crates".to_owned()));
     assert!(component
         .shipping_paths
         .contains(&"plugins/rtemplate".to_owned()));
@@ -114,8 +114,12 @@ fn shipping_change_requires_version_greater_than_latest_tag() {
     let fixture = Fixture::new();
     fixture.init_repo();
     fixture.git(&["tag", "v0.4.1"]);
-    fs::write(fixture.path("src/lib.rs"), "pub fn changed() {}\n").unwrap();
-    fixture.git(&["add", "src/lib.rs"]);
+    fs::write(
+        fixture.path("crates/rmcp-template/src/lib.rs"),
+        "pub fn changed() {}\n",
+    )
+    .unwrap();
+    fixture.git(&["add", "crates/rmcp-template/src/lib.rs"]);
     fixture.git(&["commit", "-m", "change source"]);
 
     let error = check(fixture.root(), Some("v0.4.1"), "HEAD", GateMode::Pr, false)
@@ -147,8 +151,12 @@ fn pr_mode_uses_merge_base_not_direct_base_diff() {
     fixture.git(&["add", "docs/note.md"]);
     fixture.git(&["commit", "-m", "docs"]);
     fixture.git(&["checkout", "main"]);
-    fs::write(fixture.path("src/lib.rs"), "pub fn main_changed() {}\n").unwrap();
-    fixture.git(&["add", "src/lib.rs"]);
+    fs::write(
+        fixture.path("crates/rmcp-template/src/lib.rs"),
+        "pub fn main_changed() {}\n",
+    )
+    .unwrap();
+    fixture.git(&["add", "crates/rmcp-template/src/lib.rs"]);
     fixture.git(&["commit", "-m", "main source change"]);
     fixture.git(&["checkout", "feature"]);
 
@@ -162,8 +170,12 @@ fn main_mode_uses_latest_semver_tag() {
     fixture.init_repo();
     fixture.git(&["tag", "v0.4.0"]);
     fixture.git(&["tag", "v0.4.1"]);
-    fs::write(fixture.path("src/lib.rs"), "pub fn changed() {}\n").unwrap();
-    fixture.git(&["add", "src/lib.rs"]);
+    fs::write(
+        fixture.path("crates/rmcp-template/src/lib.rs"),
+        "pub fn changed() {}\n",
+    )
+    .unwrap();
+    fixture.git(&["add", "crates/rmcp-template/src/lib.rs"]);
     fixture.git(&["commit", "-m", "change source"]);
 
     let plans = plan(fixture.root(), None, "HEAD", GateMode::Main).unwrap();
@@ -216,6 +228,12 @@ impl Fixture {
         );
         write(
             &self.path("Cargo.toml"),
+            r#"[workspace]
+members = ["crates/rmcp-template"]
+"#,
+        );
+        write(
+            &self.path("crates/rmcp-template/Cargo.toml"),
             r#"[package]
 name = "rmcp-template"
 version = "0.4.1"
@@ -249,7 +267,10 @@ version = "0.4.1"
             &self.path("plugins/rtemplate/gemini-extension.json"),
             r#"{"name":"rtemplate"}"#,
         );
-        write(&self.path("src/lib.rs"), "pub fn original() {}\n");
+        write(
+            &self.path("crates/rmcp-template/src/lib.rs"),
+            "pub fn original() {}\n",
+        );
         write(&self.path("apps/web/.keep"), "");
         write(&self.path("config/Dockerfile"), "");
         write(&self.path("entrypoint.sh"), "");

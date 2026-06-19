@@ -18,7 +18,7 @@ cargo nextest run --profile ci
 # Terminal 1:
 just dev
 # Terminal 2:
-bash tests/mcporter/test-mcp.sh
+bash crates/rmcp-template/tests/mcporter/test-mcp.sh
 
 # Template contract checks
 just template-check
@@ -79,17 +79,17 @@ Bash script that hits a running server over HTTP using `mcporter` for tool calls
 
 ```bash
 # Run all suites sequentially
-bash tests/mcporter/test-mcp.sh
+bash crates/rmcp-template/tests/mcporter/test-mcp.sh
 
 # Run suites in parallel (faster, output interleaved)
-bash tests/mcporter/test-mcp.sh --parallel
+bash crates/rmcp-template/tests/mcporter/test-mcp.sh --parallel
 
 # Verbose raw output
-bash tests/mcporter/test-mcp.sh --verbose
+bash crates/rmcp-template/tests/mcporter/test-mcp.sh --verbose
 
 # Default target is http://localhost:40060/mcp (the `just dev` port).
 # Override target when testing another deployment:
-RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=3100 bash tests/mcporter/test-mcp.sh
+RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=3100 bash crates/rmcp-template/tests/mcporter/test-mcp.sh
 ```
 
 Prerequisites:
@@ -117,7 +117,7 @@ The script logs all calls to `/tmp/test-mcp.<timestamp>.log`.
 
 ## Test helpers
 
-`src/lib.rs` exports helpers under `rmcp_template::testing`:
+`crates/rmcp-template/src/lib.rs` exports helpers under `rmcp_template::testing`:
 
 | Helper | Returns | Use for |
 |---|---|---|

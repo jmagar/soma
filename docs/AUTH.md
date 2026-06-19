@@ -123,7 +123,7 @@ The stdio transport (`example mcp`) bypasses all HTTP auth entirely. It is alway
 
 ## Auth policy reference
 
-The `AuthPolicy` enum in `src/server.rs` controls what the router does:
+The `AuthPolicy` enum in `crates/rtemplate-runtime/src/server.rs` controls what the router does:
 
 | Policy | When | Auth enforced? | Scope checks? |
 |---|---|---|---|
@@ -138,4 +138,4 @@ Public endpoints (`/health`, `/status`) are never gated by auth, regardless of p
 
 ## TEMPLATE
 
-When you adapt this template, replace all `RTEMPLATE_` prefixes with your service's prefix throughout `src/config.rs`, `src/main.rs`, and this document.
+When you adapt this template, replace all `RTEMPLATE_` prefixes with your service's prefix throughout `crates/rtemplate-contracts/src/config.rs`, `crates/rmcp-template/src/main.rs`, and this document.

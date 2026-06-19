@@ -147,7 +147,7 @@ ascii-fix:
 file-size-check:
     bash scripts/check-file-size.sh
 
-# Regenerate MCP schema contract docs from src/mcp/schemas.rs
+# Regenerate MCP schema contract docs from crates/rtemplate-mcp/src/schemas.rs
 schema-docs:
     python3 scripts/check-schema-docs.py --write
 
@@ -390,7 +390,7 @@ test-mcporter:
         echo "mcporter not found. Install it first."
         exit 1
     fi
-    bash tests/mcporter/test-mcp.sh
+    bash crates/rmcp-template/tests/mcporter/test-mcp.sh
 
 # Run the release-readiness gate
 pre-release:
@@ -422,7 +422,7 @@ publish bump="patch":
       *) echo "Usage: just publish [major|minor|patch]"; exit 1 ;;
     esac
     just bump-version "{{bump}}"
-    NEW=$(grep -m1 "^version" Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+    NEW=$(grep -m1 "^version" crates/rmcp-template/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
     cargo xtask check-version-sync
     git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"

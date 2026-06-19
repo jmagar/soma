@@ -118,7 +118,7 @@ Agents may use:
 3. **Direct REST routes** when MCP tooling is unavailable (`POST /v1/greet {"name":"Alice"}`)
 4. **Plugin skills** as human/agent guidance
 
-The action metadata in `src/actions.rs` keeps these surfaces aligned. Every action that the MCP tool exposes must also be reachable from the CLI (with the exception of MCP-only features like elicitation).
+The action metadata in `crates/rtemplate-contracts/src/actions.rs` keeps these surfaces aligned. Every action that the MCP tool exposes must also be reachable from the CLI (with the exception of MCP-only features like elicitation).
 
 ## Summarize by default, expand on request
 
@@ -138,12 +138,12 @@ $ example thing 42 --json
 
 When adding an action, update:
 
-- `src/actions.rs`
-- `src/app.rs`
-- `src/mcp/tools.rs`
-- `src/mcp/schemas.rs`
-- `src/cli.rs` when not MCP-only
-- `tests/tool_dispatch.rs`
+- `crates/rtemplate-contracts/src/actions.rs`
+- `crates/rtemplate-service/src/app.rs`
+- `crates/rtemplate-mcp/src/tools.rs`
+- `crates/rtemplate-mcp/src/schemas.rs`
+- `crates/rtemplate-cli/src/lib.rs` when not MCP-only
+- `crates/rmcp-template/tests/tool_dispatch.rs`
 - `docs/MCP_SCHEMA.md`
 - Plugin skill docs
 

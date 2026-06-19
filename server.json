@@ -28,50 +28,45 @@
 -->
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-
-  "name": "tv.tootie/rtemplate-mcp",
-  "title": "Example MCP",
   "description": "TEMPLATE: Replace with your server description — one sentence describing what service this MCP server exposes.",
-
-  "repository": {
-    "url": "https://github.com/jmagar/rtemplate-mcp",
-    "source": "github"
-  },
-
-  "version": "0.4.1",
-
+  "name": "tv.tootie/rtemplate-mcp",
   "packages": [
     {
-      "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/rtemplate-mcp:0.4.1",
-      "version": "0.4.1",
       "environmentVariables": [
         {
-          "name": "RTEMPLATE_API_URL",
           "description": "TEMPLATE: Replace with your service's base URL description. Example: 'Base URL of your Example service, e.g. https://api.example.com/v1'.",
           "isRequired": true,
-          "isSecret": false
+          "isSecret": false,
+          "name": "RTEMPLATE_API_URL"
         },
         {
-          "name": "RTEMPLATE_API_KEY",
           "description": "TEMPLATE: Replace with your service's API key description. Example: 'API key for authenticating to the Example service.'",
           "isRequired": true,
-          "isSecret": true
+          "isSecret": true,
+          "name": "RTEMPLATE_API_KEY"
         },
         {
-          "name": "RTEMPLATE_MCP_TOKEN",
           "description": "Bearer token for MCP endpoint authentication. All /mcp requests must include: Authorization: Bearer <token>. Generate with: openssl rand -hex 32.",
           "isRequired": false,
-          "isSecret": true
+          "isSecret": true,
+          "name": "RTEMPLATE_MCP_TOKEN"
         }
-      ]
+      ],
+      "identifier": "ghcr.io/jmagar/rtemplate-mcp:0.4.2",
+      "registryType": "oci",
+      "version": "0.4.2"
     }
   ],
-
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://example.yourdomain.com/mcp"
     }
-  ]
+  ],
+  "repository": {
+    "source": "github",
+    "url": "https://github.com/jmagar/rtemplate-mcp"
+  },
+  "title": "Example MCP",
+  "version": "0.4.2"
 }

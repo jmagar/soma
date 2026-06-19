@@ -24,7 +24,7 @@ Configuration is split between non-secret settings (`config.toml`) and secrets (
 | `.env.example` | Documented environment variable template. Safe to commit. |
 | `.env` | Local secrets and deployment settings. Never commit. |
 | `config.example.toml` | Optional structured config example for derived services. |
-| `src/config.rs` | Loads env/config into typed Rust structs. |
+| `crates/rtemplate-contracts/src/config.rs` | Loads env/config into typed Rust structs. |
 
 ## What goes where
 
@@ -85,7 +85,7 @@ RUST_LOG=info
 
 ## Config loading pattern
 
-`src/config.rs` is the source of truth. `Config::load()` starts from typed defaults, loads the first readable `config.toml` from `~/.example/config.toml` or `./config.toml`, then applies env overrides.
+`crates/rtemplate-contracts/src/config.rs` is the source of truth. `Config::load()` starts from typed defaults, loads the first readable `config.toml` from `~/.example/config.toml` or `./config.toml`, then applies env overrides.
 
 Current env overrides include:
 

@@ -9,7 +9,7 @@ audience:
 scope: "template"
 source_of_truth: false
 upstream_refs:
-  - "src/config.rs"
+  - "crates/rtemplate-contracts/src/config.rs"
 last_reviewed: "2026-05-15"
 ---
 

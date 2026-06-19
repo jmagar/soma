@@ -34,8 +34,8 @@ if changed "scripts/*" && ! changed "scripts/README.md"; then
   issues+=("scripts changed but scripts/README.md did not; document new or changed script behavior.")
 fi
 
-if changed "src/mcp/schemas.rs" && ! changed "docs/MCP_SCHEMA.md"; then
-  issues+=("src/mcp/schemas.rs changed but docs/MCP_SCHEMA.md did not; run scripts/check-schema-docs.py --write.")
+if changed "crates/rtemplate-mcp/src/schemas.rs" && ! changed "docs/MCP_SCHEMA.md"; then
+  issues+=("crates/rtemplate-mcp/src/schemas.rs changed but docs/MCP_SCHEMA.md did not; run scripts/check-schema-docs.py --write.")
 fi
 
 if changed "plugins/rtemplate/*" && ! changed "docs/PLUGINS.md"; then

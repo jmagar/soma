@@ -202,7 +202,7 @@ reference material.
   JSON schema for MCP registry publishing (\`server.json\`).
 
 - **mcporter**: \`mcporter/repos/openclaw-mcporter.xml\`
-  Integration testing tool used by \`tests/mcporter/test-mcp.sh\`.
+  Integration testing tool used by \`crates/rmcp-template/tests/mcporter/test-mcp.sh\`.
 
 _Updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_
 EOF
@@ -337,7 +337,7 @@ main() {
       "mcp/repos/modelcontextprotocol-registry.xml" \
       "" "**/*.svg,**/*.excalidraw.svg"
 
-    # mcporter — integration test tool used in tests/mcporter/test-mcp.sh
+    # mcporter — integration test tool used in crates/rmcp-template/tests/mcporter/test-mcp.sh
     pack_repo "openclaw/mcporter" \
       "mcporter/repos/openclaw-mcporter.xml"
 

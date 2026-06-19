@@ -38,15 +38,17 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 
 # Cache dependencies
 COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked --bin example-server && rm -rf src
+    cargo build --release --locked --package rmcp-template --bin example-server
 
 # Build real binary
-COPY src/ src/
+COPY config/ config/
+COPY entrypoint.sh entrypoint.sh
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked --bin example-server --features full && \
+    cargo build --release --locked --package rmcp-template --bin example-server --features full && \
     cp target/release/example-server /usr/local/bin/example-server
 
 FROM debian:bookworm-slim

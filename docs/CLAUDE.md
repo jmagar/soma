@@ -93,4 +93,4 @@ Artifacts in those directories inform but do not override the stable docs in `do
 - Examples should be runnable as written. Verify port numbers, command names, and flag names against the code before committing.
 - Keep generated or historical material out of guides. If something belongs in a guide, distill it; don't paste.
 - Do not move broad architecture into narrow docs only. Top-level docs should remain the map.
-- Env var names are authoritative in `src/config.rs`. If a doc disagrees with the code, update the doc.
+- Env var names are authoritative in `crates/rtemplate-contracts/src/config.rs`. If a doc disagrees with the code, update the doc.

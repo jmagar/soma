@@ -225,7 +225,7 @@ fn surface_file(path: &str) -> Option<SurfaceFile> {
     let kind = if matches!(
         path,
         "crates/rtemplate-api/src/api.rs"
-            | "src/routes.rs"
+            | "crates/rmcp-template/src/routes.rs"
             | "crates/rtemplate-mcp/src/tools.rs"
             | "crates/rtemplate-mcp/src/rmcp_server.rs"
             | "crates/rtemplate-mcp/src/schemas.rs"

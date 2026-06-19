@@ -48,11 +48,10 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 # ── Dependency caching layer ──────────────────────────────────────────────────
 # Copy only Cargo manifests first and build a stub binary. This lets Docker/
 # BuildKit cache the compiled dependencies as a separate layer — subsequent
-# builds that only change src/ skip this expensive step entirely.
+# builds that only change app code skip this expensive step entirely.
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY xtask/ xtask/
-COPY src/ src/
 COPY docs/generated/openapi.json docs/generated/openapi.json
 # Embed the Next.js static export built in the web stage.
 COPY --from=web /app/apps/web/out/ apps/web/out/

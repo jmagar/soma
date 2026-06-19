@@ -8,7 +8,7 @@ release_workflow = "release.yml"
 shipping_paths = [
   "Cargo.toml",
   "Cargo.lock",
-  "src",
+  "crates",
   "apps/web",
   "config",
   "entrypoint.sh",
@@ -17,9 +17,9 @@ shipping_paths = [
   "plugins/rtemplate",
   "scripts/repair.sh",
 ]
-version_source = { kind = "cargo_package", path = "Cargo.toml", package = "rmcp-template" }
+version_source = { kind = "cargo_package", path = "crates/rmcp-template/Cargo.toml", package = "rmcp-template" }
 version_files = [
-  { kind = "cargo_package", path = "Cargo.toml", package = "rmcp-template" },
+  { kind = "cargo_package", path = "crates/rmcp-template/Cargo.toml", package = "rmcp-template" },
   { kind = "cargo_lock_package", path = "Cargo.lock", package = "rmcp-template" },
   { kind = "json_version", path = "server.json", json_pointer = "/version" },
   { kind = "json_version", path = "server.json", json_pointer = "/packages/0/version" },
