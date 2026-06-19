@@ -15,7 +15,10 @@ last_reviewed: "2026-05-22"
 
 # Web UI
 
-The optional web UI lives under `apps/web/` and is built as a static Next.js export embedded into the Rust binary at compile time using `include_dir!`. No separate file-serving process.
+The optional web UI lives under `apps/web/`. The template treats it two ways:
+
+- Editable scaffold source is bundled by `rtemplate-web` from `crates/rtemplate-web/assets/source/`, copied from `apps/web/` without generated artifacts.
+- Runtime web serving embeds the static Next.js export from `apps/web/out/` into the Rust binary at compile time using `include_dir!`.
 
 ## Build flow
 
@@ -24,7 +27,11 @@ apps/web/           ← Next.js app source
   next.config.ts    ← output: "export" (static HTML/CSS/JS)
   out/              ← compiled static output (gitignored, built in CI)
 
-src/web.rs          ← Rust: embeds out/ into binary with include_dir!
+crates/rtemplate-web/assets/source/
+                    ← bundled editable source for generated/scaffolded apps
+
+crates/rtemplate-web/src/web.rs
+                    ← Rust: embeds source scaffold + out/ runtime assets
 ```
 
 ## Commands
@@ -42,6 +49,24 @@ pnpm -C apps/web start  # preview apps/web/out after build
 ```
 
 ## Embedding in Rust
+
+### Scaffold source
+
+`rtemplate-web` bundles editable Aurora frontend source so a generated server can
+materialize an `apps/web` directory without relying on prebuilt assets:
+
+```rust
+use rtemplate_web::{web_source_available, write_web_source_to};
+
+if web_source_available() {
+    write_web_source_to("apps/web", false)?;
+}
+```
+
+The scaffold bundle contains source/config files only. It must not include
+`node_modules`, `.next`, `out`, or TypeScript build cache files.
+
+### Runtime assets
 
 ```rust
 use include_dir::{Dir, include_dir};

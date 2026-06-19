@@ -274,6 +274,23 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
         bail!("generated Cargo.toml does not contain {expected_default}");
     }
 
+    let web_crate = format!("crates/{}-web", value(case, "crate_prefix")?);
+    for bundled_source in [
+        "assets/source/package.json",
+        "assets/source/components/aurora.css",
+        "assets/source/app/page.tsx",
+    ] {
+        assert_exists(project.join(&web_crate).join(bundled_source))?;
+    }
+    for generated_artifact in [
+        "assets/source/node_modules",
+        "assets/source/.next",
+        "assets/source/out",
+        "assets/source/tsconfig.tsbuildinfo",
+    ] {
+        assert_missing(project.join(&web_crate).join(generated_artifact))?;
+    }
+
     let expected_repo = format!(
         "https://github.com/{}/{}",
         value(case, "github_owner")?,
@@ -305,6 +322,13 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn assert_exists(path: PathBuf) -> Result<()> {
+    if !path.exists() {
+        bail!("generated project is missing {}", path.display());
+    }
     Ok(())
 }
 

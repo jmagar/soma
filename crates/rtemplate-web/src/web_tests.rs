@@ -1,8 +1,74 @@
 use super::*;
+use std::io::ErrorKind;
+use tempfile::TempDir;
 
 #[test]
 fn web_assets_available_is_callable() {
     let _ = web_assets_available();
+}
+
+#[test]
+fn bundled_web_source_contains_editable_aurora_frontend() {
+    assert!(web_source_available());
+}
+
+#[test]
+fn write_web_source_to_copies_source_without_generated_artifacts() {
+    let temp = TempDir::new().expect("temp dir");
+    let destination = temp.path().join("apps/web");
+
+    write_web_source_to(&destination, false).expect("copy web source");
+
+    for relative in [
+        "package.json",
+        "components.json",
+        "components/aurora.css",
+        "app/page.tsx",
+        "lib/template.ts",
+    ] {
+        assert!(
+            destination.join(relative).is_file(),
+            "expected {relative} to be copied"
+        );
+    }
+
+    for relative in ["node_modules", ".next", "out", "tsconfig.tsbuildinfo"] {
+        assert!(
+            !destination.join(relative).exists(),
+            "generated artifact {relative} should not be bundled"
+        );
+    }
+}
+
+#[test]
+fn write_web_source_to_refuses_to_overwrite_by_default() {
+    let temp = TempDir::new().expect("temp dir");
+    let destination = temp.path().join("apps/web");
+    std::fs::create_dir_all(&destination).expect("create destination");
+    std::fs::write(destination.join("package.json"), "keep").expect("write existing file");
+
+    let error = write_web_source_to(&destination, false).expect_err("overwrite should fail");
+
+    assert_eq!(error.kind(), ErrorKind::AlreadyExists);
+    assert_eq!(
+        std::fs::read_to_string(destination.join("package.json")).expect("read existing file"),
+        "keep"
+    );
+}
+
+#[test]
+fn write_web_source_to_can_overwrite_when_requested() {
+    let temp = TempDir::new().expect("temp dir");
+    let destination = temp.path().join("apps/web");
+    std::fs::create_dir_all(&destination).expect("create destination");
+    std::fs::write(destination.join("package.json"), "keep").expect("write existing file");
+
+    write_web_source_to(&destination, true).expect("overwrite web source");
+
+    let package_json =
+        std::fs::read_to_string(destination.join("package.json")).expect("read package.json");
+    assert_ne!(package_json, "keep");
+    assert!(package_json.contains("\"name\""));
 }
 
 #[test]

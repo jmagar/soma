@@ -18,9 +18,12 @@
 
 #[cfg(feature = "web")]
 use include_dir::{include_dir, Dir};
+use include_dir::{include_dir as include_source_dir, Dir as SourceDir, DirEntry};
+use std::{fs, path::Path};
 
 #[cfg(feature = "web")]
 static WEB_ASSETS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../apps/web/out");
+static WEB_SOURCE: SourceDir<'static> = include_source_dir!("$CARGO_MANIFEST_DIR/assets/source");
 
 #[cfg(feature = "web")]
 use axum::http::header;
@@ -44,6 +47,22 @@ pub fn web_assets_available() -> bool {
     {
         false
     }
+}
+
+/// Returns `true` when the bundled editable Aurora frontend scaffold is present.
+pub fn web_source_available() -> bool {
+    WEB_SOURCE.get_file("package.json").is_some()
+        && WEB_SOURCE.get_file("components/aurora.css").is_some()
+        && WEB_SOURCE.get_file("app/page.tsx").is_some()
+}
+
+/// Copy the bundled editable Aurora frontend source into `destination`.
+///
+/// The bundle is intended for scaffolding a derived app's `apps/web` directory.
+/// It contains source/config files only: no `node_modules`, `.next`, `out`, or
+/// TypeScript build cache artifacts.
+pub fn write_web_source_to(destination: impl AsRef<Path>, overwrite: bool) -> std::io::Result<()> {
+    write_dir(&WEB_SOURCE, destination.as_ref(), overwrite)
 }
 
 /// Axum fallback handler — serves embedded static assets with SPA fallback.
@@ -92,6 +111,32 @@ pub async fn serve_web_assets(request: Request<Body>) -> Response {
         let _ = request;
         StatusCode::NOT_FOUND.into_response()
     }
+}
+
+fn write_dir(dir: &SourceDir<'static>, destination: &Path, overwrite: bool) -> std::io::Result<()> {
+    fs::create_dir_all(destination)?;
+    for entry in dir.entries() {
+        let path = destination.join(entry.path());
+        match entry {
+            DirEntry::Dir(child) => {
+                fs::create_dir_all(&path)?;
+                write_dir(child, destination, overwrite)?;
+            }
+            DirEntry::File(file) => {
+                if path.exists() && !overwrite {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        format!("{} already exists", path.display()),
+                    ));
+                }
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::write(path, file.contents())?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(any(feature = "web", test))]

@@ -2303,6 +2303,7 @@ version = "0.4.1"
 dependencies = [
  "axum",
  "include_dir",
+ "tempfile",
 ]
 
 [[package]]
