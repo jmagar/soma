@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.2]
+## [0.4.2] — 2026-06-19
 
 
 <!-- TEMPLATE: Add changes here as you work. They move to a version section on release. -->
@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Manifest-backed release version gate with `release/components.toml`, xtask commands, CI enforcement, and auto-tag planning.
+- Cargo-generate support for the real multi-crate workspace shape, including selectable API, CLI, web, OAuth, and observability features.
+- Xtask support for syncing and checking bundled editable Aurora web source from `apps/web`.
+
+### Changed
+
+- Moved the root package into `crates/rmcp-template` and made the repository root a virtual Cargo workspace.
+- Updated Docker, docs, tests, cargo-generate, pattern checks, and release metadata for the crate-split layout.
 
 ### Fixed
 
