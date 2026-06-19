@@ -769,11 +769,24 @@ mod tests {
         .unwrap()
     }
 
-    async fn mocked_google_provider() -> GoogleProvider {
+    async fn mocked_google_provider() -> MockedGoogleProvider {
         mocked_google_provider_with_id_token(signed_test_id_token("client-id", false, true)).await
     }
 
-    async fn mocked_google_provider_with_id_token(id_token: String) -> GoogleProvider {
+    struct MockedGoogleProvider {
+        provider: GoogleProvider,
+        _server: MockServer,
+    }
+
+    impl std::ops::Deref for MockedGoogleProvider {
+        type Target = GoogleProvider;
+
+        fn deref(&self) -> &Self::Target {
+            &self.provider
+        }
+    }
+
+    async fn mocked_google_provider_with_id_token(id_token: String) -> MockedGoogleProvider {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path("/token"))
@@ -791,12 +804,17 @@ mod tests {
             .mount(&server)
             .await;
 
-        test_google_provider()
+        let provider = test_google_provider()
             .with_endpoints(
                 server.uri().parse::<Url>().unwrap(),
                 server.uri().parse::<Url>().unwrap().join("/token").unwrap(),
             )
-            .with_jwks_endpoint(server.uri().parse::<Url>().unwrap().join("/certs").unwrap())
+            .with_jwks_endpoint(server.uri().parse::<Url>().unwrap().join("/certs").unwrap());
+
+        MockedGoogleProvider {
+            provider,
+            _server: server,
+        }
     }
 
     fn sample_request() -> AuthorizeUrlRequest {
