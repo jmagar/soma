@@ -1,41 +1,86 @@
 # scripts
 
-Maintenance and automation scripts for the template. Shell scripts are written for Bash and generally use `set -euo pipefail`; Python scripts are executable with `python3`.
+Maintenance and automation scripts for the template. Shell scripts target Bash and
+generally use `set -euo pipefail`; Python scripts run with `python3`.
 
-## Quick map
+This README is the index for everything under `scripts/`. When a script is added,
+renamed, or materially changed, update the quick index and the reference entry.
 
-| Script | Purpose |
-|---|---|
-| `asciicheck.py` | Check/fix unexpected non-ASCII characters. |
-| `block-env-commits.sh` | Prevent `.env*` secrets from being committed. |
-| `build-web.sh` | Build the Next.js web UI static export (`apps/web/out/`). |
-| `bump-version.sh` | Compatibility wrapper for `cargo xtask bump-version template`. |
-| `check-blob-size.py` | Block unexpectedly large changed blobs. |
-| `check-coupled-files.sh` | Warn when files that normally change together drift. |
-| `check-dependency-updates.sh` | Report lockfile-compatible and latest dependency updates. |
-| `check-file-size.sh` | Pre-commit source file size budget. |
-| `check-plugin-hook-contract.py` | Audit plugin setup hook contract across Rust MCP servers. |
-| `check-runtime-current.sh` | Detect stale Docker/systemd runtimes. |
-| `check-openapi.py` | Generate/check `docs/generated/openapi.json` for the REST API surface. |
-| `check-schema-docs.py` | Generate/check `docs/MCP_SCHEMA.md` and action docs. |
-| `check-scaffold-intent-contract.py` | Validate scaffold intent schema and examples without third-party dependencies. |
-| `check-version-sync.sh` | Compatibility wrapper for the manifest-backed version sync gate. |
-| `generate-cli.sh` | Generate a standalone CLI for this server via mcporter (requires running server). |
-| `pre-release-check.sh` | Full release-readiness gate, including schema/OpenAPI/scaffold contract drift checks. |
-| `refresh-docs.sh` | Refresh ignored reference docs with Axon/Repomix. |
-| `repair.sh` | Stop, rebuild, and restart the service via systemd or Docker Compose. |
-| `run-ascii-check.sh` | Collect tracked files and run `asciicheck.py`; pass `--fix` to rewrite in place. |
-| `sync-cargo.sh` | Sync `Cargo.lock` into plugin data directories. |
-| `test-mcp-auth.sh` | Smoke-test HTTP MCP bearer auth. |
-| `test-template-features.sh` | Fast template invariant smoke tests. |
-| `validate-plugin-layout.sh` | Validate Claude/Codex/Gemini plugin package layout. |
-| `web-watch.sh` | Watch `apps/web` for changes and rebuild on save (requires watchexec). |
+## Regenerating The Inventory
 
-`blob-size-allowlist.txt` is data for `check-blob-size.py`, not an executable script.
+The file list can be generated directly from git:
 
----
+```bash
+rg --files scripts | sort
+```
 
-## Script reference
+Useful starter for extracting script headers while updating this README:
+
+```bash
+for f in scripts/*.sh scripts/*.py; do
+  printf '\n## %s\n' "$f"
+  sed -n '1,40p' "$f"
+done
+```
+
+The descriptions below are hand-curated from each script's current behavior,
+usage text, Justfile wiring, CI references, and hook integration.
+
+## Quick Index
+
+### Release And Versioning
+
+| File | Type | Entry points | What it does |
+|---|---|---|---|
+| `pre-release-check.sh` | Bash | `just pre-release` | Runs the release-readiness gate: patterns, plugin layout, schema/OpenAPI docs, scaffold contract, template smoke tests, release version checks, blob size, ASCII hygiene, `just verify`, plugin build, and optional mcporter tests. |
+| `bump-version.sh` | Bash | direct | Compatibility wrapper for `cargo xtask bump-version template <major|minor|patch>`. |
+| `check-version-sync.sh` | Bash | direct, historical hooks | Compatibility wrapper for `cargo xtask check-version-sync`. |
+| `check-dependency-updates.sh` | Bash | `just deps-check` | Read-only dependency drift report using `cargo update --dry-run` plus optional crates.io latest-version checks. |
+| `check-blob-size.py` | Python | `just blob-size-check`, CI | Blocks changed git blobs above the configured size budget unless allowlisted. |
+| `blob-size-allowlist.txt` | Data | used by `check-blob-size.py` | Allowlist patterns for intentional large artifacts. |
+
+### Generated Contracts And Docs
+
+| File | Type | Entry points | What it does |
+|---|---|---|---|
+| `check-schema-docs.py` | Python | `just schema-docs`, `just schema-docs-check`, CI | Generates/checks `docs/MCP_SCHEMA.md` and related action references from the canonical action specs. |
+| `check-openapi.py` | Python | `just openapi`, `just openapi-check`, CI | Generates/checks `docs/generated/openapi.json` for the REST API surface. |
+| `check-scaffold-intent-contract.py` | Python | `just scaffold-contract-check`, CI | Validates the scaffold intent JSON schema and checked-in examples without third-party packages. |
+| `check-coupled-files.sh` | Bash | `just coupled-files-check`, CI | Warns when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
+| `refresh-docs.sh` | Bash | `just refresh-docs*` | Refreshes ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
+
+### Plugin And MCP Validation
+
+| File | Type | Entry points | What it does |
+|---|---|---|---|
+| `validate-plugin-layout.sh` | Bash | `just validate-plugin`, CI | Validates Claude, Codex, and Gemini plugin packaging conventions. |
+| `check-plugin-hook-contract.py` | Python | `just plugin-hook-contract` | Audits cross-repo plugin setup hook JSON contracts, optionally executing setup commands. |
+| `check-plugin-stdio-smoke.sh` | Bash | direct, docs/contracts | Smoke-tests the installed stdio plugin binary with JSON-RPC initialize plus `status`. |
+| `test-mcp-auth.sh` | Bash | `just test-mcp-auth` | Smoke-tests HTTP MCP bearer-auth behavior. |
+| `generate-cli.sh` | Bash | `just generate-cli` | Uses mcporter to generate a standalone CLI from a running MCP server schema. |
+| `sync-cargo.sh` | Bash | plugin hook/runtime support | Copies `Cargo.lock` into plugin data directories, falling back to `cargo fetch` if needed. |
+
+### Template And Local Runtime Checks
+
+| File | Type | Entry points | What it does |
+|---|---|---|---|
+| `test-template-features.sh` | Bash | `just template-features`, CI | Fast shell smoke tests for template invariants that are awkward as Rust tests. |
+| `check-cargo-generate.py` | Python | direct, docs | Compatibility wrapper for the xtask-owned cargo-generate smoke test. |
+| `check-runtime-current.sh` | Bash | `just runtime-current` | Checks whether the running systemd unit or Docker container uses the expected/current artifact. |
+| `repair.sh` | Bash | `just repair` | Stops, rebuilds, and restarts the local `rtemplate-mcp` service through systemd or Docker Compose. |
+
+### Hygiene And Developer Workflow
+
+| File | Type | Entry points | What it does |
+|---|---|---|---|
+| `block-env-commits.sh` | Bash | lefthook pre-commit | Prevents staged `.env*` secret files from being committed, except `.env.example`. |
+| `check-file-size.sh` | Bash | `just file-size-check`, lefthook pre-commit | Enforces staged source-file size budgets. |
+| `asciicheck.py` | Python | through `run-ascii-check.sh` | Checks files for unexpected non-ASCII characters and can fix common smart punctuation. |
+| `run-ascii-check.sh` | Bash | `just ascii-check`, `just ascii-fix`, CI | Collects tracked text-like files and runs `asciicheck.py`. |
+| `build-web.sh` | Bash | `just build-web` | Builds the optional Next.js static web UI export. |
+| `web-watch.sh` | Bash | `just web-watch` | Rebuilds the optional web UI on changes using `watchexec`. |
+
+## Script Reference
 
 ### `asciicheck.py`
 
@@ -46,7 +91,20 @@ just ascii-check
 just ascii-fix
 ```
 
-Checks files for unexpected non-ASCII characters. A small allowlist covers intentional documentation glyphs such as section signs, arrows, and box-drawing characters.
+Checks files for unexpected non-ASCII characters. `--fix` replaces common smart
+punctuation with ASCII equivalents. A small allowlist permits intentional
+documentation glyphs such as section signs, arrows, and box-drawing characters.
+
+Usually run through `scripts/run-ascii-check.sh`, which provides the repo's
+tracked-file selection.
+
+### `blob-size-allowlist.txt`
+
+Data file for `scripts/check-blob-size.py`.
+
+Each non-comment line is a glob pattern for an intentional large artifact. The
+checker strips comments and blank lines, then treats matching paths as
+allowlisted instead of failing the size budget.
 
 ### `block-env-commits.sh`
 
@@ -54,7 +112,26 @@ Checks files for unexpected non-ASCII characters. A small allowlist covers inten
 bash scripts/block-env-commits.sh
 ```
 
-Pre-commit guard that rejects staged `.env`, `.env.local`, `.env.prod`, etc. `.env.example` is allowed.
+Pre-commit guard that inspects the git staging area and rejects staged `.env`,
+`.env.local`, `.env.prod`, `.env.staging`, or other `.env*` files. `.env.example`
+is explicitly allowed.
+
+Used by `lefthook.yml`.
+
+### `build-web.sh`
+
+```bash
+bash scripts/build-web.sh
+just build-web
+```
+
+Builds the optional Next.js web UI static export from `apps/web/`. If
+`apps/web/` is absent, the script exits successfully without doing anything. If
+`node_modules/` is missing, it runs `pnpm install --frozen-lockfile`, then
+`pnpm build`.
+
+Output lands in `apps/web/out/` and is embedded into the binary by the `web`
+feature.
 
 ### `bump-version.sh`
 
@@ -64,7 +141,14 @@ scripts/bump-version.sh minor
 scripts/bump-version.sh major
 ```
 
-Updates every version file declared in `release/components.toml` for the `template` component. Plugin manifests intentionally remain versionless.
+Compatibility wrapper around:
+
+```bash
+cargo xtask bump-version template <major|minor|patch>
+```
+
+It updates every version-bearing file declared for the `template` component in
+`release/components.toml`. Plugin manifests intentionally remain versionless.
 
 ### `check-blob-size.py`
 
@@ -74,16 +158,46 @@ python3 scripts/check-blob-size.py --base origin/main --head HEAD --max-bytes 51
 just blob-size-check
 ```
 
-Checks changed git blobs against a size budget. Use `scripts/blob-size-allowlist.txt` for intentional large artifacts such as plugin binaries.
+Checks changed git blobs between a base and head ref. Defaults to `origin/main`,
+then `main`, then `HEAD~1` if needed. Files over the byte budget fail unless a
+matching pattern is present in `scripts/blob-size-allowlist.txt`.
+
+Binary changes are reported as binary so reviewers can distinguish large text
+files from generated artifacts.
+
+### `check-cargo-generate.py`
+
+```bash
+python3 scripts/check-cargo-generate.py
+python3 scripts/check-cargo-generate.py --help
+```
+
+Compatibility wrapper for the xtask-owned cargo-generate smoke test. It runs:
+
+```bash
+cargo xtask cargo-generate <args>
+```
+
+from the repository root and returns the xtask exit code. The real implementation
+and maintained usage live in `xtask`.
 
 ### `check-coupled-files.sh`
 
 ```bash
+scripts/check-coupled-files.sh
 scripts/check-coupled-files.sh origin/main HEAD
 just coupled-files-check
 ```
 
-CI-oriented guard for files that usually change together, such as script changes with `scripts/README.md`, schema changes with `docs/MCP_SCHEMA.md`, and automation changes with docs.
+Checks changed paths and reports likely documentation or automation drift:
+
+- `Justfile` without `lefthook.yml`, or vice versa.
+- `scripts/*` without `scripts/README.md`.
+- `src/mcp/schemas.rs` without `docs/MCP_SCHEMA.md`.
+- plugin package changes without `docs/PLUGINS.md`.
+
+Used in CI as a guardrail. It intentionally reports coupled-file concerns rather
+than trying to infer every valid exception.
 
 ### `check-dependency-updates.sh`
 
@@ -94,7 +208,17 @@ scripts/check-dependency-updates.sh --fail-on-updates
 just deps-check
 ```
 
-Read-only dependency drift report. It runs `cargo update --dry-run`, then checks direct root dependencies against crates.io unless `--skip-search` is used.
+Read-only dependency update report. It runs `cargo update --dry-run` for
+lockfile-compatible updates, then checks direct root dependencies against
+crates.io unless `--skip-search` is used.
+
+Options:
+
+| Option | Effect |
+|---|---|
+| `--skip-search` | Skip crates.io latest-version checks. |
+| `--fail-on-updates` | Exit 1 when possible updates are detected. |
+| `-h`, `--help` | Show help. |
 
 ### `check-file-size.sh`
 
@@ -104,7 +228,18 @@ MAX_RS=450 MAX_TS=350 scripts/check-file-size.sh
 just file-size-check
 ```
 
-Checks staged `.rs`, `.ts`, and `.tsx` files for effective production lines. Test files and Rust inline `#[cfg(test)]` modules are exempted.
+Checks staged `.rs`, `.ts`, and `.tsx` files against effective production-line
+budgets. Test files are exempt. Rust trailing inline `#[cfg(test)] mod ...`
+blocks are excluded from the production count.
+
+Defaults:
+
+| Variable | Default | Meaning |
+|---|---:|---|
+| `MAX_RS` | `350` | Maximum effective production lines for Rust files. |
+| `MAX_TS` | `300` | Maximum effective production lines for TypeScript/TSX files. |
+
+Used by `lefthook.yml`.
 
 ### `check-openapi.py`
 
@@ -115,16 +250,15 @@ just openapi
 just openapi-check
 ```
 
-Generates `docs/generated/openapi.json` for the template REST API surface: public health/status routes, direct `/v1/*` business routes, `/v1/capabilities`, and the deprecated `/v1/example` compatibility envelope. The action enum is derived from `src/actions.rs` and excludes MCP-only actions such as `scaffold_intent`.
+Generates `docs/generated/openapi.json` for the template REST API surface:
 
-### `check-scaffold-intent-contract.py`
+- public `/health` and `/status`
+- direct `/v1/*` business routes
+- `/v1/capabilities`
+- deprecated `/v1/example` compatibility envelope
 
-```bash
-python3 scripts/check-scaffold-intent-contract.py
-just scaffold-contract-check
-```
-
-Validates `docs/contracts/scaffold-intent.schema.json` plus checked-in examples under `docs/contracts/examples/`. This is a targeted validator, not a full JSON Schema implementation, so it can run in fresh checkouts without extra Python packages.
+The version comes from `Cargo.toml`. The REST action enum is derived from
+`crates/rtemplate-contracts/src/actions.rs`, excluding MCP-only actions.
 
 ### `check-plugin-hook-contract.py`
 
@@ -133,18 +267,80 @@ python3 scripts/check-plugin-hook-contract.py
 python3 scripts/check-plugin-hook-contract.py --execute
 ```
 
-Audits plugin setup hooks across known Rust MCP servers. Without `--execute`, it is a static contract check. With `--execute`, it runs each binary setup command via Cargo.
+Audits plugin setup hooks across known Rust MCP server repositories in the
+workspace. Static mode checks expected files and JSON contract shape. `--execute`
+runs each binary setup command in an isolated temporary data directory and
+validates the emitted contract JSON.
+
+This is an operator/release audit tool, not a normal per-commit check.
+
+### `check-plugin-stdio-smoke.sh`
+
+```bash
+bash scripts/check-plugin-stdio-smoke.sh
+BIN=rtemplate TIMEOUT_SECS=10 bash scripts/check-plugin-stdio-smoke.sh
+```
+
+Smoke-tests the installed stdio MCP binary used by plugin manifests. It sends a
+minimal JSON-RPC sequence:
+
+1. `initialize`
+2. `notifications/initialized`
+3. `tools/call` for the `example` tool with `action=status`
+
+The response is parsed with `jq`; the script passes only when the status result
+is `ok`.
+
+Environment:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BIN` | `rtemplate` | Binary to execute from `PATH`. |
+| `TIMEOUT_SECS` | `5` | Timeout for the stdio exchange. |
 
 ### `check-runtime-current.sh`
 
 ```bash
 scripts/check-runtime-current.sh
-scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/example-server
+scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/rtemplate-server
 scripts/check-runtime-current.sh --mode docker --pull --compose-dir .
 just runtime-current
 ```
 
-Systemd mode compares the running process hash to the unit `ExecStart` binary and optional expected binary. Docker mode compares the running container image ID with the local Compose image ID.
+Checks whether the live runtime is using the expected/current artifact.
+
+Systemd mode compares the running process hash from `/proc/<pid>/exe` against
+the unit `ExecStart` binary and, when supplied, `--expected-binary`.
+
+Docker mode compares the running container image ID with the local Docker Compose
+image ID. `--pull` refreshes the Compose image before comparison.
+
+Options:
+
+| Option | Meaning |
+|---|---|
+| `--mode auto|systemd|docker` | Runtime to inspect. Default: `auto`. |
+| `--pull` | Docker mode only: pull before comparing. |
+| `--unit NAME` | Systemd user unit. Default: `rtemplate-mcp.service`. |
+| `--service NAME` | Docker Compose service/container. Default: `rtemplate-mcp`. |
+| `--compose-dir DIR` | Docker Compose project directory. Default: current directory. |
+| `--expected-binary PATH` | Systemd mode: also compare against this binary. |
+
+Template adapters should rename `RTEMPLATE_*`, service, and binary defaults.
+
+### `check-scaffold-intent-contract.py`
+
+```bash
+python3 scripts/check-scaffold-intent-contract.py
+just scaffold-contract-check
+```
+
+Validates `docs/contracts/scaffold-intent.schema.json` plus JSON examples under
+`docs/contracts/examples/`.
+
+The validator intentionally avoids third-party dependencies. It checks the
+schema shape and the specific semantic constraints the scaffold handoff relies
+on; it is not a full JSON Schema implementation.
 
 ### `check-schema-docs.py`
 
@@ -155,16 +351,13 @@ just schema-docs
 just schema-docs-check
 ```
 
-Treats `src/actions.rs::ACTION_SPECS` as canonical and verifies schema docs, help text, README, and plugin skill mentions. Generated output lives in `docs/MCP_SCHEMA.md`.
+Treats `crates/rtemplate-contracts/src/actions.rs::ACTION_SPECS` as canonical
+and generates/checks `docs/MCP_SCHEMA.md`.
 
-### `build-web.sh`
-
-```bash
-bash scripts/build-web.sh
-just build-web
-```
-
-Builds the Next.js web UI static export from `apps/web/`. Installs `node_modules` if absent, then runs `pnpm build`. Output lands in `apps/web/out/` and is embedded into the binary via the `web` feature. No-ops silently when `apps/web/` does not exist.
+It also checks that action docs stay mentioned in key user-facing surfaces such
+as the README and plugin skill text. Action descriptions are maintained in this
+script, so new actions usually require a script update plus a generated docs
+refresh.
 
 ### `check-version-sync.sh`
 
@@ -173,7 +366,15 @@ scripts/check-version-sync.sh
 scripts/check-version-sync.sh /path/to/project
 ```
 
-Runs `cargo xtask check-version-sync`, which validates `release/components.toml`, exact JSON pointers, Cargo/Cargo.lock parity, MCP registry metadata, OpenAPI version, changelog heading, and the plugin-manifest no-version rule.
+Compatibility wrapper around:
+
+```bash
+cargo xtask check-version-sync
+```
+
+The xtask validates `release/components.toml`, exact JSON pointers, Cargo and
+Cargo.lock parity, MCP registry metadata, OpenAPI version, changelog heading,
+and plugin-manifest versionlessness.
 
 ### `generate-cli.sh`
 
@@ -182,9 +383,23 @@ RTEMPLATE_MCP_TOKEN=... bash scripts/generate-cli.sh
 just generate-cli
 ```
 
-Generates a standalone CLI binary for this server via `mcporter generate-cli`. Requires a running server on port 40060 and `mcporter` in PATH. Caches a schema hash under `dist/.cache/` and skips regeneration when the tool schema is unchanged. The generated binary embeds the token — do not commit or share it.
+Generates a standalone CLI binary for this server through:
 
-**TEMPLATE:** Update the port and token env var name in this script when adapting.
+```bash
+mcporter generate-cli
+```
+
+Requirements:
+
+- a running MCP server on `http://localhost:40060/mcp`
+- `mcporter` available on `PATH`
+- optional `RTEMPLATE_MCP_TOKEN` for bearer-authenticated schema fetches
+
+The script fetches `/mcp/tools/list`, hashes the schema, and skips regeneration
+when `dist/.cache/example-cli.schema_hash` already matches and `dist/example-cli`
+exists. The generated CLI embeds the token; do not commit or share it.
+
+Template adapters must update the port, generated binary name, and token env var.
 
 ### `pre-release-check.sh`
 
@@ -195,7 +410,22 @@ scripts/pre-release-check.sh --mcporter
 just pre-release
 ```
 
-Runs the release gate: pattern checks, plugin validation, schema docs, template feature smoke tests, version sync, blob size, ASCII hygiene, `just verify`, and `just build-plugin`. `--mcporter` also runs `just test-mcporter` and requires a running server.
+Runs the release-readiness gate.
+
+Always runs:
+
+- `cargo xtask patterns`
+- `just validate-plugin`
+- `python3 scripts/check-schema-docs.py --check`
+- `python3 scripts/check-openapi.py --check`
+- `python3 scripts/check-scaffold-intent-contract.py`
+- `bash scripts/test-template-features.sh`
+- `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr`
+- `python3 scripts/check-blob-size.py`
+- `just ascii-check`
+
+By default it also runs `just verify` and `just build-plugin`. `--mcporter` adds
+`just test-mcporter`, which requires a running server.
 
 ### `refresh-docs.sh`
 
@@ -204,29 +434,30 @@ scripts/refresh-docs.sh
 scripts/refresh-docs.sh --dry-run
 scripts/refresh-docs.sh --skip-crawl
 scripts/refresh-docs.sh --skip-repomix
+just refresh-docs
+just refresh-docs-dry
 ```
 
-Refreshes ignored reference docs under `docs/references/`:
+Refreshes ignored reference docs under `docs/references/`.
 
-```text
-docs/references/
-├── mcp/docs/          # crawled modelcontextprotocol.io
-├── mcp/repos/         # Repomix packs: rust-sdk, spec, registry
-├── claude-code/       # crawled code.claude.com
-├── mcporter/docs/     # sparse-cloned mcporter docs
-├── mcporter/repos/    # Repomix pack of mcporter source
-├── INDEX.md
-└── CHANGES.md
-```
+Current inputs:
+
+- crawled docs from `https://modelcontextprotocol.io`
+- crawled docs from `https://code.claude.com`
+- Repomix packs for `modelcontextprotocol/rust-sdk`
+- Repomix packs for `modelcontextprotocol/modelcontextprotocol`
+- Repomix packs for `modelcontextprotocol/registry`
+- mcporter docs/source references
 
 Environment:
 
-| Variable | Default | Description |
+| Variable | Default | Meaning |
 |---|---|---|
 | `AXON_OUTPUT_DIR` | `~/.axon/output` | Axon host output directory. |
-| `REPOMIX_BIN` | auto-detected | Repomix executable, otherwise `npx --yes repomix`. |
+| `REPOMIX_BIN` | auto-detected | Repomix executable; falls back to `npx --yes repomix`. |
 
-The MCP spec and registry packs ignore huge SVG/Excalidraw diagrams to keep text reference packs usable.
+Template adapters should add service-specific docs and repos in the marked
+`TEMPLATE:` sections.
 
 ### `repair.sh`
 
@@ -235,36 +466,82 @@ bash scripts/repair.sh
 just repair
 ```
 
-Stops, rebuilds, and restarts the `rtemplate-mcp` service. Detects the active service manager automatically: prefers a systemd user unit (`rtemplate-mcp.service`), falls back to Docker Compose. Useful after an in-place binary update without a full `docker compose build`.
+Stops, rebuilds, and restarts the local `rtemplate-mcp` service.
+
+Flow:
+
+1. Stop `rtemplate-mcp.service` if active.
+2. Otherwise stop a Docker container named `rtemplate-mcp` if active.
+3. Build `target/release/rtemplate-server` with `--features full`.
+4. If the systemd unit exists, install the binary into `~/.local/bin/` and start
+   the unit.
+5. Otherwise, if `docker-compose.yml` exists, rebuild and recreate with Docker
+   Compose.
+6. If no manager is detected, leave the rebuilt binary in `target/release/`.
 
 ### `run-ascii-check.sh`
 
 ```bash
-bash scripts/run-ascii-check.sh          # check mode
-bash scripts/run-ascii-check.sh --fix    # rewrite smart punctuation to ASCII
+bash scripts/run-ascii-check.sh
+bash scripts/run-ascii-check.sh --fix
 just ascii-check
 just ascii-fix
 ```
 
-Collects all tracked `*.md`, `*.rs`, `*.toml`, `*.json`, `*.yml`, `*.yaml`, `*.sh`, and `*.py` files (excluding `docs/references/` and `docs/sessions/`) and passes them to `scripts/asciicheck.py`. Used in CI via `bash scripts/run-ascii-check.sh` and locally via the Justfile aliases.
+Collects tracked text-like files and runs `scripts/asciicheck.py`.
+
+Included extensions:
+
+- `*.md`
+- `*.rs`
+- `*.toml`
+- `*.json`
+- `*.yml`
+- `*.yaml`
+- `*.sh`
+- `*.py`
+
+Excluded paths:
+
+- `docs/references/**`
+- `docs/sessions/**`
+
+`--fix` rewrites files in place using `asciicheck.py --fix`.
 
 ### `sync-cargo.sh`
 
 ```bash
 bash scripts/sync-cargo.sh
+CLAUDE_PLUGIN_ROOT=/path/to/repo CLAUDE_PLUGIN_DATA=/path/to/data bash scripts/sync-cargo.sh
 ```
 
-Copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to `CLAUDE_PLUGIN_DATA` when needed. Falls back to `cargo fetch` if the copy cannot be completed.
+Copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to `CLAUDE_PLUGIN_DATA` when the
+destination is missing or stale. If the copy fails, it runs `cargo fetch` against
+the source manifest. If both fail, it removes the destination lockfile and exits
+non-zero.
+
+Used by plugin/runtime setup paths that need Cargo metadata in a plugin data
+directory.
 
 ### `test-mcp-auth.sh`
 
 ```bash
 RTEMPLATE_MCP_TOKEN=... scripts/test-mcp-auth.sh
-scripts/test-mcp-auth.sh --url http://localhost:3100/mcp --token ...
+scripts/test-mcp-auth.sh --url http://localhost:40060/mcp --token ...
 scripts/test-mcp-auth.sh --check-x-api-key
+just test-mcp-auth
 ```
 
-Checks that `/health` is public, `/mcp` rejects missing/bad bearer tokens with `401`, and `/mcp` accepts a valid bearer token. `x-api-key` is optional because the template auth layer uses bearer tokens.
+Smoke-tests HTTP MCP bearer auth:
+
+- `/health` is public.
+- `/mcp` rejects missing bearer tokens.
+- `/mcp` rejects bad bearer tokens.
+- `/mcp` accepts the configured bearer token.
+- `--check-x-api-key` optionally checks `x-api-key` behavior.
+
+The default URL is the template's local MCP endpoint. Template adapters should
+update examples and env var names.
 
 ### `test-template-features.sh`
 
@@ -273,16 +550,18 @@ bash scripts/test-template-features.sh
 just template-features
 ```
 
-Fast shell smoke tests for invariants that are awkward as Rust tests: `.env` blocking, agent docs symlinks, plugin layout, schema docs, and ASCII hygiene.
+Fast shell smoke tests for template invariants that are awkward to express as
+Rust tests.
 
-### `web-watch.sh`
+Current checks:
 
-```bash
-bash scripts/web-watch.sh
-just web-watch
-```
-
-Watches `apps/web/` for changes and rebuilds on save using `watchexec`. Ignores `.next/`, `out/`, and `node_modules/`. Requires `watchexec`: `cargo install watchexec-cli`.
+- `.env` guard blocks staged secrets.
+- `.env.example` remains allowed.
+- the inline agent-doc symlink pattern creates `AGENTS.md` and `GEMINI.md`
+  symlinks pointing at `CLAUDE.md`.
+- `scripts/validate-plugin-layout.sh` passes.
+- `scripts/check-schema-docs.py --check` passes.
+- `scripts/asciicheck.py` accepts the tracked repo file set.
 
 ### `validate-plugin-layout.sh`
 
@@ -292,18 +571,80 @@ PLUGIN_ROOT=plugins/rtemplate scripts/validate-plugin-layout.sh
 just validate-plugin
 ```
 
-Validates Claude, Codex, and Gemini plugin manifests, shared MCP config, hook config, skills, sensitive fields, and the rule that plugin manifests do not contain `version`.
+Validates the Claude, Codex, and Gemini plugin package layout.
 
----
+It checks, among other things:
 
-## Hook integration
+- manifests exist and are valid JSON
+- plugin names match expectations
+- plugin manifests have no `version` field
+- MCP config paths are correct
+- hooks and skills are wired
+- sensitive user config fields are marked sensitive
+- stdio command/args use the expected PATH binary
+- Gemini settings map into MCP environment variables
 
-`block-env-commits.sh`, `check-version-sync.sh`, and `check-file-size.sh` are designed for `lefthook` pre-commit integration. Install hooks with:
+### `web-watch.sh`
+
+```bash
+bash scripts/web-watch.sh
+just web-watch
+```
+
+Runs one initial `scripts/build-web.sh`, then watches `apps/web/` and rebuilds on
+changes using `watchexec`.
+
+Ignored paths:
+
+- `apps/web/.next/**`
+- `apps/web/out/**`
+- `apps/web/node_modules/**`
+
+Requires:
+
+```bash
+cargo install watchexec-cli
+```
+
+## Hook And CI Integration
+
+Pre-commit hook scripts:
+
+- `block-env-commits.sh`
+- `check-file-size.sh`
+
+CI-facing checks:
+
+- `validate-plugin-layout.sh`
+- `check-schema-docs.py --check`
+- `check-openapi.py --check`
+- `check-scaffold-intent-contract.py`
+- `test-template-features.sh`
+- `check-blob-size.py`
+- `check-coupled-files.sh`
+- `run-ascii-check.sh`
+
+Release-facing checks:
+
+- `pre-release-check.sh`
+- `check-version-sync.sh`
+- `bump-version.sh`
+- `check-dependency-updates.sh`
+- `check-plugin-hook-contract.py`
+- `check-runtime-current.sh`
+
+Install hooks with:
 
 ```bash
 just install-hooks
 ```
 
-## Maintenance rule
+## Maintenance Rule
 
-When adding, renaming, or changing a script, update this README and any Justfile recipe that calls it.
+When adding, renaming, or changing a script:
+
+1. Update this README.
+2. Update any Justfile recipe that calls it.
+3. Update CI or hook wiring if the script is part of a gate.
+4. If the script changes generated docs or contracts, run the matching `--check`
+   command before release.
