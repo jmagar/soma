@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# bump-version.sh — update version in all version-bearing files atomically.
+# Compatibility wrapper. Canonical implementation: cargo xtask bump-template-version.
 #
 # Usage:
 #   ./scripts/bump-version.sh patch   # auto-increment patch
@@ -18,5 +18,5 @@ case "$ARG" in
 esac
 
 cd "${REPO_ROOT}"
-cargo xtask bump-version template "${ARG}"
+cargo xtask bump-template-version "${ARG}"
 echo "Done. Review CHANGELOG.md before tagging."

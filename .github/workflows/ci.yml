@@ -410,7 +410,7 @@ jobs:
         run: cargo xtask check-test-siblings
 
       - name: Validate plugin layout
-        run: bash scripts/validate-plugin-layout.sh
+        run: cargo xtask validate-plugin-layout
 
       - name: Check generated docs
         run: cargo xtask check-docs
@@ -419,25 +419,25 @@ jobs:
         run: cargo xtask check-stale-claims
 
       - name: Check schema docs
-        run: python3 scripts/check-schema-docs.py --check
+        run: cargo xtask check-schema-docs --check
 
       - name: Check OpenAPI docs
-        run: python3 scripts/check-openapi.py --check
+        run: cargo xtask check-openapi --check
 
       - name: Check scaffold intent contract
-        run: python3 scripts/check-scaffold-intent-contract.py
+        run: cargo xtask check-scaffold-intent-contract
 
       - name: Check release versions
         run: cargo xtask check-release-versions --base origin/main --head HEAD --mode pr
 
       - name: Run template feature smoke tests
-        run: bash scripts/test-template-features.sh
+        run: cargo xtask test-template-features
 
       - name: Check blob sizes
-        run: python3 scripts/check-blob-size.py --base origin/main --head HEAD
+        run: cargo xtask check-blob-size --base origin/main --head HEAD
 
       - name: Check coupled files
-        run: bash scripts/check-coupled-files.sh origin/main HEAD
+        run: cargo xtask check-coupled-files origin/main HEAD
 
       - name: ASCII hygiene
         run: cargo xtask run-ascii-check

@@ -72,9 +72,9 @@ This directory contains focused guides for operating, adapting, testing, and rel
   ```
 - Refresh ignored external references when needed:
   ```bash
-  scripts/refresh-docs.sh
+  cargo xtask refresh-docs
   ```
 - Validate before pushing:
   ```bash
-  scripts/pre-release-check.sh
+  cargo xtask pre-release-check
   ```

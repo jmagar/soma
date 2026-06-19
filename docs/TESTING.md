@@ -175,7 +175,7 @@ suite unless a disposable target is configured.
 just template-check
 cargo xtask contract-audit
 cargo xtask patterns
-scripts/pre-release-check.sh
+cargo xtask pre-release-check
 ```
 
 ## Principles

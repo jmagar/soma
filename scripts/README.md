@@ -39,44 +39,44 @@ usage text, Justfile wiring, CI references, and hook integration.
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `pre-release-check.sh` | Bash | `just pre-release` | Runs the release-readiness gate: patterns, plugin layout, schema/OpenAPI docs, scaffold contract, template smoke tests, release version checks, blob size, ASCII hygiene, `just verify`, plugin build, and optional mcporter tests. |
-| `bump-version.sh` | Bash | direct | Compatibility wrapper for `cargo xtask bump-version template <major|minor|patch>`. |
-| `check-version-sync.sh` | Bash | direct, historical hooks | Compatibility wrapper for `cargo xtask check-version-sync`. |
-| `check-dependency-updates.sh` | Bash | `just deps-check` | Read-only dependency drift report using `cargo update --dry-run` plus optional crates.io latest-version checks. |
-| `check-blob-size.py` | Python | `just blob-size-check`, CI | Blocks changed git blobs above the configured size budget unless allowlisted. |
+| `pre-release-check.sh` | Bash wrapper | `cargo xtask pre-release-check`, `just pre-release` | Delegates to xtask for the release-readiness gate: patterns, plugin layout, schema/OpenAPI docs, scaffold contract, template smoke tests, release version checks, blob size, ASCII hygiene, `just verify`, plugin build, and optional mcporter tests. |
+| `bump-version.sh` | Bash wrapper | `cargo xtask bump-version template <major|minor|patch>` | Compatibility wrapper for the xtask version bumper. |
+| `check-version-sync.sh` | Bash wrapper | `cargo xtask check-version-sync` | Compatibility wrapper for the xtask manifest-backed version sync gate. |
+| `check-dependency-updates.sh` | Bash wrapper | `cargo xtask check-dependency-updates`, `just deps-check` | Delegates to xtask for a read-only dependency drift report using `cargo update --dry-run` plus optional crates.io latest-version checks. |
+| `check-blob-size.py` | Python wrapper | `cargo xtask check-blob-size`, `just blob-size-check`, CI | Delegates to xtask to block changed git blobs above the configured size budget unless allowlisted. |
 | `blob-size-allowlist.txt` | Data | used by `check-blob-size.py` | Allowlist patterns for intentional large artifacts. |
 
 ### Generated Contracts And Docs
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `check-schema-docs.py` | Python | `just schema-docs`, `just schema-docs-check`, CI | Generates/checks `docs/MCP_SCHEMA.md` and related action references from the canonical action specs. |
-| `check-openapi.py` | Python | `just openapi`, `just openapi-check`, CI | Generates/checks `docs/generated/openapi.json` for the REST API surface. |
+| `check-schema-docs.py` | Python wrapper | `cargo xtask check-schema-docs`, `just schema-docs`, `just schema-docs-check`, CI | Delegates to xtask to generate/check `docs/MCP_SCHEMA.md` and related action references from the canonical action specs. |
+| `check-openapi.py` | Python wrapper | `cargo xtask check-openapi`, `just openapi`, `just openapi-check`, CI | Delegates to xtask to generate/check `docs/generated/openapi.json` for the REST API surface. |
 | `generate-docs.py` | Python | `cargo xtask generate-docs`, `cargo xtask check-docs`, CI | Generates/checks volatile docs and metadata from `ACTION_SPECS`, `ENV_KEY_SPECS`, and typed config defaults. |
 | `check-stale-claims.py` | Python | `cargo xtask check-stale-claims`, CI | Fails when known stale hardcoded template claims reappear. |
-| `check-scaffold-intent-contract.py` | Python | `just scaffold-contract-check`, CI | Validates the scaffold intent JSON schema and checked-in examples without third-party packages. |
+| `check-scaffold-intent-contract.py` | Python wrapper | `cargo xtask check-scaffold-intent-contract`, `just scaffold-contract-check`, CI | Delegates to xtask to validate the scaffold intent JSON schema and checked-in examples without third-party packages. |
 | `check-coupled-files.sh` | Bash wrapper | `cargo xtask check-coupled-files`, `just coupled-files-check`, CI | Delegates to xtask to warn when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
-| `refresh-docs.sh` | Bash | `just refresh-docs*` | Refreshes ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
+| `refresh-docs.sh` | Bash wrapper | `cargo xtask refresh-docs`, `just refresh-docs*` | Delegates to xtask to refresh ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
 
 ### Plugin And MCP Validation
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `validate-plugin-layout.sh` | Bash | `just validate-plugin`, CI | Validates Claude, Codex, and Gemini plugin packaging conventions. |
-| `check-plugin-hook-contract.py` | Python | `just plugin-hook-contract` | Audits cross-repo plugin setup hook JSON contracts, optionally executing setup commands. |
+| `validate-plugin-layout.sh` | Bash wrapper | `cargo xtask validate-plugin-layout`, `just validate-plugin`, CI | Delegates to xtask to validate Claude, Codex, and Gemini plugin packaging conventions. |
+| `check-plugin-hook-contract.py` | Python wrapper | `cargo xtask check-plugin-hook-contract` | Delegates to xtask to audit cross-repo plugin setup hook JSON contracts, optionally executing setup commands. |
 | `check-plugin-stdio-smoke.sh` | Bash wrapper | `cargo xtask check-plugin-stdio-smoke`, docs/contracts | Delegates to xtask to smoke-test the installed stdio plugin binary with JSON-RPC initialize plus `status`. |
-| `test-mcp-auth.sh` | Bash | `just test-mcp-auth` | Smoke-tests HTTP MCP bearer-auth behavior. |
-| `generate-cli.sh` | Bash | `just generate-cli` | Uses mcporter to generate a standalone CLI from a running MCP server schema. |
+| `test-mcp-auth.sh` | Bash wrapper | `cargo xtask test-mcp-auth`, `just test-mcp-auth` | Delegates to xtask to smoke-test HTTP MCP bearer-auth behavior. |
+| `generate-cli.sh` | Bash wrapper | `cargo xtask generate-cli`, `just generate-cli` | Delegates to xtask to use mcporter to generate a standalone CLI from a running MCP server schema. |
 | `sync-cargo.sh` | Bash wrapper | `cargo xtask sync-cargo`, plugin hook/runtime support | Delegates to xtask to copy `Cargo.lock` into plugin data directories, falling back to `cargo fetch` if needed. |
 
 ### Template And Local Runtime Checks
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `test-template-features.sh` | Bash | `just template-features`, CI | Fast shell smoke tests for template invariants that are awkward as Rust tests. |
-| `check-cargo-generate.py` | Python | direct, docs | Compatibility wrapper for the xtask-owned cargo-generate smoke test. |
-| `check-runtime-current.sh` | Bash | `just runtime-current` | Checks whether the running systemd unit or Docker container uses the expected/current artifact. |
-| `repair.sh` | Bash | `just repair` | Stops, rebuilds, and restarts the local `rtemplate-mcp` service through systemd or Docker Compose. |
+| `test-template-features.sh` | Bash wrapper | `cargo xtask test-template-features`, `just template-features`, CI | Delegates to xtask for fast template invariant smoke tests. |
+| `check-cargo-generate.py` | Python wrapper | `cargo xtask cargo-generate`, docs | Compatibility wrapper for the xtask-owned cargo-generate smoke test. |
+| `check-runtime-current.sh` | Bash wrapper | `cargo xtask check-runtime-current`, `just runtime-current` | Delegates to xtask to check whether the running systemd unit or Docker container uses the expected/current artifact. |
+| `repair.sh` | Bash wrapper | `cargo xtask repair`, `just repair` | Delegates to xtask to stop, rebuild, and restart the local `rtemplate-mcp` service through systemd or Docker Compose. |
 
 ### Hygiene And Developer Workflow
 
@@ -84,18 +84,18 @@ usage text, Justfile wiring, CI references, and hook integration.
 |---|---|---|---|
 | `block-env-commits.sh` | Bash wrapper | `cargo xtask block-env-commits`, lefthook pre-commit | Delegates to xtask to prevent staged `.env*` secret files from being committed, except `.env.example`. |
 | `check-file-size.sh` | Bash wrapper | `cargo xtask check-file-size`, `just file-size-check`, lefthook pre-commit | Delegates to xtask to enforce staged source-file size budgets. |
-| `asciicheck.py` | Python | through `run-ascii-check.sh` | Checks files for unexpected non-ASCII characters and can fix common smart punctuation. |
+| `asciicheck.py` | Python wrapper | `cargo xtask asciicheck`, through `run-ascii-check.sh` | Delegates to xtask to check files for unexpected non-ASCII characters and optionally fix common smart punctuation. |
 | `run-ascii-check.sh` | Bash wrapper | `cargo xtask run-ascii-check`, `just ascii-check`, `just ascii-fix`, CI | Delegates to xtask to collect tracked text-like files and run `asciicheck.py`. |
-| `build-web.sh` | Bash | `just build-web` | Builds the optional Next.js static web UI export. |
-| `web-watch.sh` | Bash | `just web-watch` | Rebuilds the optional web UI on changes using `watchexec`. |
+| `build-web.sh` | Bash wrapper | `cargo xtask build-web`, `just build-web` | Delegates to xtask to build the optional Next.js static web UI export. |
+| `web-watch.sh` | Bash wrapper | `cargo xtask web-watch`, `just web-watch` | Delegates to xtask to rebuild the optional web UI on changes using `watchexec`. |
 
 ## Script Reference
 
 ### `asciicheck.py`
 
 ```bash
-python3 scripts/asciicheck.py README.md Justfile
-python3 scripts/asciicheck.py --fix README.md
+cargo xtask asciicheck README.md Justfile
+cargo xtask asciicheck --fix README.md
 just ascii-check
 just ascii-fix
 ```
@@ -104,7 +104,7 @@ Checks files for unexpected non-ASCII characters. `--fix` replaces common smart
 punctuation with ASCII equivalents. A small allowlist permits intentional
 documentation glyphs such as section signs, arrows, and box-drawing characters.
 
-Usually run through `scripts/run-ascii-check.sh`, which provides the repo's
+Usually run through `cargo xtask run-ascii-check`, which provides the repo's
 tracked-file selection.
 
 ### `blob-size-allowlist.txt`
@@ -119,7 +119,6 @@ allowlisted instead of failing the size budget.
 
 ```bash
 cargo xtask block-env-commits
-bash scripts/block-env-commits.sh
 ```
 
 Compatibility wrapper for `cargo xtask block-env-commits`.
@@ -133,7 +132,7 @@ Used by `lefthook.yml`.
 ### `build-web.sh`
 
 ```bash
-bash scripts/build-web.sh
+cargo xtask build-web
 just build-web
 ```
 
@@ -153,7 +152,7 @@ scripts/bump-version.sh minor
 scripts/bump-version.sh major
 ```
 
-Compatibility wrapper around:
+Compatibility wrapper for:
 
 ```bash
 cargo xtask bump-version template <major|minor|patch>
@@ -165,8 +164,8 @@ It updates every version-bearing file declared for the `template` component in
 ### `check-blob-size.py`
 
 ```bash
-python3 scripts/check-blob-size.py
-python3 scripts/check-blob-size.py --base origin/main --head HEAD --max-bytes 512000
+cargo xtask check-blob-size
+cargo xtask check-blob-size --base origin/main --head HEAD --max-bytes 512000
 just blob-size-check
 ```
 
@@ -180,11 +179,11 @@ files from generated artifacts.
 ### `check-cargo-generate.py`
 
 ```bash
-python3 scripts/check-cargo-generate.py
-python3 scripts/check-cargo-generate.py --help
+cargo xtask check-cargo-generate
+cargo xtask check-cargo-generate --help
 ```
 
-Compatibility wrapper for the xtask-owned cargo-generate smoke test. It runs:
+Compatibility wrapper for `cargo xtask cargo-generate`. It runs:
 
 ```bash
 cargo xtask cargo-generate <args>
@@ -198,8 +197,6 @@ and maintained usage live in `xtask`.
 ```bash
 cargo xtask check-coupled-files
 cargo xtask check-coupled-files origin/main HEAD
-scripts/check-coupled-files.sh
-scripts/check-coupled-files.sh origin/main HEAD
 just coupled-files-check
 ```
 
@@ -219,9 +216,9 @@ than trying to infer every valid exception.
 ### `check-dependency-updates.sh`
 
 ```bash
-scripts/check-dependency-updates.sh
-scripts/check-dependency-updates.sh --skip-search
-scripts/check-dependency-updates.sh --fail-on-updates
+cargo xtask check-dependency-updates
+cargo xtask check-dependency-updates --skip-search
+cargo xtask check-dependency-updates --fail-on-updates
 just deps-check
 ```
 
@@ -264,8 +261,8 @@ Used by `lefthook.yml`.
 ### `check-openapi.py`
 
 ```bash
-python3 scripts/check-openapi.py --write
-python3 scripts/check-openapi.py --check
+cargo xtask check-openapi --write
+cargo xtask check-openapi --check
 just openapi
 just openapi-check
 ```
@@ -314,8 +311,8 @@ plugin manifest `version` fields.
 ### `check-plugin-hook-contract.py`
 
 ```bash
-python3 scripts/check-plugin-hook-contract.py
-python3 scripts/check-plugin-hook-contract.py --execute
+cargo xtask check-plugin-hook-contract
+cargo xtask check-plugin-hook-contract --execute
 ```
 
 Audits plugin setup hooks across known Rust MCP server repositories in the
@@ -330,8 +327,6 @@ This is an operator/release audit tool, not a normal per-commit check.
 ```bash
 cargo xtask check-plugin-stdio-smoke
 BIN=rtemplate TIMEOUT_SECS=10 cargo xtask check-plugin-stdio-smoke
-bash scripts/check-plugin-stdio-smoke.sh
-BIN=rtemplate TIMEOUT_SECS=10 bash scripts/check-plugin-stdio-smoke.sh
 ```
 
 Compatibility wrapper for `cargo xtask check-plugin-stdio-smoke`.
@@ -387,7 +382,7 @@ Template adapters should rename `RTEMPLATE_*`, service, and binary defaults.
 ### `check-scaffold-intent-contract.py`
 
 ```bash
-python3 scripts/check-scaffold-intent-contract.py
+cargo xtask check-scaffold-intent-contract
 just scaffold-contract-check
 ```
 
@@ -401,8 +396,8 @@ on; it is not a full JSON Schema implementation.
 ### `check-schema-docs.py`
 
 ```bash
-python3 scripts/check-schema-docs.py --write
-python3 scripts/check-schema-docs.py --check
+cargo xtask check-schema-docs --write
+cargo xtask check-schema-docs --check
 just schema-docs
 just schema-docs-check
 ```
@@ -418,11 +413,11 @@ refresh.
 ### `check-version-sync.sh`
 
 ```bash
-scripts/check-version-sync.sh
-scripts/check-version-sync.sh /path/to/project
+cargo xtask check-version-sync
+cargo xtask check-version-sync /path/to/project
 ```
 
-Compatibility wrapper around:
+Compatibility wrapper for:
 
 ```bash
 cargo xtask check-version-sync
@@ -435,7 +430,7 @@ and plugin-manifest versionlessness.
 ### `generate-cli.sh`
 
 ```bash
-RTEMPLATE_MCP_TOKEN=... bash scripts/generate-cli.sh
+RTEMPLATE_MCP_TOKEN=... cargo xtask generate-cli
 just generate-cli
 ```
 
@@ -460,9 +455,9 @@ Template adapters must update the port, generated binary name, and token env var
 ### `pre-release-check.sh`
 
 ```bash
-scripts/pre-release-check.sh
-scripts/pre-release-check.sh --skip-verify --skip-build-plugin
-scripts/pre-release-check.sh --mcporter
+cargo xtask pre-release-check
+cargo xtask pre-release-check --skip-verify --skip-build-plugin
+cargo xtask pre-release-check --mcporter
 just pre-release
 ```
 
@@ -472,12 +467,12 @@ Always runs:
 
 - `cargo xtask patterns`
 - `just validate-plugin`
-- `python3 scripts/check-schema-docs.py --check`
-- `python3 scripts/check-openapi.py --check`
-- `python3 scripts/check-scaffold-intent-contract.py`
-- `bash scripts/test-template-features.sh`
+- `cargo xtask check-schema-docs --check`
+- `cargo xtask check-openapi --check`
+- `cargo xtask check-scaffold-intent-contract`
+- `cargo xtask test-template-features`
 - `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr`
-- `python3 scripts/check-blob-size.py`
+- `cargo xtask check-blob-size`
 - `just ascii-check`
 
 By default it also runs `just verify` and `just build-plugin`. `--mcporter` adds
@@ -486,10 +481,10 @@ By default it also runs `just verify` and `just build-plugin`. `--mcporter` adds
 ### `refresh-docs.sh`
 
 ```bash
-scripts/refresh-docs.sh
-scripts/refresh-docs.sh --dry-run
-scripts/refresh-docs.sh --skip-crawl
-scripts/refresh-docs.sh --skip-repomix
+cargo xtask refresh-docs
+cargo xtask refresh-docs --dry-run
+cargo xtask refresh-docs --skip-crawl
+cargo xtask refresh-docs --skip-repomix
 just refresh-docs
 just refresh-docs-dry
 ```
@@ -518,7 +513,7 @@ Template adapters should add service-specific docs and repos in the marked
 ### `repair.sh`
 
 ```bash
-bash scripts/repair.sh
+cargo xtask repair
 just repair
 ```
 
@@ -540,8 +535,6 @@ Flow:
 ```bash
 cargo xtask run-ascii-check
 cargo xtask run-ascii-check --fix
-bash scripts/run-ascii-check.sh
-bash scripts/run-ascii-check.sh --fix
 just ascii-check
 just ascii-fix
 ```
@@ -573,7 +566,6 @@ Excluded paths:
 
 ```bash
 cargo xtask sync-cargo
-bash scripts/sync-cargo.sh
 CLAUDE_PLUGIN_ROOT=/path/to/repo CLAUDE_PLUGIN_DATA=/path/to/data cargo xtask sync-cargo
 ```
 
@@ -590,9 +582,9 @@ directory.
 ### `test-mcp-auth.sh`
 
 ```bash
-RTEMPLATE_MCP_TOKEN=... scripts/test-mcp-auth.sh
-scripts/test-mcp-auth.sh --url http://localhost:40060/mcp --token ...
-scripts/test-mcp-auth.sh --check-x-api-key
+RTEMPLATE_MCP_TOKEN=... cargo xtask test-mcp-auth
+cargo xtask test-mcp-auth --url http://localhost:40060/mcp --token ...
+cargo xtask test-mcp-auth --check-x-api-key
 just test-mcp-auth
 ```
 
@@ -610,7 +602,7 @@ update examples and env var names.
 ### `test-template-features.sh`
 
 ```bash
-bash scripts/test-template-features.sh
+cargo xtask test-template-features
 just template-features
 ```
 
@@ -623,15 +615,15 @@ Current checks:
 - `.env.example` remains allowed.
 - the inline agent-doc symlink pattern creates `AGENTS.md` and `GEMINI.md`
   symlinks pointing at `CLAUDE.md`.
-- `scripts/validate-plugin-layout.sh` passes.
-- `scripts/check-schema-docs.py --check` passes.
-- `scripts/asciicheck.py` accepts the tracked repo file set.
+- `cargo xtask validate-plugin-layout` passes.
+- `cargo xtask check-schema-docs --check` passes.
+- `cargo xtask run-ascii-check` accepts the tracked repo file set.
 
 ### `validate-plugin-layout.sh`
 
 ```bash
-scripts/validate-plugin-layout.sh
-PLUGIN_ROOT=plugins/rtemplate scripts/validate-plugin-layout.sh
+cargo xtask validate-plugin-layout
+PLUGIN_ROOT=plugins/rtemplate cargo xtask validate-plugin-layout
 just validate-plugin
 ```
 
@@ -651,11 +643,11 @@ It checks, among other things:
 ### `web-watch.sh`
 
 ```bash
-bash scripts/web-watch.sh
+cargo xtask web-watch
 just web-watch
 ```
 
-Runs one initial `scripts/build-web.sh`, then watches `apps/web/` and rebuilds on
+Runs one initial `cargo xtask build-web`, then watches `apps/web/` and rebuilds on
 changes using `watchexec`.
 
 Ignored paths:

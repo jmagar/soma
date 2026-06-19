@@ -191,20 +191,12 @@ pub fn run_ascii_check(args: &[String]) -> Result<()> {
         return Ok(());
     }
 
-    let mut command = Command::new("python3");
-    command.arg("scripts/asciicheck.py");
+    let mut ascii_args = Vec::new();
     if fix {
-        command.arg("--fix");
+        ascii_args.push("--fix".to_owned());
     }
-    command.args(&files);
-    let status = command
-        .stdin(Stdio::null())
-        .status()
-        .context("failed to spawn python3")?;
-    if !status.success() {
-        bail!("ascii check failed with status {status}");
-    }
-    Ok(())
+    ascii_args.extend(files);
+    crate::scripts_lane_d::asciicheck(&ascii_args)
 }
 
 pub fn check_plugin_stdio_smoke() -> Result<()> {

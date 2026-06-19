@@ -10,12 +10,12 @@ scope: "template"
 source_of_truth: false
 upstream_refs:
   - "scripts/README.md"
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-06-18"
 ---
 
 # Scripts
 
-Maintenance scripts live in `scripts/`. The authoritative per-script usage reference is `scripts/README.md`.
+Maintenance automation is owned by `cargo xtask`. The files in `scripts/` are compatibility wrappers for older docs, hooks, and operator muscle memory, except for generated-doc helper scripts that have not been migrated yet. The authoritative per-command usage reference is `scripts/README.md`.
 The generated quick index is committed at
 [`docs/generated/scripts-index.md`](generated/scripts-index.md) and is refreshed
 by `cargo xtask generate-docs`.
@@ -24,22 +24,22 @@ by `cargo xtask generate-docs`.
 
 | Category | Scripts |
 |---|---|
-| Release gates | `pre-release-check.sh`, `check-version-sync.sh`, `check-blob-size.py`, `check-coupled-files.sh` |
-| Hygiene | `asciicheck.py`, `check-file-size.sh`, `block-env-commits.sh`, `check-stale-claims.py` |
-| MCP/plugin validation | `check-schema-docs.py`, `validate-plugin-layout.sh`, `check-plugin-hook-contract.py`, `test-mcp-auth.sh` |
-| Runtime/deploy | `check-runtime-current.sh`, `sync-cargo.sh`, `bump-version.sh` |
-| Reference docs | `refresh-docs.sh` |
+| Release gates | `cargo xtask pre-release-check`, `check-version-sync`, `check-blob-size`, `check-coupled-files` |
+| Hygiene | `cargo xtask asciicheck`, `check-file-size`, `block-env-commits`, `run-ascii-check`, `check-stale-claims` |
+| MCP/plugin validation | `cargo xtask check-schema-docs`, `validate-plugin-layout`, `check-plugin-hook-contract`, `test-mcp-auth` |
+| Runtime/deploy | `cargo xtask check-runtime-current`, `sync-cargo`, `bump-template-version` |
+| Reference docs | `cargo xtask refresh-docs`, `generate-docs`, `check-docs` |
 
 ## Important commands
 
 ```bash
-scripts/pre-release-check.sh
-scripts/pre-release-check.sh --mcporter   # include live MCP tests
-scripts/refresh-docs.sh --dry-run
-scripts/test-mcp-auth.sh --url http://localhost:40060/mcp --token <token>
+cargo xtask pre-release-check
+cargo xtask pre-release-check --mcporter   # include live MCP tests
+cargo xtask refresh-docs --dry-run
+cargo xtask test-mcp-auth --url http://localhost:40060/mcp --token <token>
 ```
 
-## pre-release-check.sh
+## pre-release-check
 
 The full release gate. Runs:
 1. `cargo xtask patterns`
@@ -52,7 +52,7 @@ The full release gate. Runs:
 8. `just verify`
 9. `just build-plugin`
 
-## refresh-docs.sh
+## refresh-docs
 
 Fetches fresh reference material into `docs/references/`:
 
@@ -102,15 +102,15 @@ curl -fsSL https://raw.githubusercontent.com/jmagar/rtemplate-mcp/main/install.s
 
 After install: `example doctor` to validate the environment.
 
-## block-env-commits.sh
+## block-env-commits
 
-Prevents accidentally committing `.env` files with secrets. Allows only `.env.example`. Called by lefthook on every commit.
+Prevents accidentally committing `.env` files with secrets. Allows only `.env.example`. Called by lefthook on every commit through `cargo xtask block-env-commits`.
 
 ## Contract
 
-- Scripts should be portable Bash or Python.
+- `cargo xtask` owns script behavior; `scripts/` files should stay thin compatibility wrappers.
 - Mutating scripts must be explicit about what they write.
 - Release checks must be repeatable; generated plugin binaries are allowlisted in `scripts/blob-size-allowlist.txt`.
-- Keep `scripts/README.md` current when adding, renaming, or changing scripts.
+- Keep `scripts/README.md` current when adding, renaming, or changing xtask commands or wrappers.
 
 See `docs/PATTERNS.md` §38 and §49 for the refresh-docs and install.sh patterns.

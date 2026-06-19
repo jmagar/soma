@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-version-sync.sh — compatibility wrapper for the manifest-backed gate.
+# Compatibility wrapper. Canonical implementation: cargo xtask check-version-sync.
 set -euo pipefail
 
 PROJECT_DIR="${1:-.}"

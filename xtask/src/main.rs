@@ -44,6 +44,10 @@ mod cargo_generate_post;
 mod patterns;
 mod release_versions;
 mod scripts;
+mod scripts_lane_a;
+mod scripts_lane_b;
+mod scripts_lane_c;
+mod scripts_lane_d;
 mod web_source;
 
 fn main() -> Result<()> {
@@ -71,20 +75,46 @@ fn main() -> Result<()> {
         Some("generate-docs") => generate_docs(),
         Some("check-docs") => check_docs(),
         Some("check-stale-claims") => check_stale_claims(),
+        Some("check-cargo-generate") => scripts_lane_d::check_cargo_generate(&args[1..]),
         Some("sync-web-source") => web_source::sync(),
         Some("check-web-source-sync") => web_source::check(),
         Some("update-aurora-web") => web_source::update_aurora(),
+        Some("build-web") => scripts_lane_a::build_web(),
+        Some("web-watch") => scripts_lane_a::web_watch(),
+        Some("generate-cli") => scripts_lane_a::generate_cli(),
+        Some("repair") => scripts_lane_a::repair(),
+        Some("test-mcp-auth") => scripts_lane_a::test_mcp_auth(&args[1..]),
         Some("block-env-commits") => scripts::block_env_commits(),
+        Some("asciicheck") => scripts_lane_d::asciicheck(&args[1..]),
+        Some("check-blob-size") => scripts_lane_c::check_blob_size(&args[1..]),
         Some("check-coupled-files") => scripts::check_coupled_files(&args[1..]),
+        Some("check-dependency-updates") => scripts_lane_c::check_dependency_updates(&args[1..]),
         Some("check-file-size") => scripts::check_file_size(),
+        Some("check-openapi") => scripts_lane_d::check_openapi(&args[1..]),
+        Some("check-plugin-hook-contract") => {
+            scripts_lane_c::check_plugin_hook_contract(&args[1..])
+        }
         Some("run-ascii-check") => scripts::run_ascii_check(&args[1..]),
         Some("check-plugin-stdio-smoke") => scripts::check_plugin_stdio_smoke(),
+        Some("check-runtime-current") => scripts_lane_c::check_runtime_current(&args[1..]),
+        Some("check-schema-docs") => scripts_lane_d::check_schema_docs(&args[1..]),
+        Some("check-scaffold-intent-contract") => scripts_lane_d::check_scaffold_intent_contract(),
         Some("sync-cargo") => scripts::sync_cargo(),
+        Some("pre-release-check") => scripts_lane_b::pre_release_check(&args[1..]),
+        Some("refresh-docs") => scripts_lane_c::refresh_docs(&args[1..]),
+        Some("test-template-features") => scripts_lane_b::test_template_features(workspace_root),
+        Some("validate-plugin-layout") => {
+            let plugin_root = std::env::var_os("PLUGIN_ROOT").map(std::path::PathBuf::from);
+            scripts_lane_b::validate_plugin_layout(workspace_root, plugin_root.as_deref())
+        }
         Some("check-test-siblings") => check_test_siblings(),
-        Some("check-version-sync") => release_versions::check_version_sync(workspace_root),
+        Some("check-version-sync") => {
+            scripts_lane_b::check_version_sync(workspace_root, &args[1..])
+        }
         Some("check-release-versions") => check_release_versions_cmd(workspace_root, &args[1..]),
         Some("release-plan") => release_plan_cmd(workspace_root, &args[1..]),
         Some("bump-version") => bump_version_cmd(workspace_root, &args[1..]),
+        Some("bump-template-version") => scripts_lane_b::bump_version(workspace_root, &args[1..]),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
             Ok(())
@@ -208,32 +238,31 @@ fn cargo_generate(args: &[String]) -> Result<()> {
 /// the static contract surfaces that every derived server should keep current.
 fn contract_audit() -> Result<()> {
     println!("==> contract-audit: local static/spec checks only");
-    println!("==> [1/7] cargo xtask patterns");
+    println!("==> [1/8] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default()).context("patterns contract check failed")?;
 
-    println!("==> [2/7] cargo xtask check-test-siblings");
+    println!("==> [2/8] cargo xtask check-test-siblings");
     check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [3/7] cargo xtask check-docs");
+    println!("==> [3/8] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
     println!("==> [4/8] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [5/8] scripts/check-schema-docs.py --check");
-    run_cmd("python3", &["scripts/check-schema-docs.py", "--check"])
+    println!("==> [5/8] cargo xtask check-schema-docs --check");
+    scripts_lane_d::check_schema_docs(&["--check".to_owned()])
         .context("schema docs check failed")?;
 
-    println!("==> [6/8] scripts/check-openapi.py --check");
-    run_cmd("python3", &["scripts/check-openapi.py", "--check"])
-        .context("OpenAPI docs check failed")?;
+    println!("==> [6/8] cargo xtask check-openapi --check");
+    scripts_lane_d::check_openapi(&["--check".to_owned()]).context("OpenAPI docs check failed")?;
 
-    println!("==> [7/8] scripts/check-scaffold-intent-contract.py");
-    run_cmd("python3", &["scripts/check-scaffold-intent-contract.py"])
+    println!("==> [7/8] cargo xtask check-scaffold-intent-contract");
+    scripts_lane_d::check_scaffold_intent_contract()
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [8/8] scripts/test-template-features.sh");
-    run_cmd("bash", &["scripts/test-template-features.sh"])
+    println!("==> [8/8] cargo xtask test-template-features");
+    scripts_lane_b::test_template_features(std::path::Path::new("."))
         .context("template feature smoke failed")?;
 
     println!("==> contract-audit: passed; no live upstream services were contacted");
@@ -717,21 +746,45 @@ COMMANDS:
   generate-docs         Generate volatile docs and metadata from canonical specs
   check-docs            Validate generated docs and metadata are current
   check-stale-claims    Fail on stale hardcoded template claims
+  check-cargo-generate  Compatibility alias for cargo-generate
   sync-web-source       Copy apps/web into crates/rtemplate-web/assets/source
   check-web-source-sync Validate bundled web source matches apps/web
   update-aurora-web     Refresh Aurora registry components, validate, then sync
+  build-web             Build optional apps/web static export
+  web-watch             Watch apps/web and rebuild on changes
+  generate-cli          Generate dist/example-cli through mcporter
+  repair                Rebuild and restart local rtemplate-mcp runtime
+  test-mcp-auth         Smoke-test HTTP MCP bearer auth
+  asciicheck            Check/fix explicit files for non-ASCII characters
+  check-blob-size       Check changed git blobs against size budget
   block-env-commits     Prevent staged .env secrets from being committed
   check-coupled-files   Check common companion-file drift in a diff
+  check-dependency-updates
+                        Report Cargo dependency updates
   check-file-size       Check staged source files against size budgets
+  check-openapi         Generate/check docs/generated/openapi.json
+  check-plugin-hook-contract
+                        Audit cross-repo plugin hook contracts
   run-ascii-check       Check or fix tracked source/config/docs ASCII hygiene
   check-plugin-stdio-smoke
                         Smoke-test installed plugin stdio binary
+  check-runtime-current Check systemd/Docker runtime artifact freshness
+  check-schema-docs     Generate/check docs/MCP_SCHEMA.md
+  check-scaffold-intent-contract
+                        Validate scaffold intent schema/examples
   sync-cargo            Copy Cargo.lock into plugin data directories
+  pre-release-check     Run release-readiness gate
+  refresh-docs          Refresh ignored reference docs
+  test-template-features
+                        Run template invariant smoke tests
+  validate-plugin-layout
+                        Validate Claude/Codex/Gemini plugin package layout
   check-version-sync    Validate release manifest version-file parity
   check-release-versions [--base REF] [--head REF] [--mode pr|main] [--json]
                         Validate changed release components have fresh versions/tags
   release-plan          Print changed release components and candidate tags
   bump-version          Bump a component: cargo xtask bump-version template patch
+  bump-template-version Bump template component: cargo xtask bump-template-version patch
   help                  Show this help
 
 TEMPLATE:

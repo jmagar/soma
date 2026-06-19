@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: false
-last_reviewed: "2026-05-22"
+last_reviewed: "2026-06-18"
 ---
 
 # CI
@@ -20,7 +20,7 @@ CI mirrors local quality gates so failures are reproducible before pushing.
 ```bash
 just verify
 just template-check
-scripts/pre-release-check.sh
+cargo xtask pre-release-check
 ```
 
 `just ci` delegates to `cargo xtask ci`, which runs formatting, clippy, tests, TOML checks, pattern checks, and audit when supporting tools are installed.
@@ -84,7 +84,7 @@ retries = 2
 
 ## Release gate
 
-`scripts/pre-release-check.sh` runs:
+`cargo xtask pre-release-check` runs:
 
 1. `cargo xtask patterns`
 2. plugin layout validation

@@ -58,7 +58,7 @@ profile where they apply:
 1. Build and test locally:
    ```bash
    just verify
-   scripts/pre-release-check.sh
+   cargo xtask pre-release-check
    ```
 2. Create a `.env` from `.env.example` and set real credentials.
 3. Generate a bearer token:

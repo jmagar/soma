@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the xtask-owned cargo-generate smoke test."""
+"""Compatibility wrapper. Canonical implementation: cargo xtask cargo-generate."""
 
 from __future__ import annotations
 

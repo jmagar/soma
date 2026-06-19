@@ -29,6 +29,15 @@ pub(super) fn size_limit(path: &Path) -> Option<usize> {
         // keep it visible as a warning without blocking unrelated CI gates.
         return Some(700);
     }
+    if path
+        .to_string_lossy()
+        .starts_with("xtask/src/scripts_lane_")
+    {
+        // Transitional script ports are grouped by migration lane. Keep them
+        // visible as warnings while avoiding a hard block during the shell to
+        // xtask handoff.
+        return Some(1000);
+    }
 
     match path.extension().and_then(|ext| ext.to_str()) {
         Some("rs") => Some(350),

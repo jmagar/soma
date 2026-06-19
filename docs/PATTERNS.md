@@ -1400,7 +1400,7 @@ pre-commit:
       glob: "*.toml"
       run: taplo check {staged_files}
     env_guard:
-      run: bash scripts/block-env-commits.sh  # prevents committing .env with secrets
+      run: cargo xtask block-env-commits  # prevents committing .env with secrets
 
 # NOT in pre-commit (too slow / too blocking):
 # - cargo clippy  → CI only
@@ -1744,15 +1744,15 @@ Maintain a parity table in `CLAUDE.md`:
 
 ---
 
-## 38. refresh-docs.sh — Reference Documentation Refresh
+## 38. refresh-docs — Reference Documentation Refresh
 
-Every server repo has a `scripts/refresh-docs.sh` that fetches fresh reference
+Every server repo has a `cargo xtask refresh-docs` command that fetches fresh reference
 material into `docs/references/`. This gives AI agents working in the repo accurate,
 up-to-date docs for both the service API and the MCP transport layer.
 
 ### Pattern source
 
-Adapted from `agentcast/scripts/refresh-docs.sh`. The core mechanics are identical:
+Adapted from the earlier `agentcast/scripts/refresh-docs.sh` pattern. The core mechanics are identical:
 - **Axon crawls** — `axon crawl <url> --wait --yes` → copies markdown output into `docs/references/<target>/`
 - **Repomix packs** — `repomix --remote <repo> --style xml --output <file>` → XML snapshot for codebase-level reference
 - **Sparse clones** — `git clone --sparse` to pull only specific doc directories
@@ -1789,10 +1789,10 @@ docs/references/
 ### Justfile recipes
 
 ```just
-refresh-docs:           bash scripts/refresh-docs.sh
-refresh-docs-repomix:   bash scripts/refresh-docs.sh --skip-crawl
-refresh-docs-crawl:     bash scripts/refresh-docs.sh --skip-repomix
-refresh-docs-dry:       bash scripts/refresh-docs.sh --dry-run
+refresh-docs:           cargo xtask refresh-docs
+refresh-docs-repomix:   cargo xtask refresh-docs --skip-crawl
+refresh-docs-crawl:     cargo xtask refresh-docs --skip-repomix
+refresh-docs-dry:       cargo xtask refresh-docs --dry-run
 ```
 
 ### .gitignore
@@ -1824,7 +1824,7 @@ docs/references/
 
 ### Adding your service's docs (when adapting the template)
 
-In `scripts/refresh-docs.sh`, find the `TEMPLATE:` comment blocks and add:
+In the xtask refresh-docs implementation, find the `TEMPLATE:` comment blocks and add:
 
 ```bash
 # In the crawl_docs section:

@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: false
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-06-18"
 ---
 
 # Justfile
@@ -37,7 +37,7 @@ last_reviewed: "2026-05-15"
 |---|---|
 | `just verify` | `fmt-check` + `lint` + `check` + `test`. |
 | `just template-check` | Pattern/plugin/schema/template checks. |
-| `just pre-release` | Full release-readiness gate (`scripts/pre-release-check.sh`). |
+| `just pre-release` | Full release-readiness gate (`cargo xtask pre-release-check`). |
 | `just fmt` | Format Rust and TOML. |
 | `just fmt-check` | Check formatting (CI). |
 | `just lint` | `cargo clippy -- -D warnings`. |
@@ -77,10 +77,10 @@ last_reviewed: "2026-05-15"
 ## Reference docs
 
 ```just
-refresh-docs:           bash scripts/refresh-docs.sh
-refresh-docs-repomix:   bash scripts/refresh-docs.sh --skip-crawl
-refresh-docs-crawl:     bash scripts/refresh-docs.sh --skip-repomix
-refresh-docs-dry:       bash scripts/refresh-docs.sh --dry-run
+refresh-docs:           cargo xtask refresh-docs
+refresh-docs-repomix:   cargo xtask refresh-docs --skip-crawl
+refresh-docs-crawl:     cargo xtask refresh-docs --skip-repomix
+refresh-docs-dry:       cargo xtask refresh-docs --dry-run
 ```
 
 ## Doctor output

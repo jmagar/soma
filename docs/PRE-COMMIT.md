@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: false
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-06-18"
 ---
 
 # Pre-commit
@@ -52,15 +52,15 @@ pre-commit:
       glob: "*.toml"
       run: taplo check {staged_files}
     env_guard:
-      run: bash scripts/block-env-commits.sh  # prevents committing .env with secrets
+      run: cargo xtask block-env-commits  # prevents committing .env with secrets
 ```
 
 ## Hook scripts
 
 | Script | Purpose |
 |---|---|
-| `scripts/block-env-commits.sh` | Blocks staged `.env*` files except `.env.example`. |
-| `scripts/check-version-sync.sh` | Ensures manifest-declared version-bearing files agree. |
+| `cargo xtask block-env-commits` | Blocks staged `.env*` files except `.env.example`. |
+| `cargo xtask check-version-sync` | Ensures manifest-declared version-bearing files agree. |
 | `cargo xtask check-file-size` | Warns/fails on staged files above size budgets. |
 | `taplo check` | Checks TOML formatting (runs on every `.toml` in the commit). |
 
@@ -98,13 +98,13 @@ fi
 ## Manual equivalents
 
 ```bash
-bash scripts/block-env-commits.sh
-bash scripts/check-version-sync.sh
+cargo xtask block-env-commits
+cargo xtask check-version-sync
 cargo xtask check-file-size
 taplo check
 ```
 
-Full release confidence comes from `scripts/pre-release-check.sh`, not from blocking every commit with long builds.
+Full release confidence comes from `cargo xtask pre-release-check`, not from blocking every commit with long builds.
 
 ## .gitignore rules
 

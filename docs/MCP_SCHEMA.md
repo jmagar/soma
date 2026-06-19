@@ -5,8 +5,8 @@ Generated from `crates/rtemplate-contracts/src/actions.rs` and checked against t
 Run:
 
 ```bash
-python3 scripts/check-schema-docs.py --write
-python3 scripts/check-schema-docs.py --check
+cargo xtask check-schema-docs --write
+cargo xtask check-schema-docs --check
 ```
 
 ## Tool

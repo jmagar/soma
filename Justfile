@@ -55,11 +55,11 @@ build-server-release:
 # Build the Next.js web UI static export (required before cargo build embeds it)
 # Output lands in apps/web/out/ and is baked into the binary via the `web` feature
 build-web:
-    bash scripts/build-web.sh
+    cargo xtask build-web
 
 # Watch apps/web for changes and rebuild on save (requires watchexec: cargo install watchexec-cli)
 web-watch:
-    bash scripts/web-watch.sh
+    cargo xtask web-watch
 
 # Run frontend lint, typecheck, tests, and static build
 web-check:
@@ -125,11 +125,11 @@ test-cov:
 
 # Report dependency updates without modifying Cargo.lock
 deps-check:
-    bash scripts/check-dependency-updates.sh
+    cargo xtask check-dependency-updates
 
 # Fail if changed blobs exceed the repo size budget
 blob-size-check:
-    python3 scripts/check-blob-size.py
+    cargo xtask check-blob-size
 
 # Check coupled files such as Justfile/lefthook and scripts/docs
 coupled-files-check:
@@ -149,11 +149,11 @@ file-size-check:
 
 # Regenerate MCP schema contract docs from crates/rtemplate-mcp/src/schemas.rs
 schema-docs:
-    python3 scripts/check-schema-docs.py --write
+    cargo xtask check-schema-docs --write
 
 # Verify MCP schema contract docs and action surfaces are in sync
 schema-docs-check:
-    python3 scripts/check-schema-docs.py --check
+    cargo xtask check-schema-docs --check
 
 # Regenerate volatile docs and metadata from canonical Rust specs
 generate-docs:
@@ -169,15 +169,15 @@ check-stale-claims:
 
 # Regenerate OpenAPI docs for the REST API surface
 openapi:
-    python3 scripts/check-openapi.py --write
+    cargo xtask check-openapi --write
 
 # Verify generated OpenAPI docs are current
 openapi-check:
-    python3 scripts/check-openapi.py --check
+    cargo xtask check-openapi --check
 
 # Validate scaffold intent JSON Schema and checked-in examples
 scaffold-contract-check:
-    python3 scripts/check-scaffold-intent-contract.py
+    cargo xtask check-scaffold-intent-contract
 
 # Check static contracts from docs/PATTERNS.md
 patterns-check:
@@ -197,7 +197,7 @@ contract-audit:
 
 # Run shell/Rust-adjacent template invariant smoke tests
 template-features:
-    bash scripts/test-template-features.sh
+    cargo xtask test-template-features
 
 # Run fast template-specific checks
 template-check:
@@ -206,7 +206,7 @@ template-check:
 
 # Check fleet plugin hooks, manifests, and required operator recipes
 fleet-alignment-check:
-    python3 scripts/check-plugin-hook-contract.py
+    cargo xtask check-plugin-hook-contract
 
 # Run all local quality checks in sequence: fmt-check → lint → check → test
 verify:
@@ -343,11 +343,11 @@ health:
 
 # Verify that the running Docker/systemd service matches the current artifact
 runtime-current:
-    bash scripts/check-runtime-current.sh --expected-binary target/release/rtemplate-server
+    cargo xtask check-runtime-current --expected-binary target/release/rtemplate-server
 
 # Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
 auth-smoke:
-    bash scripts/test-mcp-auth.sh
+    cargo xtask test-mcp-auth
 
 # Call the status action via the REST API (requires RTEMPLATE_MCP_TOKEN in env)
 status:
@@ -369,7 +369,7 @@ status:
 
 # Repair: stop, rebuild, and restart via systemd user unit or Docker Compose
 repair:
-    bash scripts/repair.sh
+    cargo xtask repair
 
 # Validate plugin metadata. Plugins launch the installed PATH binary and do not
 # bundle a release artifact.
@@ -386,7 +386,7 @@ install-local: build-local-release
 
 # Validate all plugin manifests, MCP config, hooks, and skills
 validate-plugin:
-    bash scripts/validate-plugin-layout.sh
+    cargo xtask validate-plugin-layout
 
 # Validate all plugin skills have required SKILL.md fields
 validate-skills: validate-plugin
@@ -406,12 +406,12 @@ test-mcporter:
 
 # Run the release-readiness gate
 pre-release:
-    bash scripts/pre-release-check.sh
+    cargo xtask pre-release-check
 
 # Generate a standalone CLI for this server via mcporter (requires running server)
 # TEMPLATE: Update port and token env var name in scripts/generate-cli.sh
 generate-cli:
-    bash scripts/generate-cli.sh
+    cargo xtask generate-cli
 
 # ── Publishing ────────────────────────────────────────────────────────────────
 
@@ -443,16 +443,16 @@ publish bump="patch":
 
 # Refresh local reference documentation (crawls + repomix)
 refresh-docs:
-    bash scripts/refresh-docs.sh
+    cargo xtask refresh-docs
 
 # Refresh docs — repomix packs only (no crawl)
 refresh-docs-repomix:
-    bash scripts/refresh-docs.sh --skip-crawl
+    cargo xtask refresh-docs --skip-crawl
 
 # Refresh docs — crawl only (no repomix)
 refresh-docs-crawl:
-    bash scripts/refresh-docs.sh --skip-repomix
+    cargo xtask refresh-docs --skip-repomix
 
 # Dry-run: print what would be refreshed
 refresh-docs-dry:
-    bash scripts/refresh-docs.sh --dry-run
+    cargo xtask refresh-docs --dry-run
