@@ -11,16 +11,17 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-CARGO = ROOT / "Cargo.toml"
+CARGO = ROOT / "crates/rmcp-template/Cargo.toml"
 ACTIONS = ROOT / "crates/rtemplate-contracts/src/actions.rs"
+CONFIG = ROOT / "crates/rtemplate-contracts/src/config.rs"
 OUT = ROOT / "docs/generated/openapi.json"
 
 LEGACY_REST_ENDPOINT = "/v1/example"
-DIRECT_REST_ROUTES = {
-    "greet": ("post", "/v1/greet", "GreetRequest", "GreetResponse"),
-    "echo": ("post", "/v1/echo", "EchoRequest", "EchoResponse"),
-    "status": ("get", "/v1/status", None, "StatusResponse"),
-    "help": ("get", "/v1/help", None, "HelpResponse"),
+REST_SCHEMAS = {
+    "greet": ("GreetRequest", "GreetResponse"),
+    "echo": ("EchoRequest", "EchoResponse"),
+    "status": (None, "StatusResponse"),
+    "help": (None, "HelpResponse"),
 }
 
 # Action-specific param examples. Actions not listed here get an empty params object.
@@ -42,6 +43,14 @@ def package_version() -> str:
     return match.group(1)
 
 
+def default_mcp_port() -> int:
+    text = read(CONFIG)
+    match = re.search(r"fn default_mcp_port\(\).*?\{\s*(\d+)\s*\}", text, re.S)
+    if not match:
+        raise RuntimeError("could not find default_mcp_port in config.rs")
+    return int(match.group(1))
+
+
 def action_entries() -> list[dict[str, str]]:
     text = read(ACTIONS)
     entries = re.findall(r"ActionSpec\s*\{(.*?)\}", text, re.S)
@@ -50,9 +59,13 @@ def action_entries() -> list[dict[str, str]]:
         name_match = re.search(r'name:\s*"([^"]+)"', entry)
         scope_match = re.search(r"required_scope:\s*([^,\n]+)", entry)
         transport_match = re.search(r"transport:\s*ActionTransport::(\w+)", entry)
+        rest_method_match = re.search(r'rest_method:\s*(None|Some\("[^"]*"\))', entry)
+        rest_path_match = re.search(r'rest_path:\s*(None|Some\("[^"]*"\))', entry)
         cost_match = re.search(r"cost:\s*ActionCost::(\w+)", entry)
         if not name_match or not scope_match or not transport_match or not cost_match:
             continue
+        rest_method = option_string(rest_method_match.group(1)) if rest_method_match else None
+        rest_path = option_string(rest_path_match.group(1)) if rest_path_match else None
         scope_expr = scope_match.group(1).strip()
         if scope_expr == "None":
             scope = "public"
@@ -67,10 +80,21 @@ def action_entries() -> list[dict[str, str]]:
                 "name": name_match.group(1),
                 "scope": scope,
                 "transport": transport_match.group(1),
+                "rest_method": rest_method,
+                "rest_path": rest_path,
                 "cost": cost_match.group(1).lower(),
             }
         )
     return actions
+
+
+def option_string(value: str) -> str | None:
+    if value == "None":
+        return None
+    match = re.fullmatch(r'Some\("([^"]*)"\)', value)
+    if not match:
+        raise RuntimeError(f"unsupported option string expression: {value}")
+    return match.group(1)
 
 
 def action_spec_count() -> int:
@@ -78,7 +102,11 @@ def action_spec_count() -> int:
 
 
 def rest_actions() -> list[dict[str, str]]:
-    return [action for action in action_entries() if action["transport"] == "Any"]
+    return [
+        action
+        for action in action_entries()
+        if action["transport"] == "Any" and action.get("rest_method") and action.get("rest_path")
+    ]
 
 
 def schema_ref(name: str) -> dict[str, str]:
@@ -89,6 +117,7 @@ def render() -> dict[str, Any]:
     actions = rest_actions()
     action_names = [action["name"] for action in actions]
     version = package_version()
+    port = default_mcp_port()
     paths = {
         "/health": {
             "get": {
@@ -159,10 +188,12 @@ def render() -> dict[str, Any]:
         },
     }
     for action in actions:
-        route = DIRECT_REST_ROUTES.get(action["name"])
-        if route is None:
+        schemas = REST_SCHEMAS.get(action["name"])
+        if schemas is None:
             continue
-        method, path, request_schema, response_schema = route
+        method = action["rest_method"].lower()
+        path = action["rest_path"]
+        request_schema, response_schema = schemas
         operation: dict[str, Any] = {
             "tags": ["direct-rest"],
             "summary": f"Run {action['name']}",
@@ -250,7 +281,7 @@ def render() -> dict[str, Any]:
         },
         "servers": [
             {
-                "url": "http://localhost:3100",
+                "url": f"http://localhost:{port}",
                 "description": "Default local development server",
             }
         ],
@@ -451,9 +482,11 @@ def render() -> dict[str, Any]:
             "preferred_rest_style": "direct_routes",
             "rest_actions": action_names,
             "direct_rest_routes": {
-                name: {"method": route[0].upper(), "path": route[1]}
-                for name, route in DIRECT_REST_ROUTES.items()
-                if name in action_names
+                action["name"]: {
+                    "method": action["rest_method"].upper(),
+                    "path": action["rest_path"],
+                }
+                for action in actions
             },
             "action_costs": {action["name"]: action["cost"] for action in action_entries()},
             "mcp_only_actions": [action["name"] for action in action_entries() if action["transport"] == "McpOnly"],
@@ -474,7 +507,7 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
         "/openapi.json",
         "/status",
         "/v1/capabilities",
-        *[route[1] for route in DIRECT_REST_ROUTES.values()],
+        *[action["rest_path"] for action in rest_actions()],
         LEGACY_REST_ENDPOINT,
     ]
     for path in required_paths:
@@ -493,17 +526,15 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     expected = [action["name"] for action in entries if action["transport"] == "Any"]
     if action_enum != expected:
         failures.append(f"ActionName enum drifted: expected {expected}, got {action_enum}")
-    direct_route_names = set(DIRECT_REST_ROUTES)
-    expected_route_names = set(expected)
-    missing_direct_routes = sorted(expected_route_names - direct_route_names)
-    extra_direct_routes = sorted(direct_route_names - expected_route_names)
-    if missing_direct_routes:
+    missing_route_metadata = [
+        action["name"]
+        for action in entries
+        if action["transport"] == "Any"
+        and (not action.get("rest_method") or not action.get("rest_path"))
+    ]
+    if missing_route_metadata:
         failures.append(
-            f"DIRECT_REST_ROUTES is missing REST actions: {missing_direct_routes}"
-        )
-    if extra_direct_routes:
-        failures.append(
-            f"DIRECT_REST_ROUTES contains non-REST actions: {extra_direct_routes}"
+            f"ACTION_SPECS entries are missing REST route metadata: {missing_route_metadata}"
         )
     mcp_only = {a["name"] for a in entries if a["transport"] == "McpOnly"}
     for name in sorted(mcp_only):
@@ -519,9 +550,9 @@ def validate_openapi(value: dict[str, Any]) -> list[str]:
     ]
     if x_template.get("mcp_only_actions") != expected_mcp_only:
         failures.append("x-template mcp_only_actions drifted")
-    for name, (method, path, _request_schema, _response_schema) in DIRECT_REST_ROUTES.items():
-        if name not in expected:
-            continue
+    for action in rest_actions():
+        method = action["rest_method"].lower()
+        path = action["rest_path"]
         if method not in value.get("paths", {}).get(path, {}):
             failures.append(f"missing direct REST operation {method.upper()} {path}")
     legacy_operation = value.get("paths", {}).get(LEGACY_REST_ENDPOINT, {}).get("post", {})

@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 use rtemplate_contracts::actions::{required_scope_for_action, ExampleAction};
 use rtemplate_contracts::token_limit::MAX_RESPONSE_BYTES;
 use rtemplate_runtime::server::{AppState, AuthPolicy};
-use rtemplate_service::execute_service_action;
+use rtemplate_service::{classify_service_error, execute_service_action};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub struct RestRoute {
@@ -124,6 +124,7 @@ pub struct ActionRequest {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GreetRequest {
+    #[serde(default)]
     pub name: Option<String>,
 }
 
@@ -140,12 +141,14 @@ pub async fn api_dispatch(
     auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
-    match ExampleAction::from_rest(&body.action, &body.params) {
-        Ok(action) => run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action)
-            .await
-            .into_response(),
-        Err(error) => rest_error_response(error, &body.action),
-    }
+    run_rest_action_request(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        ExampleAction::from_rest(&body.action, &body.params),
+        &body.action,
+    )
+    .await
+    .into_response()
 }
 
 pub async fn v1_capabilities() -> impl IntoResponse {
@@ -170,10 +173,11 @@ pub async fn v1_greet(
         Ok(body) => body,
         Err(error) => return rest_json_rejection_response(error),
     };
-    run_rest_action(
+    run_rest_action_request(
         state,
         auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::Greet { name: body.name },
+        ExampleAction::from_rest("greet", &optional_name_params(body.name)),
+        "greet",
     )
     .await
 }
@@ -187,22 +191,24 @@ pub async fn v1_echo(
         Ok(body) => body,
         Err(error) => return rest_json_rejection_response(error),
     };
-    match ExampleAction::from_rest("echo", &json!({ "message": body.message })) {
-        Ok(action) => {
-            run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await
-        }
-        Err(error) => rest_error_response(error, "echo"),
-    }
+    run_rest_action_request(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        ExampleAction::from_rest("echo", &json!({ "message": body.message })),
+        "echo",
+    )
+    .await
 }
 
 pub async fn v1_service_status(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
 ) -> axum::response::Response {
-    run_rest_action(
+    run_rest_action_request(
         state,
         auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::Status,
+        Ok(ExampleAction::Status),
+        "status",
     )
     .await
 }
@@ -211,12 +217,25 @@ pub async fn v1_help(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
 ) -> axum::response::Response {
-    run_rest_action(
+    run_rest_action_request(
         state,
         auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::Help,
+        Ok(ExampleAction::Help),
+        "help",
     )
     .await
+}
+
+async fn run_rest_action_request(
+    state: AppState,
+    auth: Option<&AuthContext>,
+    action: Result<ExampleAction>,
+    action_name: &str,
+) -> axum::response::Response {
+    match action {
+        Ok(action) => run_rest_action(state, auth, action).await,
+        Err(error) => rest_error_response(error, action_name),
+    }
 }
 
 async fn run_rest_action(
@@ -246,19 +265,27 @@ async fn run_rest_action(
 }
 
 fn rest_error_response(error: anyhow::Error, action: &str) -> axum::response::Response {
-    if rtemplate_service::is_validation_error(&error) {
-        return rest_bad_request(error.to_string());
+    let tool_error = classify_service_error(&error);
+    if tool_error.kind == rtemplate_contracts::errors::ServiceErrorKind::Validation {
+        tracing::warn!(
+            action = %action,
+            code = %tool_error.code,
+            "REST action rejected invalid params"
+        );
+    } else {
+        tracing::error!(
+            error = %error,
+            action = %action,
+            service_error_kind = %tool_error.kind.as_str(),
+            "REST action execution failed"
+        );
     }
-    tracing::error!(error = %error, action = %action, "REST action execution failed");
     (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(json!({"error": "internal server error"})),
+        StatusCode::from_u16(tool_error.http_status_code())
+            .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
+        Json(tool_error.to_rest_payload()),
     )
         .into_response()
-}
-
-fn rest_bad_request(error: String) -> axum::response::Response {
-    (StatusCode::BAD_REQUEST, Json(json!({"error": error}))).into_response()
 }
 
 fn rest_json_rejection_response(error: JsonRejection) -> axum::response::Response {
@@ -268,6 +295,13 @@ fn rest_json_rejection_response(error: JsonRejection) -> axum::response::Respons
         StatusCode::BAD_REQUEST
     };
     (status, Json(json!({"error": error.to_string()}))).into_response()
+}
+
+fn optional_name_params(name: Option<String>) -> Value {
+    match name {
+        Some(name) => json!({ "name": name }),
+        None => json!({}),
+    }
 }
 
 fn cap_rest_response(value: Value) -> Result<Value> {

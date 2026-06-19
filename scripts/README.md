@@ -8,7 +8,14 @@ renamed, or materially changed, update the quick index and the reference entry.
 
 ## Regenerating The Inventory
 
-The file list can be generated directly from git:
+The committed generated script index lives at `docs/generated/scripts-index.md`
+and is refreshed by:
+
+```bash
+cargo xtask generate-docs
+```
+
+The raw file list can also be generated directly from git:
 
 ```bash
 rg --files scripts | sort
@@ -45,6 +52,8 @@ usage text, Justfile wiring, CI references, and hook integration.
 |---|---|---|---|
 | `check-schema-docs.py` | Python | `just schema-docs`, `just schema-docs-check`, CI | Generates/checks `docs/MCP_SCHEMA.md` and related action references from the canonical action specs. |
 | `check-openapi.py` | Python | `just openapi`, `just openapi-check`, CI | Generates/checks `docs/generated/openapi.json` for the REST API surface. |
+| `generate-docs.py` | Python | `cargo xtask generate-docs`, `cargo xtask check-docs`, CI | Generates/checks volatile docs and metadata from `ACTION_SPECS`, `ENV_KEY_SPECS`, and typed config defaults. |
+| `check-stale-claims.py` | Python | `cargo xtask check-stale-claims`, CI | Fails when known stale hardcoded template claims reappear. |
 | `check-scaffold-intent-contract.py` | Python | `just scaffold-contract-check`, CI | Validates the scaffold intent JSON schema and checked-in examples without third-party packages. |
 | `check-coupled-files.sh` | Bash | `just coupled-files-check`, CI | Warns when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
 | `refresh-docs.sh` | Bash | `just refresh-docs*` | Refreshes ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
@@ -259,6 +268,37 @@ Generates `docs/generated/openapi.json` for the template REST API surface:
 
 The version comes from `Cargo.toml`. The REST action enum is derived from
 `crates/rtemplate-contracts/src/actions.rs`, excluding MCP-only actions.
+
+### `generate-docs.py`
+
+```bash
+python3 scripts/generate-docs.py --write
+python3 scripts/generate-docs.py --check
+cargo xtask generate-docs
+cargo xtask check-docs
+```
+
+Generates volatile docs and metadata from canonical Rust specs:
+
+- `docs/ENV.md`
+- `.env.example`
+- `config.example.toml`
+- `apps/web/lib/generated-actions.ts`
+- `docs/generated/plugin-settings.md`
+- `docs/generated/scripts-index.md`
+
+The checker fails when any generated file drifts.
+
+### `check-stale-claims.py`
+
+```bash
+python3 scripts/check-stale-claims.py
+cargo xtask check-stale-claims
+```
+
+Scans non-generated source/docs for template claims that should not reappear,
+such as stale old local-port examples, old MCP port defaults, or explicit
+plugin manifest `version` fields.
 
 ### `check-plugin-hook-contract.py`
 

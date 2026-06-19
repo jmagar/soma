@@ -412,6 +412,12 @@ jobs:
       - name: Validate plugin layout
         run: bash scripts/validate-plugin-layout.sh
 
+      - name: Check generated docs
+        run: cargo xtask check-docs
+
+      - name: Check stale template claims
+        run: cargo xtask check-stale-claims
+
       - name: Check schema docs
         run: python3 scripts/check-schema-docs.py --check
 

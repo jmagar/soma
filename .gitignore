@@ -161,6 +161,7 @@ docs/references/
 
 # ── Personal ──────────────────────────────────────────────────────────────────
 CLAUDE.md.local
+mcp-server-inventory.md
 
 # ── Next.js web UI (apps/web/) ────────────────────────────────────────────────
 # apps/web/out/ is the static export embedded in the Rust binary via include_dir!

@@ -5,9 +5,11 @@ use axum::{
     http::{header, Method, Request, StatusCode},
 };
 use rmcp_template::{
+    api::REST_ROUTES,
     server::{self, AuthPolicy},
     testing::{bearer_state, loopback_state},
 };
+use rtemplate_contracts::actions::ACTION_SPECS;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
@@ -54,6 +56,35 @@ async fn direct_rest_echo_accepts_typed_body() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["echo"], "hello");
+}
+
+#[test]
+fn rest_routes_match_action_registry_metadata() {
+    for spec in ACTION_SPECS.iter().filter(|spec| spec.transport.rest()) {
+        let method = spec
+            .rest_method
+            .unwrap_or_else(|| panic!("{} should declare a REST method", spec.name));
+        let path = spec
+            .rest_path
+            .unwrap_or_else(|| panic!("{} should declare a REST path", spec.name));
+        assert!(
+            REST_ROUTES.iter().any(|route| {
+                route.action == Some(spec.name) && route.method == method && route.path == path
+            }),
+            "{} should be exposed as {method} {path}",
+            spec.name
+        );
+    }
+
+    for route in REST_ROUTES.iter().filter(|route| route.action.is_some()) {
+        let action = route.action.unwrap();
+        let spec = ACTION_SPECS
+            .iter()
+            .find(|spec| spec.name == action)
+            .unwrap_or_else(|| panic!("REST route advertises unknown action `{action}`"));
+        assert_eq!(spec.rest_method, Some(route.method));
+        assert_eq!(spec.rest_path, Some(route.path));
+    }
 }
 
 #[tokio::test]

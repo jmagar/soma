@@ -12,6 +12,10 @@ plugin use. Application/platform servers may point plugins at the shared HTTP
 MCP endpoint when a central server deployment is the source of truth. The host
 manifests differ, but the service behavior should not.
 
+The shared descriptor is `plugins/rtemplate/plugin.surface.json`. Run
+`cargo xtask generate-docs` after editing it; the Claude, Codex, and Gemini
+manifests are generated from that descriptor plus `ENV_KEY_SPECS`.
+
 The local plugin default is stdio-first. See
 [`docs/adr/0001-stdio-first-plugin-adapter.md`](adr/0001-stdio-first-plugin-adapter.md)
 for the accepted decision and
@@ -139,6 +143,11 @@ Sensitive Gemini settings use:
 ```
 
 Keep Gemini setting names aligned with Claude/Codex where possible. For example, prefer `server_url`, `api_token`, `<service>_api_url`, and `<service>_api_key` across all three surfaces.
+
+The generated plugin option/env mapping table lives at
+[`docs/generated/plugin-settings.md`](generated/plugin-settings.md). It is
+rendered from `ENV_KEY_SPECS`; update the registry first when adding plugin
+settings or runtime env vars.
 
 ## Plugin Validation
 

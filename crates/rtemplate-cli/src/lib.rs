@@ -18,7 +18,9 @@ use rtemplate_contracts::{
     actions::{ActionSpec, ExampleAction, ACTION_SPECS},
     config::ExampleConfig,
 };
-use rtemplate_service::{execute_service_action, ExampleClient, ExampleService};
+use rtemplate_service::{
+    classify_service_error, execute_service_action, ExampleClient, ExampleService,
+};
 use std::io::{BufRead, IsTerminal, Write};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
@@ -192,7 +194,14 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     confirm_command_if_destructive(&cmd)?;
 
     let result = match service_action_from_command(&cmd) {
-        Some(action) => execute_service_action(&service, &action).await?,
+        Some(action) => match execute_service_action(&service, &action).await {
+            Ok(value) => value,
+            Err(error) => {
+                let tool_error = classify_service_error(&error);
+                eprintln!("{}", format_cli_tool_error(&tool_error));
+                return Err(anyhow!(tool_error.message));
+            }
+        },
         // Doctor, Watch, and Setup are never dispatched via this function — main.rs
         // handles them directly because they need config.mcp fields.
         None => {
@@ -202,6 +211,23 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
 
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
+}
+
+fn format_cli_tool_error(error: &rtemplate_contracts::errors::ToolError) -> String {
+    let mut lines = vec![
+        format!("error: {}", error.message),
+        format!("code: {}", error.code),
+        format!("kind: {}", error.kind.as_str()),
+        format!("retryable: {}", error.retryable),
+        format!("remediation: {}", error.remediation),
+    ];
+    if let Some(field) = &error.field {
+        lines.push(format!("field: {field}"));
+    }
+    if let Some(bad_value) = &error.bad_value {
+        lines.push(format!("bad_value: {bad_value}"));
+    }
+    lines.join("\n")
 }
 
 fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {

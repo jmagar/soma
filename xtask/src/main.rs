@@ -10,6 +10,9 @@
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
 //!   cargo-generate Smoke-test cargo-generate output
+//!   generate-docs Generate volatile docs and metadata from canonical specs
+//!   check-docs    Validate generated docs and metadata are current
+//!   check-stale-claims Fail on stale hardcoded template claims
 //!   sync-web-source Copy apps/web into the bundled rtemplate-web scaffold source
 //!   check-web-source-sync Validate bundled web source matches apps/web
 //!   update-aurora-web Refresh Aurora components, validate apps/web, then sync bundle
@@ -55,6 +58,9 @@ fn main() -> Result<()> {
         Some("patterns") => patterns_cmd(&args[1..]),
         Some("contract-audit") => contract_audit(),
         Some("cargo-generate") => cargo_generate(&args[1..]),
+        Some("generate-docs") => generate_docs(),
+        Some("check-docs") => check_docs(),
+        Some("check-stale-claims") => check_stale_claims(),
         Some("sync-web-source") => web_source::sync(),
         Some("check-web-source-sync") => web_source::check(),
         Some("update-aurora-web") => web_source::update_aurora(),
@@ -186,30 +192,54 @@ fn cargo_generate(args: &[String]) -> Result<()> {
 /// the static contract surfaces that every derived server should keep current.
 fn contract_audit() -> Result<()> {
     println!("==> contract-audit: local static/spec checks only");
-    println!("==> [1/6] cargo xtask patterns");
+    println!("==> [1/7] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default()).context("patterns contract check failed")?;
 
-    println!("==> [2/6] cargo xtask check-test-siblings");
+    println!("==> [2/7] cargo xtask check-test-siblings");
     check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [3/6] scripts/check-schema-docs.py --check");
+    println!("==> [3/7] cargo xtask check-docs");
+    check_docs().context("generated docs check failed")?;
+
+    println!("==> [4/8] cargo xtask check-stale-claims");
+    check_stale_claims().context("stale claim check failed")?;
+
+    println!("==> [5/8] scripts/check-schema-docs.py --check");
     run_cmd("python3", &["scripts/check-schema-docs.py", "--check"])
         .context("schema docs check failed")?;
 
-    println!("==> [4/6] scripts/check-openapi.py --check");
+    println!("==> [6/8] scripts/check-openapi.py --check");
     run_cmd("python3", &["scripts/check-openapi.py", "--check"])
         .context("OpenAPI docs check failed")?;
 
-    println!("==> [5/6] scripts/check-scaffold-intent-contract.py");
+    println!("==> [7/8] scripts/check-scaffold-intent-contract.py");
     run_cmd("python3", &["scripts/check-scaffold-intent-contract.py"])
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [6/6] scripts/test-template-features.sh");
+    println!("==> [8/8] scripts/test-template-features.sh");
     run_cmd("bash", &["scripts/test-template-features.sh"])
         .context("template feature smoke failed")?;
 
     println!("==> contract-audit: passed; no live upstream services were contacted");
     Ok(())
+}
+
+// =============================================================================
+// generated docs — Render/check volatile docs and metadata
+// =============================================================================
+
+fn generate_docs() -> Result<()> {
+    run_cmd("python3", &["scripts/generate-docs.py", "--write"])
+        .context("generated docs update failed")
+}
+
+fn check_docs() -> Result<()> {
+    run_cmd("python3", &["scripts/generate-docs.py", "--check"])
+        .context("generated docs are stale; run `cargo xtask generate-docs`")
+}
+
+fn check_stale_claims() -> Result<()> {
+    run_cmd("python3", &["scripts/check-stale-claims.py"]).context("stale claim check failed")
 }
 
 // =============================================================================
@@ -252,13 +282,13 @@ fn dist() -> Result<()> {
 ///
 /// TEMPLATE: Add or remove steps to match your CI pipeline.
 fn ci() -> Result<()> {
-    println!("==> [1/8] cargo fmt --check");
+    println!("==> [1/9] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/8] cargo clippy");
+    println!("==> [2/9] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [3/8] cargo nextest run --profile ci");
+    println!("==> [3/9] cargo nextest run --profile ci");
     // Falls back to cargo test if nextest isn't installed.
     // TEMPLATE: Remove the fallback once nextest is in your CI environment.
     if command_exists("cargo-nextest") {
@@ -268,7 +298,7 @@ fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [4/8] taplo check");
+    println!("==> [4/9] taplo check");
     // TEMPLATE: Remove this step if you don't use taplo.
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
@@ -276,17 +306,23 @@ fn ci() -> Result<()> {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/8] cargo xtask patterns");
+    println!("==> [5/9] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [6/8] cargo xtask check-test-siblings");
+    println!("==> [6/9] cargo xtask check-test-siblings");
     check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [7/8] cargo xtask check-web-source-sync");
+    println!("==> [7/9] cargo xtask check-docs");
+    check_docs().context("generated docs check failed")?;
+
+    println!("==> [8/10] cargo xtask check-stale-claims");
+    check_stale_claims().context("stale claim check failed")?;
+
+    println!("==> [9/10] cargo xtask check-web-source-sync");
     web_source::check().context("web source bundle drifted from apps/web")?;
 
-    println!("==> [8/8] cargo audit");
+    println!("==> [10/10] cargo audit");
     // TEMPLATE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
@@ -661,6 +697,9 @@ COMMANDS:
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
   contract-audit        Run local static/spec checks without live upstream calls
   cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
+  generate-docs         Generate volatile docs and metadata from canonical specs
+  check-docs            Validate generated docs and metadata are current
+  check-stale-claims    Fail on stale hardcoded template claims
   sync-web-source       Copy apps/web into crates/rtemplate-web/assets/source
   check-web-source-sync Validate bundled web source matches apps/web
   update-aurora-web     Refresh Aurora registry components, validate, then sync

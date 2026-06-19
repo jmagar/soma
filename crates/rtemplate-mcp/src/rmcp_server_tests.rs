@@ -4,11 +4,11 @@ use rtemplate_contracts::{
     actions::{required_scope_for_action, ExampleAction, ValidationError, READ_SCOPE, WRITE_SCOPE},
     token_limit::MAX_RESPONSE_BYTES,
 };
+use rtemplate_service::classify_service_error;
 
-use super::{
-    check_scope, execution_error_payload, scope_satisfied, tool_error_result,
-    unknown_action_payload, unknown_tool_error, validation_error_payload,
-};
+#[cfg(feature = "auth")]
+use super::check_scope;
+use super::{scope_satisfied, tool_error_result, unknown_action_payload, unknown_tool_error};
 
 fn scopes(s: &[&str]) -> Vec<String> {
     s.iter().map(|x| x.to_string()).collect()
@@ -69,7 +69,7 @@ fn validation_errors_become_structured_tool_errors() {
     let error = anyhow::Error::from(ValidationError::MissingField {
         field: "message".to_owned(),
     });
-    let payload = validation_error_payload("example", Some("echo"), &error);
+    let payload = classify_service_error(&error).to_mcp_payload("example", Some("echo"));
     let result = tool_error_result(payload).expect("tool error should serialize");
 
     assert_eq!(result.is_error, Some(true));
@@ -95,7 +95,7 @@ fn parser_validation_errors_become_structured_tool_errors() {
         "action": "echo"
     }))
     .expect_err("missing echo message should fail parsing");
-    let payload = validation_error_payload("example", Some("echo"), &error);
+    let payload = classify_service_error(&error).to_mcp_payload("example", Some("echo"));
     let result = tool_error_result(payload).expect("tool error should serialize");
 
     assert_eq!(result.is_error, Some(true));
@@ -168,7 +168,7 @@ fn unknown_tool_stays_protocol_error_with_structured_data() {
 #[test]
 fn execution_errors_do_not_expose_raw_error_text() {
     let raw_error = anyhow::anyhow!("upstream timeout talking to secret-api-key");
-    let payload = execution_error_payload("example", Some("status"), &raw_error);
+    let payload = classify_service_error(&raw_error).to_mcp_payload("example", Some("status"));
 
     assert_eq!(
         payload,
@@ -176,6 +176,7 @@ fn execution_errors_do_not_expose_raw_error_text() {
             "kind": "mcp_tool_error",
             "schema_version": 1,
             "code": "execution_error",
+            "service_error_kind": "timeout",
             "reason_kind": "timeout",
             "tool": "example",
             "action": "status",

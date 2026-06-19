@@ -16,13 +16,16 @@ last_reviewed: "2026-05-15"
 # Scripts
 
 Maintenance scripts live in `scripts/`. The authoritative per-script usage reference is `scripts/README.md`.
+The generated quick index is committed at
+[`docs/generated/scripts-index.md`](generated/scripts-index.md) and is refreshed
+by `cargo xtask generate-docs`.
 
 ## Categories
 
 | Category | Scripts |
 |---|---|
 | Release gates | `pre-release-check.sh`, `check-version-sync.sh`, `check-blob-size.py`, `check-coupled-files.sh` |
-| Hygiene | `asciicheck.py`, `check-file-size.sh`, `block-env-commits.sh` |
+| Hygiene | `asciicheck.py`, `check-file-size.sh`, `block-env-commits.sh`, `check-stale-claims.py` |
 | MCP/plugin validation | `check-schema-docs.py`, `validate-plugin-layout.sh`, `check-plugin-hook-contract.py`, `test-mcp-auth.sh` |
 | Runtime/deploy | `check-runtime-current.sh`, `sync-cargo.sh`, `bump-version.sh` |
 | Reference docs | `refresh-docs.sh` |

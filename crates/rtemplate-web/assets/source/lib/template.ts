@@ -1,3 +1,5 @@
+import { ACTIONS } from "./generated-actions";
+
 export const WEB_APP_CONFIG = {
   serviceName: "example",
   displayName: "rmcp-template",
@@ -36,124 +38,7 @@ export type ActionSpec = {
   response: Record<string, unknown>;
 };
 
-export const ACTIONS = [
-  {
-    id: "greet",
-    label: "greet",
-    description: "Return a personalized greeting for the given name.",
-    scope: "example:read",
-    transport: "rest",
-    method: "POST",
-    path: "/v1/greet",
-    params: [
-      {
-        name: "name",
-        label: "Name",
-        type: "text",
-        placeholder: "Alice",
-        required: false,
-        description: "Name to greet. Defaults to World when omitted.",
-      },
-    ],
-    example: { action: "greet", params: { name: "Alice" } },
-    response: { greeting: "Hello, Alice!", target: "Alice" },
-  },
-  {
-    id: "echo",
-    label: "echo",
-    description: "Echo a message back unchanged.",
-    scope: "example:read",
-    transport: "rest",
-    method: "POST",
-    path: "/v1/echo",
-    params: [
-      {
-        name: "message",
-        label: "Message",
-        type: "text",
-        placeholder: "Hello!",
-        required: true,
-        description: "Message to echo.",
-      },
-    ],
-    example: { action: "echo", params: { message: "Hello!" } },
-    response: { echo: "Hello!" },
-  },
-  {
-    id: "status",
-    label: "status",
-    description: "Return server status and configuration info.",
-    scope: "example:read",
-    transport: "rest",
-    method: "GET",
-    path: "/v1/status",
-    params: [],
-    example: { action: "status", params: {} },
-    response: { status: "ok", note: "stub" },
-  },
-  {
-    id: "help",
-    label: "help",
-    description: "Show all available REST actions and usage documentation.",
-    scope: "public",
-    transport: "rest",
-    method: "GET",
-    path: "/v1/help",
-    params: [],
-    example: { action: "help", params: {} },
-    response: {
-      actions: ["greet", "echo", "status", "help"],
-      mcp_only_actions: ["elicit_name", "scaffold_intent"],
-      preferred_rest_style: "direct_routes",
-      usage: "Use direct REST routes such as POST /v1/echo or GET /v1/status.",
-    },
-  },
-  {
-    id: "elicit_name",
-    label: "elicit_name",
-    description: "MCP elicitation demo that asks the user for a name mid-call.",
-    scope: "example:read",
-    transport: "mcp-only",
-    params: [],
-    example: { action: "elicit_name", params: {} },
-    response: { greeting: "Hello, Alice!", target: "Alice", elicited: true },
-  },
-  {
-    id: "scaffold_intent",
-    label: "scaffold_intent",
-    description:
-      "MCP elicitation setup wizard that returns scaffold intent JSON for the scaffold-project skill.",
-    scope: "example:read",
-    transport: "mcp-only",
-    params: [],
-    example: { action: "scaffold_intent", params: {} },
-    response: {
-      kind: "rmcp_template_scaffold_intent",
-      schema_version: 1,
-      server_category: "upstream-client",
-      required_surfaces: ["mcp", "cli"],
-      project: {
-        display_name: "Unraid MCP",
-        crate_name: "unraid-mcp",
-        binary_name: "unraid",
-        service_name: "unraid",
-        env_prefix: "UNRAID",
-      },
-      upstream: { base_url_env: "UNRAID_API_URL", auth_kind: "api-key" },
-      runtime: { host: "127.0.0.1", port: 3100, mcp_transport: "dual" },
-      mcp_primitives: ["tools", "resources", "prompts", "elicitation"],
-      deployment: "none",
-      plugins: ["claude", "codex"],
-      publish_mcp: true,
-      crawl_docs: {
-        urls: ["https://docs.unraid.net/"],
-        repos: [],
-        search_topics: ["Unraid API authentication"],
-      },
-      handoff: { recommended_skill: "scaffold-project" },
-    },
-  },
-] as const satisfies readonly ActionSpec[];
+export { ACTIONS };
 
 export type RestAction = Extract<(typeof ACTIONS)[number], { transport: "rest" }>;
 export type RestActionId = RestAction["id"];

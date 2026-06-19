@@ -16,6 +16,8 @@ fn action_metadata_is_the_action_source_of_truth() {
         ]
     );
     assert_eq!(rest_action_names(), vec!["greet", "echo", "status", "help"]);
+    assert_eq!(cli_action_names(), vec!["greet", "echo", "status", "help"]);
+    assert_eq!(cli_commands(), vec!["greet", "echo", "status", "help"]);
     assert_eq!(
         mcp_only_action_names(),
         vec!["elicit_name", "scaffold_intent"]
@@ -31,6 +33,9 @@ fn action_metadata_is_the_action_source_of_truth() {
     assert_eq!(echo.cost, ActionCost::Cheap);
     assert_eq!(echo.params[0].name, "message");
     assert!(echo.params[0].required);
+    assert_eq!(echo.cli.unwrap().command, "echo");
+    assert_eq!(echo.cli.unwrap().flags[0].name, "--message");
+    assert!(echo.cli.unwrap().flags[0].required);
     assert!(!echo.destructive);
     assert!(!echo.requires_admin);
 }
@@ -49,6 +54,11 @@ fn action_catalog_projects_surfaces_and_auth_posture() {
     assert!(!greet.surface_availability.web_ui);
     assert_eq!(greet.required_scope.as_deref(), Some(READ_SCOPE));
     assert_eq!(greet.cost, "cheap");
+    assert_eq!(greet.cli.as_ref().unwrap().command, "greet");
+    assert_eq!(
+        greet.cli.as_ref().unwrap().usage,
+        "example greet [--name NAME]"
+    );
     assert!(greet.auth_posture.contains(READ_SCOPE));
 
     let scaffold = catalog
@@ -58,7 +68,35 @@ fn action_catalog_projects_surfaces_and_auth_posture() {
     assert!(scaffold.surface_availability.mcp);
     assert!(!scaffold.surface_availability.cli);
     assert!(!scaffold.surface_availability.rest);
+    assert!(scaffold.cli.is_none());
     assert!(scaffold.mcp_only_exception.is_some());
+}
+
+#[test]
+fn every_cli_action_has_cli_metadata_and_every_mcp_only_action_does_not() {
+    for spec in ACTION_SPECS {
+        if spec.transport.cli() {
+            let cli = spec
+                .cli
+                .unwrap_or_else(|| panic!("{} should declare CLI metadata", spec.name));
+            assert_eq!(
+                cli.command, spec.name,
+                "{} CLI command should match the action name unless the template explicitly adds an alias map",
+                spec.name
+            );
+            assert!(
+                cli.usage.contains(cli.command),
+                "{} CLI usage should mention its command",
+                spec.name
+            );
+        } else {
+            assert!(
+                spec.cli.is_none(),
+                "{} should not advertise CLI metadata when transport excludes CLI",
+                spec.name
+            );
+        }
+    }
 }
 
 #[test]

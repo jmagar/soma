@@ -21,12 +21,12 @@ python3 scripts/check-schema-docs.py --check
 
 | Action | Scope | Cost | Description |
 |---|---|---|---|
-| `greet` | `example:read` | `cheap` | Return a greeting. Optional `name` string. |
-| `echo` | `example:read` | `cheap` | Echo a required `message` string. |
-| `status` | `example:read` | `cheap` | Return server status and configuration summary. |
-| `elicit_name` | `example:read` | `cheap` | Ask the MCP client to elicit a name and return a personalized greeting. |
-| `scaffold_intent` | `example:read` | `moderate` | Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files. |
-| `help` | public | `cheap` | Return the in-tool action reference. Public; no scope required. |
+| `greet` | `example:read` | `cheap` | Return a greeting. |
+| `echo` | `example:read` | `cheap` | Echo a message back unchanged. |
+| `status` | `example:read` | `cheap` | Return server status and configuration info. |
+| `elicit_name` | `example:read` | `cheap` | Ask the MCP client to collect a name, then return a personalised greeting. |
+| `scaffold_intent` | `example:read` | `moderate` | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
+| `help` | public | `cheap` | Show the action reference. |
 
 ## Drift Rules
 

@@ -1,10 +1,12 @@
-use rtemplate_contracts::actions::{ActionCost, ActionSpec, ActionTransport};
+use rtemplate_contracts::actions::{
+    ActionCost, ActionSpec, ActionTransport, ExampleAction, ACTION_SPECS,
+};
+use rtemplate_contracts::errors::ToolError;
 
 use super::{
     confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from, run,
     service_action_from_command, usage, Command, SetupCommand,
 };
-use rtemplate_contracts::actions::ExampleAction;
 use rtemplate_contracts::config::ExampleConfig;
 
 const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
@@ -12,11 +14,14 @@ const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
     description: "Delete everything.",
     required_scope: None,
     transport: ActionTransport::Any,
+    rest_method: None,
+    rest_path: None,
     destructive: true,
     requires_admin: false,
     cost: ActionCost::Write,
     params: &[],
     returns: "DeleteResult",
+    cli: None,
 }];
 
 #[test]
@@ -107,6 +112,36 @@ fn service_commands_convert_to_shared_actions() {
         service_action_from_command(&Command::Help),
         Some(ExampleAction::Help)
     );
+}
+
+#[test]
+fn cli_parser_covers_every_cli_action_in_registry() {
+    for spec in ACTION_SPECS.iter().filter(|spec| spec.cli.is_some()) {
+        let cli = spec.cli.unwrap();
+        let args = match spec.name {
+            "greet" => vec![cli.command],
+            "echo" => vec![cli.command, "--message", "hello"],
+            "status" | "help" => vec![cli.command],
+            other => panic!("add a parser parity fixture for action `{other}`"),
+        };
+        let command = parse_args_from(args)
+            .unwrap()
+            .unwrap_or_else(|| panic!("registered CLI action `{}` did not parse", spec.name));
+        let action = service_action_from_command(&command)
+            .unwrap_or_else(|| panic!("registered CLI action `{}` did not dispatch", spec.name));
+        assert_eq!(action.name(), spec.name);
+    }
+}
+
+#[test]
+fn cli_error_format_uses_shared_tool_error_fields() {
+    let error = ToolError::validation("missing_field", "`message` is required", "Provide it")
+        .with_field("message");
+    let rendered = super::format_cli_tool_error(&error);
+    assert!(rendered.contains("code: missing_field"));
+    assert!(rendered.contains("kind: validation"));
+    assert!(rendered.contains("field: message"));
+    assert!(rendered.contains("remediation: Provide it"));
 }
 
 #[test]

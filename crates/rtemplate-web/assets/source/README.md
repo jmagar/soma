@@ -41,7 +41,7 @@ pnpm validate   # Biome check + typecheck + tests + static build
 
 All API calls go through `lib/api.ts`. Template-facing service names, endpoints, and action metadata live in `lib/template.ts` so a scaffolded project has one obvious place to update the web UI.
 
-By default, the base URL is empty (relative) — the Rust server serves both the static files and the API from the same origin, so no CORS configuration is needed. For local `pnpm dev` against a separately running backend, copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_RTEMPLATE_API_BASE_URL` (for example, `http://localhost:3100`).
+By default, the base URL is empty (relative) — the Rust server serves both the static files and the API from the same origin, so no CORS configuration is needed. For local `pnpm dev` against a separately running backend, copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_RTEMPLATE_API_BASE_URL` (for example, `http://localhost:40060`).
 
 Business actions use direct REST routes:
 

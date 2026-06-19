@@ -151,16 +151,35 @@ pub struct ParamSpec {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CliFlagSpec {
+    pub name: &'static str,
+    pub value_name: Option<&'static str>,
+    pub required: bool,
+    pub description: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CliSpec {
+    pub command: &'static str,
+    pub usage: &'static str,
+    pub flags: &'static [CliFlagSpec],
+    pub description: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ActionSpec {
     pub name: &'static str,
     pub description: &'static str,
     pub required_scope: Option<&'static str>,
     pub transport: ActionTransport,
+    pub rest_method: Option<&'static str>,
+    pub rest_path: Option<&'static str>,
     pub destructive: bool,
     pub requires_admin: bool,
     pub cost: ActionCost,
     pub params: &'static [ParamSpec],
     pub returns: &'static str,
+    pub cli: Option<CliSpec>,
 }
 
 const GREET_PARAMS: &[ParamSpec] = &[ParamSpec {
@@ -177,72 +196,124 @@ const ECHO_PARAMS: &[ParamSpec] = &[ParamSpec {
     description: "Message to echo back. Must not be empty.",
 }];
 
+const GREET_CLI_FLAGS: &[CliFlagSpec] = &[CliFlagSpec {
+    name: "--name",
+    value_name: Some("NAME"),
+    required: false,
+    description: "Name to greet. Omit to greet the world.",
+}];
+
+const ECHO_CLI_FLAGS: &[CliFlagSpec] = &[CliFlagSpec {
+    name: "--message",
+    value_name: Some("MSG"),
+    required: true,
+    description: "Message to echo back. Must not be empty.",
+}];
+
 pub const ACTION_SPECS: &[ActionSpec] = &[
     ActionSpec {
         name: "greet",
         description: "Return a greeting.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::Any,
+        rest_method: Some("POST"),
+        rest_path: Some("/v1/greet"),
         destructive: false,
         requires_admin: false,
         cost: ActionCost::Cheap,
         params: GREET_PARAMS,
         returns: "Greeting",
+        cli: Some(CliSpec {
+            command: "greet",
+            usage: "example greet [--name NAME]",
+            flags: GREET_CLI_FLAGS,
+            description: "Greet NAME, or the world when omitted.",
+        }),
     },
     ActionSpec {
         name: "echo",
         description: "Echo a message back unchanged.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::Any,
+        rest_method: Some("POST"),
+        rest_path: Some("/v1/echo"),
         destructive: false,
         requires_admin: false,
         cost: ActionCost::Cheap,
         params: ECHO_PARAMS,
         returns: "EchoResult",
+        cli: Some(CliSpec {
+            command: "echo",
+            usage: "example echo --message MSG",
+            flags: ECHO_CLI_FLAGS,
+            description: "Echo MSG back unchanged.",
+        }),
     },
     ActionSpec {
         name: "status",
         description: "Return server status and configuration info.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::Any,
+        rest_method: Some("GET"),
+        rest_path: Some("/v1/status"),
         destructive: false,
         requires_admin: false,
         cost: ActionCost::Cheap,
         params: &[],
         returns: "Status",
+        cli: Some(CliSpec {
+            command: "status",
+            usage: "example status",
+            flags: &[],
+            description: "Show service status.",
+        }),
     },
     ActionSpec {
         name: "elicit_name",
         description: "Ask the MCP client to collect a name, then return a personalised greeting.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::McpOnly,
+        rest_method: None,
+        rest_path: None,
         destructive: false,
         requires_admin: false,
         cost: ActionCost::Cheap,
         params: &[],
         returns: "Greeting",
+        cli: None,
     },
     ActionSpec {
         name: "scaffold_intent",
         description: "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
         required_scope: Some(READ_SCOPE),
         transport: ActionTransport::McpOnly,
+        rest_method: None,
+        rest_path: None,
         destructive: false,
         requires_admin: false,
         cost: ActionCost::Moderate,
         params: &[],
         returns: "ScaffoldIntentReport",
+        cli: None,
     },
     ActionSpec {
         name: "help",
         description: "Show the action reference.",
         required_scope: None,
         transport: ActionTransport::Any,
+        rest_method: Some("GET"),
+        rest_path: Some("/v1/help"),
         destructive: false,
         requires_admin: false,
         cost: ActionCost::Cheap,
         params: &[],
         returns: "HelpPayload",
+        cli: Some(CliSpec {
+            command: "help",
+            usage: "example help",
+            flags: &[],
+            description: "Show JSON action reference.",
+        }),
     },
 ];
 
@@ -259,6 +330,21 @@ pub fn rest_action_names() -> Vec<&'static str> {
         .iter()
         .filter(|spec| spec.transport.rest())
         .map(|spec| spec.name)
+        .collect()
+}
+
+pub fn cli_action_names() -> Vec<&'static str> {
+    ACTION_SPECS
+        .iter()
+        .filter(|spec| spec.cli.is_some())
+        .map(|spec| spec.name)
+        .collect()
+}
+
+pub fn cli_commands() -> Vec<&'static str> {
+    ACTION_SPECS
+        .iter()
+        .filter_map(|spec| spec.cli.map(|cli| cli.command))
         .collect()
 }
 
@@ -316,6 +402,23 @@ pub struct ActionDoc {
     pub surface_availability: SurfaceAvailability,
     pub auth_posture: String,
     pub mcp_only_exception: Option<String>,
+    pub cli: Option<CliDoc>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CliFlagDoc {
+    pub name: String,
+    pub value_name: Option<String>,
+    pub required: bool,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CliDoc {
+    pub command: String,
+    pub usage: String,
+    pub description: String,
+    pub flags: Vec<CliFlagDoc>,
 }
 
 pub fn action_catalog() -> Vec<ActionDoc> {
@@ -352,6 +455,21 @@ pub fn action_catalog() -> Vec<ActionDoc> {
             },
             mcp_only_exception: (spec.transport == ActionTransport::McpOnly)
                 .then(|| "MCP-only because it requires client-rendered elicitation.".to_owned()),
+            cli: spec.cli.map(|cli| CliDoc {
+                command: cli.command.to_owned(),
+                usage: cli.usage.to_owned(),
+                description: cli.description.to_owned(),
+                flags: cli
+                    .flags
+                    .iter()
+                    .map(|flag| CliFlagDoc {
+                        name: flag.name.to_owned(),
+                        value_name: flag.value_name.map(ToOwned::to_owned),
+                        required: flag.required,
+                        description: flag.description.to_owned(),
+                    })
+                    .collect(),
+            }),
         })
         .collect()
 }

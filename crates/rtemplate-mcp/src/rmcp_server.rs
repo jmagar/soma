@@ -30,13 +30,10 @@ struct AuthContext {
 use serde_json::{json, Map, Value};
 
 use rtemplate_contracts::{
-    actions::{
-        action_names, action_validation_error, is_known_action, required_scope_for_action,
-        ValidationError,
-    },
+    actions::{is_known_action, required_scope_for_action, ValidationError},
+    errors::ServiceErrorKind,
     token_limit::MAX_RESPONSE_BYTES,
 };
-use rtemplate_service::ScaffoldIntentValidationError;
 
 use rtemplate_runtime::server::{AppState, AuthPolicy};
 
@@ -158,30 +155,26 @@ impl ServerHandler for ExampleRmcpServer {
                     continuation_args.as_ref(),
                 )
             }
-            Err(error) if rtemplate_service::is_validation_error(&error) => {
-                tracing::warn!(
-                    tool = %tool_name,
-                    elapsed_ms = started.elapsed().as_millis(),
-                    "MCP tool rejected invalid params"
-                );
-                tool_error_result(validation_error_payload(
-                    &tool_name,
-                    empty_action_as_none(&action),
-                    &error,
-                ))
-            }
             Err(error) => {
-                tracing::error!(
-                    tool = %tool_name,
-                    elapsed_ms = started.elapsed().as_millis(),
-                    error = %error,
-                    "MCP tool execution failed"
-                );
-                tool_error_result(execution_error_payload(
-                    &tool_name,
-                    empty_action_as_none(&action),
-                    &error,
-                ))
+                let tool_error = rtemplate_service::classify_service_error(&error);
+                if tool_error.kind == ServiceErrorKind::Validation {
+                    tracing::warn!(
+                        tool = %tool_name,
+                        elapsed_ms = started.elapsed().as_millis(),
+                        "MCP tool rejected invalid params"
+                    );
+                } else {
+                    tracing::error!(
+                        tool = %tool_name,
+                        elapsed_ms = started.elapsed().as_millis(),
+                        service_error_kind = %tool_error.kind.as_str(),
+                        error = %error,
+                        "MCP tool execution failed"
+                    );
+                }
+                tool_error_result(
+                    tool_error.to_mcp_payload(&tool_name, empty_action_as_none(&action)),
+                )
             }
         }
     }
@@ -337,39 +330,6 @@ fn error_overflow_payload(value: &Value, serialized_bytes: usize) -> Value {
     })
 }
 
-fn validation_error_payload(tool: &str, action: Option<&str>, error: &anyhow::Error) -> Value {
-    if let Some(error) = action_validation_error(error) {
-        return validation_error_payload_from_validation_error(tool, action, error);
-    }
-    if let Some(error) = error.downcast_ref::<ScaffoldIntentValidationError>() {
-        let mut payload = base_tool_error_payload(
-            "mcp_tool_error",
-            error.code(),
-            tool,
-            action,
-            error.to_string(),
-            true,
-            error.remediation(),
-        );
-        if let Some(field) = error.field() {
-            payload["field"] = json!(field);
-        }
-        if let Some(expected_pattern) = error.expected_pattern() {
-            payload["expected_pattern"] = json!(expected_pattern);
-        }
-        return payload;
-    }
-    base_tool_error_payload(
-        "mcp_tool_error",
-        "validation_error",
-        tool,
-        action,
-        error.to_string(),
-        true,
-        "Correct the tool arguments and retry, or use action=help for examples.",
-    )
-}
-
 fn validation_error_payload_from_validation_error(
     tool: &str,
     action: Option<&str>,
@@ -380,23 +340,8 @@ fn validation_error_payload_from_validation_error(
         | ValidationError::NotAvailableOverRest { action } => Some(action.as_str()),
         _ => None,
     });
-    let mut payload = base_tool_error_payload(
-        "mcp_tool_error",
-        error.code(),
-        tool,
-        payload_action,
-        error.to_string(),
-        true,
-        error.remediation(),
-    );
-    if let Some(field) = error.field() {
-        payload["field"] = json!(field);
-    }
-    if let Some(bad_value) = error.bad_value() {
-        payload["bad_value"] = json!(bad_value);
-    }
-    payload["available_actions"] = json!(action_names());
-    payload
+    rtemplate_contracts::errors::ToolError::from_action_validation(error)
+        .to_mcp_payload(tool, payload_action)
 }
 
 fn unknown_action_payload(tool: &str, action: &str) -> Value {
@@ -407,65 +352,6 @@ fn unknown_action_payload(tool: &str, action: &str) -> Value {
             action: action.to_owned(),
         },
     )
-}
-
-fn execution_error_payload(tool: &str, action: Option<&str>, error: &anyhow::Error) -> Value {
-    let mut payload = base_tool_error_payload(
-        "mcp_tool_error",
-        "execution_error",
-        tool,
-        action,
-        "Tool execution failed. Check server logs for details.",
-        true,
-        "Check service configuration and upstream availability, then retry. Use action=status or action=help for diagnostics.",
-    );
-    payload["reason_kind"] = json!(execution_error_kind(error));
-    payload
-}
-
-fn execution_error_kind(error: &anyhow::Error) -> &'static str {
-    let text = error.to_string().to_ascii_lowercase();
-    if text.contains("timeout") || text.contains("timed out") {
-        "timeout"
-    } else if text.contains("rate limit") || text.contains("429") {
-        "rate_limited"
-    } else if text.contains("unauthorized")
-        || text.contains("forbidden")
-        || text.contains("401")
-        || text.contains("403")
-    {
-        "auth_rejected"
-    } else if text.contains("connection refused")
-        || text.contains("connection reset")
-        || text.contains("dns")
-        || text.contains("unreachable")
-        || text.contains("temporarily unavailable")
-    {
-        "upstream_unavailable"
-    } else {
-        "unknown"
-    }
-}
-
-fn base_tool_error_payload(
-    kind: &str,
-    code: &str,
-    tool: &str,
-    action: Option<&str>,
-    message: impl Into<String>,
-    retryable: bool,
-    remediation: impl Into<String>,
-) -> Value {
-    json!({
-        "kind": kind,
-        "schema_version": 1,
-        "code": code,
-        "tool": tool,
-        "action": action,
-        "message": message.into(),
-        "retryable": retryable,
-        "remediation": remediation.into(),
-    })
 }
 
 fn empty_action_as_none(action: &str) -> Option<&str> {
