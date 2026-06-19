@@ -33,6 +33,7 @@ pub enum AuthPolicy {
     /// - `Some(auth_state)`: OAuth mode (Google flow + JWKS issuance)
     /// - `None`: static bearer token only
     Mounted {
+        #[cfg(feature = "auth")]
         auth_state: Option<Arc<rtemplate_auth::state::AuthState>>,
     },
 }
@@ -42,12 +43,16 @@ impl std::fmt::Debug for AuthPolicy {
         match self {
             AuthPolicy::LoopbackDev => f.write_str("AuthPolicy::LoopbackDev"),
             AuthPolicy::TrustedGatewayUnscoped => f.write_str("AuthPolicy::TrustedGatewayUnscoped"),
+            #[cfg(feature = "auth")]
             AuthPolicy::Mounted {
                 auth_state: Some(_),
             } => f.write_str("AuthPolicy::Mounted { auth_state: Some(<AuthState>) }"),
+            #[cfg(feature = "auth")]
             AuthPolicy::Mounted { auth_state: None } => {
                 f.write_str("AuthPolicy::Mounted { auth_state: None /* bearer-only */ }")
             }
+            #[cfg(not(feature = "auth"))]
+            AuthPolicy::Mounted {} => f.write_str("AuthPolicy::Mounted"),
         }
     }
 }
@@ -100,6 +105,11 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
     }
 
     if has_oauth {
+        #[cfg(not(feature = "auth"))]
+        anyhow::bail!(
+            "RTEMPLATE_MCP_AUTH_MODE=oauth requires compiling with the `auth`/`oauth` feature"
+        );
+        #[cfg(feature = "auth")]
         Ok(AuthPolicyKind::MountedOAuth)
     } else if has_token {
         Ok(AuthPolicyKind::MountedBearer)
@@ -203,6 +213,7 @@ impl ResponsePageStore {
 
 /// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` when the trust
 /// boundary is outside the mounted HTTP auth layer.
+#[cfg(feature = "auth")]
 pub fn build_auth_layer(
     policy: &AuthPolicy,
     static_token: Option<Arc<str>>,
@@ -227,6 +238,15 @@ pub fn build_auth_layer(
             )
         }
     }
+}
+
+#[cfg(not(feature = "auth"))]
+pub fn build_auth_layer(
+    _policy: &AuthPolicy,
+    _static_token: Option<Arc<str>>,
+    _resource_url: Option<Arc<str>>,
+) -> Option<()> {
+    None
 }
 
 #[cfg(test)]

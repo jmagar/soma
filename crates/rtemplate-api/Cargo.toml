@@ -9,14 +9,16 @@ publish = false
 
 [features]
 default = []
+auth = ["dep:rtemplate-auth"]
+oauth = ["auth"]
 
 [dependencies]
 anyhow = "1"
 axum = "0.8"
-rtemplate-auth = { path = "../rtemplate-auth" }
+rtemplate-auth = { path = "../rtemplate-auth", optional = true }
 rtemplate-contracts = { path = "../rtemplate-contracts" }
-rtemplate-runtime = { path = "../rtemplate-runtime" }
-rtemplate-service = { path = "../rtemplate-service" }
+rtemplate-runtime = { path = "../rtemplate-runtime", default-features = false }
+rtemplate-service = { path = "../rtemplate-service", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

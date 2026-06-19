@@ -7,11 +7,15 @@ description = "Business service and upstream client for rmcp-template"
 license = "MIT"
 publish = false
 
+[features]
+default = ["observability"]
+observability = ["dep:rtemplate-observability"]
+
 [dependencies]
 anyhow = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rtemplate-contracts = { path = "../rtemplate-contracts" }
-rtemplate-observability = { path = "../rtemplate-observability" }
+rtemplate-observability = { path = "../rtemplate-observability", optional = true }
 serde_json = "1"
 url = "2"
 

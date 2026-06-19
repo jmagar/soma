@@ -53,15 +53,15 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 axum = { version = "0.8", optional = true }
-rtemplate-runtime = { path = "crates/rtemplate-runtime" }
+rtemplate-runtime = { path = "crates/rtemplate-runtime", default-features = false }
 rtemplate-api = { path = "crates/rtemplate-api", optional = true }
 rtemplate-auth = { path = "crates/rtemplate-auth", optional = true }
 rtemplate-cli = { path = "crates/rtemplate-cli", optional = true }
 rtemplate-contracts = { path = "crates/rtemplate-contracts" }
 rtemplate-mcp = { path = "crates/rtemplate-mcp", optional = true }
-rtemplate-observability = { path = "crates/rtemplate-observability" }
+rtemplate-observability = { path = "crates/rtemplate-observability", optional = true }
 rtemplate-plugin-support = { path = "crates/rtemplate-plugin-support", optional = true }
-rtemplate-service = { path = "crates/rtemplate-service" }
+rtemplate-service = { path = "crates/rtemplate-service", default-features = false }
 rtemplate-web = { path = "crates/rtemplate-web", optional = true }
 rmcp = { version = "1.7.0", default-features = false, optional = true }
 serde_json = { version = "1", optional = true }
@@ -69,15 +69,24 @@ tower-http = { version = "0.6", features = ["cors", "limit", "trace"], optional 
 
 [features]
 default = ["full"]
-cli = ["dep:rtemplate-cli", "dep:rtemplate-plugin-support"]
+cli = ["dep:rtemplate-cli"]
 mcp = ["dep:rtemplate-mcp"]
 mcp-stdio = ["mcp", "dep:rmcp", "rmcp/transport-io", "rtemplate-mcp/stdio"]
-api = ["dep:rtemplate-api", "dep:rtemplate-auth"]
+api = ["auth", "dep:rtemplate-api"]
+auth = [
+  "dep:rtemplate-auth",
+  "rtemplate-api?/auth",
+  "rtemplate-mcp?/auth",
+  "rtemplate-runtime/auth",
+]
+oauth = ["auth", "rtemplate-api?/oauth", "rtemplate-mcp?/oauth", "rtemplate-runtime/oauth"]
+observability = ["dep:rtemplate-observability", "rtemplate-service/observability"]
+plugin = ["cli", "dep:rtemplate-plugin-support"]
 mcp-http = ["api", "mcp", "dep:axum", "dep:serde_json", "dep:tower-http", "rtemplate-mcp/http"]
 web = ["api", "dep:rtemplate-web"]
 local-adapter = ["cli", "mcp-stdio"]
 server = ["cli", "api", "mcp-http", "mcp-stdio"]
-full = ["local-adapter", "server", "web"]
+full = ["local-adapter", "server", "web", "oauth", "observability", "plugin"]
 test-support = ["rtemplate-mcp?/test-support"]
 
 [dev-dependencies]

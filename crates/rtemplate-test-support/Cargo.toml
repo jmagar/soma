@@ -8,7 +8,7 @@ license = "MIT"
 publish = false
 
 [dependencies]
-rtemplate-api = { path = "../rtemplate-api" }
+rtemplate-api = { path = "../rtemplate-api", features = ["auth"] }
 rtemplate-auth = { path = "../rtemplate-auth" }
 rtemplate-contracts = { path = "../rtemplate-contracts" }
-rtemplate-service = { path = "../rtemplate-service" }
+rtemplate-service = { path = "../rtemplate-service", default-features = false, features = ["observability"] }

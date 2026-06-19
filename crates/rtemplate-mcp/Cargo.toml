@@ -11,6 +11,8 @@ publish = false
 default = []
 stdio = ["rmcp/transport-io"]
 http = ["dep:axum", "rmcp/transport-streamable-http-server"]
+auth = ["dep:rtemplate-auth", "rtemplate-runtime/auth"]
+oauth = ["auth", "rtemplate-runtime/oauth"]
 test-support = []
 
 [dependencies]
@@ -23,10 +25,10 @@ rmcp = { version = "1.7.0", default-features = false, features = [
   "elicitation",
   "schemars",
 ] }
-rtemplate-auth = { path = "../rtemplate-auth" }
+rtemplate-auth = { path = "../rtemplate-auth", optional = true }
 rtemplate-contracts = { path = "../rtemplate-contracts" }
-rtemplate-runtime = { path = "../rtemplate-runtime" }
-rtemplate-service = { path = "../rtemplate-service" }
+rtemplate-runtime = { path = "../rtemplate-runtime", default-features = false }
+rtemplate-service = { path = "../rtemplate-service", default-features = false }
 schemars = "1.2.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

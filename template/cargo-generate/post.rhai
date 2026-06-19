@@ -9,6 +9,7 @@ let scope_prefix = variable::get("scope_prefix");
 let default_port = variable::get("default_port");
 let github_owner = variable::get("github_owner");
 let github_repo = variable::get("github_repo");
+let default_features = variable::get("default_features");
 let rewrite_script = env::working_directory + "/template/cargo-generate/rewrite.py";
 let generated_root = env::working_directory;
 
@@ -26,4 +27,5 @@ system::command("python3", [
     default_port,
     github_owner,
     github_repo,
+    default_features,
 ]);

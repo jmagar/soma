@@ -74,6 +74,38 @@ def validate_port(value: str) -> None:
         raise ValueError(f"default_port must be between 1 and 65535: {value!r}")
 
 
+def validate_default_features(value: str) -> list[str]:
+    allowed = {
+        "cli",
+        "mcp",
+        "mcp-stdio",
+        "api",
+        "auth",
+        "oauth",
+        "observability",
+        "plugin",
+        "mcp-http",
+        "web",
+        "local-adapter",
+        "server",
+        "full",
+        "test-support",
+    }
+    features = [feature.strip() for feature in value.split(",") if feature.strip()]
+    if not features:
+        raise ValueError("default_features must include at least one feature")
+    unknown = [feature for feature in features if feature not in allowed]
+    if unknown:
+        raise ValueError(
+            "default_features contains unknown feature(s): " + ", ".join(sorted(unknown))
+        )
+    return features
+
+
+def cargo_feature_array(features: list[str]) -> str:
+    return ", ".join(f'"{feature}"' for feature in features)
+
+
 def parse_args(args: list[str]) -> dict[str, str]:
     (
         crate_name,
@@ -87,10 +119,12 @@ def parse_args(args: list[str]) -> dict[str, str]:
         default_port,
         github_owner,
         github_repo,
+        default_features,
     ) = args
 
     validate_identifier("service_slug", service_slug)
     validate_port(default_port)
+    features = validate_default_features(default_features)
 
     return {
         "crate_name": crate_name,
@@ -106,6 +140,8 @@ def parse_args(args: list[str]) -> dict[str, str]:
         "default_port": default_port,
         "github_owner": github_owner,
         "github_repo": github_repo,
+        "default_features": default_features,
+        "default_feature_array": cargo_feature_array(features),
         "github_slug": f"{github_owner}/{github_repo}",
         "github_url": f"https://github.com/{github_owner}/{github_repo}",
         "github_ssh": f"github.com:{github_owner}/{github_repo}.git",
@@ -126,6 +162,7 @@ def replacements(values: dict[str, str]) -> list[tuple[str, str]]:
     env_prefix = values["env_prefix"]
     scope_prefix = values["scope_prefix"]
     default_port = values["default_port"]
+    default_feature_array = values["default_feature_array"]
     github_slug = values["github_slug"]
     github_url = values["github_url"]
     github_ssh = values["github_ssh"]
@@ -141,6 +178,7 @@ def replacements(values: dict[str, str]) -> list[tuple[str, str]]:
         ("jmagar/rtemplate-mcp", github_slug),
         ('"name": "rtemplate-mcp"', f'"name": "{crate_name}"'),
         ("rtemplate-server", server_binary_name),
+        ('default = ["full"]', f"default = [{default_feature_array}]"),
         ("rmcp_template", crate_name_snake),
         ("rtemplate_mcp", mcp_surface_crate_snake),
         ("rtemplate-mcp", mcp_surface_crate),
@@ -258,8 +296,8 @@ def cleanup_generated_readme(root: Path) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) != 13:
-        print("expected generated root plus 11 cargo-generate arguments", file=sys.stderr)
+    if len(sys.argv) != 14:
+        print("expected generated root plus 12 cargo-generate arguments", file=sys.stderr)
         return 2
     root = Path(sys.argv[1])
     try:

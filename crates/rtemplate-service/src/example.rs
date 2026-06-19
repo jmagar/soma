@@ -115,9 +115,7 @@ impl ExampleClient {
             // api_url intentionally omitted — topology leak on unauthenticated endpoint.
             "note": "stub — replace with real health endpoint",
         });
-        if let Some(warning) = rtemplate_observability::binary_status::stale_binary_warning() {
-            status["warnings"] = json!([warning]);
-        }
+        add_status_warnings(&mut status);
         Ok(status)
     }
 
@@ -199,3 +197,13 @@ fn non_empty(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_owned())
 }
+
+#[cfg(feature = "observability")]
+fn add_status_warnings(status: &mut Value) {
+    if let Some(warning) = rtemplate_observability::binary_status::stale_binary_warning() {
+        status["warnings"] = json!([warning]);
+    }
+}
+
+#[cfg(not(feature = "observability"))]
+fn add_status_warnings(_status: &mut Value) {}

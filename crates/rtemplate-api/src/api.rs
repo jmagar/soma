@@ -9,7 +9,13 @@ use axum::{
     http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
+#[cfg(feature = "auth")]
 use rtemplate_auth::AuthContext;
+#[cfg(not(feature = "auth"))]
+struct AuthContext {
+    sub: String,
+    scopes: Vec<String>,
+}
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

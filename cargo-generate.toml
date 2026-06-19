@@ -42,6 +42,7 @@ scope_prefix = { type = "string", prompt = "OAuth/MCP scope prefix", regex = "^[
 default_port = { type = "string", prompt = "Default HTTP MCP port", regex = "^[0-9]{2,5}$", default = "40060" }
 github_owner = { type = "string", prompt = "GitHub owner/org for docs", regex = "^[A-Za-z0-9_.-]+$", default = "jmagar" }
 github_repo = { type = "string", prompt = "GitHub repo name for docs", regex = "^[A-Za-z0-9_.-]+$", default = "myservice-mcp" }
+default_features = { type = "string", prompt = "Default Cargo features (comma-separated)", regex = "^[a-z0-9_,-]+$", default = "full" }
 
 [hooks]
 post = ["template/cargo-generate/post.rhai"]

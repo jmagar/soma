@@ -20,7 +20,9 @@ pub use rtemplate_contracts::config;
 pub use rtemplate_contracts::env_registry;
 #[cfg(feature = "mcp")]
 pub use rtemplate_mcp as mcp;
+#[cfg(feature = "observability")]
 pub use rtemplate_observability::binary_status;
+#[cfg(feature = "observability")]
 pub use rtemplate_observability::logging;
 pub use rtemplate_service::app;
 pub use rtemplate_service::example;

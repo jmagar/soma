@@ -43,13 +43,18 @@ cargo generate \
   --define scope_prefix=myservice \
   --define default_port=40060 \
   --define github_owner=jmagar \
-  --define github_repo=myservice-mcp
+  --define github_repo=myservice-mcp \
+  --define default_features=full
 ```
 
 `package_name`, `crate_prefix`, and binary names may use hyphens because Cargo
 package names and executable names support them. `service_slug` is also used as
 a Rust config field/module identifier, so keep it snake_case:
 `^[a-z][a-z0-9_]*$`.
+
+`default_features` controls the generated repo's default Cargo feature set.
+Use `full` for the platform superset, `local-adapter` for CLI + stdio MCP, or a
+comma-separated custom set such as `server,web,oauth,observability`.
 
 ## After Generation
 

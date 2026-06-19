@@ -20,7 +20,13 @@ use rmcp::{
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
 };
+#[cfg(feature = "auth")]
 use rtemplate_auth::AuthContext;
+#[cfg(not(feature = "auth"))]
+struct AuthContext {
+    sub: String,
+    scopes: Vec<String>,
+}
 use serde_json::{json, Map, Value};
 
 use rtemplate_contracts::{

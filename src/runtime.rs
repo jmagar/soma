@@ -135,7 +135,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
     match resolve_auth_policy_kind(config, config.mcp.trusted_gateway)? {
         AuthPolicyKind::LoopbackDev => Ok(AuthPolicy::LoopbackDev),
         AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
-        AuthPolicyKind::MountedBearer => Ok(AuthPolicy::Mounted { auth_state: None }),
+        AuthPolicyKind::MountedBearer => Ok(mounted_bearer_policy()),
         AuthPolicyKind::MountedOAuth => {
             let auth_cfg = rtemplate_auth::config::AuthConfigBuilder::new()
                 .env_prefix("RTEMPLATE_MCP")
@@ -157,6 +157,16 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
             })
         }
     }
+}
+
+#[cfg(all(feature = "mcp-http", feature = "auth"))]
+fn mounted_bearer_policy() -> AuthPolicy {
+    AuthPolicy::Mounted { auth_state: None }
+}
+
+#[cfg(all(feature = "mcp-http", not(feature = "auth")))]
+fn mounted_bearer_policy() -> AuthPolicy {
+    AuthPolicy::Mounted {}
 }
 
 #[cfg(feature = "mcp-http")]

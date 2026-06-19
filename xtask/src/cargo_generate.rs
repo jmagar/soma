@@ -12,6 +12,7 @@ use crate::{command_exists, run_cargo};
 struct Case {
     name: &'static str,
     values: BTreeMap<&'static str, &'static str>,
+    feature_checks: &'static [&'static str],
 }
 
 pub(crate) fn run(args: &[String]) -> Result<()> {
@@ -61,7 +62,16 @@ fn cases() -> Vec<Case> {
                 ("default_port", "40123"),
                 ("github_owner", "jmagar"),
                 ("github_repo", "myservice-mcp"),
+                ("default_features", "full"),
             ]),
+            feature_checks: &[
+                "cli",
+                "mcp-stdio",
+                "local-adapter",
+                "api,cli,web,oauth,observability",
+                "server",
+                "full",
+            ],
         },
         Case {
             name: "hyphenated-packages",
@@ -77,7 +87,15 @@ fn cases() -> Vec<Case> {
                 ("default_port", "40124"),
                 ("github_owner", "jmagar"),
                 ("github_repo", "foo-bar-mcp"),
+                ("default_features", "server,web,oauth,observability"),
             ]),
+            feature_checks: &[
+                "cli",
+                "mcp-stdio",
+                "local-adapter",
+                "api,cli,web,oauth,observability",
+                "server,web,oauth,observability",
+            ],
         },
     ]
 }
@@ -203,6 +221,21 @@ fn generate_case(
             cargo_home,
         )
         .with_context(|| format!("cargo check failed in {}", project.display()))?;
+
+        for features in case.feature_checks {
+            run_cmd_in(
+                "cargo",
+                &["check", "--no-default-features", "--features", features],
+                &project,
+                cargo_home,
+            )
+            .with_context(|| {
+                format!(
+                    "cargo check failed in {} for features {features}",
+                    project.display()
+                )
+            })?;
+        }
     }
 
     Ok(())
@@ -225,6 +258,20 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
         surface_name
     )) {
         bail!("generated README points at the internal MCP surface crate repo");
+    }
+
+    let manifest = read_to_string(project.join("Cargo.toml"))?;
+    let expected_default = format!(
+        "default = [{}]",
+        value(case, "default_features")?
+            .split(',')
+            .filter(|feature| !feature.trim().is_empty())
+            .map(|feature| format!("\"{}\"", feature.trim()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    if !manifest.contains(&expected_default) {
+        bail!("generated Cargo.toml does not contain {expected_default}");
     }
 
     let expected_repo = format!(

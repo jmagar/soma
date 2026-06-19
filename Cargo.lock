@@ -2197,7 +2197,6 @@ dependencies = [
  "anyhow",
  "dirs",
  "reqwest",
- "rtemplate-api",
  "rtemplate-contracts",
  "rtemplate-runtime",
  "rtemplate-service",
