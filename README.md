@@ -125,11 +125,14 @@ server:
 
 ```bash
 cargo install cargo-generate
-cargo generate --git https://github.com/jmagar/rtemplate-mcp --name myservice-mcp --allow-commands
+cargo generate --git https://github.com/jmagar/rtemplate-mcp --name myservice-mcp
+cd myservice-mcp
+cargo run --quiet -p xtask -- cargo-generate-post "$PWD"
 ```
 
 The generator prompts for the crate name, binary names, env prefix, scope
-prefix, default port, and Rust type prefix, then rewrites the generated copy.
+prefix, default port, and Rust type prefix. The Rust `xtask` post-processor
+then rewrites the generated copy.
 
 ## Step-by-step: build your own MCP server from this template
 

@@ -1,14 +1,15 @@
 [template]
 cargo_generate_version = ">=0.23.0"
 # This repo remains valid Rust/TOML rather than embedding Liquid placeholders.
-# The post hook performs all rewrites after cargo-generate copies the tree, so
-# cargo-generate should not try to Liquid-process source/docs assets.
+# Rewrites are owned by `cargo xtask cargo-generate-post` after cargo-generate
+# copies the tree, so cargo-generate should not try to Liquid-process source/docs
+# assets.
 include = [
   "cargo-generate.toml",
   "template/cargo-generate/post.rhai",
-  "template/cargo-generate/rewrite.py",
 ]
 ignore = [
+  "cargo-generate.toml",
   ".beads",
   ".cache",
   ".dolt",
@@ -27,6 +28,7 @@ ignore = [
   "**/__pycache__",
   "*.pyc",
   "docs/references",
+  "docs/CARGO_GENERATE.md",
   "mcp-server-inventory.md",
 ]
 
