@@ -89,21 +89,33 @@ fn rest_args_parse_nested_params_shape() {
 fn missing_action_is_validation_error() {
     let error = ExampleAction::from_mcp_args(&json!({})).unwrap_err();
     assert!(error.to_string().contains("action is required"));
-    let validation = error
+    let legacy_validation = error
         .downcast_ref::<ValidationError>()
-        .expect("error should preserve validation metadata");
+        .expect("parser errors should remain downcast-compatible as ValidationError");
+    assert_eq!(legacy_validation.code(), "missing_action");
+    let validation = action_validation_error(&error).expect("error should classify as validation");
     assert_eq!(validation.code(), "missing_action");
     assert_eq!(validation.field(), Some("action"));
     assert!(validation.remediation().contains("action=help"));
 }
 
 #[test]
+fn non_string_action_is_wrong_type_validation_error() {
+    let error = ExampleAction::from_mcp_args(&json!({ "action": 42 })).unwrap_err();
+    assert!(error.to_string().contains("`action` must be a string"));
+    let validation = error
+        .downcast_ref::<ValidationError>()
+        .expect("parser errors should remain downcast-compatible as ValidationError");
+    assert_eq!(validation.code(), "wrong_type");
+    assert_eq!(validation.field(), Some("action"));
+}
+
+#[test]
 fn echo_rejects_missing_and_empty_message() {
     let missing = ExampleAction::from_mcp_args(&json!({ "action": "echo" })).unwrap_err();
     assert!(missing.to_string().contains("`message` is required"));
-    let validation = missing
-        .downcast_ref::<ValidationError>()
-        .expect("error should preserve validation metadata");
+    let validation =
+        action_validation_error(&missing).expect("error should classify as validation");
     assert_eq!(validation.code(), "missing_field");
     assert_eq!(validation.field(), Some("message"));
 
@@ -122,9 +134,7 @@ fn string_params_reject_wrong_json_type() {
     }))
     .unwrap_err();
     assert!(echo.to_string().contains("`message` must be a string"));
-    let validation = echo
-        .downcast_ref::<ValidationError>()
-        .expect("error should preserve validation metadata");
+    let validation = action_validation_error(&echo).expect("error should classify as validation");
     assert_eq!(validation.code(), "wrong_type");
     assert_eq!(validation.field(), Some("message"));
 }
@@ -155,9 +165,7 @@ fn rest_missing_action_preserves_missing_action_error() {
 fn unknown_action_mentions_help() {
     let error = ExampleAction::from_rest("missing", &json!({})).unwrap_err();
     assert!(error.to_string().contains("action=help"));
-    let validation = error
-        .downcast_ref::<ValidationError>()
-        .expect("error should preserve validation metadata");
+    let validation = action_validation_error(&error).expect("error should classify as validation");
     assert_eq!(validation.code(), "unknown_action");
     assert_eq!(validation.bad_value(), Some("missing"));
 }
@@ -187,6 +195,18 @@ fn non_validation_errors_are_not_classified_as_validation_errors() {
         !is_validation_error(&err),
         "plain anyhow errors must not be classified as validation errors"
     );
+    assert!(
+        action_validation_error(&err).is_none(),
+        "plain anyhow errors must not expose action validation metadata"
+    );
+}
+
+#[test]
+fn wrapped_action_errors_still_classify_as_validation_errors() {
+    let err: anyhow::Error = ActionError::from(ValidationError::MissingAction).into();
+    let validation = action_validation_error(&err).expect("wrapped action error should classify");
+    assert_eq!(validation.code(), "missing_action");
+    assert!(is_validation_error(&err));
 }
 
 #[test]

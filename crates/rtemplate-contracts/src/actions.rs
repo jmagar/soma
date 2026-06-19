@@ -1,19 +1,41 @@
-use anyhow::Result;
 use serde::Serialize;
 use serde_json::{json, Value};
 
-// ── Validation error type ─────────────────────────────────────────────────────
+// ── Action error types ────────────────────────────────────────────────────────
 
-#[derive(Debug)]
-pub enum ValidationError {
+#[derive(Debug, thiserror::Error)]
+pub enum ActionError {
+    #[error(transparent)]
+    Validation(#[from] ActionValidationError),
+}
+
+impl ActionError {
+    pub fn as_validation(&self) -> Option<&ActionValidationError> {
+        match self {
+            Self::Validation(error) => Some(error),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ActionValidationError {
+    #[error("action is required")]
     MissingAction,
+    #[error("`{field}` is required and must not be empty")]
     MissingField { field: String },
+    #[error("`{field}` must be a string")]
     WrongType { field: String },
+    #[error(
+        "action={action} is not available over REST; use MCP or action=help for documentation"
+    )]
     NotAvailableOverRest { action: String },
+    #[error("unknown example action: {action}; use action=help for documentation")]
     UnknownAction { action: String },
 }
 
-impl ValidationError {
+pub type ValidationError = ActionValidationError;
+
+impl ActionValidationError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::MissingAction => "missing_action",
@@ -67,28 +89,6 @@ impl ValidationError {
         }
     }
 }
-
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MissingAction => write!(f, "action is required"),
-            Self::MissingField { field } => {
-                write!(f, "`{field}` is required and must not be empty")
-            }
-            Self::WrongType { field } => write!(f, "`{field}` must be a string"),
-            Self::NotAvailableOverRest { action } => write!(
-                f,
-                "action={action} is not available over REST; use MCP or action=help for documentation"
-            ),
-            Self::UnknownAction { action } => write!(
-                f,
-                "unknown example action: {action}; use action=help for documentation"
-            ),
-        }
-    }
-}
-
-impl std::error::Error for ValidationError {}
 
 pub const READ_SCOPE: &str = "example:read";
 pub const WRITE_SCOPE: &str = "example:write";
@@ -378,31 +378,35 @@ impl ExampleAction {
         }
     }
 
-    pub fn from_mcp_args(args: &Value) -> Result<Self> {
-        let action = args
-            .get("action")
-            .and_then(Value::as_str)
-            .ok_or(ValidationError::MissingAction)?;
+    pub fn from_mcp_args(args: &Value) -> anyhow::Result<Self> {
+        let action = match args.get("action") {
+            None => return Err(action_error(ValidationError::MissingAction)),
+            Some(Value::String(action)) => action.as_str(),
+            Some(_) => {
+                return Err(action_error(ValidationError::WrongType {
+                    field: "action".into(),
+                }));
+            }
+        };
         Self::from_params(action, args)
     }
 
-    pub fn from_rest(action: &str, params: &Value) -> Result<Self> {
+    pub fn from_rest(action: &str, params: &Value) -> anyhow::Result<Self> {
         if action.is_empty() {
-            return Err(ValidationError::MissingAction.into());
+            return Err(action_error(ValidationError::MissingAction));
         }
         if action_spec(action)
             .map(|spec| spec.transport == ActionTransport::McpOnly)
             .unwrap_or(false)
         {
-            return Err(ValidationError::NotAvailableOverRest {
+            return Err(action_error(ValidationError::NotAvailableOverRest {
                 action: action.to_owned(),
-            }
-            .into());
+            }));
         }
         Self::from_params(action, params)
     }
 
-    fn from_params(action: &str, params: &Value) -> Result<Self> {
+    fn from_params(action: &str, params: &Value) -> anyhow::Result<Self> {
         match action {
             "greet" => Ok(Self::Greet {
                 name: optional_string_param(params, "name")?,
@@ -410,8 +414,10 @@ impl ExampleAction {
             "echo" => {
                 let message = optional_string_param(params, "message")?
                     .filter(|m| !m.is_empty())
-                    .ok_or_else(|| ValidationError::MissingField {
-                        field: "message".into(),
+                    .ok_or_else(|| {
+                        action_error(ValidationError::MissingField {
+                            field: "message".into(),
+                        })
                     })?;
                 Ok(Self::Echo { message })
             }
@@ -419,10 +425,9 @@ impl ExampleAction {
             "help" => Ok(Self::Help),
             "elicit_name" => Ok(Self::ElicitName),
             "scaffold_intent" => Ok(Self::ScaffoldIntent),
-            other => Err(ValidationError::UnknownAction {
+            other => Err(action_error(ValidationError::UnknownAction {
                 action: other.to_owned(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -443,18 +448,29 @@ pub fn rest_help() -> Value {
     })
 }
 
-fn optional_string_param(params: &Value, name: &str) -> Result<Option<String>> {
+fn optional_string_param(params: &Value, name: &str) -> Result<Option<String>, ValidationError> {
     match params.get(name) {
         None => Ok(None),
         Some(value) => value
             .as_str()
             .map(|s| Some(s.to_owned()))
-            .ok_or_else(|| ValidationError::WrongType { field: name.into() }.into()),
+            .ok_or_else(|| ValidationError::WrongType { field: name.into() }),
     }
 }
 
+fn action_error(error: ValidationError) -> anyhow::Error {
+    error.into()
+}
+
+pub fn action_validation_error(error: &anyhow::Error) -> Option<&ActionValidationError> {
+    if let Some(error) = error.downcast_ref::<ActionError>() {
+        return error.as_validation();
+    }
+    error.downcast_ref::<ActionValidationError>()
+}
+
 pub fn is_validation_error(error: &anyhow::Error) -> bool {
-    error.downcast_ref::<ValidationError>().is_some()
+    action_validation_error(error).is_some()
 }
 
 #[cfg(test)]

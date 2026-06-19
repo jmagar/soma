@@ -16,7 +16,7 @@ rtemplate-runtime = { path = "../rtemplate-runtime", default-features = false }
 rtemplate-service = { path = "../rtemplate-service", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["macros", "rt", "time"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -1,4 +1,4 @@
-//! CLI — thin shim that parses args, calls `ExampleService`, formats output.
+//! CLI — thin shim that parses args, dispatches service actions, formats output.
 //!
 //! The CLI uses the same service layer as the MCP server. No business logic lives here.
 //!
@@ -15,10 +15,10 @@
 
 use anyhow::{anyhow, Result};
 use rtemplate_contracts::{
-    actions::{rest_help, ActionSpec, ACTION_SPECS},
+    actions::{ActionSpec, ExampleAction, ACTION_SPECS},
     config::ExampleConfig,
 };
-use rtemplate_service::{ExampleClient, ExampleService};
+use rtemplate_service::{execute_service_action, ExampleClient, ExampleService};
 use std::io::{BufRead, IsTerminal, Write};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
@@ -191,14 +191,11 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     let service = ExampleService::new(client);
     confirm_command_if_destructive(&cmd)?;
 
-    let result = match &cmd {
-        Command::Greet { name } => service.greet(name.as_deref()).await?,
-        Command::Echo { message } => service.echo(message).await?,
-        Command::Status => service.status().await?,
-        Command::Help => rest_help(),
+    let result = match service_action_from_command(&cmd) {
+        Some(action) => execute_service_action(&service, &action).await?,
         // Doctor, Watch, and Setup are never dispatched via this function — main.rs
         // handles them directly because they need config.mcp fields.
-        Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => {
+        None => {
             unreachable!("dispatched directly in main.rs::run_cli")
         }
     };
@@ -215,11 +212,17 @@ fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {
 }
 
 fn command_action_name(cmd: &Command) -> Option<&'static str> {
+    service_action_from_command(cmd).map(|action| action.name())
+}
+
+fn service_action_from_command(cmd: &Command) -> Option<ExampleAction> {
     match cmd {
-        Command::Greet { .. } => Some("greet"),
-        Command::Echo { .. } => Some("echo"),
-        Command::Status => Some("status"),
-        Command::Help => Some("help"),
+        Command::Greet { name } => Some(ExampleAction::Greet { name: name.clone() }),
+        Command::Echo { message } => Some(ExampleAction::Echo {
+            message: message.clone(),
+        }),
+        Command::Status => Some(ExampleAction::Status),
+        Command::Help => Some(ExampleAction::Help),
         Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => None,
     }
 }

@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use rtemplate_contracts::{
-    actions::{required_scope_for_action, ValidationError, READ_SCOPE, WRITE_SCOPE},
+    actions::{required_scope_for_action, ExampleAction, ValidationError, READ_SCOPE, WRITE_SCOPE},
     token_limit::MAX_RESPONSE_BYTES,
 };
 
@@ -90,6 +90,27 @@ fn validation_errors_become_structured_tool_errors() {
 }
 
 #[test]
+fn parser_validation_errors_become_structured_tool_errors() {
+    let error = ExampleAction::from_mcp_args(&json!({
+        "action": "echo"
+    }))
+    .expect_err("missing echo message should fail parsing");
+    let payload = validation_error_payload("example", Some("echo"), &error);
+    let result = tool_error_result(payload).expect("tool error should serialize");
+
+    assert_eq!(result.is_error, Some(true));
+    let structured = result
+        .structured_content
+        .as_ref()
+        .expect("structured content should be present");
+    assert_eq!(structured["kind"], "mcp_tool_error");
+    assert_eq!(structured["code"], "missing_field");
+    assert_eq!(structured["tool"], "example");
+    assert_eq!(structured["action"], "echo");
+    assert_eq!(structured["field"], "message");
+}
+
+#[test]
 fn unknown_actions_become_retryable_tool_errors() {
     let result = tool_error_result(unknown_action_payload("example", "missing"))
         .expect("unknown action payload should serialize");
@@ -166,6 +187,7 @@ fn execution_errors_do_not_expose_raw_error_text() {
     assert!(!payload.to_string().contains("secret-api-key"));
 }
 
+#[cfg(feature = "auth")]
 #[test]
 fn insufficient_scope_uses_structured_protocol_error_data() {
     let auth = rtemplate_auth::AuthContext {

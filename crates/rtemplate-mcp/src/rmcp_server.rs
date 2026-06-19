@@ -30,7 +30,10 @@ struct AuthContext {
 use serde_json::{json, Map, Value};
 
 use rtemplate_contracts::{
-    actions::{action_names, is_known_action, required_scope_for_action, ValidationError},
+    actions::{
+        action_names, action_validation_error, is_known_action, required_scope_for_action,
+        ValidationError,
+    },
     token_limit::MAX_RESPONSE_BYTES,
 };
 use rtemplate_service::ScaffoldIntentValidationError;
@@ -335,7 +338,7 @@ fn error_overflow_payload(value: &Value, serialized_bytes: usize) -> Value {
 }
 
 fn validation_error_payload(tool: &str, action: Option<&str>, error: &anyhow::Error) -> Value {
-    if let Some(error) = error.downcast_ref::<ValidationError>() {
+    if let Some(error) = action_validation_error(error) {
         return validation_error_payload_from_validation_error(tool, action, error);
     }
     if let Some(error) = error.downcast_ref::<ScaffoldIntentValidationError>() {
