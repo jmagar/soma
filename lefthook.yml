@@ -55,7 +55,7 @@ pre-commit:
     # Prevents accidentally committing .env files containing real secrets.
     # Only .env.example is allowed. Any other .env* file is blocked.
     env_guard:
-      run: bash scripts/block-env-commits.sh
+      run: cargo xtask block-env-commits
 
     # ── 4. file_size ──────────────────────────────────────────────────────────
     # Blocks staged production source files that exceed template line budgets.

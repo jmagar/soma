@@ -55,7 +55,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 | `generate-docs.py` | Python | `cargo xtask generate-docs`, `cargo xtask check-docs`, CI | Generates/checks volatile docs and metadata from `ACTION_SPECS`, `ENV_KEY_SPECS`, and typed config defaults. |
 | `check-stale-claims.py` | Python | `cargo xtask check-stale-claims`, CI | Fails when known stale hardcoded template claims reappear. |
 | `check-scaffold-intent-contract.py` | Python | `just scaffold-contract-check`, CI | Validates the scaffold intent JSON schema and checked-in examples without third-party packages. |
-| `check-coupled-files.sh` | Bash | `just coupled-files-check`, CI | Warns when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
+| `check-coupled-files.sh` | Bash wrapper | `cargo xtask check-coupled-files`, `just coupled-files-check`, CI | Delegates to xtask to warn when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
 | `refresh-docs.sh` | Bash | `just refresh-docs*` | Refreshes ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
 
 ### Plugin And MCP Validation
@@ -67,7 +67,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 | `check-plugin-stdio-smoke.sh` | Bash | direct, docs/contracts | Smoke-tests the installed stdio plugin binary with JSON-RPC initialize plus `status`. |
 | `test-mcp-auth.sh` | Bash | `just test-mcp-auth` | Smoke-tests HTTP MCP bearer-auth behavior. |
 | `generate-cli.sh` | Bash | `just generate-cli` | Uses mcporter to generate a standalone CLI from a running MCP server schema. |
-| `sync-cargo.sh` | Bash | plugin hook/runtime support | Copies `Cargo.lock` into plugin data directories, falling back to `cargo fetch` if needed. |
+| `sync-cargo.sh` | Bash wrapper | `cargo xtask sync-cargo`, plugin hook/runtime support | Delegates to xtask to copy `Cargo.lock` into plugin data directories, falling back to `cargo fetch` if needed. |
 
 ### Template And Local Runtime Checks
 
@@ -82,7 +82,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `block-env-commits.sh` | Bash | lefthook pre-commit | Prevents staged `.env*` secret files from being committed, except `.env.example`. |
+| `block-env-commits.sh` | Bash wrapper | `cargo xtask block-env-commits`, lefthook pre-commit | Delegates to xtask to prevent staged `.env*` secret files from being committed, except `.env.example`. |
 | `check-file-size.sh` | Bash | `just file-size-check`, lefthook pre-commit | Enforces staged source-file size budgets. |
 | `asciicheck.py` | Python | through `run-ascii-check.sh` | Checks files for unexpected non-ASCII characters and can fix common smart punctuation. |
 | `run-ascii-check.sh` | Bash | `just ascii-check`, `just ascii-fix`, CI | Collects tracked text-like files and runs `asciicheck.py`. |
@@ -118,10 +118,13 @@ allowlisted instead of failing the size budget.
 ### `block-env-commits.sh`
 
 ```bash
+cargo xtask block-env-commits
 bash scripts/block-env-commits.sh
 ```
 
-Pre-commit guard that inspects the git staging area and rejects staged `.env`,
+Compatibility wrapper for `cargo xtask block-env-commits`.
+
+The xtask command inspects the git staging area and rejects staged `.env`,
 `.env.local`, `.env.prod`, `.env.staging`, or other `.env*` files. `.env.example`
 is explicitly allowed.
 
@@ -193,12 +196,17 @@ and maintained usage live in `xtask`.
 ### `check-coupled-files.sh`
 
 ```bash
+cargo xtask check-coupled-files
+cargo xtask check-coupled-files origin/main HEAD
 scripts/check-coupled-files.sh
 scripts/check-coupled-files.sh origin/main HEAD
 just coupled-files-check
 ```
 
-Checks changed paths and reports likely documentation or automation drift:
+Compatibility wrapper for `cargo xtask check-coupled-files`.
+
+The xtask command checks changed paths and reports likely documentation or
+automation drift:
 
 - `Justfile` without `lefthook.yml`, or vice versa.
 - `scripts/*` without `scripts/README.md`.
@@ -551,14 +559,17 @@ Excluded paths:
 ### `sync-cargo.sh`
 
 ```bash
+cargo xtask sync-cargo
 bash scripts/sync-cargo.sh
-CLAUDE_PLUGIN_ROOT=/path/to/repo CLAUDE_PLUGIN_DATA=/path/to/data bash scripts/sync-cargo.sh
+CLAUDE_PLUGIN_ROOT=/path/to/repo CLAUDE_PLUGIN_DATA=/path/to/data cargo xtask sync-cargo
 ```
 
-Copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to `CLAUDE_PLUGIN_DATA` when the
-destination is missing or stale. If the copy fails, it runs `cargo fetch` against
-the source manifest. If both fail, it removes the destination lockfile and exits
-non-zero.
+Compatibility wrapper for `cargo xtask sync-cargo`.
+
+The xtask command copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to
+`CLAUDE_PLUGIN_DATA` when the destination is missing or stale. If the copy fails,
+it runs `cargo fetch` against the source manifest. If both fail, it removes the
+destination lockfile and exits non-zero.
 
 Used by plugin/runtime setup paths that need Cargo metadata in a plugin data
 directory.

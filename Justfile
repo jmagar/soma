@@ -133,7 +133,7 @@ blob-size-check:
 
 # Check coupled files such as Justfile/lefthook and scripts/docs
 coupled-files-check:
-    bash scripts/check-coupled-files.sh
+    cargo xtask check-coupled-files
 
 # Check tracked source/config/docs for non-ASCII characters
 ascii-check:

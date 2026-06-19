@@ -98,6 +98,53 @@ cargo xtask check-test-siblings
 
 ---
 
+### `cargo xtask block-env-commits`
+
+Block staged `.env*` files before they can be committed. `.env.example` is
+allowed.
+
+```bash
+cargo xtask block-env-commits
+# compatibility wrapper:
+bash scripts/block-env-commits.sh
+```
+
+Used by the `env_guard` pre-commit hook through the wrapper script.
+
+---
+
+### `cargo xtask check-coupled-files`
+
+Check a git diff for common companion-file drift, such as script changes without
+`scripts/README.md` or schema changes without generated MCP schema docs.
+
+```bash
+cargo xtask check-coupled-files
+cargo xtask check-coupled-files origin/main HEAD
+# compatibility wrapper:
+bash scripts/check-coupled-files.sh origin/main HEAD
+```
+
+The default range is `origin/main..HEAD`, falling back to `HEAD~1..HEAD` when
+`origin/main` is unavailable.
+
+---
+
+### `cargo xtask sync-cargo`
+
+Copy `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to `CLAUDE_PLUGIN_DATA` when the
+plugin data copy is missing or stale. If the copy fails, the command falls back
+to `cargo fetch --manifest-path <repo>/Cargo.toml`.
+
+```bash
+cargo xtask sync-cargo
+CLAUDE_PLUGIN_ROOT=/repo CLAUDE_PLUGIN_DATA=/tmp/plugin-data cargo xtask sync-cargo
+# compatibility wrapper:
+bash scripts/sync-cargo.sh
+```
+
+---
+
 ### `cargo xtask contract-audit`
 
 Run local static/spec checks without contacting live upstream services. This wraps the high-signal template contract checks used before release.
