@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
-use crate::{command_exists, run_cargo};
+use crate::{cargo_generate_post, command_exists};
 
 #[derive(Debug)]
 struct Case {
@@ -199,7 +199,6 @@ fn generate_case(
         destination.display().to_string(),
         "--vcs".to_string(),
         "none".to_string(),
-        "--allow-commands".to_string(),
         "--silent".to_string(),
     ];
     for (key, value) in &case.values {
@@ -208,9 +207,10 @@ fn generate_case(
     }
 
     let cargo_args: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_cargo(&cargo_args)?;
+    run_cmd_in("cargo", &cargo_args, Path::new("."), cargo_home)?;
 
     let project = destination.join(value(case, "package_name")?);
+    cargo_generate_post::run(&[project.display().to_string()])?;
     assert_generated_shape(&project, case)?;
 
     if cargo_check {
@@ -252,6 +252,7 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
     let surface_name = format!("{}-mcp-surface", value(case, "crate_prefix")?);
 
     assert_missing(project.join("cargo-generate.toml"))?;
+    assert_missing(project.join(".cargo-generate-values.toml"))?;
     assert_missing(project.join("template"))?;
     assert_missing(project.join("docs/CARGO_GENERATE.md"))?;
 

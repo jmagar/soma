@@ -4,9 +4,9 @@
 normal compileable Rust repository.
 
 The template avoids Liquid placeholders in live Rust and TOML files. Instead,
-`cargo-generate` collects the project values, then runs a post-generation hook
-that renames packages, binaries, env prefixes, scopes, type names, and plugin
-paths in the generated copy.
+`cargo-generate` copies the compileable repository, then the Rust `xtask`
+post-processor renames packages, binaries, env prefixes, scopes, type names,
+and plugin paths in the generated copy.
 
 ## Install
 
@@ -16,14 +16,12 @@ cargo install cargo-generate
 
 ## Generate
 
-Because the post hook runs a local Python rewrite script, pass
-`--allow-commands`:
-
 ```bash
 cargo generate \
   --git https://github.com/jmagar/rtemplate-mcp \
-  --name myservice-mcp \
-  --allow-commands
+  --name myservice-mcp
+cd myservice-mcp
+cargo run --quiet -p xtask -- cargo-generate-post "$PWD"
 ```
 
 Useful non-interactive form:
@@ -32,7 +30,6 @@ Useful non-interactive form:
 cargo generate \
   --git https://github.com/jmagar/rtemplate-mcp \
   --name myservice-mcp \
-  --allow-commands \
   --define package_name=myservice-mcp \
   --define crate_prefix=myservice \
   --define binary_name=myservice \
@@ -45,7 +42,16 @@ cargo generate \
   --define github_owner=jmagar \
   --define github_repo=myservice-mcp \
   --define default_features=full
+cd myservice-mcp
+cargo run --quiet -p xtask -- cargo-generate-post "$PWD"
 ```
+
+The `cargo-generate` hook writes the selected values into a temporary
+`.cargo-generate-values.toml` file. `cargo-generate-post` consumes that file,
+rewrites the generated project, then removes generation-only files:
+`.cargo-generate-values.toml`, `docs/CARGO_GENERATE.md`, and any copied
+`cargo-generate.toml` or `template/` files. It also best-effort removes the
+`target/` directory created by the post step.
 
 `package_name`, `crate_prefix`, and binary names may use hyphens because Cargo
 package names and executable names support them. `service_slug` is also used as
@@ -84,7 +90,8 @@ cargo xtask cargo-generate --no-cargo-check
 ```
 
 The smoke test generates both a simple project and a project with hyphenated
-Cargo package names, checks plugin/repository metadata, removes template-only
-generation docs from the output, and runs `cargo check --workspace --all-targets`
-inside each generated project. `scripts/check-cargo-generate.py` is only a
-compatibility wrapper for the xtask command.
+Cargo package names, runs the Rust `cargo-generate-post` rewrite command, checks
+plugin/repository metadata, verifies template-only files were removed, and runs
+`cargo check --workspace --all-targets` inside each generated project.
+`scripts/check-cargo-generate.py` is only a compatibility wrapper for the xtask
+command.

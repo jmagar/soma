@@ -10,6 +10,7 @@
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
 //!   cargo-generate Smoke-test cargo-generate output
+//!   cargo-generate-post Apply cargo-generate post-processing rewrites
 //!   generate-docs Generate volatile docs and metadata from canonical specs
 //!   check-docs    Validate generated docs and metadata are current
 //!   check-stale-claims Fail on stale hardcoded template claims
@@ -33,6 +34,7 @@ use std::process::{Command, Stdio};
 use walkdir::WalkDir;
 
 mod cargo_generate;
+mod cargo_generate_post;
 mod patterns;
 mod release_versions;
 mod web_source;
@@ -58,6 +60,7 @@ fn main() -> Result<()> {
         Some("patterns") => patterns_cmd(&args[1..]),
         Some("contract-audit") => contract_audit(),
         Some("cargo-generate") => cargo_generate(&args[1..]),
+        Some("cargo-generate-post") => cargo_generate_post::run(&args[1..]),
         Some("generate-docs") => generate_docs(),
         Some("check-docs") => check_docs(),
         Some("check-stale-claims") => check_stale_claims(),
@@ -697,6 +700,7 @@ COMMANDS:
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
   contract-audit        Run local static/spec checks without live upstream calls
   cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
+  cargo-generate-post   Internal generated-project rewrite command
   generate-docs         Generate volatile docs and metadata from canonical specs
   check-docs            Validate generated docs and metadata are current
   check-stale-claims    Fail on stale hardcoded template claims

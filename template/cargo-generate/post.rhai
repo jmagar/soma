@@ -10,22 +10,18 @@ let default_port = variable::get("default_port");
 let github_owner = variable::get("github_owner");
 let github_repo = variable::get("github_repo");
 let default_features = variable::get("default_features");
-let rewrite_script = env::working_directory + "/template/cargo-generate/rewrite.py";
-let generated_root = env::working_directory;
 
-system::command("python3", [
-    rewrite_script,
-    generated_root,
-    package_name,
-    crate_prefix,
-    binary_name,
-    server_binary_name,
-    service_slug,
-    type_prefix,
-    env_prefix,
-    scope_prefix,
-    default_port,
-    github_owner,
-    github_repo,
-    default_features,
+file::write(".cargo-generate-values.toml", [
+    "package_name = \"" + package_name + "\"",
+    "crate_prefix = \"" + crate_prefix + "\"",
+    "binary_name = \"" + binary_name + "\"",
+    "server_binary_name = \"" + server_binary_name + "\"",
+    "service_slug = \"" + service_slug + "\"",
+    "type_prefix = \"" + type_prefix + "\"",
+    "env_prefix = \"" + env_prefix + "\"",
+    "scope_prefix = \"" + scope_prefix + "\"",
+    "default_port = \"" + default_port + "\"",
+    "github_owner = \"" + github_owner + "\"",
+    "github_repo = \"" + github_repo + "\"",
+    "default_features = \"" + default_features + "\"",
 ]);

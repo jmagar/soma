@@ -112,11 +112,12 @@ just contract-audit
 
 ### `cargo xtask cargo-generate`
 
-Smoke-test real `cargo-generate` output using the repo's post-generation hook.
+Smoke-test real `cargo-generate` output plus the Rust post-generation rewrite.
 The command stages a clean template copy, generates both a simple server and a
-hyphenated-package server, checks plugin/repository metadata, verifies
-template-only files were removed, and runs `cargo check --workspace --all-targets`
-inside each generated project.
+hyphenated-package server, lets the native Rhai hook record selected values,
+runs `cargo xtask cargo-generate-post` against each generated project, checks
+plugin/repository metadata, verifies template-only files were removed, and runs
+`cargo check --workspace --all-targets` inside each generated project.
 
 ```bash
 cargo xtask cargo-generate
@@ -125,6 +126,14 @@ cargo xtask cargo-generate --no-cargo-check
 
 Use `--no-cargo-check` for a faster shape-only check while iterating on the
 generator.
+
+### `cargo xtask cargo-generate-post`
+
+Internal post-processor for generated projects. It replaces the old Python
+rewrite hook and rewrites packages, crates, binaries, env prefixes, scopes,
+ports, repository metadata, and generated paths in the final output directory.
+When called with only `<generated-root>`, it reads `.cargo-generate-values.toml`
+from the generated project and removes that temporary file before returning.
 
 ---
 
