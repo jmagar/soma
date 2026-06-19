@@ -63,7 +63,7 @@ The tool returns an object like:
   },
   "runtime": {
     "host": "127.0.0.1",
-    "port": 3100,
+    "port": 40060,
     "binary_profile": "cli-mcp",
     "mcp_transport": "dual"
   },

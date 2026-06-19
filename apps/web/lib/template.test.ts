@@ -59,8 +59,8 @@ describe("template action metadata", () => {
 
 describe("normalizeApiBaseUrl", () => {
   it("removes one or more trailing slashes", () => {
-    expect(normalizeApiBaseUrl("http://localhost:3100/")).toBe("http://localhost:3100");
-    expect(normalizeApiBaseUrl("http://localhost:3100///")).toBe("http://localhost:3100");
+    expect(normalizeApiBaseUrl("http://localhost:40060/")).toBe("http://localhost:40060");
+    expect(normalizeApiBaseUrl("http://localhost:40060///")).toBe("http://localhost:40060");
   });
 
   it("preserves empty same-origin configuration", () => {

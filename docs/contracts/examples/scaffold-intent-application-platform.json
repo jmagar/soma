@@ -16,7 +16,7 @@
   },
   "runtime": {
     "host": "0.0.0.0",
-    "port": 3100,
+    "port": 40060,
     "binary_profile": "server-full",
     "mcp_transport": "http"
   },

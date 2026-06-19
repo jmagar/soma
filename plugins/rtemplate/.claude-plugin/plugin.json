@@ -1,15 +1,16 @@
 {
   "name": "rtemplate",
-  "description": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server \u2014 a Rust-based MCP server built from rmcp-template.",
+  "description": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server - a Rust-based MCP server built from rmcp-template.",
   "author": {
-    "name": "your-username"
+    "name": "Jacob Magar"
   },
-  "repository": "https://github.com/your-org/rtemplate-mcp",
+  "repository": "https://github.com/jmagar/rtemplate-mcp",
   "license": "MIT",
   "keywords": [
     "example",
     "mcp",
-    "template"
+    "template",
+    "homelab"
   ],
   "mcpServers": "./.mcp.json",
   "hooks": "./hooks/hooks.json",
@@ -18,76 +19,82 @@
     "use_docker": {
       "type": "boolean",
       "title": "Deploy with Docker",
-      "description": "TEMPLATE: Keep this \u2014 both Docker and systemd deployment modes are useful defaults. True: run via docker compose (containerized, easier to upgrade, auto-restart). False: run as a systemd user service (lighter weight, no Docker dependency, logs to journald). Both produce identical behavior \u2014 pick based on your host conventions.",
+      "description": "TEMPLATE: Keep this. True uses docker compose; false uses a systemd user service.",
       "required": true,
       "default": false
-    },
-    "server_url": {
-      "type": "string",
-      "title": "Server URL",
-      "description": "Optional HTTP server base URL for remote/platform fallback and health monitoring. The default MCP connection uses the installed local stdio adapter: rtemplate mcp.",
-      "required": false,
-      "default": ""
-    },
-    "api_token": {
-      "type": "string",
-      "title": "API token",
-      "description": "Optional bearer token for HTTP MCP fallback. Not used by the default stdio connection. Server mode: pick any value and use the same value in RTEMPLATE_MCP_TOKEN. Generate one with: openssl rand -hex 32 or just gen-token.",
-      "sensitive": true,
-      "required": false
-    },
-    "no_auth": {
-      "type": "boolean",
-      "title": "Disable service auth",
-      "description": "Run the MCP server without authentication. ONLY safe when the server is bound to 127.x (loopback). Use this for local development only \u2014 never expose an unauthed MCP server on a network interface.",
-      "required": true,
-      "default": false
-    },
-    "auth_mode": {
-      "type": "string",
-      "title": "Auth mode",
-      "description": "Server auth mode. 'bearer' uses only the static API token. 'oauth' enables Google OAuth/JWT for clients like Codex while the static token remains accepted for this Claude Code plugin connection. OAuth mode requires public_url, google_client_id, google_client_secret, and auth_admin_email.",
-      "required": true,
-      "default": "bearer"
-    },
-    "public_url": {
-      "type": "string",
-      "title": "Public URL",
-      "description": "Public base URL for OAuth issuer metadata, e.g. https://example.yourdomain.com. Required when auth_mode=oauth. If empty, setup derives it from an https server_url by stripping /mcp suffix. Server mode only.",
-      "default": ""
-    },
-    "google_client_id": {
-      "type": "string",
-      "title": "Google OAuth client ID",
-      "description": "Google OAuth client ID used when auth_mode=oauth. Create a Web application OAuth client in Google Cloud Console (console.cloud.google.com). The plugin setup script adds the required redirect URIs automatically. Server mode only.",
-      "sensitive": true,
-      "default": ""
-    },
-    "google_client_secret": {
-      "type": "string",
-      "title": "Google OAuth client secret",
-      "description": "Google OAuth client secret from the same Google Cloud Console credential. Stored in the generated plugin env file with mode 600 (owner-read-only). Server mode only.",
-      "sensitive": true,
-      "default": ""
-    },
-    "auth_admin_email": {
-      "type": "string",
-      "title": "OAuth admin email",
-      "description": "Bootstrap allowed Google account for OAuth mode. The server refuses to start OAuth mode without at least one allowlisted email address. Server mode only.",
-      "default": ""
     },
     "rtemplate_api_url": {
       "type": "string",
       "title": "Service API URL",
-      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name (e.g. 'myservice_api_url'). For platform servers, this is the deployed REST API base URL used by the local stdio adapter. For upstream-client servers, this is the upstream service endpoint. Maps to RTEMPLATE_API_URL env var.",
-      "sensitive": true,
+      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. Maps to RTEMPLATE_API_URL.",
+      "required": false,
       "default": ""
     },
     "rtemplate_api_key": {
       "type": "string",
       "title": "Service API key",
-      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name (e.g. 'myservice_api_key'). API key or bearer token for authenticating to your upstream service. Maps to RTEMPLATE_API_KEY env var. Never stored in config.toml.",
-      "sensitive": true,
+      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. Maps to RTEMPLATE_API_KEY.",
+      "required": false,
+      "default": "",
+      "sensitive": true
+    },
+    "api_token": {
+      "type": "string",
+      "title": "API token",
+      "description": "Optional bearer token for HTTP MCP fallback. Not used by the default stdio connection.",
+      "required": false,
+      "default": "",
+      "sensitive": true
+    },
+    "server_url": {
+      "type": "string",
+      "title": "Server URL",
+      "description": "Optional HTTP server base URL for remote/platform fallback and health monitoring. The default MCP connection uses local stdio instead.",
+      "required": false,
+      "default": ""
+    },
+    "auth_mode": {
+      "type": "string",
+      "title": "Auth mode",
+      "description": "Server auth mode. 'bearer' uses only the static API token. 'oauth' enables Google OAuth/JWT.",
+      "required": true,
+      "default": "bearer"
+    },
+    "no_auth": {
+      "type": "boolean",
+      "title": "Disable service auth",
+      "description": "Run the MCP server without authentication. ONLY safe when the server is bound to 127.x loopback.",
+      "required": true,
+      "default": false
+    },
+    "public_url": {
+      "type": "string",
+      "title": "Public URL",
+      "description": "Public base URL for OAuth issuer metadata, e.g. https://example.yourdomain.com. Required when auth_mode=oauth.",
+      "required": false,
+      "default": ""
+    },
+    "google_client_id": {
+      "type": "string",
+      "title": "Google OAuth client ID",
+      "description": "Google OAuth client ID used when auth_mode=oauth.",
+      "required": false,
+      "default": "",
+      "sensitive": true
+    },
+    "google_client_secret": {
+      "type": "string",
+      "title": "Google OAuth client secret",
+      "description": "Google OAuth client secret from the same Google Cloud Console credential.",
+      "required": false,
+      "default": "",
+      "sensitive": true
+    },
+    "auth_admin_email": {
+      "type": "string",
+      "title": "OAuth admin email",
+      "description": "Bootstrap allowed Google account for OAuth mode.",
+      "required": false,
       "default": ""
     }
   }

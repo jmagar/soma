@@ -155,6 +155,18 @@ schema-docs:
 schema-docs-check:
     python3 scripts/check-schema-docs.py --check
 
+# Regenerate volatile docs and metadata from canonical Rust specs
+generate-docs:
+    cargo xtask generate-docs
+
+# Verify generated docs and metadata are current
+check-docs:
+    cargo xtask check-docs
+
+# Verify stale hardcoded template claims have not reappeared
+check-stale-claims:
+    cargo xtask check-stale-claims
+
 # Regenerate OpenAPI docs for the REST API surface
 openapi:
     python3 scripts/check-openapi.py --write

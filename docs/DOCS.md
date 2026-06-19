@@ -67,7 +67,9 @@ docs/
   │   └── examples/
   │
   ├── generated/                      ← committed machine-produced artifacts
-  │   └── openapi.json
+  │   ├── openapi.json
+  │   ├── plugin-settings.md
+  │   └── scripts-index.md
   │
   ├── specs/                          ← implementation specs and handoff docs
   │   └── scaffold-intent-handoff.md
@@ -163,6 +165,20 @@ just symlink-docs
 ```
 
 ## Generated and checked docs
+
+### Volatile docs
+
+Regenerate and check volatile docs and metadata with:
+
+```bash
+cargo xtask generate-docs
+cargo xtask check-docs
+```
+
+This updates `docs/ENV.md`, `.env.example`, `config.example.toml`, plugin
+manifests, `apps/web/lib/generated-actions.ts`,
+`docs/generated/plugin-settings.md`, README/skill action tables, and
+`docs/generated/scripts-index.md` from canonical Rust metadata.
 
 ### Schema docs
 

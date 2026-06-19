@@ -1,15 +1,18 @@
 use rtemplate_contracts::actions::{ActionCost, ActionSpec, ActionTransport};
 
 use super::{
-    confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from, usage,
-    Command, SetupCommand,
+    confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from,
+    service_action_from_command, usage, Command, SetupCommand,
 };
+use rtemplate_contracts::actions::ExampleAction;
 
 const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
     name: "delete_everything",
     description: "Delete everything.",
     required_scope: None,
     transport: ActionTransport::Any,
+    rest_method: None,
+    rest_path: None,
     destructive: true,
     requires_admin: false,
     cost: ActionCost::Write,
@@ -77,6 +80,34 @@ fn status_subcommand() {
 fn help_subcommand() {
     let cmd = parse_args_from(["help"]).unwrap().unwrap();
     assert_eq!(cmd, Command::Help);
+}
+
+#[test]
+fn service_commands_convert_to_shared_actions() {
+    assert_eq!(
+        service_action_from_command(&Command::Greet {
+            name: Some("Alice".into())
+        }),
+        Some(ExampleAction::Greet {
+            name: Some("Alice".into())
+        })
+    );
+    assert_eq!(
+        service_action_from_command(&Command::Echo {
+            message: "hello".into()
+        }),
+        Some(ExampleAction::Echo {
+            message: "hello".into()
+        })
+    );
+    assert_eq!(
+        service_action_from_command(&Command::Status),
+        Some(ExampleAction::Status)
+    );
+    assert_eq!(
+        service_action_from_command(&Command::Help),
+        Some(ExampleAction::Help)
+    );
 }
 
 #[test]
@@ -152,6 +183,25 @@ fn setup_plugin_hook_no_repair_flag() {
     assert_eq!(
         cmd,
         Command::Setup(SetupCommand::PluginHook { no_repair: true })
+    );
+}
+
+#[test]
+fn operational_commands_do_not_convert_to_service_actions() {
+    assert_eq!(
+        service_action_from_command(&Command::Doctor { json: true }),
+        None
+    );
+    assert_eq!(
+        service_action_from_command(&Command::Watch {
+            url: None,
+            interval: 10
+        }),
+        None
+    );
+    assert_eq!(
+        service_action_from_command(&Command::Setup(SetupCommand::Check)),
+        None
     );
 }
 

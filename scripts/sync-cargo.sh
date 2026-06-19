@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Copy Cargo.lock into plugin data directories for reproducible plugin builds.
 set -euo pipefail
 
 REPO_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"

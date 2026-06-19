@@ -100,7 +100,7 @@ The intent should stay lightweight. The wizard asks enough to choose the scaffol
 | `env_prefix` | string | Environment variable prefix | `UNRAID` |
 | `auth_kind` | string | Upstream auth type | `none`, `api-key`, `bearer`, `oauth`, `both`, `other` |
 | `host` | string | Default bind host | `127.0.0.1` |
-| `port` | integer | Default HTTP port | `3100` |
+| `port` | integer | Default HTTP port | `40060` |
 | `binary_profile` | string | Recommended binary profile | `local-adapter` or `server-full` |
 | `mcp_transport` | string | MCP transport mode | `stdio`, `http`, or `dual` |
 | `mcp_primitives` | comma-separated string | MCP primitives to scaffold | `tools,resources,prompts,elicitation` |
@@ -160,7 +160,7 @@ These fields are part of the core scaffold decision:
   },
   "runtime": {
     "host": "127.0.0.1",
-    "port": 3100,
+    "port": 40060,
     "binary_profile": "local-adapter",
     "mcp_transport": "dual"
   },
@@ -211,7 +211,7 @@ These fields are part of the core scaffold decision:
   },
   "runtime": {
     "host": "0.0.0.0",
-    "port": 3100,
+    "port": 40060,
     "binary_profile": "server-full",
     "mcp_transport": "http"
   },

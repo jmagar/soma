@@ -48,6 +48,8 @@ run_check() {
 
 run_check "PATTERNS.md contracts" cargo xtask patterns
 run_check "plugin layout" just validate-plugin
+run_check "generated docs" cargo xtask check-docs
+run_check "stale claims" cargo xtask check-stale-claims
 run_check "schema docs" python3 scripts/check-schema-docs.py --check
 run_check "OpenAPI docs" python3 scripts/check-openapi.py --check
 run_check "scaffold intent contract" python3 scripts/check-scaffold-intent-contract.py

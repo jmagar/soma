@@ -5,9 +5,11 @@ use rtemplate_contracts::{
     token_limit::MAX_RESPONSE_BYTES,
 };
 
+#[cfg(feature = "auth")]
+use super::check_scope;
 use super::{
-    check_scope, execution_error_payload, scope_satisfied, tool_error_result,
-    unknown_action_payload, unknown_tool_error, validation_error_payload,
+    execution_error_payload, scope_satisfied, tool_error_result, unknown_action_payload,
+    unknown_tool_error, validation_error_payload,
 };
 
 fn scopes(s: &[&str]) -> Vec<String> {
@@ -166,6 +168,7 @@ fn execution_errors_do_not_expose_raw_error_text() {
     assert!(!payload.to_string().contains("secret-api-key"));
 }
 
+#[cfg(feature = "auth")]
 #[test]
 fn insufficient_scope_uses_structured_protocol_error_data() {
     let auth = rtemplate_auth::AuthContext {

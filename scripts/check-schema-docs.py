@@ -68,15 +68,19 @@ def extract_cost_for_actions() -> dict[str, str]:
     return costs
 
 
+def extract_description_for_actions() -> dict[str, str]:
+    text = read(ACTION_RS)
+    descriptions: dict[str, str] = {}
+    for entry in re.findall(r"ActionSpec\s*\{(.*?)\}", text, re.S):
+        name_match = re.search(r'name:\s*"([^"]+)"', entry)
+        description_match = re.search(r'description:\s*"([^"]+)"', entry)
+        if name_match and description_match:
+            descriptions[name_match.group(1)] = description_match.group(1)
+    return descriptions
+
+
 def action_description(action: str) -> str:
-    descriptions = {
-        "greet": "Return a greeting. Optional `name` string.",
-        "echo": "Echo a required `message` string.",
-        "status": "Return server status and configuration summary.",
-        "elicit_name": "Ask the MCP client to elicit a name and return a personalized greeting.",
-        "scaffold_intent": "Elicit scaffold requirements and return JSON for the scaffold-project skill. Does not mutate files.",
-        "help": "Return the in-tool action reference. Public; no scope required.",
-    }
+    descriptions = extract_description_for_actions()
     return descriptions.get(action, "TEMPLATE: document this action.")
 
 

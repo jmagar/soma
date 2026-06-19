@@ -22,13 +22,13 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/jmagar/rtemplate-mcp",
+    "brandColor": "#6366F1",
     "defaultPrompt": [
       "TEMPLATE: Replace with 3 natural-language prompts that demonstrate your server's most useful actions.",
       "Check Example service status.",
       "Show all available Example actions."
     ],
-    "brandColor": "#6366F1",
+    "websiteURL": "https://github.com/jmagar/rtemplate-mcp",
     "composerIcon": "./assets/icon.png",
     "logo": "./assets/logo.svg"
   },

@@ -33,6 +33,9 @@ xtask/
 | `cargo xtask symlink-docs` | Create `AGENTS.md` and `GEMINI.md` symlinks next to each `CLAUDE.md`. |
 | `cargo xtask check-env` | Validate required environment before server start. |
 | `cargo xtask patterns` | Check static contracts derived from `docs/PATTERNS.md`. |
+| `cargo xtask generate-docs` | Regenerate volatile docs and metadata from canonical Rust specs. |
+| `cargo xtask check-docs` | Fail when generated docs or metadata drift from canonical Rust specs. |
+| `cargo xtask check-stale-claims` | Fail when known stale hardcoded template claims reappear. |
 | `cargo xtask sync-web-source` | Copy editable `apps/web` source into `crates/rtemplate-web/assets/source` with generated artifacts excluded. |
 | `cargo xtask check-web-source-sync` | Fail if the bundled web source has drifted from `apps/web`. |
 | `cargo xtask update-aurora-web` | Refresh the known Aurora registry components, validate `apps/web`, then sync the bundle. |
@@ -67,8 +70,6 @@ WARN  crates/rtemplate-cli/src/lib.rs  line 87: potential business logic in CLI 
 ERROR crates/rtemplate-service/src/app/mod.rs: mod.rs files are banned
 ERROR crates/rtemplate-mcp/src/tools.rs: action "new_action" in ACTION_SPECS missing from dispatch
 ERROR crates/rmcp-template/tests/tool_dispatch.rs: action "new_action" has no test
-```
-
 ## Web Source Sync
 
 `rtemplate-web` bundles editable Aurora frontend source for generated projects.
@@ -93,6 +94,26 @@ cargo xtask update-aurora-web
 That command refreshes the Aurora tokens plus the Aurora UI components currently
 used by the template, runs `pnpm --dir apps/web validate`, then syncs the bundled
 source.
+
+## Generated Docs
+
+`cargo xtask generate-docs` delegates to `scripts/generate-docs.py --write`.
+It renders volatile tables and metadata from `ACTION_SPECS`,
+`ENV_KEY_SPECS`, and typed config defaults:
+
+- `docs/ENV.md`
+- `.env.example`
+- `config.example.toml`
+- `plugins/rtemplate/.claude-plugin/plugin.json`
+- `plugins/rtemplate/.codex-plugin/plugin.json`
+- `plugins/rtemplate/gemini-extension.json`
+- `apps/web/lib/generated-actions.ts`
+- README and skill action tables
+- `docs/generated/plugin-settings.md`
+- `docs/generated/scripts-index.md`
+
+`cargo xtask check-docs` runs the same renderer in drift-check mode and is part
+of local CI, contract audit, and release checks.
 
 ## symlink-docs
 

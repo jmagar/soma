@@ -29,9 +29,15 @@
   "hooks": "./hooks/hooks.json",
   "settings": [
     {
-      "name": "server_url",
-      "description": "Optional HTTP server base URL for remote/platform fallback and health monitoring. The default MCP connection uses local stdio instead.",
+      "name": "rtemplate_api_url",
+      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. Maps to RTEMPLATE_API_URL.",
       "required": false
+    },
+    {
+      "name": "rtemplate_api_key",
+      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. Maps to RTEMPLATE_API_KEY.",
+      "required": false,
+      "sensitive": true
     },
     {
       "name": "api_token",
@@ -40,15 +46,41 @@
       "sensitive": true
     },
     {
-      "name": "rtemplate_api_url",
-      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. For platform servers, this is the deployed REST API base URL used by the local stdio adapter. For upstream-client servers, this is the upstream service endpoint. Maps to RTEMPLATE_API_URL env var.",
+      "name": "server_url",
+      "description": "Optional HTTP server base URL for remote/platform fallback and health monitoring. The default MCP connection uses local stdio instead.",
       "required": false
     },
     {
-      "name": "rtemplate_api_key",
-      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. API key or bearer token for your upstream service. Maps to RTEMPLATE_API_KEY env var.",
+      "name": "auth_mode",
+      "description": "Server auth mode. 'bearer' uses only the static API token. 'oauth' enables Google OAuth/JWT.",
+      "required": false
+    },
+    {
+      "name": "no_auth",
+      "description": "Run the MCP server without authentication. ONLY safe when the server is bound to 127.x loopback.",
+      "required": false
+    },
+    {
+      "name": "public_url",
+      "description": "Public base URL for OAuth issuer metadata, e.g. https://example.yourdomain.com. Required when auth_mode=oauth.",
+      "required": false
+    },
+    {
+      "name": "google_client_id",
+      "description": "Google OAuth client ID used when auth_mode=oauth.",
       "required": false,
       "sensitive": true
+    },
+    {
+      "name": "google_client_secret",
+      "description": "Google OAuth client secret from the same Google Cloud Console credential.",
+      "required": false,
+      "sensitive": true
+    },
+    {
+      "name": "auth_admin_email",
+      "description": "Bootstrap allowed Google account for OAuth mode.",
+      "required": false
     }
   ]
 }
