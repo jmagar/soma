@@ -1,9 +1,9 @@
 # plugins
 
-Claude Code, Codex, and Gemini plugin packages for the MCP server. Claude Code
-and Codex share the same stdio MCP connection config; Gemini embeds an
-equivalent inline config because its manifest format differs. All platforms
-share the same skills.
+Claude Code, Codex, and Gemini plugin packages for the MCP server. Marketplace
+manifests intentionally do not bundle an MCP server registration; the server is
+expected to be connected through the user's existing gateway or local MCP setup.
+All platforms share the same skills and lifecycle hooks.
 
 ## Structure
 
@@ -15,7 +15,6 @@ plugins/rtemplate/
 │   ├── plugin.json       # Codex manifest
 │   └── README.md         # Codex manifest field reference
 ├── gemini-extension.json # Gemini extension manifest
-├── .mcp.json             # Shared MCP server connection config
 ├── hooks/
 │   └── hooks.json        # Lifecycle hook definitions (call the binary directly)
 └── skills/
@@ -31,7 +30,7 @@ plugins/rtemplate/
 
 ### `.claude-plugin/plugin.json`
 
-Claude Code plugin manifest. Defines the plugin identity, MCP server connection, lifecycle hooks, and user-configurable options.
+Claude Code plugin manifest. Defines the plugin identity, lifecycle hooks, and user-configurable options.
 
 **User config fields** (set via Claude Code plugin settings):
 
@@ -52,7 +51,7 @@ Claude Code plugin manifest. Defines the plugin identity, MCP server connection,
 
 ### `.codex-plugin/plugin.json`
 
-Codex equivalent of the Claude Code manifest. Shares `.mcp.json` and `skills/` with the Claude plugin. Adds Codex-specific UI fields under `interface`:
+Codex equivalent of the Claude Code manifest. Shares `skills/` with the Claude plugin. Adds Codex-specific UI fields under `interface`:
 
 - `displayName`, `shortDescription`, `longDescription` — registry presentation
 - `defaultPrompt` — three sample prompts shown in the Codex UI
@@ -60,30 +59,6 @@ Codex equivalent of the Claude Code manifest. Shares `.mcp.json` and `skills/` w
 - `composerIcon`, `logo` — asset paths (512×512 PNG, SVG)
 
 See `.codex-plugin/README.md` for a full field reference and `brandColor` guide.
-
-### `.mcp.json`
-
-Shared MCP server connection config used by Claude Code and Codex. It launches
-the installed local binary in stdio mode.
-
-```json
-{
-  "mcpServers": {
-    "example": {
-      "type": "stdio",
-      "command": "rtemplate",
-      "args": ["mcp"],
-      "env": {
-        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
-        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
-        "RUST_LOG": "warn"
-      }
-    }
-  }
-}
-```
-
----
 
 ## Hooks
 

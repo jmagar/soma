@@ -22,7 +22,6 @@ WEB_ACTIONS = ROOT / "apps/web/lib/generated-actions.ts"
 PLUGIN_SETTINGS_DOC = ROOT / "docs/generated/plugin-settings.md"
 SCRIPTS_INDEX_DOC = ROOT / "docs/generated/scripts-index.md"
 PLUGIN_SURFACE = ROOT / "plugins/rtemplate/plugin.surface.json"
-PLUGIN_MCP_JSON = ROOT / "plugins/rtemplate/.mcp.json"
 PLUGIN_CLAUDE_JSON = ROOT / "plugins/rtemplate/.claude-plugin/plugin.json"
 PLUGIN_CODEX_JSON = ROOT / "plugins/rtemplate/.codex-plugin/plugin.json"
 PLUGIN_GEMINI_JSON = ROOT / "plugins/rtemplate/gemini-extension.json"
@@ -706,28 +705,6 @@ def json_file(value: object) -> str:
     return json.dumps(value, indent=2) + "\n"
 
 
-def render_plugin_mcp_json() -> str:
-    surface = load_plugin_surface()
-    binary = surface["binary"]
-    service = surface["serviceName"]
-    return json_file(
-        {
-            "mcpServers": {
-                surface["name"]: {
-                    "type": "stdio",
-                    "command": binary,
-                    "args": ["mcp"],
-                    "env": {
-                        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
-                        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
-                        "RUST_LOG": "warn",
-                    },
-                }
-            }
-        }
-    )
-
-
 def render_claude_plugin_json() -> str:
     surface = load_plugin_surface()
     user_config = {
@@ -756,7 +733,6 @@ def render_claude_plugin_json() -> str:
             "repository": surface["repository"],
             "license": surface["license"],
             "keywords": surface["keywords"],
-            "mcpServers": "./.mcp.json",
             "hooks": "./hooks/hooks.json",
             "skills": "./skills",
             "userConfig": user_config,
@@ -779,7 +755,6 @@ def render_codex_plugin_json() -> str:
             "license": surface["license"],
             "keywords": surface["keywords"],
             "skills": "./skills/",
-            "mcpServers": "./.mcp.json",
             "interface": interface,
             "author": surface["author"],
         }
@@ -807,18 +782,6 @@ def render_gemini_extension_json() -> str:
             "license": surface["license"],
             "keywords": surface["keywords"],
             "contextFileName": "GEMINI.md",
-            "mcpServers": {
-                surface["name"]: {
-                    "type": "stdio",
-                    "command": surface["binary"],
-                    "args": ["mcp"],
-                    "env": {
-                        "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}",
-                        "RTEMPLATE_API_KEY": "${settings.rtemplate_api_key}",
-                        "RUST_LOG": "warn",
-                    },
-                }
-            },
             "skills": "./skills",
             "hooks": "./hooks/hooks.json",
             "settings": settings,
@@ -1016,7 +979,6 @@ GENERATED_FILES = {
     ENV_EXAMPLE: render_env_example,
     CONFIG_EXAMPLE: render_config_example,
     WEB_ACTIONS: render_web_actions,
-    PLUGIN_MCP_JSON: render_plugin_mcp_json,
     PLUGIN_CLAUDE_JSON: render_claude_plugin_json,
     PLUGIN_CODEX_JSON: render_codex_plugin_json,
     PLUGIN_GEMINI_JSON: render_gemini_extension_json,
