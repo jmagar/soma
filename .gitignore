@@ -173,3 +173,6 @@ apps/web/.next/
 apps/web/out/*
 !apps/web/out/.gitkeep
 apps/web/.env*.local
+
+# Local binary artifacts
+/bin/
