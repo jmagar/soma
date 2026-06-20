@@ -6,12 +6,18 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 
 ## Long-Lived Branches
 
-- `marketplace-no-mcp` is an intentional long-lived marketplace variant branch,
-  not stale cleanup. It keeps the template/plugin skill surface available while
-  removing bundled MCP server registration for environments where the MCP server
-  is already connected through the Labby gateway.
-- Do not merge `marketplace-no-mcp` into `main` by default, and do not delete it
-  as stale unless Jacob explicitly retires the no-MCP marketplace variant.
+- `marketplace-no-mcp` is a protected long-lived marketplace variant branch,
+  not stale cleanup. This protection applies in every repo, not only this one.
+- Never merge, rebase, delete, prune, squash, cherry-pick away, remove the
+  worktree for, or otherwise "clean up" any `marketplace-no-mcp` branch unless
+  Jacob explicitly names that exact branch and says to retire/delete it.
+- Broad cleanup requests such as "clean everything", "down to just main/main",
+  "prune stale branches", "merge everything back", or "remove old worktrees" do
+  not apply to `marketplace-no-mcp`. Treat it as off limits and leave both the
+  local/remote branch and its worktree intact.
+- The branch keeps the template/plugin skill surface available while removing
+  bundled MCP server registration for environments where the MCP server is
+  already connected through the Labby gateway.
 
 ## Module map
 
