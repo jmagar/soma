@@ -9,7 +9,7 @@
 name = "rmcp-template"
 version = "0.4.2"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.96"
 description = "Template for building MCP servers with the rmcp crate"
 license = "MIT"
 autobins = false

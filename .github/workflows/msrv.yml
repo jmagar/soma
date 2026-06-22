@@ -11,16 +11,16 @@ permissions:
 
 jobs:
   msrv:
-    name: Minimum Supported Rust Version (1.90)
+    name: Minimum Supported Rust Version (1.96)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust 1.90
+      - name: Install Rust 1.96
         run: |
-          rustup toolchain install 1.90.0 --profile minimal
-          rustup default 1.90.0
+          rustup toolchain install 1.96.0 --profile minimal
+          rustup default 1.96.0
 
       - name: Cache Cargo
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5

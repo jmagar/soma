@@ -2,7 +2,7 @@
 name = "rtemplate-contracts"
 version = "0.4.1"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.96"
 description = "Shared contracts, config, action metadata, and schemas for rmcp-template"
 license = "MIT"
 publish = false

@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP, REST, and CLI action dispatch now flow through `dispatch_action` for uniform
   timing, structured logging, and metrics instead of calling `execute_service_action`
   directly. `execute_service_action` remains the un-instrumented core.
+- Raised MSRV from 1.90 to 1.96 (`rust-version` across all crates, `msrv.yml`, and the
+  docs). The `rusqlite` 0.40 update pulls `libsqlite3-sys` 0.38, whose build script uses
+  `cfg_select` (stable only as of recent Rust), so 1.90 no longer compiles the workspace.
 
 ## [0.4.2] — 2026-06-19
 

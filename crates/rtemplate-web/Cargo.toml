@@ -2,7 +2,7 @@
 name = "rtemplate-web"
 version = "0.4.1"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.96"
 description = "Embedded static web UI adapter for rmcp-template"
 license = "MIT"
 publish = false

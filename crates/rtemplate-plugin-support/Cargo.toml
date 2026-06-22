@@ -2,7 +2,7 @@
 name = "rtemplate-plugin-support"
 version = "0.4.1"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.96"
 description = "Plugin setup and installation helpers for rmcp-template"
 license = "MIT"
 publish = false

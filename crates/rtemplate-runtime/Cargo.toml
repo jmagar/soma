@@ -2,7 +2,7 @@
 name = "rtemplate-runtime"
 version = "0.4.1"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.96"
 description = "Shared runtime state and auth policy for rmcp-template surfaces"
 license = "MIT"
 publish = false

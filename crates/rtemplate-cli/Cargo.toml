@@ -2,7 +2,7 @@
 name = "rtemplate-cli"
 version = "0.4.1"
 edition = "2021"
-rust-version = "1.90"
+rust-version = "1.96"
 description = "CLI surface for rmcp-template"
 license = "MIT"
 publish = false
