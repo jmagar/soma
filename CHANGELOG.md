@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   client or raw HTTP.
 - `release-fast` Cargo profile (release opts, no LTO, many codegen units) plus `just
   build-fast` and `just sync-container` recipes for fast local container iteration.
+- `serial_test` dev-dependency; the env-mutating `config_tests` are now `#[serial]` so
+  they cannot race under `cargo test` (nextest already isolates them per process).
 
 ### Changed
 

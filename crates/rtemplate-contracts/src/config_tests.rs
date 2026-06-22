@@ -1,6 +1,10 @@
 //! Unit tests for src/config.rs
 
 use super::*;
+// Tests that set/remove process-global env vars are marked #[serial] so they
+// never run concurrently under `cargo test` (nextest already isolates them in
+// separate processes).
+use serial_test::serial;
 
 // ── McpConfig::is_loopback edge cases ─────────────────────────────────────────
 
@@ -77,36 +81,43 @@ fn call_env_bool(key: &str, raw: &str) -> anyhow::Result<bool> {
 }
 
 #[test]
+#[serial]
 fn env_bool_accepts_1() {
     assert!(call_env_bool("TEST_ENV_BOOL_1", "1").unwrap());
 }
 
 #[test]
+#[serial]
 fn env_bool_accepts_true() {
     assert!(call_env_bool("TEST_ENV_BOOL_TRUE", "true").unwrap());
 }
 
 #[test]
+#[serial]
 fn env_bool_accepts_yes() {
     assert!(call_env_bool("TEST_ENV_BOOL_YES", "yes").unwrap());
 }
 
 #[test]
+#[serial]
 fn env_bool_accepts_0() {
     assert!(!call_env_bool("TEST_ENV_BOOL_0", "0").unwrap());
 }
 
 #[test]
+#[serial]
 fn env_bool_accepts_false() {
     assert!(!call_env_bool("TEST_ENV_BOOL_FALSE", "false").unwrap());
 }
 
 #[test]
+#[serial]
 fn env_bool_accepts_no() {
     assert!(!call_env_bool("TEST_ENV_BOOL_NO", "no").unwrap());
 }
 
 #[test]
+#[serial]
 fn env_bool_rejects_invalid() {
     let result = call_env_bool("TEST_ENV_BOOL_INVALID", "maybe");
     assert!(result.is_err(), "invalid bool string should return Err");
@@ -123,18 +134,21 @@ fn call_env_list(key: &str, raw: &str) -> Vec<String> {
 }
 
 #[test]
+#[serial]
 fn env_list_splits_comma_separated() {
     let result = call_env_list("TEST_ENV_LIST_CSV", "a,b,c");
     assert_eq!(result, vec!["a", "b", "c"]);
 }
 
 #[test]
+#[serial]
 fn env_list_trims_spaces_around_commas() {
     let result = call_env_list("TEST_ENV_LIST_SPACES", "foo , bar , baz");
     assert_eq!(result, vec!["foo", "bar", "baz"]);
 }
 
 #[test]
+#[serial]
 fn env_list_empty_string_leaves_target_unchanged() {
     // An empty env var should not overwrite an existing target
     std::env::set_var("TEST_ENV_LIST_EMPTY", "");
