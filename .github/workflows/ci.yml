@@ -20,6 +20,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Allow maintainers to re-run the full pipeline by hand (e.g. to re-validate
+  # after a flaky external dependency, or before tagging a release).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -484,3 +487,41 @@ jobs:
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── ci-gate: single required status that aggregates every job ────────────────
+  # Point branch protection at THIS job ("CI Gate") instead of each job below.
+  # It fails if any needed job ended in anything other than success or skipped,
+  # which closes the "a required check was silently skipped" merge hole.
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs:
+      - actionlint
+      - fmt
+      - clippy
+      - test
+      - frontend-assets
+      - build-linux
+      - build-windows
+      - mcp-smoke
+      - container-smoke
+      - toml
+      - lefthook-speed
+      - template
+      - audit
+      - gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all required jobs passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Upstream job results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            if [ "${result}" != "success" ] && [ "${result}" != "skipped" ]; then
+              echo "::error::A required CI job did not pass (result: ${result})"
+              exit 1
+            fi
+          done
+          echo "All required CI jobs passed or were skipped."

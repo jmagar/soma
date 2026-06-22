@@ -1,0 +1,43 @@
+# =============================================================================
+# .gitleaks.toml — secret-scanning policy for this repo
+#
+# Extends gitleaks' built-in ruleset (useDefault = true) and layers an allowlist
+# for the placeholder / fixture credentials this template ships on purpose, so
+# the `gitleaks` CI job stays sharp without false-failing on documented examples.
+#
+# TEMPLATE: keep this file. Add real allowlist entries here when a legitimate
+# placeholder trips the scanner — never disable the job or commit real secrets.
+# =============================================================================
+
+title = "rmcp-template gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder and test-fixture credentials that are not real secrets"
+
+# Fixture tokens that appear in tests/docs by design.
+regexes = [
+  # Deterministic 32-byte test token used by auth fixtures.
+  '''0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20''',
+  # Literal placeholder bearer used in dispatch/router tests.
+  '''bearer_state\("secret"\)''',
+]
+
+# Paths that only ever contain examples, fixtures, or generated docs.
+paths = [
+  '''.*tests?/.*''',
+  '''config\.example\.toml''',
+  '''CHANGELOG\.md''',
+  '''docs/.*''',
+]
+
+# Generic placeholder words that should never be treated as live secrets.
+stopwords = [
+  "example",
+  "placeholder",
+  "changeme",
+  "your-token",
+  "your_token",
+]
