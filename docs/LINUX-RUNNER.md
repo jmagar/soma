@@ -149,25 +149,26 @@ sudo ./svc.sh start
 To remove/re-register: `sudo ./svc.sh stop && sudo ./svc.sh uninstall`, then
 `./config.sh remove --token $(gh api -X POST .../actions/runners/remove-token -q .token)`.
 
-## Security — Push-Only Triggers
+## Security — Trusted Triggers Only
 
-Self-hosted runners must **never** run untrusted code. `ci.yml` therefore has **no
-`pull_request` trigger** — only `push` to `main` and manual `workflow_dispatch`.
-This stops automated dependabot PRs (and any PR) from building third-party code on
-dookie. `scheduled.yml` runs only on a weekly cron + dispatch.
+The classic self-hosted runner risk — a stranger opening a fork PR and running
+arbitrary code on your host — **does not apply here: this is a private repo.**
+Only collaborators and dependabot can trigger CI; fork PRs from outside accounts
+are impossible. So `ci.yml` keeps the normal `push` + `pull_request` triggers
+(PR-based workflow), and collaborator PRs run on dookie as expected.
 
-Invariant: **no workflow that is `runs-on: …dookie…` may have a `pull_request`
-trigger.** Audit with:
+The only non-human trigger is **dependabot**, whose PRs build updated third-party
+dependencies on the runner. If you want to keep dependabot off the self-hosted
+host, gate the jobs (or route dependabot to GitHub-hosted), e.g.:
 
-```bash
-for f in .github/workflows/*.yml; do
-  grep -q dookie "$f" && grep -qE '^  pull_request:' "$f" && echo "LEAK: $f"
-done
+```yaml
+# workflow- or job-level guard to skip dependabot PRs on self-hosted runners
+if: ${{ github.actor != 'dependabot[bot]' }}
 ```
 
-Optional belt-and-suspenders: GitHub → Settings → Actions → General → "Require
-approval for all outside collaborators" (closes the residual case of a PR that
-*adds* a dookie-targeted workflow; dependabot cannot do this).
+Belt-and-suspenders for any future move to a public repo or outside contributors:
+GitHub → Settings → Actions → General → "Require approval for all outside
+collaborators / first-time contributors."
 
 ## Required Tools
 

@@ -18,10 +18,8 @@ name: CI
 on:
   push:
     branches: [main]
-  # NOTE: no `pull_request` trigger. CI runs on self-hosted runners (see runs-on),
-  # so PRs — including automated dependabot PRs — must NOT trigger builds: that
-  # would execute untrusted third-party code on the runner host. CI runs only on
-  # pushes to main (your commits / merges) and manual dispatch below.
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

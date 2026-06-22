@@ -31,12 +31,13 @@ Three workflows cover CI, Docker publishing, and releases:
 
 ### `.github/workflows/ci.yml`
 
-Runs on **push to main** and manual `workflow_dispatch` only — **not** on
-`pull_request`. The jobs run on self-hosted runners, so PRs (including automated
-dependabot PRs) must not trigger them, which would execute untrusted third-party
-code on the runner host. Linux jobs use `runs-on: [self-hosted, Linux,
-rmcp-template, dookie]` (see `docs/LINUX-RUNNER.md`); the Windows build uses the
-steamy runner (see `docs/WINDOWS-RUNNER.md`).
+Runs on push and `pull_request` to main, plus manual `workflow_dispatch`. The
+jobs run on self-hosted runners — Linux on dookie (`runs-on: [self-hosted, Linux,
+rmcp-template, dookie]`, see `docs/LINUX-RUNNER.md`) and Windows on steamy (see
+`docs/WINDOWS-RUNNER.md`). This is a private repo, so only collaborators and
+dependabot can trigger CI; there are no untrusted fork PRs. To keep dependabot off
+the self-hosted host specifically, gate its jobs with
+`if: ${{ github.actor != 'dependabot[bot]' }}`.
 
 Jobs:
 - `fmt`: `cargo fmt -- --check`
