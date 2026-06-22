@@ -31,7 +31,14 @@ Three workflows cover CI, Docker publishing, and releases:
 
 ### `.github/workflows/ci.yml`
 
-Runs on push/PR to main:
+Runs on **push to main** and manual `workflow_dispatch` only — **not** on
+`pull_request`. The jobs run on self-hosted runners, so PRs (including automated
+dependabot PRs) must not trigger them, which would execute untrusted third-party
+code on the runner host. Linux jobs use `runs-on: [self-hosted, Linux,
+rmcp-template, dookie]` (see `docs/LINUX-RUNNER.md`); the Windows build uses the
+steamy runner (see `docs/WINDOWS-RUNNER.md`).
+
+Jobs:
 - `fmt`: `cargo fmt -- --check`
 - `clippy`: `cargo clippy -- -D warnings`
 - `test`: `cargo nextest run --profile ci`

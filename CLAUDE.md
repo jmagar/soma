@@ -199,6 +199,7 @@ PR mode uses the merge-base of the PR branch and `origin/main`; main mode compar
 - **Default port is 40060** — set in `default_mcp_port()` in `config.rs`. Override with `RTEMPLATE_MCP_PORT`.
 - **`elicit_name` is MCP-only** — elicitation requires a live client connection; it cannot be invoked from the CLI. This is the one intentional parity exception.
 - **`watch`, `serve`, and `doctor` are CLI infrastructure** — they are not MCP actions and have no parity requirement. `watch` polls `/health` and emits state-change lines to stdout (used by the plugin monitor). `serve` starts the HTTP server. `doctor` runs pre-flight checks. None belong in the MCP parity table.
+- **CI runs on self-hosted runners** — Linux jobs on dookie (`[self-hosted, Linux, rmcp-template, dookie]`), Windows on steamy. `ci.yml` has **no `pull_request` trigger** (push-to-main + dispatch only) so PRs/dependabot never run on the runner host. Full setup, the strict `HOME`/`CARGO_HOME` isolation, and the troubleshooting log are in [`docs/LINUX-RUNNER.md`](docs/LINUX-RUNNER.md) (+ `docs/WINDOWS-RUNNER.md`). Don't re-add `pull_request` to any `…dookie…` workflow.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
