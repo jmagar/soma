@@ -18,10 +18,10 @@ name: CI
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-  # Allow maintainers to re-run the full pipeline by hand (e.g. to re-validate
-  # after a flaky external dependency, or before tagging a release).
+  # NOTE: no `pull_request` trigger. CI runs on self-hosted runners (see runs-on),
+  # so PRs — including automated dependabot PRs — must NOT trigger builds: that
+  # would execute untrusted third-party code on the runner host. CI runs only on
+  # pushes to main (your commits / merges) and manual dispatch below.
   workflow_dispatch:
 
 permissions:
@@ -382,10 +382,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      # cargo install rather than taiki-e/install-action: taplo-cli has no
+      # install-action prebuilt, so it falls back to cargo-binstall, which
+      # conflicts with the cargo-binstall a mise-based self-hosted runner already
+      # provides on PATH. cargo install is slower on a cold cache but reliable
+      # everywhere; a persistent CARGO_HOME keeps it warm.
       - name: Install taplo
-        uses: taiki-e/install-action@e03236526ace47fa2e04bebcfc6da471ebd4690c # v2.49.0
-        with:
-          tool: taplo-cli
+        run: cargo install taplo-cli --locked
 
       - name: taplo check
         run: taplo check
