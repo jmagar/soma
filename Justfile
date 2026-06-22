@@ -215,6 +215,22 @@ verify:
     just check
     just test
 
+# Preview the path-aware local pre-push plan without running checks
+pre-push-plan:
+    python3 scripts/ci/pre_push.py --dry-run
+
+# Run the same path-aware local pre-push checks as lefthook
+pre-push:
+    python3 scripts/ci/pre_push.py
+
+# Run the full local pre-push validation suite
+pre-push-full:
+    RTEMPLATE_FULL_PRE_PUSH=1 python3 scripts/ci/pre_push.py
+
+# Ensure pre-commit stays limited to fast staged-file checks
+lefthook-speed-check:
+    python3 scripts/check_lefthook_pre_commit_speed.py
+
 # Run all quality checks in sequence (mirrors CI pipeline)
 # Delegates to cargo xtask ci for the full suite (fmt, clippy, nextest, taplo, audit)
 ci:

@@ -82,6 +82,10 @@ usage text, Justfile wiring, CI references, and hook integration.
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
+| `ci/changed_paths.py` | Python | `scripts/ci/pre_push.py`, future CI routing | Classifies changed paths into coarse categories such as rust, web, docker, MCP, release, security, and template. |
+| `ci/pre_push.py` | Python | `lefthook` pre-push, `just pre-push`, `just pre-push-plan` | Runs a path-aware local pre-push plan. Full local validation is opt-in with `RTEMPLATE_FULL_PRE_PUSH=1` or `just pre-push-full`. |
+| `with_timeout.sh` | Bash | `lefthook.yml` | Applies a wall-clock budget to local hook commands so one check cannot stall commits indefinitely. |
+| `check_lefthook_pre_commit_speed.py` | Python | `lefthook.yml`, `just lefthook-speed-check`, CI | Fails if the pre-commit stage grows workspace-scale cargo/test/build commands. |
 | `block-env-commits.sh` | Bash wrapper | `cargo xtask block-env-commits`, lefthook pre-commit | Delegates to xtask to prevent staged `.env*` secret files from being committed, except `.env.example`. |
 | `check-file-size.sh` | Bash wrapper | `cargo xtask check-file-size`, `just file-size-check`, lefthook pre-commit | Delegates to xtask to enforce staged source-file size budgets. |
 | `asciicheck.py` | Python wrapper | `cargo xtask asciicheck`, through `run-ascii-check.sh` | Delegates to xtask to check files for unexpected non-ASCII characters and optionally fix common smart punctuation. |
