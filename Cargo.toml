@@ -22,3 +22,14 @@ members = [
   "xtask",
 ]
 resolver = "2"
+
+# ── profiles ─────────────────────────────────────────────────────────────────
+# release-fast: release-grade binary (optimized, stripped) but with cheap LTO and
+# many codegen units so local iteration — `just sync-container`, container smoke
+# loops — recompiles in a fraction of the full `release` time. Not for shipping;
+# tags/publishes still build the canonical `release` profile.
+[profile.release-fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+strip = "symbols"

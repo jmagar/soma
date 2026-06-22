@@ -30,7 +30,10 @@ struct AuthContext {
 use serde_json::{json, Map, Value};
 
 use rtemplate_contracts::{
-    actions::{is_known_action, required_scope_for_action, ValidationError},
+    actions::{
+        is_known_action, require_confirmation_if_destructive, required_scope_for_action,
+        ValidationError,
+    },
     errors::ServiceErrorKind,
     token_limit::MAX_RESPONSE_BYTES,
 };
@@ -131,6 +134,15 @@ impl ServerHandler for ExampleRmcpServer {
             .unwrap_or_else(|| Value::Object(Map::new()));
         strip_response_page_params(&mut arguments);
         let continuation_args = arguments.as_object().cloned();
+
+        // Destructive actions require an explicit "confirm": true. No-op for the
+        // template's current (non-destructive) actions; gates any future one with
+        // a structured validation error consistent with the dispatch error path.
+        if let Err(tool_error) = require_confirmation_if_destructive(&action, &arguments) {
+            return tool_error_result(
+                tool_error.to_mcp_payload(&tool_name, empty_action_as_none(&action)),
+            );
+        }
 
         // Clone the peer so we can pass it to the tool dispatcher.
         // The peer is needed for elicitation (asking the client for user input).

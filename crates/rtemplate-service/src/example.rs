@@ -119,6 +119,37 @@ impl ExampleClient {
         Ok(status)
     }
 
+    /// Readiness probe of the upstream dependency.
+    ///
+    /// Stub mode is always ready (there is no upstream). Deployed mode issues a
+    /// short, timeout-bounded GET against the upstream `/health` so a wedged or
+    /// unreachable upstream surfaces as not-ready instead of hanging the probe.
+    /// Used by the `/readyz` route; keep it cheap and side-effect free.
+    pub async fn ready(&self) -> Result<()> {
+        let ExampleTarget::DeployedApi {
+            base_url,
+            bearer_token,
+        } = &self.target
+        else {
+            return Ok(());
+        };
+
+        let url = api_url(base_url, "health")?;
+        let mut request = self.client.get(url).timeout(Duration::from_secs(2));
+        if let Some(token) = bearer_token {
+            request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
+        }
+
+        let response = request
+            .send()
+            .await
+            .context("upstream readiness probe failed")?;
+        if !response.status().is_success() {
+            anyhow::bail!("upstream not ready: HTTP {}", response.status());
+        }
+        Ok(())
+    }
+
     async fn post_deployed_api(
         &self,
         action: &str,

@@ -53,6 +53,10 @@ pub async fn serve_http_mcp() -> Result<()> {
     let config = Config::load()?;
     let state = build_state(config).await?;
 
+    // Install the Prometheus recorder once, before the router exposes /metrics.
+    #[cfg(feature = "observability")]
+    rtemplate_observability::metrics::init();
+
     info!(
         bind = %state.config.bind_addr(),
         server_name = %state.config.server_name,

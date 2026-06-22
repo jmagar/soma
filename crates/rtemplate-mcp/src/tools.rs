@@ -19,7 +19,7 @@ use std::sync::OnceLock;
 use rtemplate_contracts::actions::{ActionTransport, ExampleAction, ACTION_SPECS};
 use rtemplate_runtime::server::AppState;
 use rtemplate_service::app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent};
-use rtemplate_service::execute_service_action;
+use rtemplate_service::dispatch_action;
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
 ///
@@ -83,7 +83,7 @@ async fn dispatch_non_elicitation_action(
 ) -> anyhow::Result<Value> {
     match action {
         ExampleAction::Help => Ok(json!({ "help": help_text() })),
-        other => execute_service_action(service, other).await,
+        other => dispatch_action(service, other, "mcp").await,
     }
 }
 

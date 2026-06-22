@@ -9,14 +9,16 @@ publish = false
 
 [features]
 default = ["observability"]
-observability = ["dep:rtemplate-observability"]
+observability = ["dep:rtemplate-observability", "dep:metrics"]
 
 [dependencies]
 anyhow = "1"
+metrics = { version = "0.24", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rtemplate-contracts = { path = "../rtemplate-contracts" }
 rtemplate-observability = { path = "../rtemplate-observability", optional = true }
 serde_json = "1"
+tracing = "0.1"
 url = "2"
 
 [dev-dependencies]

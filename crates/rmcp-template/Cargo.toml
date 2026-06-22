@@ -68,8 +68,13 @@ test-support = ["rtemplate-mcp?/test-support"]
 
 [dev-dependencies]
 rmcp-template = { path = ".", features = ["test-support"] }
+rtemplate-contracts = { path = "../rtemplate-contracts" }
+rtemplate-service = { path = "../rtemplate-service" }
+rtemplate-test-support = { path = "../rtemplate-test-support" }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }
 rmcp = { version = "1.7.0", default-features = false, features = [
   "client",
   "transport-child-process",

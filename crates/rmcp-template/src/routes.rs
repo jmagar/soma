@@ -22,8 +22,8 @@ use serde_json::json;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use crate::api::{
-    api_dispatch, health, openapi_json, status, v1_capabilities, v1_echo, v1_greet, v1_help,
-    v1_service_status,
+    api_dispatch, health, openapi_json, readyz, status, v1_capabilities, v1_echo, v1_greet,
+    v1_help, v1_service_status,
 };
 use rtemplate_mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use rtemplate_runtime::server::{build_auth_layer, AppState, AuthPolicy};
@@ -91,11 +91,16 @@ pub fn router(state: AppState) -> Router {
         None
     };
 
-    let public: Router<()> = Router::new()
+    let public_state: Router<AppState> = Router::new()
         .route("/health", get(health))
+        .route("/readyz", get(readyz))
         .route("/status", get(status))
-        .route("/openapi.json", get(openapi_json))
-        .with_state(state.clone());
+        .route("/openapi.json", get(openapi_json));
+    // Prometheus metrics are only meaningful when the observability feature
+    // installed a recorder at startup; gate the route on the same feature.
+    #[cfg(feature = "observability")]
+    let public_state = public_state.route("/metrics", get(metrics_handler));
+    let public: Router<()> = public_state.with_state(state.clone());
 
     let mut base: Router<()> = Router::new().merge(authenticated).merge(public);
 
@@ -115,6 +120,30 @@ pub fn router(state: AppState) -> Router {
 
     base.layer(RequestBodyLimitLayer::new(MCP_BODY_LIMIT_BYTES))
         .layer(cors_layer(&state.config))
+}
+
+/// `GET /metrics` — Prometheus text exposition (unauthenticated).
+///
+/// Returns 503 until the recorder is installed (which `serve_http_mcp` does at
+/// startup), so scraping never panics on a partially-initialized process.
+#[cfg(feature = "observability")]
+async fn metrics_handler() -> axum::response::Response {
+    use axum::response::IntoResponse;
+    match rtemplate_observability::metrics::render() {
+        Some(body) => (
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/plain; version=0.0.4; charset=utf-8",
+            )],
+            body,
+        )
+            .into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "metrics recorder not initialized",
+        )
+            .into_response(),
+    }
 }
 
 fn cors_layer(config: &rtemplate_contracts::config::McpConfig) -> CorsLayer {

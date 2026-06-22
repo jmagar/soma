@@ -10,6 +10,11 @@ publish = false
 [dependencies]
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
+metrics = "0.24"
+# default-features=false drops the built-in HTTP listener / push-gateway (and
+# their hyper/tokio deps): we render metrics through the handle on our own
+# /metrics route, so the recorder core is all we need.
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
 serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

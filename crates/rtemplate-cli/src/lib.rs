@@ -18,9 +18,7 @@ use rtemplate_contracts::{
     actions::{ActionSpec, ExampleAction, ACTION_SPECS},
     config::ExampleConfig,
 };
-use rtemplate_service::{
-    classify_service_error, execute_service_action, ExampleClient, ExampleService,
-};
+use rtemplate_service::{classify_service_error, dispatch_action, ExampleClient, ExampleService};
 use std::io::{BufRead, IsTerminal, Write};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
@@ -194,7 +192,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     confirm_command_if_destructive(&cmd)?;
 
     let result = match service_action_from_command(&cmd) {
-        Some(action) => match execute_service_action(&service, &action).await {
+        Some(action) => match dispatch_action(&service, &action, "cli").await {
             Ok(value) => value,
             Err(error) => {
                 let tool_error = classify_service_error(&error);

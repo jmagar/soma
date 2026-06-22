@@ -31,6 +31,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   optional-feature scenarios are fenced as expected failures.
 - Documented the MCP draft (2026-07-28) migration plan, ownership/gap analysis, schema
   provenance, and conformance workflow in `docs/specs/mcp-draft-2026-07-28-migration.md`.
+- `GET /readyz` readiness probe (public): unlike `/health` (liveness), it probes the
+  upstream dependency and returns `503 Service Unavailable` when it is unreachable, so
+  orchestrators only route traffic once the server can serve it.
+- `GET /metrics` Prometheus endpoint (public, requires the `observability` feature): the
+  server installs a global recorder at startup and exposes `rtemplate_actions_total` and
+  `rtemplate_action_duration_ms` (labelled by `surface`/`action`/`outcome`) in text
+  exposition format. Returns `503` until the recorder is installed.
+- `rtemplate_service::dispatch_action(service, action, surface)` — a unified dispatch seam
+  that all surfaces (MCP, REST, CLI) now route through, emitting one structured log line
+  per action (`surface`, `action`, `outcome`, `elapsed_ms`; never parameters) plus metrics.
+- `require_confirmation_if_destructive(action, params)` confirmation gate in
+  `rtemplate-contracts`, enforced on the MCP and REST dispatch paths (the CLI already
+  gated): a `destructive` action without `"confirm": true` returns a structured
+  validation error. No-op for the template's current actions; gates any future one.
+- `.gitleaks.toml` secret-scan policy with an allowlist for placeholder/fixture
+  credentials, plus a `scheduled.yml` workflow (weekly cron + `workflow_dispatch`) that
+  refreshes RUSTSEC advisories without a push, and a `workflow_dispatch` trigger on CI.
+- A `ci-gate` aggregation job in CI: a single required status that fails if any needed job
+  ended in anything other than success or skipped (point branch protection at it).
+- In-process tracing-capture test harness (`rtemplate-test-support`: `SharedBuf`,
+  `SharedWriter`, `tracing_test_lock`) and a `dispatch_logging` regression test that pins
+  the structured-logging contract.
+- Architecture boundary tests (`tests/architecture_boundaries.rs`) that make the thin-shim
+  rule executable: the MCP/CLI shims must reach the service layer, never the transport
+  client or raw HTTP.
+- `release-fast` Cargo profile (release opts, no LTO, many codegen units) plus `just
+  build-fast` and `just sync-container` recipes for fast local container iteration.
+
+### Changed
+
+- MCP, REST, and CLI action dispatch now flow through `dispatch_action` for uniform
+  timing, structured logging, and metrics instead of calling `execute_service_action`
+  directly. `execute_service_action` remains the un-instrumented core.
 
 ## [0.4.2] — 2026-06-19
 

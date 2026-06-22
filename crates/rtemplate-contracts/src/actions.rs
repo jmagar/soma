@@ -372,6 +372,42 @@ pub fn action_spec(action: &str) -> Option<&'static ActionSpec> {
     ACTION_SPECS.iter().find(|spec| spec.name == action)
 }
 
+/// Confirmation gate for destructive actions, shared by every surface.
+///
+/// Returns `Err` with a structured validation error when `action` is marked
+/// `destructive` in [`ACTION_SPECS`] and the caller did not pass
+/// `"confirm": true` in `params`. Non-destructive actions (and unknown actions,
+/// which fail later in scope/dispatch) always pass. Cheap and side-effect free —
+/// call it on every dispatch so a future destructive action is gated by default
+/// rather than by remembering to add a check.
+pub fn require_confirmation_if_destructive(
+    action: &str,
+    params: &Value,
+) -> Result<(), Box<crate::errors::ToolError>> {
+    let Some(spec) = action_spec(action) else {
+        return Ok(());
+    };
+    if !spec.destructive {
+        return Ok(());
+    }
+    let confirmed = params
+        .get("confirm")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if confirmed {
+        return Ok(());
+    }
+    // Boxed because ToolError is a large struct and this is a hot, mostly-Ok path.
+    Err(Box::new(
+        crate::errors::ToolError::validation(
+            "confirmation_required",
+            format!("action '{action}' is destructive and requires \"confirm\": true"),
+            "Re-send the request with \"confirm\": true to proceed.",
+        )
+        .with_field("confirm"),
+    ))
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SurfaceAvailability {
     pub mcp: bool,

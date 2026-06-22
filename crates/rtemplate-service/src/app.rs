@@ -129,6 +129,12 @@ impl ExampleService {
         self.client.status().await
     }
 
+    /// Readiness probe: `Ok(())` when the upstream dependency is reachable.
+    /// Backs the `/readyz` route. Delegates to the client; no business logic.
+    pub async fn ready(&self) -> Result<()> {
+        self.client.ready().await
+    }
+
     /// Build the response for the elicited-name demo after the MCP shim collects input.
     pub fn elicited_name_greeting(&self, outcome: ElicitedNameOutcome<'_>) -> Value {
         match outcome {

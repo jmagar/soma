@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 use rtemplate_contracts::actions::{required_scope_for_action, ExampleAction};
 use rtemplate_contracts::token_limit::MAX_RESPONSE_BYTES;
 use rtemplate_runtime::server::{AppState, AuthPolicy};
-use rtemplate_service::{classify_service_error, execute_service_action};
+use rtemplate_service::{classify_service_error, dispatch_action};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub struct RestRoute {
@@ -40,6 +40,21 @@ pub const REST_ROUTES: &[RestRoute] = &[
         action: None,
         auth: "public",
         description: "Fast liveness probe.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/readyz",
+        action: None,
+        auth: "public",
+        description: "Readiness probe; 503 when the upstream dependency is unreachable.",
+    },
+    RestRoute {
+        method: "GET",
+        path: "/metrics",
+        action: None,
+        auth: "public",
+        description:
+            "Prometheus metrics (text exposition format; requires the observability feature).",
     },
     RestRoute {
         method: "GET",
@@ -141,6 +156,19 @@ pub async fn api_dispatch(
     auth: Option<Extension<AuthContext>>,
     Json(body): Json<ActionRequest>,
 ) -> impl IntoResponse {
+    // Destructive actions require an explicit "confirm": true. No-op for the
+    // template's current (non-destructive) actions; gates any future one.
+    if let Err(tool_error) = rtemplate_contracts::actions::require_confirmation_if_destructive(
+        &body.action,
+        &body.params,
+    ) {
+        return (
+            StatusCode::from_u16(tool_error.http_status_code()).unwrap_or(StatusCode::BAD_REQUEST),
+            Json(tool_error.to_rest_payload()),
+        )
+            .into_response();
+    }
+
     run_rest_action_request(
         state,
         auth.as_ref().map(|Extension(auth)| auth),
@@ -248,7 +276,7 @@ async fn run_rest_action(
         return response;
     }
 
-    match execute_service_action(&state.service, &action).await {
+    match dispatch_action(&state.service, &action, "rest").await {
         Ok(value) => match cap_rest_response(value) {
             Ok(value) => Json(value).into_response(),
             Err(e) => {
@@ -359,6 +387,26 @@ fn enforce_rest_scope(
 pub async fn health() -> impl IntoResponse {
     tracing::debug!("health probe");
     Json(json!({ "status": "ok" }))
+}
+
+/// `GET /readyz` — readiness probe (unauthenticated).
+///
+/// Unlike `/health` (pure liveness: "the process is up"), this probes the
+/// upstream dependency and returns `503 Service Unavailable` when it is
+/// unreachable, so orchestrators (Kubernetes, compose healthchecks, load
+/// balancers) only route traffic once the server can actually serve it.
+pub async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
+    match state.service.ready().await {
+        Ok(()) => (StatusCode::OK, Json(json!({ "status": "ready" }))).into_response(),
+        Err(error) => {
+            tracing::warn!(%error, "readiness probe failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({ "status": "not_ready", "reason": error.to_string() })),
+            )
+                .into_response()
+        }
+    }
 }
 
 /// `GET /openapi.json` — generated OpenAPI schema for the REST surface.

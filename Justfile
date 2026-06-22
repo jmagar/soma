@@ -336,6 +336,21 @@ docker-rebuild:
     docker compose build --no-cache
     docker compose up -d --force-recreate
 
+# Compile an optimized-but-fast host binary for local iteration.
+# Uses the `release-fast` profile (release opts, no LTO, many codegen units) so
+# the binary behaves like release while compiling in a fraction of the time.
+build-fast:
+    cargo build --profile release-fast --bin rtemplate-server --features full
+
+# Fast "edit → rebuild image → check in browser" loop.
+# Unlike docker-rebuild's --no-cache full build, this reuses BuildKit layer and
+# cargo cache mounts so only changed crates recompile, then recreates just this
+# service. Reach for this during active container dev; use docker-rebuild only
+# when you need a guaranteed-clean image.
+sync-container:
+    DOCKER_BUILDKIT=1 docker compose build
+    docker compose up -d --force-recreate
+
 # Follow Docker container logs
 docker-logs:
     docker compose logs -f

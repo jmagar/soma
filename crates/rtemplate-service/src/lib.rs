@@ -11,6 +11,61 @@ use serde_json::Value;
 pub use app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent, ScaffoldIntentValidationError};
 pub use example::ExampleClient;
 
+/// Unified dispatch seam shared by every surface (MCP, REST, CLI).
+///
+/// Wraps [`execute_service_action`] with consistent timing, structured logging,
+/// and metrics so each surface gets identical observability for free. The shims
+/// call this instead of `execute_service_action` directly; `execute_service_action`
+/// remains public for callers that have already established their own span.
+///
+/// `surface` is a short, low-cardinality label such as `"mcp"`, `"rest"`, or
+/// `"cli"`. Action *parameters* are intentionally never logged or labelled —
+/// they can carry credentials, and per-value labels would explode metric
+/// cardinality.
+pub async fn dispatch_action(
+    service: &ExampleService,
+    action: &ExampleAction,
+    surface: &str,
+) -> Result<Value> {
+    let action_name = action.name();
+    let started = std::time::Instant::now();
+    let result = execute_service_action(service, action).await;
+    let elapsed_ms = started.elapsed().as_millis();
+    let outcome = if result.is_ok() { "ok" } else { "error" };
+
+    tracing::info!(
+        surface,
+        service = "example",
+        action = action_name,
+        outcome,
+        elapsed_ms = elapsed_ms as u64,
+        "action dispatched"
+    );
+    record_action_metric(surface, action_name, outcome, elapsed_ms as f64);
+
+    result
+}
+
+#[cfg(feature = "observability")]
+fn record_action_metric(surface: &str, action: &str, outcome: &str, elapsed_ms: f64) {
+    metrics::counter!(
+        "rtemplate_actions_total",
+        "surface" => surface.to_owned(),
+        "action" => action.to_owned(),
+        "outcome" => outcome.to_owned(),
+    )
+    .increment(1);
+    metrics::histogram!(
+        "rtemplate_action_duration_ms",
+        "surface" => surface.to_owned(),
+        "action" => action.to_owned(),
+    )
+    .record(elapsed_ms);
+}
+
+#[cfg(not(feature = "observability"))]
+fn record_action_metric(_surface: &str, _action: &str, _outcome: &str, _elapsed_ms: f64) {}
+
 pub async fn execute_service_action(
     service: &ExampleService,
     action: &ExampleAction,
