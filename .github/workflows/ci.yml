@@ -92,8 +92,6 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           key: ${{ github.repository }}-clippy-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-clippy-
@@ -117,8 +115,6 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           key: ${{ github.repository }}-test-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-test-
@@ -193,8 +189,6 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           key: ${{ github.repository }}-build-linux-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-build-linux-
@@ -291,8 +285,6 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           key: ${{ github.repository }}-mcp-smoke-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-mcp-smoke-
