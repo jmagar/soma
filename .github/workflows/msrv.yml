@@ -9,31 +9,40 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Disable the repo's dev-only rustc-wrapper for CI (see ci.yml).
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+
 jobs:
   msrv:
     name: Minimum Supported Rust Version (1.96)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust 1.96
-        run: |
-          rustup toolchain install 1.96.0 --profile minimal
-          rustup default 1.96.0
+      # Install the MSRV toolchain without changing the runner's shared default
+      # (self-hosted RUSTUP_HOME is shared across jobs); pin it per-invocation
+      # below with `cargo +1.96.0`.
+      - name: Install Rust 1.96.0
+        run: rustup toolchain install 1.96.0 --profile minimal
 
+      # Cache only target/ — the cargo registry lives in the runner's isolated
+      # CARGO_HOME (outside the workspace), never the dev user's ~/.cargo.
       - name: Cache Cargo
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           key: ${{ github.repository }}-msrv-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-msrv-
 
       - name: cargo check (MSRV)
-        run: cargo check --all-targets --locked
+        run: cargo +1.96.0 check --all-targets --locked
 
       - name: cargo test --no-run (MSRV)
-        run: cargo test --no-run --all-targets --locked
+        run: cargo +1.96.0 test --no-run --all-targets --locked
