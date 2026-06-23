@@ -11,8 +11,8 @@
 # in this file with your actual values.
 #
 # Triggers:
-#   - push to main → builds and pushes :latest tag
-#   - push of v* tag → builds and pushes :<version> tag + GitHub Release assets
+#   - push of v* tag → builds and pushes :<version>, :<major>.<minor>, and :latest
+#     (no longer builds on every push to main — release tags only)
 #
 # Registry: ghcr.io/jmagar/<IMAGE_NAME>
 # TEMPLATE: Replace "jmagar" with your GitHub org/username.
@@ -22,7 +22,6 @@ name: Docker Publish
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
 
 env:
@@ -64,10 +63,9 @@ jobs:
           # TEMPLATE: Replace "rtemplate-mcp" with your image name.
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
 
       # Multi-platform build and push.
       - name: Build and push
