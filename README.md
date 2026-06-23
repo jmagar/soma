@@ -120,19 +120,21 @@ curl -s -X POST http://localhost:40060/mcp \
 
 ## Generate a New Server
 
-Use [cargo-generate](docs/CARGO_GENERATE.md) when starting a new rmcp-family
+Use [cargo xtask scaffold](docs/SCAFFOLD.md) when starting a new rmcp-family
 server:
 
 ```bash
-cargo install cargo-generate
-cargo generate --git https://github.com/jmagar/rtemplate-mcp --name myservice-mcp
-cd myservice-mcp
-cargo run --quiet -p xtask -- cargo-generate-post "$PWD"
+cargo xtask scaffold --name myservice --category upstream-client --port auto --plan
+cargo xtask scaffold --intent scaffold-intent.json --apply ../generated
+cargo xtask scaffold --verify ../generated/myservice-mcp
 ```
 
-The generator prompts for the crate name, binary names, env prefix, scope
-prefix, default port, and Rust type prefix. The Rust `xtask` post-processor
-then rewrites the generated copy.
+The scaffold command can plan from a short service name or from
+`scaffold_intent` JSON returned by the MCP elicitation wizard. It feeds
+`cargo-generate`, runs the Rust post-processor, writes a scaffold report, and
+verifies the generated project. Use the lower-level
+[cargo-generate guide](docs/CARGO_GENERATE.md) when debugging the generator
+itself.
 
 ## Step-by-step: build your own MCP server from this template
 

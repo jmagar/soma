@@ -223,6 +223,22 @@ cargo xtask cargo-generate --no-cargo-check
 Use `--no-cargo-check` for a faster shape-only check while iterating on the
 generator.
 
+### `cargo xtask scaffold`
+
+Plan, generate, or verify a new project from the template.
+
+```bash
+cargo xtask scaffold --name myservice --category upstream-client --port auto --plan
+cargo xtask scaffold --intent scaffold-intent.json --apply ../generated
+cargo xtask scaffold --verify ../generated/myservice-mcp
+```
+
+The command bridges `scaffold_intent` JSON to `cargo-generate` definitions,
+defaults upstream-client servers to the lean `local-adapter` feature set, can
+render starter snippets from an action manifest, writes
+`docs/scaffold-report.md` after generation, and verifies generated-project
+cleanup before publishing.
+
 ### `cargo xtask cargo-generate-post`
 
 Internal post-processor for generated projects. It replaces the old Python
