@@ -7,10 +7,18 @@ on:
     # Weekly scan on Wednesdays at 08:00 UTC
     - cron: "0 8 * * 3"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Disable the repo's dev-only rustc-wrapper for CI (see ci.yml).
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 20
     permissions:
       security-events: write
@@ -36,8 +44,6 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           key: ${{ github.repository }}-codeql-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-codeql-

@@ -8,6 +8,10 @@ permissions:
   contents: read
   actions: read
 
+env:
+  # Disable the repo's dev-only rustc-wrapper for CI (see ci.yml).
+  CARGO_BUILD_RUSTC_WRAPPER: ""
+
 concurrency:
   group: auto-tag-${{ github.ref }}
   cancel-in-progress: false
@@ -15,7 +19,7 @@ concurrency:
 jobs:
   plan:
     name: Plan release tags
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -45,7 +49,7 @@ jobs:
     name: Create release tag
     needs: plan
     if: needs.plan.outputs.matrix != '{"include":[]}'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 20
     permissions:
       contents: write

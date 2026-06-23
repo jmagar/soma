@@ -30,11 +30,15 @@ env:
   # TEMPLATE: Replace "rtemplate" with your binary name.
   BINARY_NAME: rtemplate
   SERVER_BINARY_NAME: rtemplate-server
+  # Disable the repo's dev-only rustc-wrapper for CI (see ci.yml). Critical here:
+  # the wrapper auto-installs built binaries to ./bin, which lfs-commit would
+  # then commit to main.
+  CARGO_BUILD_RUSTC_WRAPPER: ""
 
 jobs:
   frontend-assets:
     name: Frontend Assets
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 20
     defaults:
       run:
@@ -61,7 +65,7 @@ jobs:
   # ── Build release binaries ────────────────────────────────────────────────────
   build:
     name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     needs: frontend-assets
     timeout-minutes: 60
     strategy:
@@ -70,12 +74,10 @@ jobs:
         include:
           # linux/amd64 — most common deployment target
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
             arch: x86_64
             ext: ""
           # windows/amd64 — cross-compiled via MinGW
           - target: x86_64-pc-windows-gnu
-            os: ubuntu-latest
             arch: windows-x86_64
             ext: ".exe"
 
@@ -111,8 +113,6 @@ jobs:
         uses: actions/cache@v5
         with:
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
             target
           # TEMPLATE: Change "rmcp-template" to your repo name.
           key: ${{ github.repository }}-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
@@ -156,7 +156,7 @@ jobs:
   lfs-commit:
     name: Commit binaries to bin/ (Git LFS)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 20
     permissions:
       contents: write
@@ -206,7 +206,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [build, lfs-commit]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, rmcp-template, dookie]
     timeout-minutes: 20
     permissions:
       contents: write
