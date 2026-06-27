@@ -46,9 +46,32 @@ env:
     -C target-feature=-avx512f,-avx512vl,-avx512bw,-avx512dq,-avx512cd,-avx512ifma,-avx512vbmi,-avx512vbmi2,-avx512vnni,-avx512bitalg,-avx512vpopcntdq
 
 jobs:
+  # Do not allocate self-hosted runners for fork PRs. Same-repo PRs, pushes,
+  # schedules, and manual runs are trusted for this private self-hosted fleet.
+  # The repo can add GitHub-hosted fork CI later if it accepts outside PRs.
+  trusted-event:
+    name: Trusted event
+    runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - id: check
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # -- actionlint: GitHub Actions workflow syntax and shell checks -------------
   actionlint:
     name: Actionlint
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 10
     steps:
@@ -65,6 +88,8 @@ jobs:
   # ── fmt: cargo fmt --check ──────────────────────────────────────────────────
   fmt:
     name: Format
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -81,6 +106,8 @@ jobs:
   # ── clippy: zero warnings ────────────────────────────────────────────────────
   clippy:
     name: Clippy
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -107,6 +134,8 @@ jobs:
   # ── test: cargo nextest run --profile ci ─────────────────────────────────────
   test:
     name: Test
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 30
     steps:
@@ -145,6 +174,8 @@ jobs:
   # ── web: pnpm install, lint, audit, static build ─────────────────────────────
   frontend-assets:
     name: Frontend Assets
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     defaults:
@@ -418,6 +449,8 @@ jobs:
   # -- container-smoke: compose config plus Docker build on PRs/main ------------
   container-smoke:
     name: Container Smoke
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 45
     steps:
@@ -462,6 +495,8 @@ jobs:
   # ── toml: taplo check ─────────────────────────────────────────────────────────
   toml:
     name: TOML Format
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -484,6 +519,8 @@ jobs:
   # -- lefthook-speed: pre-commit must stay staged and fast ---------------------
   lefthook-speed:
     name: Lefthook Speed
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 5
     steps:
@@ -495,6 +532,8 @@ jobs:
   # ── template: generated docs, plugin layout, coupled files ───────────────────
   template:
     name: Template Contracts
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -547,6 +586,8 @@ jobs:
   # ── deny: dependency advisories, licenses, bans, sources ─────────────────────
   audit:
     name: Cargo Deny
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -566,6 +607,8 @@ jobs:
   # ── gitleaks: secret scanning ─────────────────────────────────────────────────
   gitleaks:
     name: Secret Scan
+    needs: trusted-event
+    if: needs.trusted-event.outputs.ok == 'true'
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     permissions:
@@ -587,8 +630,9 @@ jobs:
   # which closes the "a required check was silently skipped" merge hole.
   ci-gate:
     name: CI Gate
-    if: always()
+    if: always() && needs.trusted-event.outputs.ok == 'true'
     needs:
+      - trusted-event
       - actionlint
       - fmt
       - clippy
