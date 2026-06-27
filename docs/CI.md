@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: false
-last_reviewed: "2026-06-18"
+last_reviewed: "2026-06-27"
 ---
 
 # CI
@@ -27,28 +27,46 @@ cargo xtask pre-release-check
 
 ## GitHub workflows
 
-Three workflows cover CI, Docker publishing, and releases:
+The repository keeps separate workflows for fast PR feedback, release
+automation, long-lived marketplace-variant maintenance, and scheduled drift
+checks. Use the smallest workflow that proves the thing you changed; do not
+turn release or sync workflows into general PR CI.
 
 ### `.github/workflows/ci.yml`
 
-Runs on push and `pull_request` to main, plus manual `workflow_dispatch`. The
-jobs run on self-hosted runners — Linux on dookie (`runs-on: [self-hosted, Linux,
-rmcp-template, dookie]`, see `docs/LINUX-RUNNER.md`) and Windows on steamy (see
-`docs/WINDOWS-RUNNER.md`). This is a private repo, so only collaborators and
-dependabot can trigger CI; there are no untrusted fork PRs. To keep dependabot off
-the self-hosted host specifically, gate its jobs with
-`if: ${{ github.actor != 'dependabot[bot]' }}`.
+Use for: every PR, every push to `main`, and manual full verification.
+
+Do not use for: tag-only packaging or marketplace-no-mcp branch maintenance.
+
+The jobs run on self-hosted runners: Linux on the TOOTIE Docker runner
+(`runs-on: [self-hosted, linux-lab, rmcp-template]`, see `docs/LINUX-RUNNER.md`)
+and Windows on steamy (`runs-on: [self-hosted, Windows, rmcp-template, steamy]`,
+see `docs/WINDOWS-RUNNER.md`). The Rust jobs force `RUSTC_WRAPPER=sccache`,
+`CARGO_BUILD_RUSTC_WRAPPER=sccache`, and `CARGO_INCREMENTAL=0`; the local
+`.github/actions/setup-rust-sccache` action installs Rust plus sccache and prints
+the effective cache configuration. This keeps CI on sccache while bypassing the
+repo's developer-only `scripts/cargo-rustc-wrapper`.
+
+This is currently a private repo, so only collaborators and dependabot can
+trigger CI. If the repo becomes public, any self-hosted job must use a same-repo
+PR guard or a GitHub-hosted fork fallback before accepting outside PRs.
 
 Jobs:
+- `actionlint`: validates workflow syntax and self-hosted labels
 - `fmt`: `cargo fmt -- --check`
 - `clippy`: `cargo clippy -- -D warnings`
-- `test`: `cargo nextest run --profile ci`
-- `web`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm build`
-- `build-linux`: native Linux release build, uploads `example-linux-x86_64`
-- `build-windows`: native Windows release build and test, uploads `example-windows-x86_64`
+- `test`: builds the stdio binary, runs `cargo nextest run --profile ci`, and uploads the JUnit report
+- `frontend-assets`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm typecheck`, `pnpm build`
+- `build-linux`: native Linux release build, uploads `rtemplate-linux-x86_64`
+- `build-windows`: native Windows release build and test on steamy, uploads `rtemplate-windows-x86_64`
+- `mcp-smoke`: starts the HTTP MCP server and runs the mcporter smoke suite
+- `container-smoke`: validates compose files and builds the Docker image
 - `toml`: `taplo check`
+- `lefthook-speed`: keeps pre-commit hooks staged-only and fast
+- `template`: generated docs, plugin layout, scaffold, release-version, blob, coupled-file, and ASCII gates
 - `deny`: `cargo deny check`
 - `gitleaks`: secret scanning
+- `ci-gate`: single aggregate status for branch protection
 
 The Linux and Windows build jobs are PR-time artifact checks. They prove the
 binary compiles natively before a release tag exists and give reviewers a
@@ -59,23 +77,91 @@ sets explicit portable CPU flags so self-hosted runner config cannot leak
 `target-cpu=native` into published artifacts. See `docs/WINDOWS-RUNNER.md` for
 the full runner setup and audit process.
 
+### `.github/workflows/msrv.yml`
+
+Use for: proving the declared `rust-version` remains honest.
+
+Do not use for: full behavior testing; it only checks that the workspace still
+builds on the minimum supported toolchain.
+
+Runs on PRs and pushes to `main` with Rust 1.96.0 and sccache.
+
+### `.github/workflows/auto-tag.yml`
+
+Use for: automatic component tag creation after a successful push to `main`.
+
+Do not use for: manually forcing a release. If the release manifest says no
+component changed, this workflow intentionally does nothing.
+
+It runs `cargo xtask release-plan --head HEAD --mode main --json`, waits for CI
+on the exact push SHA, and creates the candidate tag for each changed component.
+
+### `.github/workflows/release.yml`
+
+Use for: tag-time binary packaging and GitHub Release creation.
+
+Do not use for: PR validation. PRs should use `ci.yml`; release only runs on
+`v*` tags.
+
+It builds Linux and Windows release artifacts, writes SHA256 sums, and creates
+the GitHub Release. Release Cargo builds use sccache through the same wrapper
+environment as CI. The LFS write-back job is intentionally isolated here because
+it can push to `main`; audit that behavior before reusing it in a derived repo.
+
 ### `.github/workflows/docker-publish.yml`
 
-Runs on push to main + tags:
+Use for: publishing container images after code has landed.
+
+Do not use for: PR smoke tests. `ci.yml` has a non-pushing `container-smoke` job
+for that.
+
+Runs on push to `main` and tags:
 - Multi-platform build (linux/amd64, linux/arm64)
 - Push to `ghcr.io/jmagar/<repo>:latest` on main, `:<version>` on tags
 - Trivy vulnerability scan
 - SBOM generation
 - MCP registry publish on version tags
 
-### `.github/workflows/release.yml`
+### `.github/workflows/scheduled.yml`
 
-Runs on version tags (`v*`):
-- Build release binaries for linux/amd64 and windows/amd64
-- Create GitHub Release with binary assets
-- Generate `SHA256SUMS`
-- Optionally copy binaries to `bin/` through the existing Git LFS job when that
-  workflow is enabled for the target repo
+Use for: surfacing new RUSTSEC advisories after code has already merged.
+
+Do not use for: replacing the PR-time `audit` job. This is a periodic safety
+net, not the merge gate.
+
+Scheduled runs check advisories only; manual dispatch can run the full
+`cargo-deny` suite.
+
+### `.github/workflows/check-no-mcp-drift.yml`
+
+Use for: detecting drift between `main` and the protected `marketplace-no-mcp`
+variant.
+
+Do not use for: syncing or modifying the branch. This workflow is read-only.
+
+### `.github/workflows/sync-marketplace-no-mcp.yml`
+
+Use for: keeping the protected `marketplace-no-mcp` branch current with `main`
+while applying the no-MCP variant rules.
+
+Do not use for: branch cleanup. `marketplace-no-mcp` is a long-lived protected
+variant branch and must not be deleted, squashed away, or folded into `main`
+unless Jacob explicitly asks for that exact branch to be retired.
+
+### `.github/workflows/dependabot-auto-merge.yml`
+
+Use for: auto-merging eligible Dependabot updates after required checks pass.
+
+Do not use for: human-authored dependency migrations, major upgrades, or changes
+that alter public behavior. Those need normal review.
+
+### `.github/workflows/rmcp-release-monitor.yml`
+
+Use for: watching upstream `rmcp`, MCP schema, and conformance movement and
+opening/updating an issue when there is drift.
+
+Do not use for: automatically bumping protocol dependencies. It reports; humans
+decide the migration.
 
 ## nextest configuration
 
@@ -144,13 +230,13 @@ Version tags (`v*`) trigger the release workflow, which builds release binaries 
 
 CI artifact naming convention:
 
-- `example-linux-x86_64`
-- `example-windows-x86_64`
+- `rtemplate-linux-x86_64`
+- `rtemplate-windows-x86_64`
 
 Release tarball naming convention:
 
-- `example-x86_64.tar.gz`
-- `example-windows-x86_64.tar.gz`
+- `rtemplate-x86_64.tar.gz`
+- `rtemplate-windows-x86_64.tar.gz`
 
 ## CHANGELOG.md
 

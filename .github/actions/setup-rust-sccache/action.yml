@@ -1,0 +1,64 @@
+name: Setup Rust with sccache
+description: Install a Rust toolchain plus sccache and print cache evidence.
+inputs:
+  toolchain:
+    description: Rust toolchain to install.
+    required: false
+    default: stable
+  components:
+    description: Comma-separated Rust components to install.
+    required: false
+    default: ""
+  targets:
+    description: Comma-separated Rust targets to install.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install Linux build prerequisites
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v cc >/dev/null 2>&1; then
+          exit 0
+        fi
+        if command -v apt-get >/dev/null 2>&1; then
+          if [ "$(id -u)" = "0" ]; then
+            apt-get update
+            apt-get install -y build-essential pkg-config libssl-dev
+          elif command -v sudo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential pkg-config libssl-dev
+          else
+            echo "::error::apt-get is available but the runner is not root and sudo is missing."
+            exit 1
+          fi
+          exit 0
+        fi
+        echo "::error::No C compiler found and no supported package manager is available."
+        exit 1
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Install sccache
+      uses: taiki-e/install-action@95cc2373c3f00275e315c306e56fef1c7a8854c0 # v2
+      with:
+        tool: sccache
+
+    - name: Show Rust cache configuration
+      shell: bash
+      run: |
+        set -euo pipefail
+        rustc -vV
+        cargo -V
+        sccache --version
+        printf 'RUSTC_WRAPPER=%s\n' "${RUSTC_WRAPPER:-}"
+        printf 'CARGO_BUILD_RUSTC_WRAPPER=%s\n' "${CARGO_BUILD_RUSTC_WRAPPER:-}"
+        printf 'SCCACHE_DIR=%s\n' "${SCCACHE_DIR:-}"

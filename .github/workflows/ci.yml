@@ -30,13 +30,15 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Disable the repo's dev-only rustc-wrapper (scripts/cargo-rustc-wrapper auto-
-  # installs binaries to ./bin) for CI. It is a bash script, so it cannot run as
-  # a rustc wrapper on the Windows self-hosted runner ("not a valid Win32
-  # application"); CI gets no benefit from it on any platform.
-  CARGO_BUILD_RUSTC_WRAPPER: ""
+  # Force CI through sccache on both Linux and Windows. This also overrides the
+  # repo's dev-only scripts/cargo-rustc-wrapper, whose local binary-sync side
+  # effects are not wanted in CI and whose bash wrapper cannot run on Windows.
+  RUSTC_WRAPPER: sccache
+  CARGO_BUILD_RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
   # Keep Windows artifacts portable even on self-hosted runners whose user-level
   # Cargo config may contain target-cpu=native or machine-specific SIMD flags.
   WINDOWS_PORTABLE_RUSTFLAGS: >-
@@ -47,7 +49,7 @@ jobs:
   # -- actionlint: GitHub Actions workflow syntax and shell checks -------------
   actionlint:
     name: Actionlint
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -63,13 +65,13 @@ jobs:
   # ── fmt: cargo fmt --check ──────────────────────────────────────────────────
   fmt:
     name: Format
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust (stable with rustfmt)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
         with:
           components: rustfmt
 
@@ -79,13 +81,13 @@ jobs:
   # ── clippy: zero warnings ────────────────────────────────────────────────────
   clippy:
     name: Clippy
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust (stable with clippy)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
         with:
           components: clippy
 
@@ -105,13 +107,13 @@ jobs:
   # ── test: cargo nextest run --profile ci ─────────────────────────────────────
   test:
     name: Test
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
 
       # TEMPLATE: Change cache key prefix from "rmcp-template" to your repo name.
       - name: Cache Cargo
@@ -131,10 +133,19 @@ jobs:
       - name: cargo nextest run --profile ci
         run: cargo nextest run --profile ci
 
+      - name: Upload nextest report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nextest-junit
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
   # ── web: pnpm install, lint, audit, static build ─────────────────────────────
   frontend-assets:
     name: Frontend Assets
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     defaults:
       run:
@@ -176,7 +187,7 @@ jobs:
   # packaging and GitHub Release publication.
   build-linux:
     name: Build Linux
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     needs: frontend-assets
     timeout-minutes: 45
     steps:
@@ -188,8 +199,8 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
 
       - name: Cache Cargo
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -226,16 +237,20 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
 
-      - name: Show Windows Rust CPU flags
+      - name: Show Windows Rust CPU flags and sccache
         shell: pwsh
         env:
           RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
         run: |
           $ErrorActionPreference = 'Continue'
           rustc -vV
+          sccache --version
+          "RUSTC_WRAPPER=$env:RUSTC_WRAPPER"
+          "CARGO_BUILD_RUSTC_WRAPPER=$env:CARGO_BUILD_RUSTC_WRAPPER"
+          "SCCACHE_DIR=$env:SCCACHE_DIR"
           "RUSTFLAGS=$env:RUSTFLAGS"
           rustc --print cfg | Select-String 'target_feature'
           cargo config get build.rustflags --merged
@@ -248,19 +263,64 @@ jobs:
         shell: pwsh
         env:
           RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
-        run: cargo test --locked --all-targets
+        run: |
+          $ErrorActionPreference = "Stop"
+          $process = Start-Process `
+            -FilePath cargo `
+            -ArgumentList @("test", "--locked", "--all-targets") `
+            -NoNewWindow `
+            -PassThru
+
+          while (-not $process.HasExited) {
+            Start-Sleep -Seconds 60
+            if (-not $process.HasExited) {
+              Write-Host "Windows cargo test still running at $(Get-Date -Format o)"
+            }
+          }
+
+          exit $process.ExitCode
 
       - name: cargo build local binary
         shell: pwsh
         env:
           RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
-        run: cargo build --release --locked --bin rtemplate --no-default-features --features local-adapter
+        run: |
+          $ErrorActionPreference = "Stop"
+          $process = Start-Process `
+            -FilePath cargo `
+            -ArgumentList @("build", "--release", "--locked", "--bin", "rtemplate", "--no-default-features", "--features", "local-adapter") `
+            -NoNewWindow `
+            -PassThru
+
+          while (-not $process.HasExited) {
+            Start-Sleep -Seconds 60
+            if (-not $process.HasExited) {
+              Write-Host "Windows local binary build still running at $(Get-Date -Format o)"
+            }
+          }
+
+          exit $process.ExitCode
 
       - name: cargo build server binary
         shell: pwsh
         env:
           RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
-        run: cargo build --release --locked --bin rtemplate-server --features full
+        run: |
+          $ErrorActionPreference = "Stop"
+          $process = Start-Process `
+            -FilePath cargo `
+            -ArgumentList @("build", "--release", "--locked", "--bin", "rtemplate-server", "--features", "full") `
+            -NoNewWindow `
+            -PassThru
+
+          while (-not $process.HasExited) {
+            Start-Sleep -Seconds 60
+            if (-not $process.HasExited) {
+              Write-Host "Windows server binary build still running at $(Get-Date -Format o)"
+            }
+          }
+
+          exit $process.ExitCode
 
       - name: Upload Windows binary
         uses: actions/upload-artifact@v7
@@ -272,7 +332,7 @@ jobs:
   # -- mcp-smoke: live MCP HTTP tool/resource smoke through mcporter -----------
   mcp-smoke:
     name: MCP Smoke
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     needs: frontend-assets
     timeout-minutes: 35
     steps:
@@ -284,8 +344,8 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
 
       - name: Cache Cargo
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -348,7 +408,7 @@ jobs:
   # -- container-smoke: compose config plus Docker build on PRs/main ------------
   container-smoke:
     name: Container Smoke
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -378,13 +438,13 @@ jobs:
   # ── toml: taplo check ─────────────────────────────────────────────────────────
   toml:
     name: TOML Format
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
 
       # cargo install rather than taiki-e/install-action: taplo-cli has no
       # install-action prebuilt, so it falls back to cargo-binstall, which
@@ -400,7 +460,7 @@ jobs:
   # -- lefthook-speed: pre-commit must stay staged and fast ---------------------
   lefthook-speed:
     name: Lefthook Speed
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -411,15 +471,15 @@ jobs:
   # ── template: generated docs, plugin layout, coupled files ───────────────────
   template:
     name: Template Contracts
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
 
       - name: Check PATTERNS.md contracts
         run: cargo xtask patterns
@@ -463,7 +523,7 @@ jobs:
   # ── deny: dependency advisories, licenses, bans, sources ─────────────────────
   audit:
     name: Cargo Deny
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -477,7 +537,7 @@ jobs:
   # ── gitleaks: secret scanning ─────────────────────────────────────────────────
   gitleaks:
     name: Secret Scan
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     permissions:
       contents: read
@@ -514,7 +574,7 @@ jobs:
       - template
       - audit
       - gitleaks
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 5
     steps:
       - name: Verify all required jobs passed

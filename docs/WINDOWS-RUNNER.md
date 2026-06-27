@@ -9,7 +9,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: false
-last_reviewed: "2026-05-22"
+last_reviewed: "2026-06-27"
 ---
 
 # Windows CI Runner
@@ -20,12 +20,12 @@ setup used by repos derived from `rmcp-template`.
 The template can run on GitHub-hosted runners, but this repo's Windows job is
 currently wired to the steamy self-hosted runner:
 
-- `build-linux`: `ubuntu-latest`, builds `target/release/example` and `target/release/example-server`
+- `build-linux`: `[self-hosted, linux-lab, rmcp-template]`, builds `target/release/rtemplate` and `target/release/rtemplate-server`
 - `build-windows`: `[self-hosted, Windows, rmcp-template, steamy]`, builds
-  `target/release/example.exe` and `target/release/example-server.exe`
+  `target/release/rtemplate.exe` and `target/release/rtemplate-server.exe`
 
 Both jobs run on push and pull request through `.github/workflows/ci.yml`. They
-upload artifacts named `example-linux-x86_64` and `example-windows-x86_64` so PR
+upload artifacts named `rtemplate-linux-x86_64` and `rtemplate-windows-x86_64` so PR
 review can test the exact compiled binary before a release tag exists.
 
 ## Why Native Windows Builds
@@ -60,6 +60,10 @@ The Windows job also prints Rust CPU flag evidence:
 
 ```powershell
 rustc -vV
+sccache --version
+"RUSTC_WRAPPER=$env:RUSTC_WRAPPER"
+"CARGO_BUILD_RUSTC_WRAPPER=$env:CARGO_BUILD_RUSTC_WRAPPER"
+"SCCACHE_DIR=$env:SCCACHE_DIR"
 "RUSTFLAGS=$env:RUSTFLAGS"
 rustc --print cfg | Select-String 'target_feature'
 cargo config get build.rustflags --merged
@@ -69,6 +73,19 @@ cargo config get target.x86_64-pc-windows-msvc.rustflags --merged
 This is intentional. On self-hosted runners, user-level Cargo config can silently
 add `target-cpu=native` or SIMD flags that make the artifact crash on other
 Windows machines.
+
+The Windows cargo steps use the same sccache wrapper environment as Linux:
+
+```yaml
+CARGO_INCREMENTAL: "0"
+RUSTC_WRAPPER: sccache
+CARGO_BUILD_RUSTC_WRAPPER: sccache
+SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+```
+
+`sccache.exe` is expected to be in `PATH` on steamy. The workflow's local
+`.github/actions/setup-rust-sccache` action also installs sccache, so the job
+prints cache evidence even if the host PATH changes.
 
 ## Portable Windows CPU Flags
 
@@ -84,6 +101,10 @@ The Windows `cargo test` and `cargo build --release` steps pass those flags via
 `RUSTFLAGS`. Keep this override when switching from `windows-latest` to a
 self-hosted Windows runner.
 
+Long Windows cargo steps run through a PowerShell `Start-Process` wrapper that
+prints a heartbeat every 60 seconds. Keep this pattern for slow build or nextest
+steps; it prevents a quiet but healthy self-hosted job from looking hung.
+
 Do not put `target-cpu=native` in repo config. If a developer wants local native
 optimizations, they belong in that developer's private environment, never in
 committed `.cargo/config.toml`.
@@ -92,7 +113,7 @@ committed `.cargo/config.toml`.
 
 The active runner is:
 
-- GitHub repo: `jmagar/rmcp-template`
+- GitHub repo: `jmagar/template-rmcp`
 - Runner name: `rmcp-template-windows-1`
 - Runner path: `C:\Users\jmaga\actions-runner\rmcp-template`
 - Labels: `self-hosted`, `Windows`, `X64`, `rmcp-template`, `steamy`
@@ -134,7 +155,7 @@ runs-on: [self-hosted, Windows, rmcp-template]
 If Linux should also use a self-hosted runner, change the Linux job similarly:
 
 ```yaml
-runs-on: [self-hosted, Linux, rmcp-template]
+runs-on: [self-hosted, linux-lab, rmcp-template]
 ```
 
 Keep labels repo-family-specific. Avoid labels tied to one machine name unless
@@ -150,6 +171,7 @@ Install these for a self-hosted Windows runner:
 - Rustup and stable Rust
 - Node.js LTS
 - PowerShell 7 if the host does not already have it
+- `sccache.exe` in `PATH`
 
 Verify from the runner account, not from an administrator shell:
 
@@ -175,6 +197,7 @@ workflow run or from the runner account:
 cargo config get build.rustflags --merged
 cargo config get target.x86_64-pc-windows-msvc.rustflags --merged
 cargo config get build.rustc-wrapper --merged
+sccache --version
 ```
 
 Also inspect likely config files:
@@ -200,21 +223,21 @@ After a workflow run:
 
 ```bash
 gh run list --workflow CI --limit 5
-gh run download <run-id> --name example-windows-x86_64 --dir /tmp/example-win
+gh run download <run-id> --name rtemplate-windows-x86_64 --dir /tmp/rtemplate-win
 ```
 
-Then copy `example.exe` to a Windows host and run:
+Then copy `rtemplate.exe` to a Windows host and run:
 
 ```powershell
-.\example.exe --version
-.\example.exe status
-.\example.exe doctor
+.\rtemplate.exe --version
+.\rtemplate.exe status
+.\rtemplate.exe doctor
 ```
 
 For MCP transport smoke testing:
 
 ```powershell
-.\example.exe mcp
+.\rtemplate.exe mcp
 ```
 
 For HTTP smoke testing:
@@ -222,7 +245,7 @@ For HTTP smoke testing:
 ```powershell
 $env:RTEMPLATE_MCP_HOST = "127.0.0.1"
 $env:RTEMPLATE_MCP_NO_AUTH = "true"
-.\example.exe serve
+.\rtemplate.exe serve
 ```
 
 Then from another shell:
@@ -239,7 +262,7 @@ If the Windows artifact crashes on another machine:
 - Recheck the self-hosted runner user's Cargo config.
 - Confirm `RUSTFLAGS` is set on both `cargo test` and `cargo build`.
 - Rebuild with `windows-latest` to separate repo issues from host issues.
-- Test `example.exe --version` before testing MCP or HTTP behavior.
+- Test `rtemplate.exe --version` before testing MCP or HTTP behavior.
 
 If pnpm fails on Windows:
 
