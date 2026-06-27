@@ -17,9 +17,13 @@ concurrency:
 jobs:
   monitor:
     name: Watch rmcp crate releases
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 15
     env:
+      CARGO_INCREMENTAL: "0"
+      RUSTC_WRAPPER: sccache
+      CARGO_BUILD_RUSTC_WRAPPER: sccache
+      SCCACHE_DIR: ${{ github.workspace }}/../.sccache
       GH_TOKEN: ${{ github.token }}
       MCP_SCHEMA_PATH: schema/2025-11-25/schema.ts
       MCP_SCHEMA_RAW_URL: https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-11-25/schema.ts
@@ -29,10 +33,13 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
+
       - name: Fetch rmcp crate metadata
         run: |
           curl -fsSL \
-            -H "User-Agent: jmagar/rmcp-template rmcp-release-monitor" \
+            -H "User-Agent: jmagar/template-rmcp rmcp-release-monitor" \
             https://crates.io/api/v1/crates/rmcp \
             -o rmcp-crate.json
 

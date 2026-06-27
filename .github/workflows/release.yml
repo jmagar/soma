@@ -30,15 +30,18 @@ env:
   # TEMPLATE: Replace "rtemplate" with your binary name.
   BINARY_NAME: rtemplate
   SERVER_BINARY_NAME: rtemplate-server
-  # Disable the repo's dev-only rustc-wrapper for CI (see ci.yml). Critical here:
-  # the wrapper auto-installs built binaries to ./bin, which lfs-commit would
-  # then commit to main.
-  CARGO_BUILD_RUSTC_WRAPPER: ""
+  CARGO_INCREMENTAL: "0"
+  # Release builds use sccache, while still overriding the repo's dev-only
+  # scripts/cargo-rustc-wrapper so it cannot auto-sync binaries into ./bin before
+  # the release packaging step.
+  RUSTC_WRAPPER: sccache
+  CARGO_BUILD_RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
 
 jobs:
   frontend-assets:
     name: Frontend Assets
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     defaults:
       run:
@@ -65,7 +68,7 @@ jobs:
   # ── Build release binaries ────────────────────────────────────────────────────
   build:
     name: Build ${{ matrix.target }}
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     needs: frontend-assets
     timeout-minutes: 60
     strategy:
@@ -90,8 +93,8 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust target
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust target and sccache
+        uses: ./.github/actions/setup-rust-sccache
         with:
           targets: ${{ matrix.target }}
 
@@ -156,7 +159,7 @@ jobs:
   lfs-commit:
     name: Commit binaries to bin/ (Git LFS)
     needs: build
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     permissions:
       contents: write
@@ -206,7 +209,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [build, lfs-commit]
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     permissions:
       contents: write

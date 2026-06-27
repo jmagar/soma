@@ -14,22 +14,23 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Disable the repo's dev-only rustc-wrapper for CI (see ci.yml).
-  CARGO_BUILD_RUSTC_WRAPPER: ""
+  CARGO_INCREMENTAL: "0"
+  RUSTC_WRAPPER: sccache
+  CARGO_BUILD_RUSTC_WRAPPER: sccache
+  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
 
 jobs:
   msrv:
     name: Minimum Supported Rust Version (1.96)
-    runs-on: [self-hosted, Linux, rmcp-template, dookie]
+    runs-on: [self-hosted, linux-lab, rmcp-template]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      # Install the MSRV toolchain without changing the runner's shared default
-      # (self-hosted RUSTUP_HOME is shared across jobs); pin it per-invocation
-      # below with `cargo +1.96.0`.
-      - name: Install Rust 1.96.0
-        run: rustup toolchain install 1.96.0 --profile minimal
+      - name: Install Rust 1.96.0 and sccache
+        uses: ./.github/actions/setup-rust-sccache
+        with:
+          toolchain: 1.96.0
 
       # Cache only target/ — the cargo registry lives in the runner's isolated
       # CARGO_HOME (outside the workspace), never the dev user's ~/.cargo.
@@ -42,7 +43,7 @@ jobs:
           restore-keys: ${{ github.repository }}-msrv-
 
       - name: cargo check (MSRV)
-        run: cargo +1.96.0 check --all-targets --locked
+        run: cargo check --all-targets --locked
 
       - name: cargo test --no-run (MSRV)
-        run: cargo +1.96.0 test --no-run --all-targets --locked
+        run: cargo test --no-run --all-targets --locked

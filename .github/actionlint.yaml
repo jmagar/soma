@@ -1,7 +1,8 @@
 self-hosted-runner:
   labels:
+    - linux-lab
     - rmcp-template
     - steamy
-    - dookie
+    - tootie
 
 config-variables: null
