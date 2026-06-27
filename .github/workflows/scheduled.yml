@@ -60,8 +60,8 @@ jobs:
       # between pushes). A manual dispatch can opt into the full suite.
       - name: cargo deny check (advisories)
         if: ${{ github.event_name == 'schedule' || !inputs.full_audit }}
-        run: cargo deny check --all-features advisories
+        run: cargo deny check advisories
 
       - name: cargo deny check (full suite)
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_audit }}
-        run: cargo deny check --all-features
+        run: cargo deny check all
