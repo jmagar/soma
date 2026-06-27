@@ -65,17 +65,19 @@ not available for this private repo without GitHub Pro or making the repo
 public, so treat the live repository settings as manual state and keep docs
 focused on the required check names.
 
-The jobs run on self-hosted runners: Linux on the TOOTIE Docker runner
-(`runs-on: [self-hosted, tootie, rmcp-template]`, see `docs/LINUX-RUNNER.md`)
-and Windows on steamy (`runs-on: [self-hosted, Windows, rmcp-template, steamy]`,
+The jobs run on self-hosted runners: path classifiers, aggregate gates, and
+Linux jobs use the TOOTIE Docker runner
+(`runs-on: [self-hosted, tootie, rmcp-template]`, see `docs/LINUX-RUNNER.md`),
+and Windows jobs use steamy (`runs-on: [self-hosted, Windows, rmcp-template, steamy]`,
 see `docs/WINDOWS-RUNNER.md`). The Rust jobs force `RUSTC_WRAPPER=sccache`,
 `CARGO_BUILD_RUSTC_WRAPPER=sccache`, and `CARGO_INCREMENTAL=0`; the local
 `.github/actions/setup-rust-sccache` action installs Rust plus sccache and prints
 the effective cache configuration. This keeps CI on sccache while bypassing the
 repo's developer-only `scripts/cargo-rustc-wrapper`.
 
-Self-hosted jobs use a same-repository job guard. Pushes, schedules, manual
-runs, and same-repo PRs can use the TOOTIE and steamy runners; fork PRs do not
+Self-hosted jobs, including `changes`, `ci-gate`, `MSRV Changes`, and
+`MSRV Gate`, use a same-repository job guard. Pushes, schedules, manual runs,
+and same-repo PRs can use the TOOTIE and steamy runners; fork PRs do not
 allocate self-hosted runners. Add a GitHub-hosted fork fallback before accepting
 outside PRs that need CI feedback.
 

@@ -22,7 +22,8 @@ env:
 jobs:
   changes:
     name: MSRV Changes
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, tootie, rmcp-template]
     outputs:
       workflow: ${{ steps.classify.outputs.workflow }}
       rust: ${{ steps.classify.outputs.rust }}
@@ -86,7 +87,7 @@ jobs:
     needs:
       - changes
       - msrv
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 5
     steps:
       - name: Verify MSRV jobs passed or were intentionally skipped
