@@ -35,11 +35,13 @@ runner layout.
 | Persistent work/cache root | `/mnt/cache/appdata/actions-runner/rmcp-template/work` |
 | Persistent temp dir | `/mnt/cache/appdata/actions-runner/rmcp-template/tmp` (`1777`, sticky world-writable) |
 
-Current runner:
+Current runners:
 
 | Runner | Labels |
 |---|---|
-| `tootie-rmcp-template-linux` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
+| `tootie-rmcp-template-linux-1` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
+| `tootie-rmcp-template-linux-2` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
+| `tootie-rmcp-template-linux-3` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
 
 Verify from this repo:
 
@@ -59,6 +61,8 @@ services:
     image: ghcr.io/actions/actions-runner:2.335.1
     container_name: rmcp-template-linux-runner
     restart: unless-stopped
+    group_add:
+      - "281"
     working_dir: /home/runner
     environment:
       - RUNNER_REPO=jmagar/template-rmcp
@@ -84,6 +88,12 @@ services:
       - /mnt/cache/compose/actions-runner/rmcp-template/start.sh:/start.sh:ro
     command: ["/start.sh"]
 ```
+
+The real compose file defines three services using the same shape, with
+runner-specific names and separate `home`, `work`, and `tmp` appdata directories.
+`group_add: ["281"]` is the TOOTIE Docker socket group; keep it in parity with
+`stat -c '%g' /var/run/docker.sock` so `container-smoke` and Docker publish jobs
+can reach the host Docker daemon.
 
 The persistent `/home/runner` volume must contain the runner distribution files
 (`run.sh`, `config.sh`, `bin/`, `externals/`). If the volume is empty, it hides
