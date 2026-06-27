@@ -47,9 +47,10 @@ see `docs/WINDOWS-RUNNER.md`). The Rust jobs force `RUSTC_WRAPPER=sccache`,
 the effective cache configuration. This keeps CI on sccache while bypassing the
 repo's developer-only `scripts/cargo-rustc-wrapper`.
 
-This is currently a private repo, so only collaborators and dependabot can
-trigger CI. If the repo becomes public, any self-hosted job must use a same-repo
-PR guard or a GitHub-hosted fork fallback before accepting outside PRs.
+Self-hosted jobs are guarded by a lightweight GitHub-hosted `trusted-event`
+precheck. Pushes, schedules, manual runs, and same-repo PRs can use the TOOTIE
+and steamy runners; fork PRs do not allocate self-hosted runners. Add a
+GitHub-hosted fork fallback before accepting outside PRs that need CI feedback.
 
 Jobs:
 - `actionlint`: validates workflow syntax and self-hosted labels
