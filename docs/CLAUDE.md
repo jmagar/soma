@@ -10,12 +10,14 @@ scope: "template"
 source_of_truth: false
 upstream_refs:
   - "docs/references/mcp/"
-last_reviewed: "2026-05-14"
+last_reviewed: "2026-06-27"
 ---
 
 # Documentation Instructions
 
-This directory contains guides, reference material, and working records for the rmcp-template project and the Rust MCP server family it governs.
+This directory contains stable guides, generated compatibility artifacts,
+durable contracts/specs, external reference snapshots, and working records for
+the rmcp-template project and the Rust MCP server family it governs.
 
 Both humans and LLM agents operate this codebase. Write docs, contracts, specs, examples, and commands assuming both audiences. Prefer structured, runnable, and self-contained content. Avoid prose that only makes sense in context of a prior conversation.
 
@@ -25,10 +27,20 @@ Both humans and LLM agents operate this codebase. Write docs, contracts, specs, 
 
 Use the right layer for the job:
 
-- `docs/*.md` — Orientation, architecture narrative, cross-cutting guidance, and stable how-to guides. These are the map.
-- `docs/references/mcp/` — Snapshots of the official MCP specification, registry, and tooling documentation. Treat as the authoritative source for MCP protocol behavior at the captured revision.
-
-There are no `contracts/`, `specs/`, or `reports/` directories yet. If durable implementation contracts or investigation reports are added, create those directories and record their authority in this file.
+- `docs/*.md` — Stable orientation, architecture narrative, cross-cutting
+  guidance, and how-to guides. These are the map.
+- `docs/contracts/` — Durable schemas, example payloads, and normative adapter
+  contracts. Keep examples valid against the schema and code.
+- `docs/generated/` — Machine-produced compatibility artifacts. Regenerate;
+  do not hand-edit except to repair a generator.
+- `docs/specs/` — Draft or handoff specs. Promote accepted requirements into
+  stable guides after implementation.
+- `docs/adr/` — Accepted architecture decisions. Add new ADRs for durable
+  cross-cutting decisions.
+- `docs/sessions/` and `docs/superpowers/plans/` — Historical work records.
+  Useful evidence, not source of truth.
+- `docs/references/` — Captured external specs and upstream repopacks. Treat as
+  source evidence at the captured revision; refresh from upstream when stale.
 
 ---
 
@@ -39,6 +51,10 @@ There are no `contracts/`, `specs/`, or `reports/` directories yet. If durable i
 | `QUICKSTART.md` | Five-minute getting-started guide | The startup sequence, CLI commands, or port changes |
 | `AUTH.md` | Auth model: bearer tokens, OAuth, startup guard, gateway case | Auth behavior or env vars change |
 | `PATTERNS.md` | Canonical patterns for the entire rmcp server family | The module structure, thin-shim rule, or family-wide conventions change |
+| `CI.md` | Workflow purpose, path-aware gates, runner trust model, release gates | GitHub Actions, required checks, or runner routing changes |
+| `LINUX-RUNNER.md` | TOOTIE Docker runner setup, isolation, cache, troubleshooting | Linux runner labels, volumes, compose path, cache, or security model changes |
+| `WINDOWS-RUNNER.md` | STEAMY native Windows runner setup and artifact checks | Windows runner labels, sccache, artifacts, or native build flow changes |
+| `XTASKS.md` | `cargo xtask` automation reference | xtask commands or generated-doc gates change |
 | `MCP-REGISTRY-PUBLISH-GUIDE.md` | How to publish a derived server to the official MCP registry | The mcp-publisher CLI, registry schema, or CI publish workflow changes |
 | `CLAUDE.md` (this file) | Instructions for agents and contributors navigating this directory | The directory structure or doc authority changes |
 
@@ -46,9 +62,13 @@ There are no `contracts/`, `specs/`, or `reports/` directories yet. If durable i
 
 ## References
 
-`docs/references/mcp/` contains snapshots of the MCP specification, SEPs, registry docs, and tooling references. Treat these as the source-of-truth for MCP protocol behavior as captured in this repo.
+`docs/references/` contains snapshots of MCP, Claude Code, registry, tooling,
+and upstream repo references. Treat these as evidence for the captured revision,
+not editable local docs.
 
 - Prefer `docs/references/mcp/` before web search when implementing or verifying MCP protocol behavior.
+- Prefer `docs/references/claude-code/` before web search when checking captured
+  Claude Code plugin/skill behavior.
 - If the captured reference is suspected stale or ambiguous for a fast-moving spec area (elicitation, extensions, registry preview), verify against the upstream source before changing behavior.
 - When upstream marks material as `preview`, `draft`, `proposal`, `RFD`, or `SEP`, mirror that status in any derived docs.
 
@@ -76,14 +96,15 @@ This repo is a template. Every doc in this directory contains `TEMPLATE:` marker
 
 ## Working Artifact Directories
 
-There are none yet. If you add them:
+Working artifacts inform but do not override stable docs in `docs/*.md`.
 
-- `docs/plans/` — durable implementation plans and task breakdowns.
-- `docs/reports/` — audits, investigations, review results.
 - `docs/sessions/` — saved session notes and handoff records.
-- `docs/generated/` — small machine-produced contracts that are committed when they are part of CI/API compatibility, such as `openapi.json`.
+- `docs/superpowers/plans/` — durable implementation plans from skill-driven work.
+- `docs/specs/` — handoff specs and draft designs that may become stable docs.
+- `docs/generated/` — committed generated artifacts used by CI/API compatibility.
 
-Artifacts in those directories inform but do not override the stable docs in `docs/*.md`. If a working artifact contains an accepted requirement, promote it into the appropriate stable doc.
+If a working artifact contains an accepted requirement, promote it into the
+appropriate stable guide, contract, or ADR.
 
 ---
 
@@ -94,3 +115,5 @@ Artifacts in those directories inform but do not override the stable docs in `do
 - Keep generated or historical material out of guides. If something belongs in a guide, distill it; don't paste.
 - Do not move broad architecture into narrow docs only. Top-level docs should remain the map.
 - Env var names are authoritative in `crates/rtemplate-contracts/src/config.rs`. If a doc disagrees with the code, update the doc.
+- Runner labels and trust boundaries must be documented in `docs/CI.md` plus
+  the focused runner runbook. Do not leave runner behavior only in session notes.

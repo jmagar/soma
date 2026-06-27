@@ -24,8 +24,9 @@ currently wired to the steamy self-hosted runner:
 - `build-windows`: `[self-hosted, Windows, rmcp-template, steamy]`, builds
   `target/release/rtemplate.exe` and `target/release/rtemplate-server.exe`
 
-Both jobs run on push and pull request through `.github/workflows/ci.yml`. They
-upload artifacts named `rtemplate-linux-x86_64` and `rtemplate-windows-x86_64` so PR
+Both jobs are wired through `.github/workflows/ci.yml` and run when the
+path-aware `Changes` job marks native artifact checks as relevant. They upload
+artifacts named `rtemplate-linux-x86_64` and `rtemplate-windows-x86_64` so PR
 review can test the exact compiled binary before a release tag exists.
 
 ## Why Native Windows Builds
@@ -41,20 +42,21 @@ problems in:
 - runner-level Cargo configuration that changes generated CPU instructions
 
 `release.yml` is the tag-time packaging flow. The CI build jobs are earlier
-feedback: they run on every PR and produce artifacts for smoke testing.
+feedback: they run on native-relevant PRs and pushes and produce artifacts for
+smoke testing.
 
 ## Workflow Shape
 
 The PR-time build path is:
 
-1. Check out the repo.
-2. Install Rust stable.
-3. Restore Cargo cache.
-4. Build `apps/web/out` with pnpm so the default `web` feature embeds real
+1. Run the path-aware `Changes` job.
+2. Check out the repo.
+3. Build `apps/web/out` with pnpm when web/native/MCP checks need embedded
    static assets.
+4. Install Rust stable and sccache.
 5. Run Windows tests on the Windows job.
-6. Build the release binary.
-7. Upload the compiled binary as a workflow artifact.
+6. Build the local-adapter and full server release binaries.
+7. Upload the compiled local-adapter binary as a workflow artifact.
 
 The Windows job also prints Rust CPU flag evidence:
 

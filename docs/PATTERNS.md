@@ -1084,8 +1084,10 @@ Use this when creating a new server from rmcp-template:
 ## 21. Release Artifact Distribution
 
 Version tags build release binaries and attach them to the GitHub Release. The
-release workflow must not push generated binaries back to `main`. Local `dist`
-recipes are operator conveniences for preparing artifacts, not a CI write-back path.
+rmcp-template release workflow also has an explicit Git LFS write-back job for
+plugin install compatibility. Treat that as a release-only exception to audit or
+disable in derived repos. Local `dist` recipes are operator conveniences for
+preparing artifacts, not a separate CI write-back path.
 
 ---
 
@@ -1416,31 +1418,54 @@ kills momentum. Only block on things that catch secrets or obviously broken synt
 
 ## 31. GitHub Workflows
 
-Every repo has three workflows:
+CI is split by purpose. Keep PR feedback, tag-time publishing, scheduled drift
+checks, and long-lived branch maintenance in separate workflows.
 
 ### `.github/workflows/ci.yml`
-Runs on push/PR to main:
-- `fmt`: `cargo fmt -- --check`
-- `clippy`: `cargo clippy -- -D warnings`  
-- `test`: `cargo nextest run --profile ci`
-- `web`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm build`
-- `toml`: `taplo check`
-- `deny`: `cargo deny check`
-- `gitleaks`: secret scanning
+Runs on PRs, pushes to `main`, and manual dispatch. The first job runs
+`cargo xtask changed-paths`, then path-aware jobs do the focused work:
+- Rust quality: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo nextest run --profile ci`
+- Frontend assets: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm typecheck`, `pnpm build`
+- Native artifacts: Linux and Windows release builds for PR-time smoke testing
+- Integration: HTTP MCP mcporter smoke, Docker Compose config, non-pushing Docker build
+- Contracts: Taplo, lefthook speed, generated docs/schema/OpenAPI, scaffold contract, release-version, blob-size, coupled-file, ASCII gates
+- Security: `cargo deny check all` and gitleaks when relevant
+
+Require the stable aggregate `CI Gate` status in branch protection, not
+individual path-skipped jobs.
+
+### `.github/workflows/msrv.yml`
+Runs on PRs and pushes to `main`. It uses `cargo xtask changed-paths` and only
+runs the Rust 1.96 MSRV build for Rust, native, TOML, or workflow changes.
+Require the stable aggregate `MSRV Gate` status when MSRV is protected.
 
 ### `.github/workflows/docker-publish.yml`
-Runs on push to main + tags:
-- Multi-platform build (linux/amd64, linux/arm64)
-- Push to `ghcr.io/jmagar/<repo>:latest` on main, `:<version>` on tags
+Runs on version tags (`v*`) only:
+- Build and push linux/amd64 Docker image
+- Push `:<version>`, `:<major>.<minor>`, and `:latest`
 - Trivy vulnerability scan
-- SBOM generation
-- MCP registry publish on version tags
+- MCP Registry manifest publish when credentials are configured
 
 ### `.github/workflows/release.yml`
 Runs on version tags (`v*`):
-- Build release binaries for linux/amd64 and linux/arm64
+- Build release binaries for linux/amd64 and windows/amd64
 - Create GitHub Release with binary assets
-- Update `install.sh` download URLs
+- Optionally commit Git LFS binary pointers back to `main`; audit this write-back before reusing it
+
+### Maintenance workflows
+
+- `auto-tag.yml`: after a successful push to `main`, plans changed release
+  components, waits for the matching CI run, and creates candidate version tags.
+- `scheduled.yml`: weekly RUSTSEC advisory refresh, with manual full
+  `cargo-deny` audit.
+- `check-no-mcp-drift.yml`: read-only scheduled/manual drift check for the
+  protected `marketplace-no-mcp` branch.
+- `sync-marketplace-no-mcp.yml`: push/scheduled/manual sync from `main` into the
+  long-lived no-MCP marketplace variant.
+- `rmcp-release-monitor.yml`: daily/manual upstream `rmcp`, MCP schema, and MCP
+  conformance drift issue maintenance.
+- `dependabot-auto-merge.yml`: same-repo Dependabot patch/minor auto-merge
+  enablement after required checks pass.
 
 ---
 

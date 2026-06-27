@@ -46,10 +46,24 @@ changes intentionally skip heavyweight runtime, web, Docker, release, and
 security jobs. Branch protection should require the stable aggregate `CI Gate`
 status instead of individual path-skipped jobs.
 
+`changed-paths` emits these routing keys: `all`, `docs`, `workflow`, `rust`,
+`web`, `native`, `mcp`, `docker`, `toml`, `template`, `security`, `secrets`,
+and `release`. The routing is intentionally conservative:
+
+- workflow changes (`.github/**`, `xtask/src/ci_paths.rs`,
+  `xtask/src/main.rs`, or this doc) enable every key
+- `workflow_dispatch` and an empty changed-file set enable every key
+- Rust or web changes also enable native artifact checks
+- Rust changes, Docker/config/script changes, and web changes enable container smoke
+- low-risk Markdown docs, session notes, and agent-skill changes can skip secret scanning
+
 For branch protection, require stable aggregate gates (`CI Gate` and `MSRV Gate`)
 rather than individual path-skipped jobs. GitHub reports skipped jobs
 inconsistently as required checks; the aggregate gates turn "passed or
-intentionally skipped" into one predictable status.
+intentionally skipped" into one predictable status. Branch-protection lookup is
+not available for this private repo without GitHub Pro or making the repo
+public, so treat the live repository settings as manual state and keep docs
+focused on the required check names.
 
 The jobs run on self-hosted runners: Linux on the TOOTIE Docker runner
 (`runs-on: [self-hosted, tootie, rmcp-template]`, see `docs/LINUX-RUNNER.md`)
@@ -100,10 +114,9 @@ Do not use for: full behavior testing; it only checks that the workspace still
 builds on the minimum supported toolchain.
 
 Runs on PRs and pushes to `main` with Rust 1.96.0 and sccache. It is also
-path-aware: `MSRV Changes` skips the self-hosted MSRV build for docs-only,
-session-log, and agent-skill changes, while workflow and Rust/TOML changes still
-run the real MSRV check. Require `MSRV Gate` if this workflow is part of branch
-protection.
+path-aware: `MSRV Changes` skips the self-hosted MSRV build unless Rust, native,
+TOML, or workflow files changed. Require `MSRV Gate` if this workflow is part of
+branch protection.
 
 ### `.github/workflows/auto-tag.yml`
 
@@ -124,8 +137,11 @@ Do not use for: PR validation. PRs should use `ci.yml`; release only runs on
 
 It builds Linux and Windows release artifacts, writes SHA256 sums, and creates
 the GitHub Release. Release Cargo builds use sccache through the same wrapper
-environment as CI. The LFS write-back job is intentionally isolated here because
-it can push to `main`; audit that behavior before reusing it in a derived repo.
+environment as CI. Linux release jobs cross-compile the Windows GNU target from
+the TOOTIE runner; the native Windows build is a PR-time `ci.yml` check, not the
+tag packaging path. The LFS write-back job is intentionally isolated here
+because it can push to `main`; audit that behavior before reusing it in a
+derived repo.
 
 ### `.github/workflows/docker-publish.yml`
 
@@ -249,7 +265,14 @@ Large artifacts are blocked unless allowlisted in `scripts/blob-size-allowlist.t
 
 `release/components.toml` is the source of truth for release components, version-bearing files, tag prefixes, release workflows, and shipping paths. PR CI runs `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr`, using the merge-base of the PR branch so base-only changes do not force a false bump. Pushes to `main` run `.github/workflows/auto-tag.yml`, which consumes `cargo xtask release-plan --head HEAD --mode main --json`, waits for CI on the exact push SHA, and creates the candidate tag for changed components.
 
-Version tags (`v*`) trigger the release workflow, which builds release binaries and attaches them to the GitHub Release. The release workflow must **not** push generated binaries back to `main`. Local `just dist` / `cargo xtask dist` recipes are operator conveniences for preparing artifacts — they are not a CI write-back path.
+Version tags (`v*`) trigger the release workflow, which builds release binaries
+and attaches them to the GitHub Release. This template still includes an
+explicit Git LFS write-back job that commits binary pointers to `bin/` on
+`main` for plugin install compatibility. Treat that as an auditable release-only
+exception: disable it in derived repos that distribute solely through GitHub
+Release assets. Local `just dist` / `cargo xtask dist` recipes are operator
+conveniences for preparing artifacts and should not become a separate CI
+write-back path.
 
 CI artifact naming convention:
 
