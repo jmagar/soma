@@ -33,7 +33,7 @@ runner layout.
 | GitHub PAT env file | `/mnt/cache/compose/actions-runner/rmcp-template/.env` |
 | Persistent runner home | `/mnt/cache/appdata/actions-runner/rmcp-template/home` |
 | Persistent work/cache root | `/mnt/cache/appdata/actions-runner/rmcp-template/work` |
-| Persistent temp dir | `/mnt/cache/appdata/actions-runner/rmcp-template/tmp` |
+| Persistent temp dir | `/mnt/cache/appdata/actions-runner/rmcp-template/tmp` (`1777`, sticky world-writable) |
 
 Current runner:
 
@@ -90,6 +90,15 @@ The persistent `/home/runner` volume must contain the runner distribution files
 the files baked into the image and the container loops with `./run.sh: No such
 file or directory`. Seed it from an existing working runner home before the
 first start, then let `start.sh` remove stale local registration files.
+
+The persistent temp mount must be sticky world-writable:
+
+```bash
+chmod 1777 /mnt/cache/appdata/actions-runner/rmcp-template/tmp
+```
+
+Without that, Linux package tools fail before the Rust setup step can install a
+C linker.
 
 ## Manage The Runner
 
