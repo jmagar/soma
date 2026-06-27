@@ -20,28 +20,9 @@ env:
   SCCACHE_DIR: ${{ github.workspace }}/../.sccache
 
 jobs:
-  trusted-event:
-    name: Trusted event
-    runs-on: ubuntu-latest
-    outputs:
-      ok: ${{ steps.check.outputs.ok }}
-    steps:
-      - id: check
-        run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-          fi
-
   msrv:
     name: Minimum Supported Rust Version (1.96)
-    needs: trusted-event
-    if: needs.trusted-event.outputs.ok == 'true'
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
