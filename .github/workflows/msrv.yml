@@ -34,6 +34,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
+
       - name: Classify changed paths
         id: classify
         env:
