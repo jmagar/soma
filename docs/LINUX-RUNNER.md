@@ -166,9 +166,8 @@ not need them baked in.
 ## When To Use This Runner
 
 Use the TOOTIE runner for trusted repo code: pushes, same-repo PRs, scheduled
-maintenance, and release automation. `ci.yml` and `msrv.yml` use a
-GitHub-hosted `trusted-event` precheck so fork PRs do not allocate self-hosted
-runners.
+maintenance, and release automation. `ci.yml` and `msrv.yml` use same-repository
+job guards so fork PRs do not allocate self-hosted runners.
 
 Do not run untrusted fork PR code on this runner. If the repo becomes public and
 outside contributors need CI feedback, route fork PRs to GitHub-hosted runners.

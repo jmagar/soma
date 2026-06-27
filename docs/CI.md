@@ -47,10 +47,10 @@ see `docs/WINDOWS-RUNNER.md`). The Rust jobs force `RUSTC_WRAPPER=sccache`,
 the effective cache configuration. This keeps CI on sccache while bypassing the
 repo's developer-only `scripts/cargo-rustc-wrapper`.
 
-Self-hosted jobs are guarded by a lightweight GitHub-hosted `trusted-event`
-precheck. Pushes, schedules, manual runs, and same-repo PRs can use the TOOTIE
-and steamy runners; fork PRs do not allocate self-hosted runners. Add a
-GitHub-hosted fork fallback before accepting outside PRs that need CI feedback.
+Self-hosted jobs use a same-repository job guard. Pushes, schedules, manual
+runs, and same-repo PRs can use the TOOTIE and steamy runners; fork PRs do not
+allocate self-hosted runners. Add a GitHub-hosted fork fallback before accepting
+outside PRs that need CI feedback.
 
 Jobs:
 - `actionlint`: validates workflow syntax and self-hosted labels
