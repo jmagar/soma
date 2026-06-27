@@ -166,8 +166,11 @@ not need them baked in.
 ## When To Use This Runner
 
 Use the TOOTIE runner for trusted repo code: pushes, same-repo PRs, scheduled
-maintenance, and release automation. `ci.yml` and `msrv.yml` use same-repository
-job guards so fork PRs do not allocate self-hosted runners.
+maintenance, and release automation. `ci.yml` and `msrv.yml` first classify
+changed paths with `cargo xtask changed-paths`; irrelevant heavyweight jobs are
+allowed to skip and the stable aggregate `CI Gate` / `MSRV Gate` jobs convert
+"passed or intentionally skipped" into the required status. Both workflows also
+use same-repository job guards so fork PRs do not allocate self-hosted runners.
 
 Do not run untrusted fork PR code on this runner. If the repo becomes public and
 outside contributors need CI feedback, route fork PRs to GitHub-hosted runners.

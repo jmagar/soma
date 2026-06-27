@@ -1,81 +1,115 @@
-# Documentation index
+---
+title: "Documentation Index"
+doc_type: "guide"
+status: "active"
+owner: "rmcp-template"
+audience:
+  - "contributors"
+  - "agents"
+scope: "template"
+source_of_truth: false
+upstream_refs:
+  - "docs/DOCS.md"
+  - "docs/CLAUDE.md"
+last_reviewed: "2026-06-27"
+---
 
-This directory contains focused guides for operating, adapting, testing, and releasing an `rmcp-template`-derived MCP server.
+# Documentation Index
 
-## Start here
+Use this page as the map for `docs/`. The directory is intentionally mixed:
+stable guides live next to generated contracts, external reference snapshots,
+and historical session notes. Pick the right layer before editing.
 
-| Doc | Use when you want to... |
+## Start Here
+
+| Need | Read |
 |---|---|
-| `QUICKSTART.md` | Get the template running quickly. |
-| `ARCHITECTURE.md` | Understand the Rust module layout and layering rules. |
-| `PHILOSOPHY.md` | Understand the design principles behind the template. |
-| `AGENTS-FIRST.md` | Build outputs and workflows that are reliable for AI agents. |
-| `PATTERNS.md` | Read the canonical long-form pattern catalog. |
-| `adr/README.md` | Review accepted architecture decision records. |
-| `adr/0001-stdio-first-plugin-adapter.md` | Understand the accepted local-adapter/server-binary split. |
+| Run the template quickly | `QUICKSTART.md` |
+| Understand the architecture | `ARCHITECTURE.md`, then `PATTERNS.md` |
+| Generate a new server | `SCAFFOLD.md`, `CARGO_GENERATE.md`, `contracts/scaffold-intent.schema.json` |
+| Add or change actions | `MCP_SCHEMA.md`, `API.md`, `AGENTS-FIRST.md`, `PATTERNS.md` |
+| Operate CI or releases | `CI.md`, `LINUX-RUNNER.md`, `WINDOWS-RUNNER.md`, `XTASKS.md` |
+| Package plugins | `PLUGINS.md`, `contracts/plugin-stdio-adapter.md` |
+| Publish externally | `MCP-REGISTRY-PUBLISH-GUIDE.md`, `DOCKER.md`, `DEPLOYMENT.md` |
 
-## Operations
+## Stable Guides
 
-| Doc | Covers |
+These are the human-facing docs to keep polished. They should summarize the
+code, contracts, and workflows without becoming session logs.
+
+| Area | Docs |
 |---|---|
-| `DEPLOYMENT.md` | End-to-end deployment checklist. |
-| `DOCKER.md` | Docker image and Compose operations. |
-| `SYSTEMD.md` | User systemd deployment and runtime freshness checks. |
-| `CONFIG.md` | Configuration structure and auth policy summary. |
-| `ENV.md` | Environment variable reference. |
-| `OBSERVABILITY.md` | Health/status endpoints, logging, runtime checks. |
+| Orientation | `QUICKSTART.md`, `PHILOSOPHY.md`, `AGENTS-FIRST.md`, `ARCHITECTURE.md`, `PATTERNS.md` |
+| Runtime surfaces | `API.md`, `MCP_SCHEMA.md`, `WEB.md`, `PLUGINS.md` |
+| Configuration and security | `CONFIG.md`, `ENV.md`, `AUTH.md`, `OBSERVABILITY.md` |
+| Local development | `RUST.md`, `JUSTFILE.md`, `XTASKS.md`, `PRE-COMMIT.md`, `TESTING.md`, `MCPORTER.md`, `SCRIPTS.md` |
+| Delivery | `CI.md`, `LINUX-RUNNER.md`, `WINDOWS-RUNNER.md`, `DOCKER.md`, `SYSTEMD.md`, `DEPLOYMENT.md` |
+| Template generation | `SCAFFOLD.md`, `CARGO_GENERATE.md` |
+| Documentation system | `DOCS.md`, `CLAUDE.md`, this index |
 
-## Development and quality
+## Durable Records
 
-| Doc | Covers |
-|---|---|
-| `JUSTFILE.md` | `just` recipes and local operator commands. |
-| `XTASKS.md` | `cargo xtask` automation. |
-| `PRE-COMMIT.md` | Lefthook and fast local guardrails. |
-| `CI.md` | Local CI parity and release gates. |
-| `WINDOWS-RUNNER.md` | Native Windows build artifacts and self-hosted runner setup. |
-| `LINUX-RUNNER.md` | Self-hosted Linux CI runners (dookie): isolation, setup, push-only triggers, troubleshooting. |
-| `TESTING.md` | Rust tests, route tests, live MCP tests. |
-| `MCPORTER.md` | Live MCP tool/resource testing and CLI generation. |
-| `SCRIPTS.md` | Script categories and maintenance contract. |
-| `DOCS.md` | Documentation generation and references. |
+These files are committed because they define behavior, compatibility, or
+accepted design history.
 
-## Surfaces
+| Directory | Purpose | Editing rule |
+|---|---|---|
+| `adr/` | Accepted architecture decision records | Add a new ADR for cross-cutting decisions; do not rewrite history casually. |
+| `contracts/` | JSON schemas, example payloads, and normative adapter contracts | Keep examples valid against the schema and code. |
+| `specs/` | Draft or handoff specs for work that has not fully settled into guides | Promote accepted requirements into stable guides. |
+| `generated/` | Machine-produced compatibility artifacts | Regenerate with the documented commands; avoid hand edits. |
 
-| Doc | Covers |
-|---|---|
-| `API.md` | REST and HTTP endpoints. |
-| `WEB.md` | Optional static Next.js web UI. |
-| `AUTH.md` | Auth policies and security model. |
-| `PLUGINS.md` | Claude/Codex/Gemini plugin packaging. |
-| `MCP_SCHEMA.md` | Generated MCP tool schema/action contract. |
-| `contracts/plugin-stdio-adapter.md` | Normative binary profile and plugin stdio adapter contract. |
-| `MCP-REGISTRY-PUBLISH-GUIDE.md` | MCP registry publishing guidance. |
+## Working Records
 
-## Directories
+| Directory | Purpose | Editing rule |
+|---|---|---|
+| `sessions/` | Saved session notes and handoff records | Historical evidence only. Distill useful decisions into stable docs. |
+| `superpowers/plans/` | Durable implementation plans from skill-driven work | Keep if still useful; close the loop in stable docs when work lands. |
+| `references/` | Captured external docs and upstream repopacks | Refresh from source; do not rewrite snapshots into local prose. |
 
-| Directory | Contents |
-|---|---|
-| `adr/` | Accepted architecture decision records for the template and Rust MCP/server family. |
-| `generated/` | Machine-produced artefacts committed for CI/API compatibility (e.g. `openapi.json`). |
-| `contracts/` | Durable JSON Schema and example contracts (e.g. scaffold intent schema). |
-| `specs/` | Design specs and handoff documents for MCP-only wizard flows. |
-| `sessions/` | Saved session notes and agent handoff records. |
-| `references/` | Snapshots of external specifications and tooling docs (MCP spec, registry, etc.). |
+## Generated And Checked Files
 
-## Keeping docs current
+Use the generators instead of editing derived docs by hand:
 
-- Update focused docs when changing commands, scripts, routes, deployment, or plugin behavior.
-- Update `docs/PATTERNS.md` when a reusable repo-family pattern changes.
-- Regenerate schema docs after action changes:
-  ```bash
-  just schema-docs
-  ```
-- Refresh ignored external references when needed:
-  ```bash
-  cargo xtask refresh-docs
-  ```
-- Validate before pushing:
-  ```bash
-  cargo xtask pre-release-check
-  ```
+```bash
+cargo xtask generate-docs
+cargo xtask check-docs
+just schema-docs
+just schema-docs-check
+just openapi
+just openapi-check
+```
+
+Key generated outputs include `docs/ENV.md`, `docs/MCP_SCHEMA.md`,
+`docs/generated/openapi.json`, `docs/generated/plugin-settings.md`, and
+`docs/generated/scripts-index.md`.
+
+## Before Pushing Docs
+
+For small prose-only edits:
+
+```bash
+cargo xtask check-docs
+```
+
+For docs that touch actions, config, scripts, releases, or workflows:
+
+```bash
+cargo xtask generate-docs
+cargo xtask check-docs
+cargo xtask check-stale-claims
+```
+
+For release-facing or template-shape changes:
+
+```bash
+cargo xtask pre-release-check
+```
+
+## Keep It Tidy
+
+- Keep stable guides practical and current; move maintainer/process detail into
+  the focused operations doc, not the README.
+- Do not let `sessions/` become the source of truth. Promote the useful bit.
+- Keep generated files generated.
+- Update this index and `docs/DOCS.md` when adding, moving, or retiring docs.

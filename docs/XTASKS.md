@@ -39,6 +39,7 @@ xtask/
 | `cargo xtask sync-web-source` | Copy editable `apps/web` source into `crates/rtemplate-web/assets/source` with generated artifacts excluded. |
 | `cargo xtask check-web-source-sync` | Fail if the bundled web source has drifted from `apps/web`. |
 | `cargo xtask update-aurora-web` | Refresh the known Aurora registry components, validate `apps/web`, then sync the bundle. |
+| `cargo xtask changed-paths` | Classify changed files into CI routing categories consumed by path-aware GitHub workflow gates. |
 
 ## Justfile delegates to xtask
 
@@ -140,3 +141,22 @@ Run `just symlink-docs` after adding any new `CLAUDE.md` file.
 ```
 
 See `docs/PATTERNS.md` §24 and §48 for the xtask and doctor patterns.
+
+## changed-paths
+
+`cargo xtask changed-paths` is the source of truth for path-aware CI routing.
+`ci.yml` and `msrv.yml` call it before expensive jobs and write the booleans to
+`GITHUB_OUTPUT`.
+
+```bash
+cargo xtask changed-paths --event pull_request --output /tmp/ci-paths.env
+cargo xtask changed-paths \
+  --event pull_request \
+  --changed-files /tmp/changed-files.txt \
+  --output /tmp/ci-paths.env \
+  --write-changed-files /tmp/seen-files.txt
+```
+
+Outputs: `all`, `docs`, `workflow`, `rust`, `web`, `native`, `mcp`, `docker`,
+`toml`, `template`, `security`, `secrets`, and `release`. Workflow changes,
+manual dispatch, and empty changed-file sets fail safe to full CI.

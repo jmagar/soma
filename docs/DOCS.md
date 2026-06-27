@@ -8,7 +8,7 @@ audience:
   - "agents"
 scope: "template"
 source_of_truth: true
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-06-27"
 ---
 
 # Documentation
@@ -19,11 +19,11 @@ This repo keeps documentation close to the automation it describes. Every file i
 
 ```
 docs/
-  ├── DOCS.md                         ← this file; doc directory index
+  ├── README.md                       ← task-oriented docs index
+  ├── DOCS.md                         ← documentation system and generation guide
   ├── CLAUDE.md                       ← agent/contributor instructions (source)
   ├── AGENTS.md                       ← symlink → CLAUDE.md (Codex CLI)
   ├── GEMINI.md                       ← symlink → CLAUDE.md (Gemini CLI)
-  ├── README.md                       ← docs index listing all files
   │
   ├── PATTERNS.md                     ← canonical pattern catalog (normative)
   ├── MCP_SCHEMA.md                   ← MCP action/scope/schema contract
@@ -52,6 +52,8 @@ docs/
   ├── WEB.md                          ← embedded Next.js web UI
   │
   ├── CI.md                           ← GitHub workflows, nextest, taplo
+  ├── LINUX-RUNNER.md                 ← TOOTIE self-hosted runner setup and trust boundary
+  ├── WINDOWS-RUNNER.md               ← STEAMY native Windows runner setup and artifacts
   ├── PRE-COMMIT.md                   ← lefthook hooks, taplo, env guard
   ├── TESTING.md                      ← test strategy, sidecars, mcporter
   ├── MCPORTER.md                     ← live MCP integration testing
@@ -72,15 +74,15 @@ docs/
   │   └── scripts-index.md
   │
   ├── specs/                          ← implementation specs and handoff docs
+  │   ├── mcp-draft-2026-07-28-migration.md
   │   └── scaffold-intent-handoff.md
   │
-  ├── plans/                          ← durable implementation plans (transient)
-  ├── reports/                        ← audits, investigations, reviews (transient)
-  ├── research/                       ← research notes (transient)
   ├── sessions/                       ← saved session logs (transient)
-  └── references/                     ← auto-fetched upstream docs (gitignored)
+  ├── superpowers/plans/              ← durable skill-driven plans
+  └── references/                     ← captured upstream docs and repopacks
       ├── INDEX.md
       ├── CHANGES.md
+      ├── claude-code/
       └── mcp/
 ```
 
@@ -95,11 +97,9 @@ docs/
 | `docs/contracts/` | Machine-readable JSON schemas and example payloads checked by CI scripts. Committed. |
 | `docs/generated/` | Small artifacts produced by `just openapi`, `just schema-docs`, etc. Only commit when the artifact is part of CI/API compatibility checking. |
 | `docs/specs/` | Implementation specs and handoff documents. Draft until promoted to a stable guide. |
-| `docs/plans/` | Durable task breakdowns for in-progress work. Transient — clean up when work lands. |
-| `docs/reports/` | Audits, investigations, and review results. Transient. |
-| `docs/research/` | Research notes and evidence gathered during investigations. Transient. |
+| `docs/superpowers/plans/` | Durable implementation plans from skill-driven work. Keep only while still useful. |
 | `docs/sessions/` | Saved session logs and handoff records written by `just save-session`. Transient. |
-| `docs/references/` | Auto-fetched upstream docs (MCP spec, registry, upstream repos). **Gitignored.** Run `just refresh-docs` to populate. |
+| `docs/references/` | Captured upstream docs and repopacks (MCP spec, registry, Claude Code docs, upstream repos). Refresh from source; do not rewrite snapshots by hand. |
 
 Working artifacts (plans, reports, research, sessions) inform but do not override the stable docs in `docs/*.md`. Accepted requirements from working artifacts should be promoted into the appropriate stable guide.
 
@@ -136,7 +136,10 @@ last_reviewed: "2026-05-15"
 
 ### CLAUDE.md / AGENTS.md / GEMINI.md
 
-`docs/CLAUDE.md` carries agent and contributor instructions for navigating this directory. It is `source_of_truth: false` because the code itself is authoritative; the file explains structure and conventions, not behavior.
+`docs/CLAUDE.md` carries agent and contributor instructions for navigating this
+directory. It is `source_of_truth: false` because the code, contracts, and
+accepted ADRs are authoritative; the file explains structure and conventions,
+not runtime behavior.
 
 `docs/AGENTS.md` and `docs/GEMINI.md` are symlinks to `docs/CLAUDE.md` — they exist so Codex CLI and Gemini CLI find the same instructions Claude Code does. Their frontmatter is identical to `docs/CLAUDE.md` because they are the same file:
 
@@ -204,7 +207,8 @@ The generator derives REST-capable actions from `ACTION_SPECS` and excludes MCP-
 
 ### Reference docs
 
-`docs/references/` is populated by `scripts/refresh-docs.sh` and excluded from git:
+`docs/references/` is populated by `scripts/refresh-docs.sh` and committed when
+the captured external state is useful to preserve:
 
 ```bash
 just refresh-docs              # full refresh (crawl + repomix)
@@ -213,4 +217,8 @@ just refresh-docs-repomix      # skip crawl, repomix only
 just refresh-docs-crawl        # skip repomix, crawl only
 ```
 
-Run when starting work on a new feature touching the service API, when the upstream service releases a new API version, or monthly to keep reference material current.
+Run when starting work on MCP protocol, registry, Claude Code plugin/skill, or
+other upstream-sensitive behavior; when an upstream releases a relevant new
+version; or monthly to keep reference material current. Do not hand-edit the
+captured snapshots. Distill accepted implications into stable guides, contracts,
+or ADRs.

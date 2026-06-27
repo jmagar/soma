@@ -10,19 +10,44 @@ Run all CI checks locally in the same order as `.github/workflows/ci.yml`. Stops
 
 | Step | Tool | Skipped if absent |
 |---|---|---|
-| 1/7 | `cargo fmt --check` | — |
-| 2/7 | `cargo clippy -- -D warnings` | — |
-| 3/7 | `cargo nextest run --profile ci` | falls back to `cargo test` |
-| 4/7 | `taplo check` | yes |
-| 5/7 | `cargo xtask patterns` | — |
-| 6/7 | `cargo xtask check-test-siblings` | — |
-| 7/7 | `cargo audit` | yes |
+| 1/10 | `cargo fmt --all -- --check` | — |
+| 2/10 | `cargo clippy --all-targets -- -D warnings` | — |
+| 3/10 | `cargo nextest run --profile ci` | falls back to `cargo test` |
+| 4/10 | `taplo check` | yes |
+| 5/10 | `cargo xtask patterns` | — |
+| 6/10 | `cargo xtask check-test-siblings` | — |
+| 7/10 | `cargo xtask check-docs` | — |
+| 8/10 | `cargo xtask check-stale-claims` | — |
+| 9/10 | `cargo xtask check-web-source-sync` | — |
+| 10/10 | `cargo audit` | yes |
 
 ```bash
 cargo xtask ci
 # or via Justfile:
 just ci
 ```
+
+---
+
+### `cargo xtask changed-paths`
+
+Classify changed files into the routing categories consumed by the path-aware
+GitHub Actions gates in `.github/workflows/ci.yml` and
+`.github/workflows/msrv.yml`.
+
+```bash
+cargo xtask changed-paths --event pull_request --output /tmp/ci-paths.env
+cargo xtask changed-paths \
+  --event pull_request \
+  --changed-files /tmp/changed-files.txt \
+  --output /tmp/ci-paths.env \
+  --write-changed-files /tmp/seen-files.txt
+```
+
+Outputs: `all`, `docs`, `workflow`, `rust`, `web`, `native`, `mcp`, `docker`,
+`toml`, `template`, `security`, `secrets`, and `release`. Workflow changes,
+manual dispatch, and empty changed-file sets enable every key so the gates fail
+safe.
 
 ---
 
