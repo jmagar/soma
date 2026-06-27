@@ -39,7 +39,7 @@ Use for: every PR, every push to `main`, and manual full verification.
 Do not use for: tag-only packaging or marketplace-no-mcp branch maintenance.
 
 The jobs run on self-hosted runners: Linux on the TOOTIE Docker runner
-(`runs-on: [self-hosted, linux-lab, rmcp-template]`, see `docs/LINUX-RUNNER.md`)
+(`runs-on: [self-hosted, tootie, rmcp-template]`, see `docs/LINUX-RUNNER.md`)
 and Windows on steamy (`runs-on: [self-hosted, Windows, rmcp-template, steamy]`,
 see `docs/WINDOWS-RUNNER.md`). The Rust jobs force `RUSTC_WRAPPER=sccache`,
 `CARGO_BUILD_RUSTC_WRAPPER=sccache`, and `CARGO_INCREMENTAL=0`; the local

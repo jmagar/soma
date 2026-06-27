@@ -17,7 +17,7 @@ last_reviewed: "2026-06-27"
 Linux GitHub Actions jobs run on a Dockerized self-hosted runner on TOOTIE:
 
 ```yaml
-runs-on: [self-hosted, linux-lab, rmcp-template]
+runs-on: [self-hosted, tootie, rmcp-template]
 ```
 
 The runner is repo-scoped to `jmagar/template-rmcp` and mirrors the proven lab
@@ -39,9 +39,9 @@ Current runners:
 
 | Runner | Labels |
 |---|---|
-| `tootie-rmcp-template-linux-a` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
-| `tootie-rmcp-template-linux-b` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
-| `tootie-rmcp-template-linux-c` | `self-hosted`, `Linux`, `X64`, `linux-lab`, `rmcp-template`, `tootie` |
+| `tootie-rmcp-template-linux-a` | `self-hosted`, `Linux`, `X64`, `rmcp-template`, `tootie` |
+| `tootie-rmcp-template-linux-b` | `self-hosted`, `Linux`, `X64`, `rmcp-template`, `tootie` |
+| `tootie-rmcp-template-linux-c` | `self-hosted`, `Linux`, `X64`, `rmcp-template`, `tootie` |
 
 Verify from this repo:
 
@@ -67,7 +67,7 @@ services:
     environment:
       - RUNNER_REPO=jmagar/template-rmcp
       - RUNNER_NAME=tootie-rmcp-template-linux
-      - RUNNER_LABELS=linux-lab,rmcp-template,tootie,self-hosted,linux,x64
+      - RUNNER_LABELS=rmcp-template,tootie,self-hosted,linux,x64
       - RUNNER_WORKDIR=/home/runner/_work
       - RUNNER_URL=https://github.com/jmagar/template-rmcp
       - RUNNER_USE_JIT=1
@@ -178,7 +178,7 @@ runners.
   `docker logs rmcp-template-linux-runner`; if `run.sh` is missing, seed the
   persistent home with the runner distribution files.
 - **Job waits for a runner**: verify the workflow labels exactly match
-  `self-hosted`, `linux-lab`, and `rmcp-template`.
+  `self-hosted`, `tootie`, and `rmcp-template`.
 - **Cargo ignores sccache**: check the setup action output for
   `RUSTC_WRAPPER=sccache` and `CARGO_BUILD_RUSTC_WRAPPER=sccache`.
 - **Docker jobs fail**: confirm `/var/run/docker.sock` is mounted and the host
