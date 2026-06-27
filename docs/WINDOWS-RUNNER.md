@@ -20,7 +20,7 @@ setup used by repos derived from `rmcp-template`.
 The template can run on GitHub-hosted runners, but this repo's Windows job is
 currently wired to the steamy self-hosted runner:
 
-- `build-linux`: `[self-hosted, linux-lab, rmcp-template]`, builds `target/release/rtemplate` and `target/release/rtemplate-server`
+- `build-linux`: `[self-hosted, tootie, rmcp-template]`, builds `target/release/rtemplate` and `target/release/rtemplate-server`
 - `build-windows`: `[self-hosted, Windows, rmcp-template, steamy]`, builds
   `target/release/rtemplate.exe` and `target/release/rtemplate-server.exe`
 
@@ -155,7 +155,7 @@ runs-on: [self-hosted, Windows, rmcp-template]
 If Linux should also use a self-hosted runner, change the Linux job similarly:
 
 ```yaml
-runs-on: [self-hosted, linux-lab, rmcp-template]
+runs-on: [self-hosted, tootie, rmcp-template]
 ```
 
 Keep labels repo-family-specific. Avoid labels tied to one machine name unless
