@@ -1,4 +1,5 @@
-fn workflow_job_block<'a>(workflow: &'a str, job_name: &str) -> &'a str {
+fn workflow_job_block(workflow: &str, job_name: &str) -> String {
+    let workflow = workflow.replace("\r\n", "\n").replace('\r', "\n");
     let marker = format!("  {job_name}:");
     let start = workflow
         .lines()
@@ -26,7 +27,7 @@ fn workflow_job_block<'a>(workflow: &'a str, job_name: &str) -> &'a str {
             }
         })
         .unwrap_or(rest.len());
-    &rest[..end]
+    rest[..end].to_owned()
 }
 
 #[test]
