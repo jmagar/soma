@@ -25,7 +25,7 @@ rsa = "0.10.0-rc.16"
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 sha2 = "0.11"
 subtle = "2"
 thiserror = "2"
