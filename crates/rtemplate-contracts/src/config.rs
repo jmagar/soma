@@ -55,6 +55,11 @@ pub struct McpConfig {
     /// that enforces its own auth (RTEMPLATE_NOAUTH). Loaded here so it participates in
     /// typed config rather than being a raw env read at call sites.
     pub trusted_gateway: bool,
+    /// Advertise official MCP conformance reference fixtures.
+    ///
+    /// This is a test harness switch, not part of the template's production
+    /// surface. Keep it false for real derived servers.
+    pub conformance_fixtures: bool,
     /// Static bearer token for simple auth (RTEMPLATE_MCP_TOKEN).
     pub api_token: Option<String>,
     /// Additional allowed Host header values (comma-separated in env).
@@ -160,6 +165,7 @@ impl Default for McpConfig {
             server_name: default_server_name(),
             no_auth: false,
             trusted_gateway: false,
+            conformance_fixtures: false,
             api_token: None,
             allowed_hosts: Vec::new(),
             allowed_origins: Vec::new(),
@@ -293,6 +299,10 @@ impl Config {
         env_str("RTEMPLATE_MCP_SERVER_NAME", &mut config.mcp.server_name);
         env_bool("RTEMPLATE_MCP_NO_AUTH", &mut config.mcp.no_auth)?;
         env_bool("RTEMPLATE_NOAUTH", &mut config.mcp.trusted_gateway)?;
+        env_bool(
+            "RTEMPLATE_MCP_CONFORMANCE_FIXTURES",
+            &mut config.mcp.conformance_fixtures,
+        )?;
         env_opt_str("RTEMPLATE_MCP_TOKEN", &mut config.mcp.api_token);
         env_list("RTEMPLATE_MCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
         env_list(

@@ -439,7 +439,7 @@ test-mcporter:
 
 # Run the official MCP conformance suite against a locally booted server.
 # Boots a loopback no-auth server, waits for /health, runs the suite, tears down.
-# Requires npx (Node). Suite: active (latest dated spec, default) | all | pending
+# Requires npx (Node). Suite: active (latest dated spec, default) | draft | all | pending
 # Defaults to port 41060 to avoid colliding with a live server on the default 40060.
 # TEMPLATE: adjust the default port and binary name if you renamed them.
 conformance suite="active" port="41060":
@@ -461,6 +461,7 @@ conformance suite="active" port="41060":
     cargo build --bin rtemplate-server
     echo "Starting loopback no-auth server on ${PORT}..."
     RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=${PORT} RTEMPLATE_MCP_NO_AUTH=true \
+        RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true \
         ./target/debug/rtemplate-server serve mcp >/tmp/rtemplate-conformance-server.log 2>&1 &
     SERVER_PID=$!
     trap 'kill ${SERVER_PID} 2>/dev/null || true' EXIT
@@ -480,6 +481,10 @@ conformance suite="active" port="41060":
     # regression (or flags a baselined scenario that started passing as stale).
     npx -y @modelcontextprotocol/conformance server --url "${URL}" --suite {{suite}} \
         --expected-failures conformance-baseline.yml
+
+# Summarize official conformance results/checks.json output.
+conformance-report:
+    python3 scripts/conformance_report.py --results results
 
 # Run the release-readiness gate
 pre-release:

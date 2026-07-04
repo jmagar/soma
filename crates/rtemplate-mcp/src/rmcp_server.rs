@@ -41,7 +41,7 @@ use rtemplate_contracts::{
 use rtemplate_runtime::server::{AppState, AuthPolicy};
 
 use super::{
-    prompts,
+    conformance, prompts,
     response_paging::{
         response_page_request, strip_response_page_params, tool_result_from_cached_page,
         tool_result_from_json,
@@ -70,7 +70,10 @@ impl ServerHandler for ExampleRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
-        let tools = rmcp_tool_definitions()?;
+        let mut tools = rmcp_tool_definitions()?;
+        if self.state.config.conformance_fixtures {
+            tools.extend(conformance::tool_definitions());
+        }
         tracing::debug!(tool_count = tools.len(), "MCP tools listed");
         Ok(ListToolsResult {
             tools,
@@ -96,6 +99,11 @@ impl ServerHandler for ExampleRmcpServer {
 
         let response_page = response_page_request(request.arguments.as_ref())?;
         let auth = require_auth_context(&self.state, &context)?;
+        if self.state.config.conformance_fixtures {
+            if let Some(result) = conformance::call_tool(&tool_name) {
+                return Ok(result);
+            }
+        }
         if tool_name != "example" {
             return Err(unknown_tool_error(&tool_name));
         }
@@ -199,8 +207,12 @@ impl ServerHandler for ExampleRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
+        let mut resources = vec![schema_resource()];
+        if self.state.config.conformance_fixtures {
+            resources.extend(conformance::resources());
+        }
         Ok(ListResourcesResult {
-            resources: vec![schema_resource()],
+            resources,
             ..Default::default()
         })
     }
@@ -211,6 +223,11 @@ impl ServerHandler for ExampleRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
+        if self.state.config.conformance_fixtures {
+            if let Some(result) = conformance::read_resource(&request.uri) {
+                return Ok(result);
+            }
+        }
         if request.uri != SCHEMA_RESOURCE_URI {
             return Err(ErrorData::invalid_params(
                 format!("unknown resource: {}", request.uri),
@@ -235,7 +252,11 @@ impl ServerHandler for ExampleRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<ListPromptsResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
-        Ok(prompts::list_prompts())
+        let mut result = prompts::list_prompts();
+        if self.state.config.conformance_fixtures {
+            result.prompts.extend(conformance::prompts());
+        }
+        Ok(result)
     }
 
     async fn get_prompt(
@@ -244,6 +265,11 @@ impl ServerHandler for ExampleRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<GetPromptResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
+        if self.state.config.conformance_fixtures {
+            if let Some(result) = conformance::get_prompt(request.clone()) {
+                return Ok(result);
+            }
+        }
         prompts::get_prompt(request).map_err(|e| ErrorData::invalid_params(e.to_string(), None))
     }
 
