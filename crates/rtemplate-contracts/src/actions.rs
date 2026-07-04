@@ -592,12 +592,11 @@ pub fn rest_help() -> Value {
         "mcp_only_actions": mcp_only_action_names(),
         "catalog": action_catalog(),
         "preferred_rest_style": "direct_routes",
-        "usage": "Use direct REST routes such as POST /v1/echo or GET /v1/status. POST /v1/example remains as a deprecated compatibility action envelope.",
+        "usage": "Use direct REST routes such as POST /v1/echo or GET /v1/status. MCP keeps a single action-dispatched tool; REST does not expose an action envelope.",
         "examples": {
             "greet":  {"method": "POST", "path": "/v1/greet",  "body": {"name": "Alice"}},
             "echo":   {"method": "POST", "path": "/v1/echo",   "body": {"message": "Hello!"}},
             "status": {"method": "GET", "path": "/v1/status"},
-            "legacy_envelope": {"method": "POST", "path": "/v1/example", "body": {"action": "echo", "params": {"message": "Hello!"}}},
         }
     })
 }

@@ -91,13 +91,12 @@ Direct REST body shapes are action-specific:
 }
 ```
 
-`POST {RTEMPLATE_API_URL}/v1/example` remains a deprecated compatibility
-envelope for older adapters:
+Adapters should call direct REST routes such as `GET {RTEMPLATE_API_URL}/v1/status`
+or `POST {RTEMPLATE_API_URL}/v1/echo`. REST does not expose an action envelope:
 
 ```json
 {
-  "action": "status",
-  "params": {}
+  "message": "hello"
 }
 ```
 

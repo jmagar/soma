@@ -32,7 +32,6 @@ Upstream-client MCP servers do not need a local REST mirror by default. They sho
 | `/v1/echo` | POST | Auth policy | Direct `echo` action route. |
 | `/v1/status` | GET | Auth policy | Authenticated service-status action route. |
 | `/v1/help` | GET | Auth policy | Action catalog and route help. |
-| `/v1/example` | POST | Auth policy | Deprecated compatibility action envelope. |
 
 ## Direct REST requests
 
@@ -44,7 +43,7 @@ Preferred REST routes use ordinary product-shaped request bodies:
 }
 ```
 
-`GET` routes such as `/v1/status` and `/v1/help` do not require a body. The deprecated `/v1/example` route still accepts the legacy `{ "action": "...", "params": { ... } }` envelope for compatibility.
+`GET` routes such as `/v1/status` and `/v1/help` do not require a body. REST does not expose an action-envelope route; action dispatch is reserved for the single MCP tool surface.
 
 ## REST handler
 

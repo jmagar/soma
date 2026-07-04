@@ -27,7 +27,7 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 | `crates/rtemplate-service/src/app.rs` | `ExampleService` — business layer; all logic lives here, never in shims |
 | `crates/rtemplate-runtime/src/server.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` — HTTP server state and auth policy |
 | `crates/rmcp-template/src/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
-| `crates/rtemplate-api/src/api.rs` | REST API handlers: `POST /v1/example`, `GET /health`, `GET /status` |
+| `crates/rtemplate-api/src/api.rs` | REST API handlers: direct `/v1/*` routes, `GET /health`, `GET /status` |
 | `crates/rtemplate-mcp/src/lib.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
 | `crates/rtemplate-mcp/src/tools.rs` | MCP shim: parse JSON args → call service → return `Value` |
 | `crates/rtemplate-mcp/src/schemas.rs` | Tool JSON schema derived from `ACTION_SPECS` |

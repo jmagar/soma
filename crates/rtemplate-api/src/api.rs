@@ -105,13 +105,6 @@ pub const REST_ROUTES: &[RestRoute] = &[
         auth: "mounted auth policy",
         description: "Return the action catalog and route help.",
     },
-    RestRoute {
-        method: "POST",
-        path: "/v1/example",
-        action: None,
-        auth: "mounted auth policy",
-        description: "Deprecated compatibility action envelope.",
-    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -121,19 +114,6 @@ pub struct CapabilitiesResponse {
     pub preferred_rest_style: &'static str,
     pub supported_routes: Vec<String>,
     pub routes: &'static [RestRoute],
-}
-
-/// Request body for deprecated `POST /v1/example`.
-///
-/// REST uses an explicit `{ action, params }` envelope. MCP uses a flat
-/// argument object such as `{ action, message }`. Both convert into the same
-/// typed `ExampleAction` before calling `ExampleService`.
-#[derive(Deserialize)]
-pub struct ActionRequest {
-    #[serde(default)]
-    pub action: String,
-    #[serde(default)]
-    pub params: Value,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -147,36 +127,6 @@ pub struct GreetRequest {
 #[serde(deny_unknown_fields)]
 pub struct EchoRequest {
     pub message: String,
-}
-
-/// Deprecated compatibility route. New platform servers should prefer direct
-/// product routes such as `POST /v1/echo` over an action envelope.
-pub async fn api_dispatch(
-    State(state): State<AppState>,
-    auth: Option<Extension<AuthContext>>,
-    Json(body): Json<ActionRequest>,
-) -> impl IntoResponse {
-    // Destructive actions require an explicit "confirm": true. No-op for the
-    // template's current (non-destructive) actions; gates any future one.
-    if let Err(tool_error) = rtemplate_contracts::actions::require_confirmation_if_destructive(
-        &body.action,
-        &body.params,
-    ) {
-        return (
-            StatusCode::from_u16(tool_error.http_status_code()).unwrap_or(StatusCode::BAD_REQUEST),
-            Json(tool_error.to_rest_payload()),
-        )
-            .into_response();
-    }
-
-    run_rest_action_request(
-        state,
-        auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::from_rest(&body.action, &body.params),
-        &body.action,
-    )
-    .await
-    .into_response()
 }
 
 pub async fn v1_capabilities() -> impl IntoResponse {

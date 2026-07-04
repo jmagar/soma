@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Removed the deprecated `POST /v1/example` REST action-envelope route. REST now exposes
+  only direct typed `/v1/*` business routes while MCP keeps compact action dispatch behind
+  its single tool surface.
+
 ### Added
 
 - GitHub workflow docs now cover the full workflow inventory, TOOTIE Docker

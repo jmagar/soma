@@ -114,26 +114,6 @@ async fn direct_rest_validation_errors_are_bad_requests() {
 }
 
 #[tokio::test]
-async fn legacy_rest_envelope_rejects_mcp_only_actions_as_bad_requests() {
-    let app = server::router(loopback_state());
-    for action in ["elicit_name", "scaffold_intent"] {
-        let (status, response) = request_json(
-            app.clone(),
-            Method::POST,
-            "/v1/example",
-            None,
-            Some(json!({"action": action, "params": {}})),
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
-        assert!(response["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("not available over REST"));
-    }
-}
-
-#[tokio::test]
 async fn direct_rest_help_excludes_mcp_only_actions_from_rest_actions() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(app, Method::GET, "/v1/help", None, None).await;
@@ -157,7 +137,7 @@ async fn capabilities_advertises_direct_rest_routes() {
         .as_array()
         .expect("supported_routes should be an array")
         .contains(&json!("POST /v1/echo")));
-    assert!(body["supported_routes"]
+    assert!(!body["supported_routes"]
         .as_array()
         .expect("supported_routes should be an array")
         .contains(&json!("POST /v1/example")));
@@ -172,7 +152,7 @@ async fn openapi_json_is_public_and_lists_direct_routes() {
     assert_eq!(body["openapi"], "3.1.0");
     assert!(body["paths"].get("/v1/echo").is_some());
     assert!(body["paths"].get("/v1/capabilities").is_some());
-    assert_eq!(body["paths"]["/v1/example"]["post"]["deprecated"], true);
+    assert!(body["paths"].get("/v1/example").is_none());
     assert_eq!(body["x-template"]["preferred_rest_style"], "direct_routes");
     assert!(
         body["components"]["schemas"]["StatusResponse"]["properties"]

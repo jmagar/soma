@@ -106,7 +106,7 @@ src/
   │
   ├── config.rs               ← Config structs + env overrides (single file is fine)
   │
-  ├── api.rs                  ← REST API handlers: api_dispatch, health, status
+  ├── api.rs                  ← REST API handlers: direct /v1/* routes, health, status
   │   or api/                 ← split into a directory when ≥ 2 resource groups
   │       things.rs           ← GET/POST/PUT/DELETE /things → service calls
   │       users.rs
@@ -3013,7 +3013,6 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/echo", post(v1_echo))
         .route("/v1/status", get(v1_service_status))
         .route("/v1/help", get(v1_help))
-        .route("/v1/example", post(api_dispatch))  // deprecated compatibility envelope
         .route_layer(auth_layer.clone());
 
     // 3. MCP transport
@@ -3052,37 +3051,33 @@ pub fn router(state: AppState) -> Router {
 
 ---
 
-## A2. REST API — Action Dispatch Mirrors MCP
+## A2. REST API — Direct Routes Share Service Dispatch
 
-The REST API uses the same `action` + `params` pattern as MCP tools. This means:
-- **One service method** serves both MCP and HTTP — no duplication
-- Agents can use whichever surface is available
-- The request shape is identical: `{"action":"greet","params":{"name":"Alice"}}`
+REST uses traditional typed routes while MCP keeps the compact `action` argument
+inside a single tool. Both surfaces still converge on the same `ExampleAction`
+and service dispatcher:
+- **One service method** serves MCP, REST, and CLI — no duplicated business logic
+- REST stays natural for humans, HTTP clients, OpenAPI, and generated SDKs
+- MCP stays compact for agents by exposing one action-dispatched tool
 
 ```rust
 // src/api.rs
-#[derive(Deserialize)]
-pub struct ActionRequest {
-    pub action: String,
-    #[serde(default)]
-    pub params: serde_json::Value,
-}
-
-async fn api_dispatch(
+async fn v1_echo(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
-    Json(body): Json<ActionRequest>,
+    Json(body): Json<EchoRequest>,
 ) -> impl IntoResponse {
-    let result = match ExampleAction::from_rest(&body.action, &body.params) {
+    let params = serde_json::json!({ "message": body.message });
+    let result = match ExampleAction::from_rest("echo", &params) {
         Ok(action) => {
             if let Some(response) = enforce_rest_scope(
                 &state,
                 auth.as_ref().map(|Extension(auth)| auth),
-                &body.action,
+                action.name(),
             ) {
                 return response;
             }
-            execute_service_action(&state.service, &action).await
+            dispatch_action(&state.service, &action, "rest").await
         }
         Err(error) => Err(error),
     };

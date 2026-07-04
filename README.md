@@ -217,7 +217,6 @@ HTTP routes in the server profile:
 | `/metrics` | Prometheus metrics when built with `observability`. |
 | `/v1/capabilities` | REST route inventory. |
 | `/v1/greet`, `/v1/echo`, `/v1/status`, `/v1/help` | Direct REST business routes. |
-| `/v1/example` | Deprecated compatibility action envelope. |
 | `/mcp/.well-known/*` | OAuth metadata when OAuth is enabled. |
 | `/*` | Embedded web UI fallback when built with `web`. |
 

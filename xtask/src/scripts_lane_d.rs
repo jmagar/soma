@@ -16,8 +16,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const LEGACY_REST_ENDPOINT: &str = "/v1/example";
-
 const REST_SCHEMAS: &[(&str, Option<&str>, &str)] = &[
     ("greet", Some("GreetRequest"), "GreetResponse"),
     ("echo", Some("EchoRequest"), "EchoResponse"),
@@ -413,20 +411,6 @@ fn render_openapi(root: &Path) -> Result<Value> {
         paths.insert(path.to_owned(), json!({method: operation}));
     }
 
-    let examples = rest_actions
-        .iter()
-        .map(|action| {
-            (
-                action.name.clone(),
-                json!({"value":{"action": action.name, "params": param_example(&action.name)}}),
-            )
-        })
-        .collect::<serde_json::Map<_, _>>();
-    paths.insert(
-        LEGACY_REST_ENDPOINT.to_owned(),
-        json!({"post":{"tags":["legacy-actions"],"summary":"Deprecated action-envelope dispatch","description":"Compatibility shim for older clients. New application/platform servers should expose direct product REST routes and reserve action dispatch for MCP.","operationId":"dispatchExampleActionDeprecated","deprecated":true,"security":[{"BearerAuth":[]},{}],"requestBody":{"required":true,"content":{"application/json":{"schema":schema_ref("ActionRequest"),"examples":examples}}},"responses":{"200":{"description":"Action result. Shape depends on the requested action.","content":{"application/json":{"schema":schema_ref("ActionResponse")}}},"400":{"$ref":"#/components/responses/BadRequest"},"401":{"$ref":"#/components/responses/Unauthorized"},"403":{"$ref":"#/components/responses/Forbidden"},"500":{"$ref":"#/components/responses/InternalError"}}}}),
-    );
-
     let direct_rest_routes = rest_actions
         .iter()
         .map(|action| {
@@ -460,8 +444,7 @@ fn render_openapi(root: &Path) -> Result<Value> {
         "tags": [
             {"name":"health","description":"Unauthenticated runtime probes"},
             {"name":"capabilities","description":"REST route inventory"},
-            {"name":"direct-rest","description":"Preferred typed REST routes"},
-            {"name":"legacy-actions","description":"Deprecated action-envelope compatibility"}
+            {"name":"direct-rest","description":"Typed REST routes"}
         ],
         "paths": paths,
         "components": {
@@ -489,7 +472,6 @@ fn render_openapi(root: &Path) -> Result<Value> {
 fn openapi_schemas(action_names: Vec<String>) -> Value {
     json!({
         "ActionName":{"type":"string","enum":action_names,"description":"REST-capable action names from crates/rtemplate-contracts/src/actions.rs."},
-        "ActionRequest":{"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":schema_ref("ActionName"),"params":{"type":"object","description":"Action-specific parameters. greet.name is optional; echo.message is required.","additionalProperties":true,"default":{}}}},
         "GreetRequest":{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string","description":"Name to greet. Omit to greet the world."}}},
         "EchoRequest":{"type":"object","additionalProperties":false,"required":["message"],"properties":{"message":{"type":"string","minLength":1,"description":"Message to echo back. Must not be empty."}}},
         "ActionResponse":{"oneOf":[schema_ref("GreetResponse"),schema_ref("EchoResponse"),schema_ref("StatusResponse"),schema_ref("HelpResponse"),schema_ref("RestTruncationResponse")]},
@@ -616,17 +598,8 @@ fn validate_openapi(root: &Path, value: &Value) -> Result<Vec<String>> {
             ));
         }
     }
-    if value
-        .pointer("/paths/~1v1~1example/post/deprecated")
-        .and_then(Value::as_bool)
-        != Some(true)
-    {
-        failures.push(format!("{LEGACY_REST_ENDPOINT} must be marked deprecated"));
-    }
-    if value.pointer("/paths/~1v1~1example/post/security") != Some(&json!([{"BearerAuth":[]},{}])) {
-        failures.push(format!(
-            "{LEGACY_REST_ENDPOINT} security must document bearer auth and no-local-auth modes"
-        ));
+    if value.pointer("/paths/~1v1~1example").is_some() {
+        failures.push("/v1/example must not be present; REST uses direct routes only".to_owned());
     }
     if value.pointer("/paths/~1v1~1capabilities/get/responses/200/content/application~1json/schema")
         != Some(&schema_ref("CapabilitiesResponse"))
@@ -1408,7 +1381,6 @@ fn required_openapi_paths(root: &Path) -> Result<Vec<String>> {
             .filter(|entry| entry.transport == "Any")
             .filter_map(|entry| entry.rest_path),
     );
-    paths.push(LEGACY_REST_ENDPOINT.to_owned());
     Ok(paths)
 }
 

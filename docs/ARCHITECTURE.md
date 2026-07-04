@@ -110,7 +110,6 @@ Port 40060
   ├── /v1/echo              → Direct REST action route
   ├── /v1/status            → Direct REST action route
   ├── /v1/help              → Direct REST action route
-  ├── /v1/example           → Deprecated compatibility action envelope
   ├── /.well-known/*        → OAuth metadata (when auth_mode=oauth)
   └── /*                    → SPA fallback (serves embedded web UI)
 ```
@@ -128,7 +127,6 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/echo", post(v1_echo))
         .route("/v1/status", get(v1_service_status))
         .route("/v1/help", get(v1_help))
-        .route("/v1/example", post(api_dispatch))
         .route_layer(auth_layer.clone());
 
     let mcp = Router::new()
