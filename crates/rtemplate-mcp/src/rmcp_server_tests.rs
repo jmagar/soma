@@ -135,7 +135,6 @@ fn oversized_tool_errors_return_valid_overflow_envelope() {
     }))
     .expect("tool error should serialize");
     let text = result.content[0]
-        .raw
         .as_text()
         .expect("tool error should contain text")
         .text

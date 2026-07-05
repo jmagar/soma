@@ -12,10 +12,10 @@ use std::{borrow::Cow, sync::Arc, time::Instant};
 
 use rmcp::{
     model::{
-        CallToolRequestParams, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
-        Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult,
-        PaginatedRequestParams, RawResource, ReadResourceRequestParams, ReadResourceResult,
-        Resource, ResourceContents, ServerCapabilities, ServerInfo, Tool,
+        CallToolRequestParams, CallToolResult, ContentBlock, GetPromptRequestParams,
+        GetPromptResult, Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult,
+        PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResult, Resource,
+        ResourceContents, ServerCapabilities, ServerInfo, Tool,
     },
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
@@ -276,14 +276,9 @@ impl ServerHandler for ExampleRmcpServer {
 const SCHEMA_RESOURCE_URI: &str = "example://schema/mcp-tool";
 
 fn schema_resource() -> Resource {
-    Resource::new(
-        RawResource::new(SCHEMA_RESOURCE_URI, "example tool schema")
-            .with_description(
-                "JSON schema for the example MCP tool and its action-based parameters",
-            )
-            .with_mime_type("application/json"),
-        None,
-    )
+    Resource::new(SCHEMA_RESOURCE_URI, "example tool schema")
+        .with_description("JSON schema for the example MCP tool and its action-based parameters")
+        .with_mime_type("application/json")
 }
 
 // ── tool definition conversion ────────────────────────────────────────────────
@@ -329,7 +324,7 @@ fn tool_error_result(value: Value) -> Result<CallToolResult, ErrorData> {
         (payload, text)
     };
     let mut result = CallToolResult::structured_error(payload);
-    result.content = vec![Content::text(text)];
+    result.content = vec![ContentBlock::text(text)];
     Ok(result)
 }
 
