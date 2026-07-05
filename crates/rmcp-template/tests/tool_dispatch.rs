@@ -5,19 +5,94 @@
 //!
 //! **Template**: mirror this file for your service. Add one test per action.
 
+use async_trait::async_trait;
 use rmcp::{model::CallToolRequestParams, service::ServiceError, ServiceExt};
 use rmcp_template::{
     actions::ExampleAction,
     mcp::{execute_tool_without_peer_for_test, rmcp_server},
     testing::{bearer_state, loopback_state},
 };
+use rtemplate_contracts::providers::{
+    ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool,
+};
+use rtemplate_service::provider_registry::{Provider, ProviderOutput, ProviderRegistry};
+use rtemplate_service::ProviderError;
 use serde_json::json;
+use std::sync::Arc;
 
 async fn call_mcp_action(args: serde_json::Value) -> serde_json::Value {
     let state = loopback_state();
     execute_tool_without_peer_for_test(&state, "example", args)
         .await
         .expect("MCP tool dispatch should succeed")
+}
+
+#[derive(Clone)]
+struct DynamicProvider;
+
+#[async_trait]
+impl Provider for DynamicProvider {
+    fn catalog(&self) -> ProviderCatalog {
+        ProviderManifest {
+            schema_version: 1,
+            provider: ProviderIdentity {
+                name: "dynamic".to_owned(),
+                kind: ProviderKind::StaticRust,
+                title: None,
+                description: None,
+                homepage: None,
+                source: None,
+                version: None,
+                enabled: Some(true),
+            },
+            tools: vec![ProviderTool {
+                name: "weather".to_owned(),
+                description: "Fetch weather".to_owned(),
+                title: None,
+                input_schema: json!({
+                    "type": "object",
+                    "required": ["city"],
+                    "additionalProperties": false,
+                    "properties": {"city": {"type": "string"}}
+                }),
+                output_schema: None,
+                scope: Some("example:read".to_owned()),
+                destructive: false,
+                requires_admin: false,
+                cost: Some("cheap".to_owned()),
+                env: Vec::new(),
+                limits: None,
+                mcp: None,
+                rest: None,
+                cli: None,
+                palette: None,
+                ui: None,
+                examples: Vec::new(),
+                meta: json!({}),
+            }],
+            prompts: Vec::new(),
+            resources: Vec::new(),
+            tasks: Vec::new(),
+            elicitation: Vec::new(),
+            env: Vec::new(),
+            capabilities: Default::default(),
+            docs: None,
+            plugin: None,
+            ui: None,
+            meta: json!({}),
+        }
+    }
+
+    async fn call(
+        &self,
+        call: rtemplate_service::provider_registry::ProviderCall,
+    ) -> Result<ProviderOutput, ProviderError> {
+        Ok(ProviderOutput::json(json!({
+            "provider": call.provider,
+            "action": call.action,
+            "city": call.params["city"],
+        })))
+    }
 }
 
 #[tokio::test]
@@ -64,6 +139,25 @@ async fn test_status_returns_ok() {
         .and_then(|v| v.as_str())
         .expect("status field should be present");
     assert_eq!(status, "ok");
+}
+
+#[tokio::test]
+async fn test_dynamic_provider_action_dispatches_without_static_action_enum() {
+    let mut state = loopback_state();
+    state.provider_registry =
+        ProviderRegistry::new(vec![Arc::new(DynamicProvider)]).expect("dynamic registry");
+
+    let result = execute_tool_without_peer_for_test(
+        &state,
+        "example",
+        json!({ "action": "weather", "city": "Paris" }),
+    )
+    .await
+    .expect("dynamic provider action should dispatch");
+
+    assert_eq!(result["provider"], "dynamic");
+    assert_eq!(result["action"], "weather");
+    assert_eq!(result["city"], "Paris");
 }
 
 #[tokio::test]
@@ -198,7 +292,7 @@ async fn test_mcp_dispatch_rejects_unknown_action() {
         execute_tool_without_peer_for_test(&state, "example", json!({ "action": "missing" }))
             .await
             .expect_err("unknown action should be rejected");
-    assert!(error.to_string().contains("unknown example action"));
+    assert!(error.to_string().contains("unknown provider action"));
 }
 
 #[tokio::test]

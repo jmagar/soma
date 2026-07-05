@@ -42,6 +42,10 @@ pub struct ProviderIdentity {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
+    pub homepage: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
     pub version: Option<String>,
     #[serde(default)]
     pub enabled: Option<bool>,
@@ -74,6 +78,8 @@ impl ProviderKind {
 pub struct ProviderTool {
     pub name: String,
     pub description: String,
+    #[serde(default)]
+    pub title: Option<String>,
     pub input_schema: Value,
     #[serde(default)]
     pub output_schema: Option<Value>,
@@ -327,6 +333,12 @@ pub struct RestOverlay {
     pub description: Option<String>,
     #[serde(default)]
     pub deprecated: bool,
+    #[serde(default)]
+    pub path_params: Value,
+    #[serde(default)]
+    pub query_params: Value,
+    #[serde(default)]
+    pub request_body_schema: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -344,6 +356,12 @@ pub struct CliOverlay {
     pub long_about: Option<String>,
     #[serde(default)]
     pub hidden: bool,
+    #[serde(default)]
+    pub flags: Vec<Value>,
+    #[serde(default)]
+    pub default_output: Option<String>,
+    #[serde(default)]
+    pub interactive: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

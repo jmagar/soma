@@ -24,7 +24,8 @@ pub(super) fn action_surfaces(reporter: &mut PatternReporter) {
     let tests = read_file("crates/rmcp-template/tests/tool_dispatch.rs");
     let cli = read_file("crates/rtemplate-cli/src/lib.rs");
 
-    let schema_uses_metadata = schema.contains("action_names()");
+    let schema_uses_metadata = schema.contains("tool_definitions_for_catalogs")
+        && schema.contains("action_names(catalogs)");
     let missing_schema = if schema_uses_metadata {
         Vec::new()
     } else {

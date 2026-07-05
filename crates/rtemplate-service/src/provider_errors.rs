@@ -108,14 +108,37 @@ pub fn redact_public(input: &str) -> String {
     if markers.iter().any(|marker| lower.contains(marker)) {
         output = "[redacted provider diagnostic]".to_owned();
     }
-    for (key, _) in std::env::vars() {
+    for (key, value) in std::env::vars() {
         if key.ends_with("_TOKEN")
             || key.ends_with("_KEY")
             || key.ends_with("_SECRET")
             || key.contains("PASSWORD")
         {
             output = output.replace(&key, "[redacted env]");
+            if value.len() >= 4 {
+                output = output.replace(&value, "[redacted env]");
+            }
         }
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_public;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn redacts_sensitive_env_values_from_public_diagnostics() {
+        let _guard = ENV_LOCK.lock().expect("env lock should not be poisoned");
+        std::env::set_var("RTEMPLATE_TEST_SECRET", "super-secret-value");
+
+        let redacted = redact_public("upstream returned super-secret-value");
+
+        std::env::remove_var("RTEMPLATE_TEST_SECRET");
+        assert!(!redacted.contains("super-secret-value"));
+        assert_eq!(redacted, "upstream returned [redacted env]");
+    }
 }

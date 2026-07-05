@@ -15,7 +15,7 @@
 
 use anyhow::{anyhow, Result};
 use rtemplate_contracts::{
-    actions::{ActionSpec, ExampleAction, ACTION_SPECS},
+    actions::{ActionSpec, ExampleAction},
     config::ExampleConfig,
 };
 use rtemplate_service::{
@@ -197,7 +197,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     let client = ExampleClient::new(cfg)?;
     let service = ExampleService::new(client);
     let registry = static_provider_registry(service.clone())?;
-    confirm_command_if_destructive(&cmd)?;
+    let destructive_confirmed = confirm_command_if_destructive(&cmd, &registry)?;
 
     let result = match service_action_from_command(&cmd) {
         Some(action) => match registry
@@ -208,7 +208,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
                 principal: ProviderPrincipal::loopback_dev(),
                 auth_mode: ProviderAuthMode::LoopbackDev,
                 surface: ProviderSurface::Cli,
-                destructive_confirmed: false,
+                destructive_confirmed,
                 limits: ProviderRequestLimits::default(),
                 snapshot_id: String::new(),
             })
@@ -232,7 +232,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
                     principal: ProviderPrincipal::loopback_dev(),
                     auth_mode: ProviderAuthMode::LoopbackDev,
                     surface: ProviderSurface::Cli,
-                    destructive_confirmed: false,
+                    destructive_confirmed,
                     limits: ProviderRequestLimits::default(),
                     snapshot_id: String::new(),
                 })
@@ -274,15 +274,34 @@ fn format_cli_tool_error(error: &rtemplate_contracts::errors::ToolError) -> Stri
     lines.join("\n")
 }
 
-fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {
+fn confirm_command_if_destructive(
+    cmd: &Command,
+    registry: &rtemplate_service::ProviderRegistry,
+) -> Result<bool> {
     let Some(action) = command_action_name(cmd) else {
-        return Ok(());
+        return Ok(false);
     };
-    confirm_destructive_action_allowed(ACTION_SPECS, action, false, std::io::stdin().is_terminal())
+    if !registry.snapshot().action_requires_confirmation(&action) {
+        return Ok(false);
+    }
+    if !std::io::stdin().is_terminal() {
+        return Err(anyhow!(
+            "pass -y / --yes to confirm destructive action `{action}`"
+        ));
+    }
+    confirm_destructive_action_from_io(
+        &action,
+        &mut std::io::stdin().lock(),
+        &mut std::io::stderr(),
+    )?;
+    Ok(true)
 }
 
-fn command_action_name(cmd: &Command) -> Option<&'static str> {
-    service_action_from_command(cmd).map(|action| action.name())
+fn command_action_name(cmd: &Command) -> Option<String> {
+    match cmd {
+        Command::Provider { command, .. } => Some(command.clone()),
+        _ => service_action_from_command(cmd).map(|action| action.name().to_owned()),
+    }
 }
 
 fn service_action_from_command(cmd: &Command) -> Option<ExampleAction> {

@@ -11,7 +11,7 @@ use rtemplate_contracts::{
     providers::{HostCapabilities, ProviderCatalog, ProviderTool},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::{capabilities::CapabilityBroker, provider_errors::ProviderError};
@@ -49,6 +49,13 @@ impl ProviderPrincipal {
         Self {
             subject: "loopback-dev".to_owned(),
             scopes: vec![rtemplate_contracts::actions::READ_SCOPE.to_owned()],
+        }
+    }
+
+    pub fn anonymous() -> Self {
+        Self {
+            subject: "anonymous".to_owned(),
+            scopes: Vec::new(),
         }
     }
 }
@@ -92,7 +99,7 @@ impl ProviderOutput {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RegistrySnapshot {
     pub id: String,
     pub fingerprint: String,
@@ -132,17 +139,24 @@ impl RegistrySnapshot {
         self.primitive_index.get(name).map(String::as_str)
     }
 
+    pub fn action_requires_confirmation(&self, action: &str) -> bool {
+        self.tool_entry(action)
+            .map(|entry| entry.tool.destructive)
+            .unwrap_or(false)
+    }
+
     fn tool_entry(&self, action: &str) -> Option<&ToolEntry> {
         self.action_index.get(action)
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ToolEntry {
     provider: String,
     action: String,
     tool: ProviderTool,
     capabilities: HostCapabilities,
+    input_validator: Arc<JSONSchema>,
 }
 
 #[derive(Clone)]
@@ -210,7 +224,7 @@ impl ProviderRegistry {
     }
 
     pub async fn dispatch(&self, mut call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
-        let (snapshot, provider) = {
+        let (snapshot, provider, entry) = {
             let state = self
                 .state
                 .read()
@@ -224,6 +238,7 @@ impl ProviderRegistry {
                     format!("unknown provider action `{}`", call.action),
                 )
             })?;
+            let entry = entry.clone();
             let provider = state
                 .providers
                 .get(&entry.provider)
@@ -237,13 +252,9 @@ impl ProviderRegistry {
                         "Reload providers and retry.",
                     )
                 })?;
-            (snapshot, provider)
+            (snapshot, provider, entry)
         };
 
-        let entry = snapshot
-            .tool_entry(&call.action)
-            .expect("entry exists after provider lookup")
-            .clone();
         call.provider = entry.provider.clone();
         call.snapshot_id = snapshot.id.clone();
         enforce_call(&entry, &call, &self.capabilities)?;
@@ -287,15 +298,21 @@ fn build_snapshot(
         let catalog = provider.catalog();
         validate_provider_manifest(&catalog)?;
         for tool in &catalog.tools {
-            if JSONSchema::compile(&tool.input_schema).is_ok() {
-                compiled_validator_count += 1;
-            }
+            let input_validator =
+                Arc::new(JSONSchema::compile(&tool.input_schema).map_err(|error| {
+                    ProviderValidationError::new(
+                        "input_schema_invalid",
+                        format!("tool `{}` has invalid input_schema: {error}", tool.name),
+                    )
+                })?);
+            compiled_validator_count += 1;
             let action = tool.name.clone();
             let entry = ToolEntry {
                 provider: catalog.provider.name.clone(),
                 action: action.clone(),
                 tool: tool.clone(),
                 capabilities: catalog.capabilities.clone(),
+                input_validator,
             };
             if action_index.insert(action.clone(), entry).is_some() {
                 return Err(ProviderValidationError::new(
@@ -361,15 +378,18 @@ fn build_snapshot(
     catalogs.sort_by(|left, right| left.provider.name.cmp(&right.provider.name));
     let fingerprint = fingerprint_catalogs(&catalogs);
     let id = fingerprint.clone();
+    let mut action_names = action_index.keys().cloned().collect::<Vec<_>>();
+    action_names.sort();
+    let openapi_paths = openapi_paths_from_rest_index(&rest_index);
     let cached_catalog_summary = Arc::new(json!({
         "schema_version": 1,
         "provider_fingerprint": fingerprint,
-        "actions": action_index.keys().collect::<Vec<_>>(),
+        "actions": action_names.clone(),
     }));
     let cached_palette_manifest = Arc::new(json!({
         "schema_version": 1,
         "provider_fingerprint": fingerprint,
-        "commands": action_index.keys().collect::<Vec<_>>(),
+        "commands": action_names,
         "builtins": {
             "file_explorer": false,
             "github": false,
@@ -381,8 +401,9 @@ fn build_snapshot(
         serde_json::to_vec_pretty(&json!({
             "openapi": "3.1.0",
             "info": {"title": "rmcp-template provider API", "version": env!("CARGO_PKG_VERSION")},
+            "x-template": {"preferred_rest_style": "direct_routes"},
             "x-rtemplate": {"provider_fingerprint": fingerprint},
-            "paths": {}
+            "paths": openapi_paths
         }))
         .expect("static OpenAPI summary serializes"),
     );
@@ -400,6 +421,48 @@ fn build_snapshot(
         cached_catalog_summary,
         cached_palette_manifest,
     })
+}
+
+fn openapi_paths_from_rest_index(rest_index: &HashMap<(String, String), String>) -> Value {
+    let mut paths = Map::new();
+    paths.insert(
+        "/v1/capabilities".to_owned(),
+        json!({
+            "get": {
+                "summary": "List REST capabilities",
+                "operationId": "v1Capabilities",
+                "responses": {
+                    "200": {"description": "Route inventory and server metadata"}
+                }
+            }
+        }),
+    );
+
+    let mut routes = rest_index
+        .iter()
+        .map(|((method, path), action)| (method.clone(), path.clone(), action.clone()))
+        .collect::<Vec<_>>();
+    routes.sort_by(|left, right| left.1.cmp(&right.1).then(left.0.cmp(&right.0)));
+
+    for (method, path, action) in routes {
+        let entry = paths
+            .entry(path)
+            .or_insert_with(|| Value::Object(Map::new()));
+        if let Value::Object(methods) = entry {
+            methods.insert(
+                method.to_ascii_lowercase(),
+                json!({
+                    "summary": format!("Provider action `{action}`"),
+                    "operationId": action,
+                    "responses": {
+                        "200": {"description": "Provider action response"},
+                        "400": {"description": "Provider validation error"}
+                    }
+                }),
+            );
+        }
+    }
+    Value::Object(paths)
 }
 
 fn insert_primitive(
@@ -429,6 +492,7 @@ fn enforce_call(
 ) -> Result<(), ProviderError> {
     enforce_surface(entry, call)?;
     enforce_scope(entry, call)?;
+    enforce_admin(entry, call)?;
     enforce_destructive(entry, call)?;
     enforce_input_limit(entry, call)?;
     enforce_schema(entry, call)?;
@@ -496,6 +560,26 @@ fn enforce_scope(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderE
     ))
 }
 
+fn enforce_admin(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
+    if !entry.tool.requires_admin || provider_principal_is_admin(&call.principal) {
+        return Ok(());
+    }
+    Err(ProviderError::new(
+        "admin_required",
+        &entry.provider,
+        Some(entry.action.clone()),
+        format!("action `{}` requires an admin principal", entry.action),
+        "Authenticate with an admin-scoped token and retry.",
+    ))
+}
+
+fn provider_principal_is_admin(principal: &ProviderPrincipal) -> bool {
+    principal
+        .scopes
+        .iter()
+        .any(|scope| scope == "admin" || scope == "example:admin")
+}
+
 fn enforce_destructive(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
     if !entry.tool.destructive || call.destructive_confirmed {
         return Ok(());
@@ -533,16 +617,7 @@ fn enforce_input_limit(entry: &ToolEntry, call: &ProviderCall) -> Result<(), Pro
 }
 
 fn enforce_schema(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    let compiled = JSONSchema::compile(&entry.tool.input_schema).map_err(|error| {
-        ProviderError::new(
-            "input_schema_invalid",
-            &entry.provider,
-            Some(entry.action.clone()),
-            error.to_string(),
-            "Fix the provider manifest input schema.",
-        )
-    })?;
-    if let Err(errors) = compiled.validate(&call.params) {
+    if let Err(errors) = entry.input_validator.validate(&call.params) {
         let details = errors
             .map(|error| format!("{}: {}", error.instance_path, error))
             .collect::<Vec<_>>()

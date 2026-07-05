@@ -9,6 +9,7 @@ enum Mode {
     Check,
     Write,
     CheckAndWrite,
+    Help,
 }
 
 impl Mode {
@@ -21,7 +22,7 @@ impl Mode {
                 "--write" => write = true,
                 "--help" | "-h" => {
                     println!("{usage}");
-                    return Ok(Self::Check);
+                    return Ok(Self::Help);
                 }
                 unknown => bail!("unknown option: {unknown}"),
             }

@@ -17,7 +17,6 @@ use serde_json::{json, Value};
 #[cfg(test)]
 use std::sync::OnceLock;
 
-use rtemplate_contracts::actions::ExampleAction;
 #[cfg(test)]
 use rtemplate_contracts::actions::{ActionTransport, ACTION_SPECS};
 use rtemplate_runtime::server::AppState;
@@ -36,9 +35,11 @@ pub(super) async fn execute_tool(
     name: &str,
     args: Value,
     peer: &Peer<RoleServer>,
+    principal: ProviderPrincipal,
+    auth_mode: ProviderAuthMode,
 ) -> anyhow::Result<Value> {
     match name {
-        "example" => dispatch_example(state, args, peer).await,
+        "example" => dispatch_example(state, args, peer, principal, auth_mode).await,
         _ => Err(anyhow::anyhow!("unknown tool: {name}")),
     }
 }
@@ -51,7 +52,15 @@ pub async fn execute_tool_without_peer_for_test(
     args: Value,
 ) -> anyhow::Result<Value> {
     match name {
-        "example" => dispatch_example_without_peer(state, args).await,
+        "example" => {
+            dispatch_example_without_peer(
+                state,
+                args,
+                ProviderPrincipal::loopback_dev(),
+                ProviderAuthMode::LoopbackDev,
+            )
+            .await
+        }
         _ => Err(anyhow::anyhow!("unknown tool: {name}")),
     }
 }
@@ -60,46 +69,61 @@ async fn dispatch_example(
     state: &AppState,
     args: Value,
     peer: &Peer<RoleServer>,
+    principal: ProviderPrincipal,
+    auth_mode: ProviderAuthMode,
 ) -> anyhow::Result<Value> {
-    let action = ExampleAction::from_mcp_args(&args)?;
+    let action = action_name(&args)?.to_owned();
 
-    match action {
-        ExampleAction::ElicitName => elicit_name(&state.service, peer).await,
-        ExampleAction::ScaffoldIntent => scaffold_intent(&state.service, peer).await,
-        other => dispatch_non_elicitation_action(state, &other, args).await,
+    match action.as_str() {
+        "elicit_name" => elicit_name(&state.service, peer).await,
+        "scaffold_intent" => scaffold_intent(&state.service, peer).await,
+        other => dispatch_non_elicitation_action(state, other, args, principal, auth_mode).await,
     }
 }
 
 #[cfg(any(test, feature = "test-support"))]
-async fn dispatch_example_without_peer(state: &AppState, args: Value) -> anyhow::Result<Value> {
-    let action = ExampleAction::from_mcp_args(&args)?;
-    match action {
-        ExampleAction::ElicitName | ExampleAction::ScaffoldIntent => Err(anyhow::anyhow!(
-            "action={} requires an MCP peer",
-            action.name()
-        )),
-        other => dispatch_non_elicitation_action(state, &other, args).await,
+async fn dispatch_example_without_peer(
+    state: &AppState,
+    args: Value,
+    principal: ProviderPrincipal,
+    auth_mode: ProviderAuthMode,
+) -> anyhow::Result<Value> {
+    let action = action_name(&args)?.to_owned();
+    match action.as_str() {
+        "elicit_name" | "scaffold_intent" => {
+            Err(anyhow::anyhow!("action={} requires an MCP peer", action))
+        }
+        other => dispatch_non_elicitation_action(state, other, args, principal, auth_mode).await,
     }
 }
 
 async fn dispatch_non_elicitation_action(
     state: &AppState,
-    action: &ExampleAction,
+    action: &str,
     args: Value,
+    principal: ProviderPrincipal,
+    auth_mode: ProviderAuthMode,
 ) -> anyhow::Result<Value> {
     let params = strip_action_arg(args);
     let call = ProviderCall {
         provider: String::new(),
-        action: action.name().to_owned(),
+        action: action.to_owned(),
         params,
-        principal: ProviderPrincipal::loopback_dev(),
-        auth_mode: provider_auth_mode(&state.auth_policy),
+        principal,
+        auth_mode,
         surface: ProviderSurface::Mcp,
         destructive_confirmed: false,
         limits: ProviderRequestLimits::default(),
         snapshot_id: String::new(),
     };
     Ok(state.provider_registry.dispatch(call).await?.value)
+}
+
+fn action_name(args: &Value) -> anyhow::Result<&str> {
+    args.get("action")
+        .and_then(Value::as_str)
+        .filter(|action| !action.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("action is required"))
 }
 
 fn strip_action_arg(mut args: Value) -> Value {
@@ -110,16 +134,6 @@ fn strip_action_arg(mut args: Value) -> Value {
         map.remove("_response_cursor");
     }
     args
-}
-
-fn provider_auth_mode(policy: &rtemplate_runtime::server::AuthPolicy) -> ProviderAuthMode {
-    match policy {
-        rtemplate_runtime::server::AuthPolicy::LoopbackDev => ProviderAuthMode::LoopbackDev,
-        rtemplate_runtime::server::AuthPolicy::TrustedGatewayUnscoped => {
-            ProviderAuthMode::TrustedGateway
-        }
-        rtemplate_runtime::server::AuthPolicy::Mounted { .. } => ProviderAuthMode::Mounted,
-    }
 }
 
 // ── elicitation ───────────────────────────────────────────────────────────────

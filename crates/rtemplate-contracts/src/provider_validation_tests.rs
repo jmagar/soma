@@ -27,11 +27,17 @@ fn validates_manifest_and_server_prefixed_env() {
 }
 
 #[test]
-fn rejects_mcp_default_rest_exposure() {
+fn mcp_provider_rest_and_cli_are_explicit_opt_in() {
     let mut value = valid_manifest();
     value["provider"]["kind"] = json!("mcp");
-    let error = validate_provider_manifest_value(&value).expect_err("MCP REST default fails");
-    assert_eq!(error.code(), "mcp_rest_requires_explicit_opt_in");
+    validate_provider_manifest_value(&value).expect("explicit MCP REST and CLI overlays validate");
+
+    value["tools"][0].as_object_mut().unwrap().remove("rest");
+    value["tools"][0].as_object_mut().unwrap().remove("cli");
+    let manifest =
+        validate_provider_manifest_value(&value).expect("MCP provider defaults validate");
+    assert!(manifest.tools[0].rest.is_none());
+    assert!(manifest.tools[0].cli.is_none());
 }
 
 #[test]
@@ -65,16 +71,20 @@ fn rejects_duplicate_routes_and_cli_aliases() {
 }
 
 #[test]
-fn rejects_reserved_cli_names_denied_capabilities_and_prefixed_env() {
+fn rejects_reserved_cli_names_empty_capabilities_and_prefixed_env() {
     let mut value = valid_manifest();
     value["tools"][0]["cli"] = json!({"enabled":true,"command":"doctor"});
     let error = validate_provider_manifest_value(&value).expect_err("reserved name fails");
     assert_eq!(error.code(), "reserved_cli_command");
 
     let mut value = valid_manifest();
+    value["capabilities"] = json!({"filesystem":{"enabled":true}});
+    let error = validate_provider_manifest_value(&value).expect_err("empty capability fails");
+    assert_eq!(error.code(), "empty_capability_scope");
+
+    let mut value = valid_manifest();
     value["capabilities"] = json!({"filesystem":{"enabled":true,"read_roots":["/tmp"]}});
-    let error = validate_provider_manifest_value(&value).expect_err("capability fails");
-    assert_eq!(error.code(), "denied_capability");
+    validate_provider_manifest_value(&value).expect("scoped capabilities validate");
 
     let mut value = valid_manifest();
     value["env"] = json!([{"name":"LAB_API_KEY"}]);

@@ -6,14 +6,13 @@
   },
   "capabilities": {
     "filesystem": {
-      "enabled": true,
-      "read_roots": ["/"]
+      "enabled": true
     }
   },
   "tools": [
     {
       "name": "read-home",
-      "description": "Attempts host filesystem access.",
+      "description": "Declares host filesystem access without a scoped root.",
       "input_schema": { "type": "object" }
     }
   ]

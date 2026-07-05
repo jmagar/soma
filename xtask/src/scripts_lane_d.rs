@@ -755,9 +755,11 @@ fn check_schema_scope(root: &Path, actions: &[ActionEntry]) -> Result<Vec<String
         }
     }
     let schema_text = read(root.join("crates/rtemplate-mcp/src/schemas.rs"))?;
-    if !schema_text.contains("action_names()") {
+    if !schema_text.contains("tool_definitions_for_catalogs")
+        || !schema_text.contains("action_names(catalogs)")
+    {
         failures.push(
-            "crates/rtemplate-mcp/src/schemas.rs must derive action enum from action_names()"
+            "crates/rtemplate-mcp/src/schemas.rs must derive action enum from provider catalogs"
                 .to_owned(),
         );
     }
@@ -767,16 +769,16 @@ fn check_schema_scope(root: &Path, actions: &[ActionEntry]) -> Result<Vec<String
                 .to_owned(),
         );
     }
-    if !schema_text.contains("required_param_conditionals()")
+    if !schema_text.contains("required_param_conditionals(catalogs)")
         || !schema_text.contains("\"then\": { \"required\": required }")
     {
-        failures.push("crates/rtemplate-mcp/src/schemas.rs must derive required action parameters from ACTION_SPECS".to_owned());
+        failures.push("crates/rtemplate-mcp/src/schemas.rs must derive required action parameters from provider catalogs".to_owned());
     }
     let rmcp_server_text = read(root.join("crates/rtemplate-mcp/src/rmcp_server.rs"))?;
     if !rmcp_server_text.contains("example://schema/mcp-tool")
-        || !rmcp_server_text.contains("tool_definitions()")
+        || !rmcp_server_text.contains("tool_definitions_for_state")
     {
-        failures.push("crates/rtemplate-mcp/src/rmcp_server.rs must expose the schema resource from tool_definitions()".to_owned());
+        failures.push("crates/rtemplate-mcp/src/rmcp_server.rs must expose the schema resource from the state-backed tool definitions".to_owned());
     }
     let prompts_text = read(root.join("crates/rtemplate-mcp/src/prompts.rs"))?;
     if !prompts_text.contains("quick_start") {

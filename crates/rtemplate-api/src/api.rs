@@ -5,8 +5,8 @@
 
 use anyhow::Result;
 use axum::{
-    extract::{rejection::JsonRejection, Extension, State},
-    http::{header, StatusCode},
+    extract::{rejection::JsonRejection, Extension, Path, State},
+    http::{Method, StatusCode},
     response::{IntoResponse, Json},
 };
 #[cfg(feature = "auth")]
@@ -207,6 +207,56 @@ pub async fn v1_help(
     .await
 }
 
+pub async fn v1_dynamic_provider_route(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+    method: Method,
+    Path(path): Path<String>,
+    body: Result<Json<Value>, JsonRejection>,
+) -> axum::response::Response {
+    let route_path = format!("/v1/{path}");
+    let method = method.as_str().to_ascii_uppercase();
+    let action = match state
+        .provider_registry
+        .snapshot()
+        .route_action(&method, &route_path)
+        .map(str::to_owned)
+    {
+        Some(action) => action,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "error": "not_found",
+                    "message": format!("No provider route registered for {method} {route_path}"),
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let params = if method == "GET" || method == "DELETE" {
+        match body {
+            Ok(Json(value)) => value,
+            Err(JsonRejection::MissingJsonContentType(_)) => json!({}),
+            Err(error) => return rest_json_rejection_response(error),
+        }
+    } else {
+        match body {
+            Ok(Json(value)) => value,
+            Err(error) => return rest_json_rejection_response(error),
+        }
+    };
+
+    run_provider_rest_action(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        action,
+        params,
+    )
+    .await
+}
+
 async fn run_rest_action_request(
     state: AppState,
     auth: Option<&AuthContext>,
@@ -214,21 +264,24 @@ async fn run_rest_action_request(
     action_name: &str,
 ) -> axum::response::Response {
     match action {
-        Ok(action) => run_rest_action(state, auth, action).await,
+        Ok(action) => {
+            let action_name = action.name().to_owned();
+            run_provider_rest_action(state, auth, action_name, rest_params(&action)).await
+        }
         Err(error) => rest_error_response(error, action_name),
     }
 }
 
-async fn run_rest_action(
+async fn run_provider_rest_action(
     state: AppState,
     auth: Option<&AuthContext>,
-    action: ExampleAction,
+    action_name: String,
+    params: Value,
 ) -> axum::response::Response {
-    let action_name = action.name();
     let call = ProviderCall {
         provider: String::new(),
-        action: action_name.to_owned(),
-        params: rest_params(&action),
+        action: action_name.clone(),
+        params,
         principal: rest_principal(auth),
         auth_mode: rest_auth_mode(&state),
         surface: ProviderSurface::Rest,
@@ -270,7 +323,7 @@ fn rest_principal(auth: Option<&AuthContext>) -> ProviderPrincipal {
             subject: auth.sub.clone(),
             scopes: auth.scopes.clone(),
         },
-        None => ProviderPrincipal::loopback_dev(),
+        None => ProviderPrincipal::anonymous(),
     }
 }
 
@@ -379,11 +432,19 @@ pub async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// `GET /openapi.json` — generated OpenAPI schema for the REST surface.
-pub async fn openapi_json() -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
-        include_str!("../../../docs/generated/openapi.json"),
-    )
+pub async fn openapi_json(State(state): State<AppState>) -> axum::response::Response {
+    match serde_json::from_slice::<Value>(&state.provider_registry.snapshot().cached_openapi_bytes)
+    {
+        Ok(value) => Json(value).into_response(),
+        Err(error) => {
+            tracing::error!(%error, "runtime OpenAPI snapshot failed to deserialize");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "openapi_unavailable"})),
+            )
+                .into_response()
+        }
+    }
 }
 
 /// `GET /status` — local runtime status (unauthenticated, redacts secrets).

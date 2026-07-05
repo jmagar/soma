@@ -79,6 +79,8 @@ fn static_catalog() -> ProviderCatalog {
             kind: ProviderKind::StaticRust,
             title: Some("Built-in Rust actions".to_owned()),
             description: Some("Native service actions compiled into the template.".to_owned()),
+            homepage: None,
+            source: None,
             version: None,
             enabled: Some(true),
         },
@@ -100,6 +102,7 @@ fn static_tool(spec: &rtemplate_contracts::actions::ActionSpec) -> ProviderTool 
     ProviderTool {
         name: spec.name.to_owned(),
         description: spec.description.to_owned(),
+        title: None,
         input_schema: action_input_schema(spec),
         output_schema: None,
         scope: spec.required_scope.map(ToOwned::to_owned),
@@ -121,6 +124,9 @@ fn static_tool(spec: &rtemplate_contracts::actions::ActionSpec) -> ProviderTool 
             summary: Some(spec.description.to_owned()),
             description: Some(spec.description.to_owned()),
             deprecated: false,
+            path_params: json!({}),
+            query_params: json!({}),
+            request_body_schema: None,
         }),
         cli: spec.cli.map(|cli| CliOverlay {
             enabled: spec.transport.cli(),
@@ -129,6 +135,9 @@ fn static_tool(spec: &rtemplate_contracts::actions::ActionSpec) -> ProviderTool 
             about: Some(cli.description.to_owned()),
             long_about: Some(cli.usage.to_owned()),
             hidden: false,
+            flags: Vec::new(),
+            default_output: None,
+            interactive: false,
         }),
         palette: Some(PaletteOverlay {
             enabled: spec.transport != ActionTransport::McpOnly,

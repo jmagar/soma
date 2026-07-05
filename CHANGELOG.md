@@ -11,17 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5]
+
+### Added
+
+- Dynamic provider runtime registry with manifest-backed MCP, REST, CLI, palette, and
+  generated OpenAPI surfaces, including provider capability enforcement and contract
+  checks for generated provider/palette metadata.
+
 ## [0.4.4]
-
-
-## [0.4.3]
-
 
 ### Removed
 
 - Removed the deprecated `POST /v1/example` REST action-envelope route. REST now exposes
   only direct typed `/v1/*` business routes while MCP keeps compact action dispatch behind
   its single tool surface.
+
+## [0.4.3]
 
 ### Added
 

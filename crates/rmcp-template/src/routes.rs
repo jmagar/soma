@@ -21,8 +21,8 @@ use serde_json::json;
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use crate::api::{
-    health, openapi_json, readyz, status, v1_capabilities, v1_echo, v1_greet, v1_help,
-    v1_service_status,
+    health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
+    v1_greet, v1_help, v1_service_status,
 };
 use rtemplate_mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use rtemplate_runtime::server::{build_auth_layer, AppState, AuthPolicy};
@@ -55,7 +55,15 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/greet", post(v1_greet))
         .route("/v1/echo", post(v1_echo))
         .route("/v1/status", get(v1_service_status))
-        .route("/v1/help", get(v1_help));
+        .route("/v1/help", get(v1_help))
+        .route(
+            "/v1/{*path}",
+            get(v1_dynamic_provider_route)
+                .post(v1_dynamic_provider_route)
+                .put(v1_dynamic_provider_route)
+                .patch(v1_dynamic_provider_route)
+                .delete(v1_dynamic_provider_route),
+        );
 
     let api_and_mcp_resolved: Router<()> = api_and_mcp.with_state(state.clone());
 

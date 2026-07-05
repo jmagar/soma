@@ -95,27 +95,6 @@ pub fn validate_provider_manifest(
             ));
         }
 
-        if manifest.provider.kind == ProviderKind::Mcp {
-            if tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false) {
-                return Err(ProviderValidationError::new(
-                    "mcp_rest_requires_explicit_opt_in",
-                    format!(
-                        "MCP provider tool `{}` cannot enable REST by default",
-                        tool.name
-                    ),
-                ));
-            }
-            if tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false) {
-                return Err(ProviderValidationError::new(
-                    "mcp_cli_requires_explicit_opt_in",
-                    format!(
-                        "MCP provider tool `{}` cannot enable CLI by default",
-                        tool.name
-                    ),
-                ));
-            }
-        }
-
         if let Some(rest) = &tool.rest {
             if rest.enabled {
                 let method = rest.method.as_deref().unwrap_or("POST");
@@ -233,32 +212,67 @@ fn validate_capabilities(capabilities: &HostCapabilities) -> Result<(), Provider
     if capabilities
         .filesystem
         .as_ref()
-        .map(|cap| cap.enabled)
+        .map(|cap| cap.enabled && cap.read_roots.is_empty() && cap.write_roots.is_empty())
         .unwrap_or(false)
-        || capabilities
-            .env
-            .as_ref()
-            .map(|cap| cap.enabled)
-            .unwrap_or(false)
-        || capabilities
-            .terminal
-            .as_ref()
-            .map(|cap| cap.enabled)
-            .unwrap_or(false)
-        || capabilities
-            .browser
-            .as_ref()
-            .map(|cap| cap.enabled)
-            .unwrap_or(false)
-        || capabilities
-            .github
-            .as_ref()
-            .map(|cap| cap.enabled)
-            .unwrap_or(false)
     {
         return Err(ProviderValidationError::new(
-            "denied_capability",
-            "host capability grants are denied by default",
+            "empty_capability_scope",
+            "enabled filesystem capability must declare at least one read or write root",
+        ));
+    }
+    if capabilities
+        .network
+        .as_ref()
+        .map(|cap| cap.enabled && cap.allowed_hosts.is_empty())
+        .unwrap_or(false)
+    {
+        return Err(ProviderValidationError::new(
+            "empty_capability_scope",
+            "enabled network capability must declare at least one allowed host",
+        ));
+    }
+    if capabilities
+        .env
+        .as_ref()
+        .map(|cap| cap.enabled && cap.allowed.is_empty())
+        .unwrap_or(false)
+    {
+        return Err(ProviderValidationError::new(
+            "empty_capability_scope",
+            "enabled env capability must declare at least one allowed variable",
+        ));
+    }
+    if capabilities
+        .terminal
+        .as_ref()
+        .map(|cap| cap.enabled && cap.working_dir.is_none() && cap.allowlist.is_empty())
+        .unwrap_or(false)
+    {
+        return Err(ProviderValidationError::new(
+            "empty_capability_scope",
+            "enabled terminal capability must declare a working directory or allowlist",
+        ));
+    }
+    if capabilities
+        .browser
+        .as_ref()
+        .map(|cap| cap.enabled && cap.allowed_origins.is_empty())
+        .unwrap_or(false)
+    {
+        return Err(ProviderValidationError::new(
+            "empty_capability_scope",
+            "enabled browser capability must declare at least one allowed origin",
+        ));
+    }
+    if capabilities
+        .github
+        .as_ref()
+        .map(|cap| cap.enabled && cap.allowed_repos.is_empty())
+        .unwrap_or(false)
+    {
+        return Err(ProviderValidationError::new(
+            "empty_capability_scope",
+            "enabled github capability must declare at least one allowed repo",
         ));
     }
     Ok(())

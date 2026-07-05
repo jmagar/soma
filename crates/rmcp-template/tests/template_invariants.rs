@@ -132,8 +132,8 @@ fn schema_contract_doc_tracks_known_actions() {
         );
     }
     assert!(
-        schemas.contains("StaticRustProvider::catalog_static")
-            && schemas.contains("fn action_names(catalog: &ProviderCatalog)"),
+        schemas.contains("tool_definitions_for_catalogs")
+            && schemas.contains("fn action_names(catalogs: &[ProviderCatalog])"),
         "schemas.rs should derive action enum from provider catalog metadata"
     );
 }
