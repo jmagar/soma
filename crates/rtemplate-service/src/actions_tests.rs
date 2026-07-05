@@ -40,6 +40,16 @@ fn param_validation_rejects_unknown_and_missing_fields() {
 
     let unknown = validate_params(echo, &json!({"message": "hi", "extra": true})).unwrap_err();
     assert!(unknown.to_string().contains("unknown parameter"));
+
+    let reserved = validate_params(echo, &json!({"message": "hi", "action": "echo"})).unwrap_err();
+    assert!(reserved.to_string().contains("unknown parameter"));
+}
+
+#[test]
+fn mcp_param_validation_allows_reserved_action_field() {
+    let echo = action_registry().action("echo").unwrap();
+    crate::actions::validate_mcp_params(echo, &json!({"action": "echo", "message": "hi"}))
+        .expect("MCP arguments should allow the action selector");
 }
 
 #[test]

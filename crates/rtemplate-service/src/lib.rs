@@ -10,7 +10,8 @@ use rtemplate_contracts::{
 use serde_json::Value;
 
 pub use actions::{
-    action_registry, action_specs, execute_native_action, validate_params, ActionRegistry,
+    action_registry, action_specs, execute_native_action, validate_mcp_params, validate_params,
+    ActionRegistry,
 };
 pub use app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent, ScaffoldIntentValidationError};
 pub use example::ExampleClient;

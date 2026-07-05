@@ -224,6 +224,18 @@ pub fn action_specs() -> &'static [ActionSpec] {
 }
 
 pub fn validate_params(spec: &ActionSpec, params: &Value) -> Result<()> {
+    validate_params_with_reserved(spec, params, false)
+}
+
+pub fn validate_mcp_params(spec: &ActionSpec, params: &Value) -> Result<()> {
+    validate_params_with_reserved(spec, params, true)
+}
+
+fn validate_params_with_reserved(
+    spec: &ActionSpec,
+    params: &Value,
+    allow_action_field: bool,
+) -> Result<()> {
     let object = params.as_object().ok_or_else(|| {
         rtemplate_contracts::actions::action_error(
             rtemplate_contracts::actions::ValidationError::WrongType {
@@ -231,12 +243,16 @@ pub fn validate_params(spec: &ActionSpec, params: &Value) -> Result<()> {
             },
         )
     })?;
-    validate_param_object(spec, object)
+    validate_param_object(spec, object, allow_action_field)
 }
 
-fn validate_param_object(spec: &ActionSpec, object: &Map<String, Value>) -> Result<()> {
+fn validate_param_object(
+    spec: &ActionSpec,
+    object: &Map<String, Value>,
+    allow_action_field: bool,
+) -> Result<()> {
     for key in object.keys() {
-        if key == "confirm" || key == "action" {
+        if key == "confirm" || (allow_action_field && key == "action") {
             continue;
         }
         if !spec.params.iter().any(|param| param.name == key) {
@@ -304,7 +320,7 @@ pub async fn execute_native_action(
             },
         )
     })?;
-    validate_params(spec, params)?;
+    validate_mcp_params(spec, params)?;
     match action {
         "greet" => {
             service
@@ -403,6 +419,7 @@ pub async fn execute_test_reverse(_service: &ExampleService, params: &Value) -> 
         params
             .as_object()
             .ok_or_else(|| anyhow::anyhow!("params must be an object"))?,
+        false,
     )?;
     let text = required_string_param(params, "text")?;
     let reversed: String = text.chars().rev().collect();

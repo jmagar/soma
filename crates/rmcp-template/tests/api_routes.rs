@@ -154,6 +154,7 @@ async fn direct_rest_validation_errors_are_bad_requests() {
         json!({"message": ""}),
         json!({"message": 42}),
         json!({"message": "hello", "extra": true}),
+        json!({"message": "hello", "action": "echo"}),
     ] {
         let (status, response) =
             request_json(app.clone(), Method::POST, "/v1/echo", None, Some(body)).await;

@@ -82,7 +82,7 @@ fn mcp_help(args: &Value) -> anyhow::Result<Value> {
     let spec = rtemplate_service::action_registry()
         .action("help")
         .expect("help action should be registered");
-    rtemplate_service::validate_params(spec, args)?;
+    rtemplate_service::validate_mcp_params(spec, args)?;
     Ok(json!({ "help": help_text() }))
 }
 
