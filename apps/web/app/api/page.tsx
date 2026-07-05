@@ -60,11 +60,6 @@ export default function ApiPage() {
             description="REST route inventory"
           />
           <EndpointRow
-            method="POST"
-            path={WEB_APP_CONFIG.legacyRestEndpoint}
-            description="Deprecated action envelope"
-          />
-          <EndpointRow
             method="GET"
             path={WEB_APP_CONFIG.healthEndpoint}
             description="Liveness probe (unauthenticated)"

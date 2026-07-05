@@ -22,6 +22,7 @@ Generated from script header comments.
 | `scripts/check-stale-claims.py` | Fail on stale template claims that should never come back. |
 | `scripts/check-version-sync.sh` | Compatibility wrapper. Canonical implementation: cargo xtask check-version-sync. |
 | `scripts/check_lefthook_pre_commit_speed.py` | Fail if lefthook.yml pre-commit grows workspace-scale commands. |
+| `scripts/conformance_report.py` | Summarize official MCP conformance checks.json files. |
 | `scripts/generate-cli.sh` | Compatibility wrapper. Canonical implementation: cargo xtask generate-cli. |
 | `scripts/generate-docs.py` | Generate volatile docs and metadata from canonical template specs. |
 | `scripts/pre-release-check.sh` | Compatibility wrapper. Canonical implementation: cargo xtask pre-release-check. |

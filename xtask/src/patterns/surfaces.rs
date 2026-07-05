@@ -54,7 +54,6 @@ const RUST_DELEGATION_TOKENS: &[&str] = &[
     "state.service",
     "service.",
     "execute_service_action",
-    "api_dispatch",
     "streamable_http_service",
 ];
 

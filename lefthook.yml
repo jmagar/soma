@@ -29,6 +29,7 @@
 #   - cargo check     → too slow for every commit; use `just check` manually
 #   - cargo audit     → network call; runs in CI
 #   - gitleaks        → heavy scan; runs in CI
+#   - just conformance → boots a server and runs the official MCP conformance suite; CI/manual only
 #   - cargo xtask patterns → full-repo contract scan; runs in CI and `just template-check`
 #   - cargo xtask check-release-versions → PR/main release gate; runs in CI and release scripts
 #
