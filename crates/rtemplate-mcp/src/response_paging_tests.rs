@@ -4,6 +4,14 @@ use rtemplate_contracts::token_limit::MAX_RESPONSE_BYTES;
 
 use super::{response_page_request, tool_result_from_json, ResponsePageRequest};
 
+fn result_text(result: &rmcp::model::CallToolResult) -> &str {
+    result.content[0]
+        .as_text()
+        .expect("tool result should contain text")
+        .text
+        .as_str()
+}
+
 #[test]
 fn tool_result_from_json_returns_scrollable_page_envelope() {
     let store = rtemplate_runtime::server::ResponsePageStore::default();
@@ -18,12 +26,7 @@ fn tool_result_from_json_returns_scrollable_page_envelope() {
         None,
     )
     .expect("tool result should serialize");
-    let text = result.content[0]
-        .raw
-        .as_text()
-        .expect("tool result should contain text")
-        .text
-        .as_str();
+    let text = result_text(&result);
     let parsed: serde_json::Value =
         serde_json::from_str(text).expect("paged text should remain valid JSON");
 
@@ -63,8 +66,7 @@ fn tool_result_from_json_returns_requested_continuation_page() {
         None,
     )
     .expect("first page should serialize");
-    let first_payload: serde_json::Value =
-        serde_json::from_str(first.content[0].raw.as_text().unwrap().text.as_str()).unwrap();
+    let first_payload: serde_json::Value = serde_json::from_str(result_text(&first)).unwrap();
     let next_offset = first_payload["continuation"]["arguments"]["_response_offset"]
         .as_u64()
         .expect("first page should expose next offset") as usize;
@@ -86,8 +88,7 @@ fn tool_result_from_json_returns_requested_continuation_page() {
         None,
     )
     .expect("second page should serialize");
-    let second_payload: serde_json::Value =
-        serde_json::from_str(second.content[0].raw.as_text().unwrap().text.as_str()).unwrap();
+    let second_payload: serde_json::Value = serde_json::from_str(result_text(&second)).unwrap();
 
     assert_eq!(second_payload["kind"], "mcp_response_page");
     assert_eq!(second_payload["page"]["offset"], next_offset);
@@ -136,8 +137,7 @@ fn response_page_cursor_handles_out_of_range_offsets() {
         None,
     )
     .expect("first page should serialize");
-    let first_payload: serde_json::Value =
-        serde_json::from_str(first.content[0].raw.as_text().unwrap().text.as_str()).unwrap();
+    let first_payload: serde_json::Value = serde_json::from_str(result_text(&first)).unwrap();
     let cursor = first_payload["continuation"]["arguments"]["_response_cursor"]
         .as_str()
         .expect("first page should expose response cursor")
@@ -159,8 +159,7 @@ fn response_page_cursor_handles_out_of_range_offsets() {
         None,
     )
     .expect("out of range continuation should serialize");
-    let payload: serde_json::Value =
-        serde_json::from_str(result.content[0].raw.as_text().unwrap().text.as_str()).unwrap();
+    let payload: serde_json::Value = serde_json::from_str(result_text(&result)).unwrap();
 
     assert_eq!(payload["kind"], "mcp_response_page");
     assert_eq!(payload["page"]["offset"], serialized_bytes);
@@ -187,8 +186,7 @@ fn response_page_continuation_preserves_original_arguments() {
         Some(&args),
     )
     .expect("tool result should serialize");
-    let parsed: serde_json::Value =
-        serde_json::from_str(result.content[0].raw.as_text().unwrap().text.as_str()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(result_text(&result)).unwrap();
 
     assert_eq!(parsed["continuation"]["arguments"]["action"], "echo");
     assert_eq!(

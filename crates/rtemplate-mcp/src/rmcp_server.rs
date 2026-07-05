@@ -12,10 +12,10 @@ use std::{borrow::Cow, sync::Arc, time::Instant};
 
 use rmcp::{
     model::{
-        CallToolRequestParams, CallToolResult, Content, GetPromptRequestParams, GetPromptResult,
-        Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult,
-        PaginatedRequestParams, RawResource, ReadResourceRequestParams, ReadResourceResult,
-        Resource, ResourceContents, ServerCapabilities, ServerInfo, Tool,
+        CallToolRequestParams, CallToolResult, ContentBlock, GetPromptRequestParams,
+        GetPromptResult, Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult,
+        PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResult, Resource,
+        ResourceContents, ServerCapabilities, ServerInfo, Tool,
     },
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
@@ -31,8 +31,8 @@ use serde_json::{json, Map, Value};
 
 use rtemplate_contracts::{
     actions::{
-        is_known_action, require_confirmation_if_destructive, required_scope_for_action,
-        ValidationError,
+        is_known_action_from, require_confirmation_if_destructive_from,
+        required_scope_for_action_from, ValidationError,
     },
     errors::ServiceErrorKind,
     token_limit::MAX_RESPONSE_BYTES,
@@ -108,7 +108,7 @@ impl ServerHandler for ExampleRmcpServer {
             return Err(unknown_tool_error(&tool_name));
         }
         if let Some(action_str) = action_opt.as_deref() {
-            if !is_known_action(action_str) {
+            if !is_known_action_from(rtemplate_service::action_specs(), action_str) {
                 tracing::warn!(
                     tool = %tool_name,
                     action = %action_str,
@@ -120,7 +120,9 @@ impl ServerHandler for ExampleRmcpServer {
         // Only scope-check when a known action is present; dispatch_example will
         // return the validation error for a missing action below.
         if let (Some(auth), Some(action_str)) = (auth, action_opt.as_deref()) {
-            if let Some(required_scope) = required_scope_for_action(action_str) {
+            if let Some(required_scope) =
+                required_scope_for_action_from(rtemplate_service::action_specs(), action_str)
+            {
                 check_scope(auth, required_scope, action_str)?;
             }
         }
@@ -146,7 +148,11 @@ impl ServerHandler for ExampleRmcpServer {
         // Destructive actions require an explicit "confirm": true. No-op for the
         // template's current (non-destructive) actions; gates any future one with
         // a structured validation error consistent with the dispatch error path.
-        if let Err(tool_error) = require_confirmation_if_destructive(&action, &arguments) {
+        if let Err(tool_error) = require_confirmation_if_destructive_from(
+            rtemplate_service::action_specs(),
+            &action,
+            &arguments,
+        ) {
             return tool_error_result(
                 tool_error.to_mcp_payload(&tool_name, empty_action_as_none(&action)),
             );
@@ -296,14 +302,9 @@ impl ServerHandler for ExampleRmcpServer {
 const SCHEMA_RESOURCE_URI: &str = "example://schema/mcp-tool";
 
 fn schema_resource() -> Resource {
-    Resource::new(
-        RawResource::new(SCHEMA_RESOURCE_URI, "example tool schema")
-            .with_description(
-                "JSON schema for the example MCP tool and its action-based parameters",
-            )
-            .with_mime_type("application/json"),
-        None,
-    )
+    Resource::new(SCHEMA_RESOURCE_URI, "example tool schema")
+        .with_description("JSON schema for the example MCP tool and its action-based parameters")
+        .with_mime_type("application/json")
 }
 
 // ── tool definition conversion ────────────────────────────────────────────────
@@ -349,7 +350,7 @@ fn tool_error_result(value: Value) -> Result<CallToolResult, ErrorData> {
         (payload, text)
     };
     let mut result = CallToolResult::structured_error(payload);
-    result.content = vec![Content::text(text)];
+    result.content = vec![ContentBlock::text(text)];
     Ok(result)
 }
 
@@ -378,8 +379,14 @@ fn validation_error_payload_from_validation_error(
         | ValidationError::NotAvailableOverRest { action } => Some(action.as_str()),
         _ => None,
     });
-    rtemplate_contracts::errors::ToolError::from_action_validation(error)
-        .to_mcp_payload(tool, payload_action)
+    rtemplate_contracts::errors::ToolError::from_action_validation_with_actions(
+        error,
+        rtemplate_service::action_specs()
+            .iter()
+            .map(|spec| spec.name)
+            .collect(),
+    )
+    .to_mcp_payload(tool, payload_action)
 }
 
 fn unknown_action_payload(tool: &str, action: &str) -> Value {

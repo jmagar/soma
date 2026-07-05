@@ -8,9 +8,9 @@
 use std::{borrow::Cow, sync::Arc};
 
 use rmcp::model::{
-    AnnotateAble, CallToolResult, Content, GetPromptRequestParams, GetPromptResult, Prompt,
-    PromptArgument, PromptMessage, PromptMessageContent, PromptMessageRole, RawAudioContent,
-    RawContent, RawImageContent, RawResource, ReadResourceResult, Resource, ResourceContents, Tool,
+    AudioContent, CallToolResult, ContentBlock, GetPromptRequestParams, GetPromptResult,
+    ImageContent, Prompt, PromptArgument, PromptMessage, ReadResourceResult, Resource,
+    ResourceContents, Role, Tool,
 };
 use serde_json::{json, Map, Value};
 
@@ -64,18 +64,16 @@ pub(super) fn tool_definitions() -> Vec<Tool> {
 
 pub(super) fn call_tool(name: &str) -> Option<CallToolResult> {
     let result = match name {
-        "test_simple_text" => CallToolResult::success(vec![Content::text(
+        "test_simple_text" => CallToolResult::success(vec![ContentBlock::text(
             "This is a simple text response for testing.",
         )]),
         "test_image_content" => {
-            CallToolResult::success(vec![Content::image(PNG_1X1_RED, "image/png")])
+            CallToolResult::success(vec![ContentBlock::image(PNG_1X1_RED, "image/png")])
         }
-        "test_audio_content" => CallToolResult::success(vec![RawContent::Audio(RawAudioContent {
-            data: WAV_SILENCE.to_string(),
-            mime_type: "audio/wav".to_string(),
-        })
-        .no_annotation()]),
-        "test_embedded_resource" => CallToolResult::success(vec![Content::resource(
+        "test_audio_content" => CallToolResult::success(vec![ContentBlock::Audio(
+            AudioContent::new(WAV_SILENCE, "audio/wav"),
+        )]),
+        "test_embedded_resource" => CallToolResult::success(vec![ContentBlock::resource(
             ResourceContents::text(
                 "This is an embedded resource content.",
                 "test://embedded-resource",
@@ -83,9 +81,9 @@ pub(super) fn call_tool(name: &str) -> Option<CallToolResult> {
             .with_mime_type("text/plain"),
         )]),
         "test_multiple_content_types" => CallToolResult::success(vec![
-            Content::text("Multiple content types test:"),
-            Content::image(PNG_1X1_RED, "image/png"),
-            Content::resource(
+            ContentBlock::text("Multiple content types test:"),
+            ContentBlock::image(PNG_1X1_RED, "image/png"),
+            ContentBlock::resource(
                 ResourceContents::text(
                     r#"{"test":"data","value":123}"#,
                     "test://mixed-content-resource",
@@ -93,7 +91,7 @@ pub(super) fn call_tool(name: &str) -> Option<CallToolResult> {
                 .with_mime_type("application/json"),
             ),
         ]),
-        "test_error_handling" => CallToolResult::error(vec![Content::text(
+        "test_error_handling" => CallToolResult::error(vec![ContentBlock::text(
             "This tool intentionally returns an error for testing",
         )]),
         _ => return None,
@@ -103,18 +101,12 @@ pub(super) fn call_tool(name: &str) -> Option<CallToolResult> {
 
 pub(super) fn resources() -> Vec<Resource> {
     vec![
-        Resource::new(
-            RawResource::new("test://static-text", "static text fixture")
-                .with_description("MCP conformance text resource fixture")
-                .with_mime_type("text/plain"),
-            None,
-        ),
-        Resource::new(
-            RawResource::new("test://static-binary", "static binary fixture")
-                .with_description("MCP conformance binary resource fixture")
-                .with_mime_type("image/png"),
-            None,
-        ),
+        Resource::new("test://static-text", "static text fixture")
+            .with_description("MCP conformance text resource fixture")
+            .with_mime_type("text/plain"),
+        Resource::new("test://static-binary", "static binary fixture")
+            .with_description("MCP conformance binary resource fixture")
+            .with_mime_type("image/png"),
     ]
 }
 
@@ -176,7 +168,7 @@ pub(super) fn prompts() -> Vec<Prompt> {
 pub(super) fn get_prompt(request: GetPromptRequestParams) -> Option<GetPromptResult> {
     let result = match request.name.as_str() {
         "test_simple_prompt" => GetPromptResult::new(vec![PromptMessage::new_text(
-            PromptMessageRole::User,
+            Role::User,
             "This is a simple prompt for testing.",
         )]),
         "test_prompt_with_arguments" => {
@@ -184,7 +176,7 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> Option<GetPromptRes
             let arg1 = prompt_arg(args, "arg1");
             let arg2 = prompt_arg(args, "arg2");
             GetPromptResult::new(vec![PromptMessage::new_text(
-                PromptMessageRole::User,
+                Role::User,
                 format!("Prompt with arguments: arg1='{arg1}', arg2='{arg2}'"),
             )])
         }
@@ -193,7 +185,7 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> Option<GetPromptRes
             let uri = prompt_arg(args, "resourceUri");
             GetPromptResult::new(vec![
                 PromptMessage::new_resource(
-                    PromptMessageRole::User,
+                    Role::User,
                     uri,
                     Some("text/plain".to_string()),
                     Some("Embedded resource content for testing.".to_string()),
@@ -201,25 +193,15 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> Option<GetPromptRes
                     None,
                     None,
                 ),
-                PromptMessage::new_text(
-                    PromptMessageRole::User,
-                    "Please process the embedded resource above.",
-                ),
+                PromptMessage::new_text(Role::User, "Please process the embedded resource above."),
             ])
         }
         "test_prompt_with_image" => GetPromptResult::new(vec![
             PromptMessage::new(
-                PromptMessageRole::User,
-                PromptMessageContent::Image {
-                    image: RawImageContent {
-                        data: PNG_1X1_RED.to_string(),
-                        mime_type: "image/png".to_string(),
-                        meta: None,
-                    }
-                    .no_annotation(),
-                },
+                Role::User,
+                ContentBlock::Image(ImageContent::new(PNG_1X1_RED, "image/png")),
             ),
-            PromptMessage::new_text(PromptMessageRole::User, "Please analyze the image above."),
+            PromptMessage::new_text(Role::User, "Please analyze the image above."),
         ]),
         _ => return None,
     };
