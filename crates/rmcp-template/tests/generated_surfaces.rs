@@ -51,6 +51,35 @@ fn generated_marketplaces_point_at_template_plugin() {
 }
 
 #[test]
+fn generated_distribution_plugin_points_at_all_artifacts() {
+    let root = workspace_root();
+    let plugin: serde_json::Value =
+        serde_json::from_slice(&fs::read(root.join("docs/generated/plugin.json")).expect("plugin"))
+            .expect("plugin JSON");
+
+    assert!(plugin.get("version").is_none());
+    assert_eq!(plugin["plugin_root"], "plugins/rtemplate");
+    assert_eq!(
+        plugin["codex"]["plugin_json"],
+        "plugins/rtemplate/.codex-plugin/plugin.json"
+    );
+    assert_eq!(
+        plugin["claude"]["plugin_json"],
+        "plugins/rtemplate/.claude-plugin/plugin.json"
+    );
+    assert_eq!(plugin["skills"], "plugins/rtemplate/skills");
+    assert_eq!(
+        plugin["node_package"],
+        "packages/rtemplate-mcp/package.json"
+    );
+    assert_eq!(plugin["docs"], "docs/generated/provider-surfaces.md");
+    assert!(plugin["provider_fingerprint"]
+        .as_str()
+        .unwrap_or_default()
+        .starts_with("sha256:"));
+}
+
+#[test]
 fn node_package_exposes_npx_launcher() {
     let root = workspace_root();
     let package: serde_json::Value = serde_json::from_slice(

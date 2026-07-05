@@ -1,4 +1,18 @@
 {
+  "claude": {
+    "marketplace": ".claude-plugin/marketplace.json",
+    "plugin_json": "plugins/rtemplate/.claude-plugin/plugin.json"
+  },
+  "codex": {
+    "marketplace": ".agents/plugins/marketplace.json",
+    "plugin_json": "plugins/rtemplate/.codex-plugin/plugin.json"
+  },
+  "description": "Generated distributable plugin surface for rmcp-template.",
+  "docs": "docs/generated/provider-surfaces.md",
+  "mcp_server": "server.json",
+  "name": "rtemplate",
+  "node_package": "packages/rtemplate-mcp/package.json",
+  "plugin_root": "plugins/rtemplate",
   "provider_fingerprint": "sha256:232076215b6dc2512e1f908a5ad4b723eaeb7e7b343cdff1c49dcd283142fd38",
   "providers": [
     {
@@ -57,6 +71,7 @@
     }
   ],
   "schema_version": 1,
+  "skills": "plugins/rtemplate/skills",
   "surfaces": {
     "claude_marketplace": ".claude-plugin/marketplace.json",
     "cli_actions": [
