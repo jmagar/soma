@@ -217,7 +217,7 @@ async fn openapi_json_is_public_and_lists_direct_routes() {
     assert_eq!(body["openapi"], "3.1.0");
     assert!(body["paths"].get("/v1/echo").is_some());
     assert!(body["paths"].get("/v1/capabilities").is_some());
-    assert_eq!(body["paths"]["/v1/example"]["post"]["deprecated"], true);
+    assert!(body["paths"].get("/v1/example").is_none());
     assert_eq!(body["x-template"]["preferred_rest_style"], "direct_routes");
     assert!(
         body["components"]["schemas"]["StatusResponse"]["properties"]

@@ -3791,6 +3791,8 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rtemplate-contracts",
+ "rtemplate-service",
  "semver",
  "serde",
  "serde_json",

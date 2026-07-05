@@ -175,6 +175,10 @@ Transport shims
   crates/rtemplate-mcp/src/tools.rs      MCP JSON args to service calls.
   crates/rtemplate-api/src/api.rs        REST extractors to service calls.
   crates/rmcp-template/src/routes.rs     Axum router, auth, MCP, API, web fallback.
+
+Action registry
+  crates/rtemplate-service/src/actions.rs
+  Service-owned action metadata, validation, cached catalog/help, and native dispatch.
 ```
 
 The thin-shim rule is strict:
@@ -217,7 +221,8 @@ HTTP routes in the server profile:
 | `/metrics` | Prometheus metrics when built with `observability`. |
 | `/v1/capabilities` | REST route inventory. |
 | `/v1/greet`, `/v1/echo`, `/v1/status`, `/v1/help` | Direct REST business routes. |
-| `/v1/example` | Deprecated compatibility action envelope. |
+
+REST is direct-route-only: there is no `/v1/example` action envelope. MCP remains one `example` tool with an `action` argument.
 | `/mcp/.well-known/*` | OAuth metadata when OAuth is enabled. |
 | `/*` | Embedded web UI fallback when built with `web`. |
 
