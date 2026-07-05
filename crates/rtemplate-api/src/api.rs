@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use axum::{
-    extract::{rejection::JsonRejection, Extension, State},
+    extract::{rejection::JsonRejection, Extension, Path, State},
     http::{header, StatusCode},
     response::{IntoResponse, Json},
 };
@@ -16,13 +16,12 @@ struct AuthContext {
     sub: String,
     scopes: Vec<String>,
 }
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{json, Value};
 
-use rtemplate_contracts::actions::{required_scope_for_action, ExampleAction};
 use rtemplate_contracts::token_limit::MAX_RESPONSE_BYTES;
 use rtemplate_runtime::server::{AppState, AuthPolicy};
-use rtemplate_service::{classify_service_error, dispatch_action};
+use rtemplate_service::{classify_service_error, dispatch_action, validate_params};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub struct RestRoute {
@@ -105,13 +104,6 @@ pub const REST_ROUTES: &[RestRoute] = &[
         auth: "mounted auth policy",
         description: "Return the action catalog and route help.",
     },
-    RestRoute {
-        method: "POST",
-        path: "/v1/example",
-        action: None,
-        auth: "mounted auth policy",
-        description: "Deprecated compatibility action envelope.",
-    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -121,62 +113,6 @@ pub struct CapabilitiesResponse {
     pub preferred_rest_style: &'static str,
     pub supported_routes: Vec<String>,
     pub routes: &'static [RestRoute],
-}
-
-/// Request body for deprecated `POST /v1/example`.
-///
-/// REST uses an explicit `{ action, params }` envelope. MCP uses a flat
-/// argument object such as `{ action, message }`. Both convert into the same
-/// typed `ExampleAction` before calling `ExampleService`.
-#[derive(Deserialize)]
-pub struct ActionRequest {
-    #[serde(default)]
-    pub action: String,
-    #[serde(default)]
-    pub params: Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct GreetRequest {
-    #[serde(default)]
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct EchoRequest {
-    pub message: String,
-}
-
-/// Deprecated compatibility route. New platform servers should prefer direct
-/// product routes such as `POST /v1/echo` over an action envelope.
-pub async fn api_dispatch(
-    State(state): State<AppState>,
-    auth: Option<Extension<AuthContext>>,
-    Json(body): Json<ActionRequest>,
-) -> impl IntoResponse {
-    // Destructive actions require an explicit "confirm": true. No-op for the
-    // template's current (non-destructive) actions; gates any future one.
-    if let Err(tool_error) = rtemplate_contracts::actions::require_confirmation_if_destructive(
-        &body.action,
-        &body.params,
-    ) {
-        return (
-            StatusCode::from_u16(tool_error.http_status_code()).unwrap_or(StatusCode::BAD_REQUEST),
-            Json(tool_error.to_rest_payload()),
-        )
-            .into_response();
-    }
-
-    run_rest_action_request(
-        state,
-        auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::from_rest(&body.action, &body.params),
-        &body.action,
-    )
-    .await
-    .into_response()
 }
 
 pub async fn v1_capabilities() -> impl IntoResponse {
@@ -192,40 +128,21 @@ pub async fn v1_capabilities() -> impl IntoResponse {
     })
 }
 
-pub async fn v1_greet(
+pub async fn v1_action_post(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
-    body: Result<Json<GreetRequest>, JsonRejection>,
+    Path(action): Path<String>,
+    body: Result<Json<Value>, JsonRejection>,
 ) -> axum::response::Response {
-    let Json(body) = match body {
+    let Json(params) = match body {
         Ok(body) => body,
         Err(error) => return rest_json_rejection_response(error),
     };
-    run_rest_action_request(
-        state,
-        auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::from_rest("greet", &optional_name_params(body.name)),
-        "greet",
-    )
-    .await
-}
-
-pub async fn v1_echo(
-    State(state): State<AppState>,
-    auth: Option<Extension<AuthContext>>,
-    body: Result<Json<EchoRequest>, JsonRejection>,
-) -> axum::response::Response {
-    let Json(body) = match body {
-        Ok(body) => body,
-        Err(error) => return rest_json_rejection_response(error),
+    let Some(spec) = rtemplate_service::action_registry().rest_post(&action) else {
+        return (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))).into_response();
     };
-    run_rest_action_request(
-        state,
-        auth.as_ref().map(|Extension(auth)| auth),
-        ExampleAction::from_rest("echo", &json!({ "message": body.message })),
-        "echo",
-    )
-    .await
+    run_rest_action_request(state, auth.as_ref().map(|Extension(auth)| auth), spec.name, params)
+        .await
 }
 
 pub async fn v1_service_status(
@@ -235,8 +152,8 @@ pub async fn v1_service_status(
     run_rest_action_request(
         state,
         auth.as_ref().map(|Extension(auth)| auth),
-        Ok(ExampleAction::Status),
         "status",
+        json!({}),
     )
     .await
 }
@@ -248,8 +165,8 @@ pub async fn v1_help(
     run_rest_action_request(
         state,
         auth.as_ref().map(|Extension(auth)| auth),
-        Ok(ExampleAction::Help),
         "help",
+        json!({}),
     )
     .await
 }
@@ -257,26 +174,57 @@ pub async fn v1_help(
 async fn run_rest_action_request(
     state: AppState,
     auth: Option<&AuthContext>,
-    action: Result<ExampleAction>,
     action_name: &str,
+    params: Value,
 ) -> axum::response::Response {
-    match action {
-        Ok(action) => run_rest_action(state, auth, action).await,
-        Err(error) => rest_error_response(error, action_name),
+    let Some(spec) = rtemplate_service::action_registry().action(action_name) else {
+        return rest_error_response(
+            rtemplate_contracts::actions::action_error(
+                rtemplate_contracts::actions::ValidationError::UnknownAction {
+                    action: action_name.to_owned(),
+                },
+            ),
+            action_name,
+        );
+    };
+    if !spec.transport.rest() {
+        return (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))).into_response();
     }
-}
-
-async fn run_rest_action(
-    state: AppState,
-    auth: Option<&AuthContext>,
-    action: ExampleAction,
-) -> axum::response::Response {
-    let action_name = action.name();
     if let Some(response) = enforce_rest_scope(&state, auth, action_name) {
         return response;
     }
+    if spec.requires_admin {
+        let Some(auth) = auth else {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "forbidden: missing auth context"})),
+            )
+                .into_response();
+        };
+        if !auth.scopes.iter().any(|scope| scope == "admin") {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "forbidden: requires admin"})),
+            )
+                .into_response();
+        }
+    }
+    if let Err(error) = rtemplate_contracts::actions::require_confirmation_if_destructive_from(
+        rtemplate_service::action_specs(),
+        action_name,
+        &params,
+    ) {
+        return (
+            StatusCode::from_u16(error.http_status_code()).unwrap_or(StatusCode::BAD_REQUEST),
+            Json(error.to_rest_payload()),
+        )
+            .into_response();
+    }
+    if let Err(error) = validate_params(spec, &params) {
+        return rest_error_response(error, action_name);
+    }
 
-    match dispatch_action(&state.service, &action, "rest").await {
+    match dispatch_action(&state.service, action_name, &params, "rest").await {
         Ok(value) => match cap_rest_response(value) {
             Ok(value) => Json(value).into_response(),
             Err(e) => {
@@ -325,13 +273,6 @@ fn rest_json_rejection_response(error: JsonRejection) -> axum::response::Respons
     (status, Json(json!({"error": error.to_string()}))).into_response()
 }
 
-fn optional_name_params(name: Option<String>) -> Value {
-    match name {
-        Some(name) => json!({ "name": name }),
-        None => json!({}),
-    }
-}
-
 fn cap_rest_response(value: Value) -> Result<Value> {
     let serialized = serde_json::to_vec(&value)?;
     if serialized.len() <= MAX_RESPONSE_BYTES {
@@ -353,7 +294,8 @@ fn enforce_rest_scope(
     if !matches!(&state.auth_policy, AuthPolicy::Mounted { .. }) {
         return None;
     }
-    let required_scope = required_scope_for_action(action)?;
+    let required_scope =
+        rtemplate_contracts::actions::required_scope_for_action_from(rtemplate_service::action_specs(), action)?;
     let Some(auth) = auth else {
         tracing::warn!(action = %action, "REST action denied: missing auth context");
         return Some(

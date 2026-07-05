@@ -10,7 +10,6 @@ use rmcp_template::{
     server::{self, AuthPolicy},
     testing::{bearer_state, loopback_state},
 };
-use rtemplate_contracts::actions::ACTION_SPECS;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
@@ -59,9 +58,59 @@ async fn direct_rest_echo_accepts_typed_body() {
     assert_eq!(body["echo"], "hello");
 }
 
+#[tokio::test]
+async fn generic_post_route_dispatches_registered_action() {
+    let app = server::router(loopback_state());
+    let (status, body) = request_json(
+        app,
+        Method::POST,
+        "/v1/echo",
+        None,
+        Some(json!({"message": "hello"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["echo"], "hello");
+}
+
+#[tokio::test]
+async fn generic_post_route_rejects_unknown_fields() {
+    let app = server::router(loopback_state());
+    let (status, body) = request_json(
+        app,
+        Method::POST,
+        "/v1/echo",
+        None,
+        Some(json!({"message": "hello", "extra": true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert!(body["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("unknown parameter"));
+}
+
+#[tokio::test]
+async fn removed_rest_envelope_is_not_found() {
+    let app = server::router(loopback_state());
+    let (status, _body) = request_json(
+        app,
+        Method::POST,
+        "/v1/example",
+        None,
+        Some(json!({"action": "echo", "params": {"message": "hello"}})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
 #[test]
 fn rest_routes_match_action_registry_metadata() {
-    for spec in ACTION_SPECS.iter().filter(|spec| spec.transport.rest()) {
+    for spec in rtemplate_service::action_specs()
+        .iter()
+        .filter(|spec| spec.transport.rest())
+    {
         let method = spec
             .rest_method
             .unwrap_or_else(|| panic!("{} should declare a REST method", spec.name));
@@ -79,7 +128,7 @@ fn rest_routes_match_action_registry_metadata() {
 
     for route in REST_ROUTES.iter().filter(|route| route.action.is_some()) {
         let action = route.action.unwrap();
-        let spec = ACTION_SPECS
+        let spec = rtemplate_service::action_specs()
             .iter()
             .find(|spec| spec.name == action)
             .unwrap_or_else(|| panic!("REST route advertises unknown action `{action}`"));
@@ -114,22 +163,18 @@ async fn direct_rest_validation_errors_are_bad_requests() {
 }
 
 #[tokio::test]
-async fn legacy_rest_envelope_rejects_mcp_only_actions_as_bad_requests() {
+async fn mcp_only_actions_are_not_available_as_generic_rest_posts() {
     let app = server::router(loopback_state());
     for action in ["elicit_name", "scaffold_intent"] {
         let (status, response) = request_json(
             app.clone(),
             Method::POST,
-            "/v1/example",
+            &format!("/v1/{action}"),
             None,
-            Some(json!({"action": action, "params": {}})),
+            Some(json!({})),
         )
         .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
-        assert!(response["error"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("not available over REST"));
+        assert_eq!(status, StatusCode::NOT_FOUND, "{response}");
     }
 }
 
@@ -157,7 +202,7 @@ async fn capabilities_advertises_direct_rest_routes() {
         .as_array()
         .expect("supported_routes should be an array")
         .contains(&json!("POST /v1/echo")));
-    assert!(body["supported_routes"]
+    assert!(!body["supported_routes"]
         .as_array()
         .expect("supported_routes should be an array")
         .contains(&json!("POST /v1/example")));

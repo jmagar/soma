@@ -25,6 +25,10 @@ pub enum ActionValidationError {
     MissingField { field: String },
     #[error("`{field}` must be a string")]
     WrongType { field: String },
+    #[error("unknown parameter `{field}`")]
+    UnknownField { field: String },
+    #[error("`{field}` is too long; maximum length is {max_len} bytes")]
+    TooLong { field: String, max_len: usize },
     #[error(
         "action={action} is not available over REST; use MCP or action=help for documentation"
     )]
@@ -41,6 +45,8 @@ impl ActionValidationError {
             Self::MissingAction => "missing_action",
             Self::MissingField { .. } => "missing_field",
             Self::WrongType { .. } => "wrong_type",
+            Self::UnknownField { .. } => "unknown_field",
+            Self::TooLong { .. } => "too_long",
             Self::NotAvailableOverRest { .. } => "not_available_over_rest",
             Self::UnknownAction { .. } => "unknown_action",
         }
@@ -49,7 +55,10 @@ impl ActionValidationError {
     pub fn field(&self) -> Option<&str> {
         match self {
             Self::MissingAction => Some("action"),
-            Self::MissingField { field } | Self::WrongType { field } => Some(field.as_str()),
+            Self::MissingField { field }
+            | Self::WrongType { field }
+            | Self::UnknownField { field }
+            | Self::TooLong { field, .. } => Some(field.as_str()),
             Self::NotAvailableOverRest { .. } | Self::UnknownAction { .. } => Some("action"),
         }
     }
@@ -59,7 +68,11 @@ impl ActionValidationError {
             Self::NotAvailableOverRest { action } | Self::UnknownAction { action } => {
                 Some(action.as_str())
             }
-            Self::MissingAction | Self::MissingField { .. } | Self::WrongType { .. } => None,
+            Self::MissingAction
+            | Self::MissingField { .. }
+            | Self::WrongType { .. }
+            | Self::UnknownField { .. }
+            | Self::TooLong { .. } => None,
         }
     }
 
@@ -76,6 +89,12 @@ impl ActionValidationError {
             }
             Self::WrongType { field } => {
                 format!("Pass `{field}` as a JSON string, or use action=help for examples.")
+            }
+            Self::UnknownField { field } => {
+                format!("Remove `{field}` or use action=help for the supported parameters.")
+            }
+            Self::TooLong { field, max_len } => {
+                format!("Shorten `{field}` to at most {max_len} bytes.")
             }
             Self::NotAvailableOverRest { action } => {
                 format!("Call action={action} through MCP, or call action=help over REST.")
@@ -637,6 +656,16 @@ impl ExampleAction {
                 action: other.to_owned(),
             })),
         }
+    }
+}
+
+pub fn action_name_from_mcp_args(args: &Value) -> anyhow::Result<&str> {
+    match args.get("action") {
+        None => Err(action_error(ValidationError::MissingAction)),
+        Some(Value::String(action)) => Ok(action.as_str()),
+        Some(_) => Err(action_error(ValidationError::WrongType {
+            field: "action".into(),
+        })),
     }
 }
 

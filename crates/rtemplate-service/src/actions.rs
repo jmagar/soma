@@ -240,9 +240,10 @@ fn validate_param_object(spec: &ActionSpec, object: &Map<String, Value>) -> Resu
             continue;
         }
         if !spec.params.iter().any(|param| param.name == key) {
-            return Err(anyhow::anyhow!(
-                "unknown parameter `{key}` for action `{}`",
-                spec.name
+            return Err(rtemplate_contracts::actions::action_error(
+                rtemplate_contracts::actions::ValidationError::UnknownField {
+                    field: key.to_owned(),
+                },
             ));
         }
     }
@@ -261,16 +262,19 @@ fn validate_param_object(spec: &ActionSpec, object: &Map<String, Value>) -> Resu
         match param.ty {
             "string" => {
                 let Some(text) = value.as_str() else {
-                    return Err(anyhow::anyhow!(
-                        "parameter `{}` must be a string",
-                        param.name
+                    return Err(rtemplate_contracts::actions::action_error(
+                        rtemplate_contracts::actions::ValidationError::WrongType {
+                            field: param.name.to_owned(),
+                        },
                     ));
                 };
                 if let Some(max_len) = param.max_len {
                     if text.len() > max_len {
-                        return Err(anyhow::anyhow!(
-                            "parameter `{}` is too long: max {max_len} bytes",
-                            param.name
+                        return Err(rtemplate_contracts::actions::action_error(
+                            rtemplate_contracts::actions::ValidationError::TooLong {
+                                field: param.name.to_owned(),
+                                max_len,
+                            },
                         ));
                     }
                 }
