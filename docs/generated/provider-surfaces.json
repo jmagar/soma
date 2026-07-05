@@ -65,6 +65,12 @@
       "help",
       "status"
     ],
+    "cli_commands": [
+      "echo",
+      "greet",
+      "help",
+      "status"
+    ],
     "codex_marketplace": ".agents/plugins/marketplace.json",
     "docs": "docs/generated/provider-surfaces.md",
     "mcp_actions": [
@@ -78,6 +84,8 @@
     "node_package": "packages/rtemplate-mcp/package.json",
     "palette": "deferred until Axon tauri-palette port lands",
     "plugin": "docs/generated/plugin.json",
+    "provider_dir": "providers",
+    "provider_files": [],
     "rest_routes": [
       "GET /v1/help",
       "GET /v1/status",

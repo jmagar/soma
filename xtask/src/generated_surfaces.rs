@@ -162,6 +162,7 @@ fn render_palette_manifest() -> Result<Value> {
 }
 
 fn render_provider_snapshot() -> Result<Value> {
+    let provider_dir = provider_dir();
     let client = ExampleClient::new(&ExampleConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
@@ -176,12 +177,15 @@ fn render_provider_snapshot() -> Result<Value> {
         "surfaces": {
             "mcp_actions": surface_actions(&snapshot.catalogs, Surface::Mcp),
             "cli_actions": surface_actions(&snapshot.catalogs, Surface::Cli),
+            "cli_commands": cli_commands(&snapshot.catalogs),
             "rest_routes": rest_routes(&snapshot.catalogs),
             "docs": "docs/generated/provider-surfaces.md",
             "plugin": "docs/generated/plugin.json",
             "codex_marketplace": ".agents/plugins/marketplace.json",
             "claude_marketplace": ".claude-plugin/marketplace.json",
             "node_package": "packages/rtemplate-mcp/package.json",
+            "provider_dir": provider_dir.display().to_string(),
+            "provider_files": provider_files(&provider_dir)?,
             "palette": "deferred until Axon tauri-palette port lands"
         }
     }))
@@ -264,6 +268,7 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
         "node_package": "packages/rtemplate-mcp/package.json",
         "docs": "docs/generated/provider-surfaces.md",
         "mcp_server": "server.json",
+        "provider_files": snapshot["surfaces"]["provider_files"].clone(),
         "surfaces": snapshot["surfaces"].clone(),
         "providers": snapshot["providers"].clone()
     })
@@ -351,6 +356,61 @@ fn rest_routes(catalogs: &[ProviderCatalog]) -> Vec<String> {
     routes
 }
 
+fn cli_commands(catalogs: &[ProviderCatalog]) -> Vec<String> {
+    let mut commands = catalogs
+        .iter()
+        .flat_map(|catalog| catalog.tools.iter())
+        .flat_map(|tool| {
+            let Some(cli) = &tool.cli else {
+                return Vec::new();
+            };
+            if !cli.enabled {
+                return Vec::new();
+            }
+            let mut commands = vec![cli.command.clone().unwrap_or_else(|| tool.name.clone())];
+            commands.extend(cli.aliases.clone());
+            commands
+        })
+        .collect::<Vec<_>>();
+    commands.sort();
+    commands
+}
+
+fn provider_dir() -> std::path::PathBuf {
+    std::env::var_os("RTEMPLATE_PROVIDER_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("providers"))
+}
+
+fn provider_files(provider_dir: &Path) -> Result<Vec<String>> {
+    if !provider_dir.exists() {
+        return Ok(Vec::new());
+    }
+    let label = provider_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("providers");
+    let mut files = fs::read_dir(provider_dir)
+        .with_context(|| format!("failed to read {}", provider_dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file())
+        .filter(|path| {
+            matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("json" | "ts" | "wasm")
+            )
+        })
+        .filter_map(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| format!("{label}/{name}"))
+        })
+        .collect::<Vec<_>>();
+    files.sort();
+    Ok(files)
+}
+
 fn yes_no(value: bool) -> &'static str {
     if value {
         "yes"
@@ -384,4 +444,146 @@ fn relative_display(root: &Path, path: &Path) -> String {
         .unwrap_or(path)
         .display()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[test]
+    fn mixed_drop_in_providers_populate_generated_distribution_surfaces() {
+        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let providers = temp.path().join("providers");
+        fs::create_dir(&providers).expect("providers dir");
+        fs::write(
+            providers.join("weather.tool.ts"),
+            format!(
+                "export default {};\nexport async function call(input) {{ return {{ ok: true, action: input.action }}; }}\n",
+                provider_manifest("weather-ts", "ai-sdk", "weather_ts")
+            ),
+        )
+        .expect("ts provider");
+        fs::write(
+            providers.join("image.wasm"),
+            wasm_provider(provider_manifest("image-wasm", "wasm", "image_wasm").as_bytes()),
+        )
+        .expect("wasm provider");
+        fs::write(
+            providers.join("notes.mcp.json"),
+            provider_manifest("notes-mcp", "mcp", "notes_search"),
+        )
+        .expect("mcp provider");
+        fs::write(
+            providers.join("github.openapi.json"),
+            provider_manifest("github-openapi", "openapi", "github_issue"),
+        )
+        .expect("openapi provider");
+
+        std::env::set_var("RTEMPLATE_PROVIDER_DIR", &providers);
+        let snapshot = render_provider_snapshot().expect("snapshot");
+        std::env::remove_var("RTEMPLATE_PROVIDER_DIR");
+        let plugin = render_distribution_plugin(&snapshot);
+
+        for action in ["weather_ts", "image_wasm", "notes_search", "github_issue"] {
+            assert!(
+                contains_string(&snapshot["surfaces"]["mcp_actions"], action),
+                "MCP actions should include {action}"
+            );
+            assert!(
+                contains_string(&snapshot["surfaces"]["cli_actions"], action),
+                "CLI actions should include {action}"
+            );
+        }
+        assert!(contains_string(
+            &snapshot["surfaces"]["cli_commands"],
+            "ship-weather-ts"
+        ));
+        assert!(contains_string(
+            &snapshot["surfaces"]["cli_commands"],
+            "ship-alias-weather_ts"
+        ));
+        assert!(contains_string(
+            &snapshot["surfaces"]["rest_routes"],
+            "POST /v1/providers/weather-ts"
+        ));
+        assert!(contains_string(
+            &plugin["provider_files"],
+            "providers/weather.tool.ts"
+        ));
+        assert!(contains_string(
+            &plugin["provider_files"],
+            "providers/github.openapi.json"
+        ));
+    }
+
+    fn provider_manifest(name: &str, kind: &str, action: &str) -> String {
+        json!({
+            "schema_version": 1,
+            "provider": {
+                "name": name,
+                "kind": kind,
+                "enabled": true,
+                "description": format!("Generated test provider {name}.")
+            },
+            "tools": [{
+                "name": action,
+                "description": format!("Generated test action {action}."),
+                "input_schema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {}
+                },
+                "cli": {
+                    "enabled": true,
+                    "command": format!("ship-{name}"),
+                    "aliases": [format!("ship-alias-{action}")]
+                },
+                "rest": {
+                    "enabled": true,
+                    "method": "POST",
+                    "path": format!("/v1/providers/{name}")
+                }
+            }]
+        })
+        .to_string()
+    }
+
+    fn wasm_provider(manifest: &[u8]) -> Vec<u8> {
+        let mut bytes = vec![0, b'a', b's', b'm', 1, 0, 0, 0];
+        let name = b"rtemplate.provider";
+        let mut payload = Vec::new();
+        write_leb(name.len() as u32, &mut payload);
+        payload.extend_from_slice(name);
+        payload.extend_from_slice(manifest);
+        bytes.push(0);
+        write_leb(payload.len() as u32, &mut bytes);
+        bytes.extend(payload);
+        bytes
+    }
+
+    fn write_leb(mut value: u32, bytes: &mut Vec<u8>) {
+        loop {
+            let mut byte = (value & 0x7f) as u8;
+            value >>= 7;
+            if value != 0 {
+                byte |= 0x80;
+            }
+            bytes.push(byte);
+            if value == 0 {
+                break;
+            }
+        }
+    }
+
+    fn contains_string(value: &Value, needle: &str) -> bool {
+        value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|value| value.as_str() == Some(needle))
+    }
 }
