@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use rtemplate_contracts::{
     actions::{ActionTransport, ExampleAction, ACTION_SPECS},
     providers::{
-        CliOverlay, McpOverlay, PaletteOverlay, ProviderCatalog, ProviderIdentity, ProviderKind,
-        ProviderManifest, ProviderTool, RestOverlay,
+        CliOverlay, DocsOverlay, McpOverlay, PaletteOverlay, ProviderCatalog, ProviderIdentity,
+        ProviderKind, ProviderManifest, ProviderTool, RestOverlay,
     },
 };
 use serde_json::{json, Map, Value};
@@ -91,7 +91,14 @@ fn static_catalog() -> ProviderCatalog {
         elicitation: Vec::new(),
         env: Vec::new(),
         capabilities: Default::default(),
-        docs: None,
+        docs: Some(DocsOverlay {
+            when_to_use: Some(
+                "Use for rmcp-template built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
+                    .to_owned(),
+            ),
+            examples: Vec::new(),
+            troubleshooting: Vec::new(),
+        }),
         plugin: None,
         ui: None,
         meta: json!({}),
@@ -135,7 +142,18 @@ fn static_tool(spec: &rtemplate_contracts::actions::ActionSpec) -> ProviderTool 
             about: Some(cli.description.to_owned()),
             long_about: Some(cli.usage.to_owned()),
             hidden: false,
-            flags: Vec::new(),
+            flags: cli
+                .flags
+                .iter()
+                .map(|flag| {
+                    json!({
+                        "name": flag.name,
+                        "value_name": flag.value_name,
+                        "required": flag.required,
+                        "description": flag.description,
+                    })
+                })
+                .collect(),
             default_output: None,
             interactive: false,
         }),
@@ -150,7 +168,18 @@ fn static_tool(spec: &rtemplate_contracts::actions::ActionSpec) -> ProviderTool 
         }),
         ui: None,
         examples: Vec::new(),
-        meta: json!({ "returns": spec.returns }),
+        meta: json!({
+            "returns": spec.returns,
+            "cli_usage": spec.cli.map(|cli| cli.usage),
+            "scaffold_fallback": if spec.name == "scaffold_intent" {
+                json!({
+                    "recommended_skill": "scaffold-project",
+                    "instructions": "Ask the user for the scaffold fields manually, then create the same JSON shape documented by the scaffold-project skill. Do not mutate files until the user approves the plan."
+                })
+            } else {
+                Value::Null
+            },
+        }),
     }
 }
 
