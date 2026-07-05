@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "description": "Generated marketplace catalog for rmcp-template plugins.",
+  "name": "rmcp-template",
+  "owner": {
+    "email": "jmagar@users.noreply.github.com",
+    "name": "Jacob Magar"
+  },
+  "plugins": [
+    {
+      "category": "infrastructure",
+      "description": "Example MCP plugin generated from rmcp-template.",
+      "name": "rtemplate",
+      "source": "./plugins/rtemplate"
+    }
+  ]
+}

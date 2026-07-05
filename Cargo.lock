@@ -2778,6 +2778,7 @@ dependencies = [
  "jsonschema",
  "metrics",
  "reqwest 0.12.28",
+ "rmcp",
  "rtemplate-contracts",
  "rtemplate-observability",
  "serde",

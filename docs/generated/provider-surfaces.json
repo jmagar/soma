@@ -1,0 +1,87 @@
+{
+  "provider_fingerprint": "sha256:232076215b6dc2512e1f908a5ad4b723eaeb7e7b343cdff1c49dcd283142fd38",
+  "providers": [
+    {
+      "description": "Native service actions compiled into the template.",
+      "elicitation": [],
+      "kind": "static-rust",
+      "name": "static-rust",
+      "prompts": [],
+      "resources": [],
+      "tasks": [],
+      "title": "Built-in Rust actions",
+      "tools": [
+        {
+          "cli": true,
+          "description": "Return a greeting.",
+          "mcp": true,
+          "name": "greet",
+          "rest": true
+        },
+        {
+          "cli": true,
+          "description": "Echo a message back unchanged.",
+          "mcp": true,
+          "name": "echo",
+          "rest": true
+        },
+        {
+          "cli": true,
+          "description": "Return server status and configuration info.",
+          "mcp": true,
+          "name": "status",
+          "rest": true
+        },
+        {
+          "cli": false,
+          "description": "Ask the MCP client to collect a name, then return a personalised greeting.",
+          "mcp": true,
+          "name": "elicit_name",
+          "rest": false
+        },
+        {
+          "cli": false,
+          "description": "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
+          "mcp": true,
+          "name": "scaffold_intent",
+          "rest": false
+        },
+        {
+          "cli": true,
+          "description": "Show the action reference.",
+          "mcp": true,
+          "name": "help",
+          "rest": true
+        }
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "surfaces": {
+    "claude_marketplace": ".claude-plugin/marketplace.json",
+    "cli_actions": [
+      "echo",
+      "greet",
+      "help",
+      "status"
+    ],
+    "codex_marketplace": ".agents/plugins/marketplace.json",
+    "docs": "docs/generated/provider-surfaces.md",
+    "mcp_actions": [
+      "echo",
+      "elicit_name",
+      "greet",
+      "help",
+      "scaffold_intent",
+      "status"
+    ],
+    "node_package": "packages/rtemplate-mcp/package.json",
+    "palette": "deferred until Axon tauri-palette port lands",
+    "rest_routes": [
+      "GET /v1/help",
+      "GET /v1/status",
+      "POST /v1/echo",
+      "POST /v1/greet"
+    ]
+  }
+}

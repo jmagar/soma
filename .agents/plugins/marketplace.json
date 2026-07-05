@@ -1,0 +1,20 @@
+{
+  "name": "rmcp-template",
+  "plugins": [
+    {
+      "category": "Infrastructure",
+      "interface": {
+        "displayName": "Example MCP"
+      },
+      "name": "rtemplate",
+      "policy": {
+        "authentication": "ON_INSTALL",
+        "installation": "AVAILABLE"
+      },
+      "source": {
+        "path": "./plugins/rtemplate",
+        "source": "local"
+      }
+    }
+  ]
+}

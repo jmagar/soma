@@ -256,6 +256,10 @@ version = "0.4.1"
             r#"{"info":{"version":"0.4.1"}}"#,
         );
         write(
+            &self.path("packages/rtemplate-mcp/package.json"),
+            r#"{"name":"rtemplate-mcp","version":"0.4.1"}"#,
+        );
+        write(
             &self.path("plugins/rtemplate/.claude-plugin/plugin.json"),
             r#"{"name":"rtemplate"}"#,
         );
