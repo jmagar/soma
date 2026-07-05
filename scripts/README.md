@@ -62,6 +62,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
+| `conformance_report.py` | Python | `just conformance-report` | Summarizes official MCP conformance `checks.json` result files under `results/`, with optional JSON output for audits. |
 | `validate-plugin-layout.sh` | Bash wrapper | `cargo xtask validate-plugin-layout`, `just validate-plugin`, CI | Delegates to xtask to validate Claude, Codex, and Gemini plugin packaging conventions. |
 | `check-plugin-hook-contract.py` | Python wrapper | `cargo xtask check-plugin-hook-contract` | Delegates to xtask to audit cross-repo plugin setup hook JSON contracts, optionally executing setup commands. |
 | `check-plugin-stdio-smoke.sh` | Bash wrapper | `cargo xtask check-plugin-stdio-smoke`, docs/contracts | Delegates to xtask to smoke-test the installed stdio plugin binary with JSON-RPC initialize plus `status`. |
@@ -216,6 +217,19 @@ automation drift:
 
 Used in CI as a guardrail. It intentionally reports coupled-file concerns rather
 than trying to infer every valid exception.
+
+### `conformance_report.py`
+
+```bash
+just conformance-report
+python3 scripts/conformance_report.py --results results
+python3 scripts/conformance_report.py --results results --json
+```
+
+Summarizes `checks.json` files emitted by the official MCP conformance suite.
+The text output is intended for quick local audits; `--json` emits a stable
+machine-readable summary with total checks, pass rate, status counts,
+per-scenario counts, and non-success failures.
 
 ### `check-dependency-updates.sh`
 

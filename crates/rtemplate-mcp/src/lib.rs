@@ -3,6 +3,7 @@
 //! This module is strictly MCP concerns: the `ServerHandler` impl, tool schemas,
 //! prompt templates, and dispatch shims. Application state lives in `rtemplate_runtime::server`.
 
+mod conformance;
 mod prompts;
 mod response_paging;
 pub mod rmcp_server;

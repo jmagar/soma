@@ -4,20 +4,20 @@
 # `just conformance` fails only on a NEW regression — and flags any baselined
 # scenario that starts passing as a stale entry to remove.
 #
-# Captured 2026-06-21 against the `active` suite (current dated spec) on a no-auth
-# loopback server. Result: 8 passed, 22 expected-failures.
+# Updated 2026-07-04 against the `active` suite with
+# RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true on a no-auth loopback server.
 #
 # The CORE protocol scenarios PASS — server-initialize, ping, tools-list,
 # resources-list, prompts-list, completion-complete, dns-rebinding-protection —
 # so the server is structurally conformant with the current spec. The entries
 # below fail for two benign reasons, not protocol violations:
 #
-#   1. Fixture scenarios call named reference tools/resources/prompts that a
-#      generic template does not expose (e.g. a `test_simple_text` tool). The
-#      template ships a single action-dispatched `example` tool instead.
-#   2. Optional-feature scenarios exercise features the template does not
-#      implement: logging/setLevel, sampling, progress, resource subscribe, and
-#      elicitation SEP variants.
+#   1. The server runs in JSON-response mode, so the multiple-SSE-stream
+#      transport scenario does not apply to this template harness.
+#   2. Progress and elicitation reference-fixture scenarios need live client
+#      notification/input round trips beyond the static fixture overlay.
+#   3. Logging, sampling, and resource subscriptions are deprecated/removed in
+#      the draft protocol and are intentionally not implemented here.
 #
 # Regenerate the failing list with: just conformance
 server:
@@ -25,24 +25,14 @@ server:
   # multiple-concurrent-SSE-streams scenario does not apply.
   - server-sse-multiple-streams
   - logging-set-level
-  - tools-call-simple-text
-  - tools-call-image
-  - tools-call-audio
-  - tools-call-embedded-resource
-  - tools-call-mixed-content
   - tools-call-with-logging
-  - tools-call-error
   - tools-call-with-progress
   - tools-call-sampling
   - tools-call-elicitation
   - elicitation-sep1034-defaults
   - elicitation-sep1330-enums
-  - resources-read-text
-  - resources-read-binary
-  - resources-templates-read
   - resources-subscribe
   - resources-unsubscribe
-  - prompts-get-simple
-  - prompts-get-with-args
-  - prompts-get-embedded-resource
-  - prompts-get-with-image
+  # Pending SEP-1699 transport experiment. Removed in the draft protocol and not
+  # implemented by this JSON-response template harness.
+  - server-sse-polling

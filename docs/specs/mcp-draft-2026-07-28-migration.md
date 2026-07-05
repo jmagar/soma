@@ -87,6 +87,7 @@ running server over Streamable HTTP. Run it locally with:
 ```bash
 just conformance                 # active suite, default port 41060
 just conformance active 41170    # explicit suite and port
+just conformance-report          # summarize results/**/checks.json
 ```
 
 Notes:
@@ -95,15 +96,30 @@ Notes:
   suite, and tears down. It defaults to port 41060 to avoid colliding with a live
   server on the default 40060, pre-checks the port is free, and verifies our
   process is the one answering.
+- The recipe sets `RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true`. That advertises
+  the upstream reference tools/resources/prompts only for the conformance
+  process:
+  - tools: `test_simple_text`, `test_image_content`, `test_audio_content`,
+    `test_embedded_resource`, `test_multiple_content_types`,
+    `test_error_handling`
+  - resources: `test://static-text`, `test://static-binary`,
+    `test://template/123/data`
+  - prompts: `test_simple_prompt`, `test_prompt_with_arguments`,
+    `test_prompt_with_embedded_resource`, `test_prompt_with_image`
 - Requires `npx` (Node.js).
 - `conformance-baseline.yml` fences known gaps so the recipe fails only on a new
   regression (and flags a baselined scenario that starts passing as stale).
-- Current baseline: the core protocol scenarios pass (server-initialize, ping,
-  tools-list, resources-list, prompts-list, completion-complete,
-  dns-rebinding-protection). Fixture scenarios (the suite calls named `test_*`
-  tools/resources/prompts that the generic `example` tool does not expose) and
-  optional features (logging, sampling, progress, subscribe, elicitation
-  variants, and multi-SSE in json_response mode) are expected failures.
+- The dedicated `MCP Conformance` GitHub Actions workflow runs the same local
+  recipe, uses Node.js 22 to match the current upstream action default, and
+  uploads the official `results/` tree.
+- Current baseline: the core protocol scenarios and static fixture scenarios
+  should pass. Remaining expected failures are transport-mode mismatch for
+  multi-SSE in JSON-response mode, progress/elicitation reference fixtures that
+  require live notification/input round trips, and deprecated/removed logging,
+  sampling, and resource subscription scenarios.
+- Do not add roots, sampling, or logging support from the conformance suite.
+  Those protocol areas are deprecated/removed in the draft track and stay
+  intentionally absent from this template.
 
 ## References
 
