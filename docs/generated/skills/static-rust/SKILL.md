@@ -1,11 +1,22 @@
 ---
 name: static-rust
-description: Generated skill for the `static-rust` provider. Use when working with this provider's generated MCP, CLI, or REST surfaces.
+description: "Use when working with `static-rust` provider actions such as greet, echo, status, elicit_name."
 ---
 
 # `static-rust` Provider
 
 Native service actions compiled into the template.
+
+## When To Use
+
+Use when working with `static-rust` provider actions such as greet, echo, status, elicit_name.
+
+## Surface Selection
+
+- Use MCP first when the server is connected, especially for MCP-only actions.
+- Use CLI only when the action's CLI surface is `yes`; do not invent commands for `N/A` entries.
+- Use REST only when the action's REST surface is `yes`; send JSON bodies matching the action schema.
+- MCP-only elicitation actions require an elicitation-capable MCP client; do not attempt CLI or REST fallbacks.
 
 ## Tools
 
@@ -14,12 +25,99 @@ Native service actions compiled into the template.
 | `greet` | yes | yes | yes | `greet` | `POST /v1/greet` | Return a greeting. |
 | `echo` | yes | yes | yes | `echo` | `POST /v1/echo` | Echo a message back unchanged. |
 | `status` | yes | yes | yes | `status` | `GET /v1/status` | Return server status and configuration info. |
-| `elicit_name` | yes | no | no | `elicit_name` | `` | Ask the MCP client to collect a name, then return a personalised greeting. |
-| `scaffold_intent` | yes | no | no | `scaffold_intent` | `` | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
+| `elicit_name` | yes | no | no | `N/A` | `N/A` | Ask the MCP client to collect a name, then return a personalised greeting. |
+| `scaffold_intent` | yes | no | no | `N/A` | `N/A` | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
 | `help` | yes | yes | yes | `help` | `GET /v1/help` | Show the action reference. |
 
-## Usage
+## Action Reference
 
-- Prefer the MCP action when the server is connected.
-- Use the CLI command for local scripts and smoke tests.
-- Use REST routes for HTTP clients when the tool explicitly enables REST.
+### `greet`
+
+Return a greeting.
+
+- Scope: `example:read`
+- Cost: `cheap`
+- Destructive: `false`
+- Requires admin: `false`
+- Required args: `none`
+- Optional args: `name: string`
+- Output: `unspecified`
+- MCP: `example(action="greet")`
+- CLI: `rtemplate greet`
+- REST: `POST /v1/greet`
+
+### `echo`
+
+Echo a message back unchanged.
+
+- Scope: `example:read`
+- Cost: `cheap`
+- Destructive: `false`
+- Requires admin: `false`
+- Required args: `message: string`
+- Optional args: `none`
+- Output: `unspecified`
+- MCP: `example(action="echo")`
+- CLI: `rtemplate echo`
+- REST: `POST /v1/echo`
+
+### `status`
+
+Return server status and configuration info.
+
+- Scope: `example:read`
+- Cost: `cheap`
+- Destructive: `false`
+- Requires admin: `false`
+- Required args: `none`
+- Optional args: `none`
+- Output: `unspecified`
+- MCP: `example(action="status")`
+- CLI: `rtemplate status`
+- REST: `GET /v1/status`
+
+### `elicit_name`
+
+Ask the MCP client to collect a name, then return a personalised greeting.
+
+- Scope: `example:read`
+- Cost: `cheap`
+- Destructive: `false`
+- Requires admin: `false`
+- Required args: `none`
+- Optional args: `none`
+- Output: `unspecified`
+- MCP: `example(action="elicit_name")`
+- CLI: `N/A` - do not call this action from CLI.
+- REST: `N/A` - do not invent an HTTP route.
+
+### `scaffold_intent`
+
+Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.
+
+- Scope: `example:read`
+- Cost: `moderate`
+- Destructive: `false`
+- Requires admin: `false`
+- Required args: `none`
+- Optional args: `none`
+- Output: `unspecified`
+- MCP: `example(action="scaffold_intent")`
+- CLI: `N/A` - do not call this action from CLI.
+- REST: `N/A` - do not invent an HTTP route.
+
+### `help`
+
+Show the action reference.
+
+- Scope: `public/default`
+- Cost: `cheap`
+- Destructive: `false`
+- Requires admin: `false`
+- Required args: `none`
+- Optional args: `none`
+- Output: `unspecified`
+- MCP: `example(action="help")`
+- CLI: `rtemplate help`
+- REST: `GET /v1/help`
+

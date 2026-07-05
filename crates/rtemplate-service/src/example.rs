@@ -133,7 +133,7 @@ impl ExampleClient {
     pub async fn ready(&self) -> Result<()> {
         #[cfg(not(feature = "client"))]
         {
-            return Ok(());
+            Ok(())
         }
         #[cfg(feature = "client")]
         {
@@ -185,7 +185,7 @@ impl ExampleClient {
         #[cfg(not(feature = "client"))]
         {
             let _ = (action, relative_path, body);
-            return Ok(None);
+            Ok(None)
         }
         #[cfg(feature = "client")]
         {
