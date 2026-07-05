@@ -1,5 +1,5 @@
 {
-  "provider_fingerprint": "sha256:232076215b6dc2512e1f908a5ad4b723eaeb7e7b343cdff1c49dcd283142fd38",
+  "provider_fingerprint": "sha256:c0c63fc4531f0e7610bcdb717e75ad3bf7b2c6da6deaddedd809759cdeeed08d",
   "providers": [
     {
       "description": "Native service actions compiled into the template.",
@@ -16,7 +16,15 @@
           "cli_aliases": [],
           "cli_command": "greet",
           "cli_default_output": null,
-          "cli_flags": [],
+          "cli_flags": [
+            {
+              "description": "Name to greet. Omit to greet the world.",
+              "name": "--name",
+              "required": false,
+              "value_name": "NAME"
+            }
+          ],
+          "cli_usage": "example greet [--name NAME]",
           "cost": "cheap",
           "description": "Return a greeting.",
           "destructive": false,
@@ -33,6 +41,11 @@
             "type": "object"
           },
           "mcp": true,
+          "meta": {
+            "cli_usage": "example greet [--name NAME]",
+            "returns": "Greeting",
+            "scaffold_fallback": null
+          },
           "name": "greet",
           "output_schema": null,
           "requires_admin": false,
@@ -45,7 +58,15 @@
           "cli_aliases": [],
           "cli_command": "echo",
           "cli_default_output": null,
-          "cli_flags": [],
+          "cli_flags": [
+            {
+              "description": "Message to echo back. Must not be empty.",
+              "name": "--message",
+              "required": true,
+              "value_name": "MSG"
+            }
+          ],
+          "cli_usage": "example echo --message MSG",
           "cost": "cheap",
           "description": "Echo a message back unchanged.",
           "destructive": false,
@@ -66,6 +87,11 @@
             "type": "object"
           },
           "mcp": true,
+          "meta": {
+            "cli_usage": "example echo --message MSG",
+            "returns": "EchoResult",
+            "scaffold_fallback": null
+          },
           "name": "echo",
           "output_schema": null,
           "requires_admin": false,
@@ -79,6 +105,7 @@
           "cli_command": "status",
           "cli_default_output": null,
           "cli_flags": [],
+          "cli_usage": "example status",
           "cost": "cheap",
           "description": "Return server status and configuration info.",
           "destructive": false,
@@ -90,6 +117,11 @@
             "type": "object"
           },
           "mcp": true,
+          "meta": {
+            "cli_usage": "example status",
+            "returns": "Status",
+            "scaffold_fallback": null
+          },
           "name": "status",
           "output_schema": null,
           "requires_admin": false,
@@ -103,6 +135,7 @@
           "cli_command": "N/A",
           "cli_default_output": null,
           "cli_flags": [],
+          "cli_usage": null,
           "cost": "cheap",
           "description": "Ask the MCP client to collect a name, then return a personalised greeting.",
           "destructive": false,
@@ -114,6 +147,11 @@
             "type": "object"
           },
           "mcp": true,
+          "meta": {
+            "cli_usage": null,
+            "returns": "Greeting",
+            "scaffold_fallback": null
+          },
           "name": "elicit_name",
           "output_schema": null,
           "requires_admin": false,
@@ -127,6 +165,7 @@
           "cli_command": "N/A",
           "cli_default_output": null,
           "cli_flags": [],
+          "cli_usage": null,
           "cost": "moderate",
           "description": "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
           "destructive": false,
@@ -138,6 +177,14 @@
             "type": "object"
           },
           "mcp": true,
+          "meta": {
+            "cli_usage": null,
+            "returns": "ScaffoldIntentReport",
+            "scaffold_fallback": {
+              "instructions": "Ask the user for the scaffold fields manually, then create the same JSON shape documented by the scaffold-project skill. Do not mutate files until the user approves the plan.",
+              "recommended_skill": "scaffold-project"
+            }
+          },
           "name": "scaffold_intent",
           "output_schema": null,
           "requires_admin": false,
@@ -151,6 +198,7 @@
           "cli_command": "help",
           "cli_default_output": null,
           "cli_flags": [],
+          "cli_usage": "example help",
           "cost": "cheap",
           "description": "Show the action reference.",
           "destructive": false,
@@ -162,6 +210,11 @@
             "type": "object"
           },
           "mcp": true,
+          "meta": {
+            "cli_usage": "example help",
+            "returns": "HelpPayload",
+            "scaffold_fallback": null
+          },
           "name": "help",
           "output_schema": null,
           "requires_admin": false,
@@ -170,7 +223,7 @@
           "scope": null
         }
       ],
-      "when_to_use": null
+      "when_to_use": "Use for rmcp-template built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
     }
   ],
   "schema_version": 1,
