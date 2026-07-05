@@ -339,10 +339,7 @@ fn escape_char(ch: char) -> String {
 
 fn render_openapi(root: &Path) -> Result<Value> {
     let specs = rtemplate_service::action_specs();
-    let rest_actions: Vec<_> = specs
-        .iter()
-        .filter(|spec| spec.transport.rest())
-        .collect();
+    let rest_actions: Vec<_> = specs.iter().filter(|spec| spec.transport.rest()).collect();
     let action_names: Vec<String> = rest_actions
         .iter()
         .map(|spec| spec.name.to_owned())
@@ -479,7 +476,10 @@ fn openapi_schemas(
         "ActionName".to_owned(),
         json!({"type":"string","enum":action_names,"description":"REST-capable action names from crates/rtemplate-service/src/actions.rs."}),
     );
-    for action in rest_actions.iter().filter(|action| !action.params.is_empty()) {
+    for action in rest_actions
+        .iter()
+        .filter(|action| !action.params.is_empty())
+    {
         schemas.insert(
             format!("{}Request", title_no_underscore(action.name)),
             request_schema_for_action(action),
@@ -638,10 +638,7 @@ fn validate_openapi(root: &Path, value: &Value) -> Result<Vec<String>> {
     if value.pointer("/x-template/mcp_only_actions") != Some(&json!(expected_mcp_only)) {
         failures.push("x-template mcp_only_actions drifted".to_owned());
     }
-    for action in specs
-        .iter()
-        .filter(|spec| spec.transport.rest())
-    {
+    for action in specs.iter().filter(|spec| spec.transport.rest()) {
         let Some(path) = action.rest_path else {
             failures.push(format!("REST action {} is missing rest_path", action.name));
             continue;

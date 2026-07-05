@@ -1,6 +1,4 @@
-use rtemplate_contracts::actions::{
-    ActionCost, ActionSpec, ActionTransport, CatalogVisibility,
-};
+use rtemplate_contracts::actions::{ActionCost, ActionSpec, ActionTransport, CatalogVisibility};
 use rtemplate_contracts::errors::ToolError;
 use serde_json::json;
 
@@ -143,7 +141,9 @@ fn dynamic_action_rejects_flag_like_values() {
 #[test]
 fn dynamic_action_rejects_missing_required_flags() {
     let error = parse_args_from(["echo"]).unwrap_err();
-    assert!(error.to_string().contains("missing required flag --message"));
+    assert!(error
+        .to_string()
+        .contains("missing required flag --message"));
 }
 
 #[test]
@@ -163,7 +163,10 @@ fn cli_parser_covers_every_cli_action_in_registry() {
             .unwrap()
             .unwrap_or_else(|| panic!("registered CLI action `{}` did not parse", spec.name));
         let Command::Action { name, .. } = command else {
-            panic!("registered CLI action `{}` parsed to non-action command", spec.name);
+            panic!(
+                "registered CLI action `{}` parsed to non-action command",
+                spec.name
+            );
         };
         assert_eq!(name, spec.name);
     }
@@ -258,7 +261,10 @@ fn setup_plugin_hook_no_repair_flag() {
 
 #[test]
 fn operational_commands_do_not_convert_to_service_actions() {
-    assert!(matches!(Command::Doctor { json: true }, Command::Doctor { .. }));
+    assert!(matches!(
+        Command::Doctor { json: true },
+        Command::Doctor { .. }
+    ));
     assert!(matches!(
         (Command::Watch {
             url: None,
@@ -282,8 +288,8 @@ async fn run_service_command_uses_shared_dispatch_path() {
         },
         &ExampleConfig::default(),
     )
-        .await
-        .expect("status should run through shared service dispatch");
+    .await
+    .expect("status should run through shared service dispatch");
 }
 
 #[test]

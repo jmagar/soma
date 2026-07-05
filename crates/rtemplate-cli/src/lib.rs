@@ -14,10 +14,7 @@
 //! ```
 
 use anyhow::{anyhow, Result};
-use rtemplate_contracts::{
-    actions::ActionSpec,
-    config::ExampleConfig,
-};
+use rtemplate_contracts::{actions::ActionSpec, config::ExampleConfig};
 use rtemplate_service::{classify_service_error, dispatch_action, ExampleClient, ExampleService};
 use serde_json::{Map, Value};
 use std::io::{BufRead, Write};
@@ -172,14 +169,16 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     confirm_command_if_destructive(&cmd)?;
 
     let result = match &cmd {
-        Command::Action { name, params, .. } => match dispatch_action(&service, name, params, "cli").await {
-            Ok(value) => value,
-            Err(error) => {
-                let tool_error = classify_service_error(&error);
-                eprintln!("{}", format_cli_tool_error(&tool_error));
-                return Err(anyhow!(tool_error.message));
+        Command::Action { name, params, .. } => {
+            match dispatch_action(&service, name, params, "cli").await {
+                Ok(value) => value,
+                Err(error) => {
+                    let tool_error = classify_service_error(&error);
+                    eprintln!("{}", format_cli_tool_error(&tool_error));
+                    return Err(anyhow!(tool_error.message));
+                }
             }
-        },
+        }
         // Doctor, Watch, and Setup are never dispatched via this function — main.rs
         // handles them directly because they need config.mcp fields.
         Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => {

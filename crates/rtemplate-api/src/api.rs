@@ -141,8 +141,13 @@ pub async fn v1_action_post(
     let Some(spec) = rtemplate_service::action_registry().rest_post(&action) else {
         return (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))).into_response();
     };
-    run_rest_action_request(state, auth.as_ref().map(|Extension(auth)| auth), spec.name, params)
-        .await
+    run_rest_action_request(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        spec.name,
+        params,
+    )
+    .await
 }
 
 pub async fn v1_service_status(
@@ -294,8 +299,10 @@ fn enforce_rest_scope(
     if !matches!(&state.auth_policy, AuthPolicy::Mounted { .. }) {
         return None;
     }
-    let required_scope =
-        rtemplate_contracts::actions::required_scope_for_action_from(rtemplate_service::action_specs(), action)?;
+    let required_scope = rtemplate_contracts::actions::required_scope_for_action_from(
+        rtemplate_service::action_specs(),
+        action,
+    )?;
     let Some(auth) = auth else {
         tracing::warn!(action = %action, "REST action denied: missing auth context");
         return Some(

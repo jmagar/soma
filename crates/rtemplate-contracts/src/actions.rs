@@ -416,10 +416,7 @@ pub fn action_spec_from<'a>(specs: &'a [ActionSpec], action: &str) -> Option<&'a
     specs.iter().find(|spec| spec.name == action)
 }
 
-pub fn required_scope_for_action_from(
-    specs: &[ActionSpec],
-    action: &str,
-) -> Option<&'static str> {
+pub fn required_scope_for_action_from(specs: &[ActionSpec], action: &str) -> Option<&'static str> {
     action_spec_from(specs, action)
         .map(|spec| spec.required_scope)
         .unwrap_or(Some(DENY_SCOPE))
@@ -523,14 +520,14 @@ pub struct CliDoc {
 }
 
 pub fn action_catalog() -> Vec<ActionDoc> {
-    ACTION_SPECS
-        .iter()
-        .map(action_doc_from_spec)
-        .collect()
+    ACTION_SPECS.iter().map(action_doc_from_spec).collect()
 }
 
 pub fn action_catalog_from(specs: &[&ActionSpec]) -> Vec<ActionDoc> {
-    specs.iter().map(|spec| action_doc_from_spec(spec)).collect()
+    specs
+        .iter()
+        .map(|spec| action_doc_from_spec(spec))
+        .collect()
 }
 
 fn action_doc_from_spec(spec: &ActionSpec) -> ActionDoc {
@@ -675,12 +672,11 @@ pub fn rest_help() -> Value {
         "mcp_only_actions": mcp_only_action_names(),
         "catalog": action_catalog(),
         "preferred_rest_style": "direct_routes",
-        "usage": "Use direct REST routes such as POST /v1/echo or GET /v1/status. POST /v1/example remains as a deprecated compatibility action envelope.",
+        "usage": "Use direct REST routes such as POST /v1/echo or GET /v1/status. REST does not expose an action envelope.",
         "examples": {
             "greet":  {"method": "POST", "path": "/v1/greet",  "body": {"name": "Alice"}},
             "echo":   {"method": "POST", "path": "/v1/echo",   "body": {"message": "Hello!"}},
-            "status": {"method": "GET", "path": "/v1/status"},
-            "legacy_envelope": {"method": "POST", "path": "/v1/example", "body": {"action": "echo", "params": {"message": "Hello!"}}},
+            "status": {"method": "GET", "path": "/v1/status"}
         }
     })
 }

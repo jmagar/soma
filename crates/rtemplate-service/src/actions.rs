@@ -306,8 +306,16 @@ pub async fn execute_native_action(
     })?;
     validate_params(spec, params)?;
     match action {
-        "greet" => service.greet(optional_string_param(params, "name")?.as_deref()).await,
-        "echo" => service.echo(&required_string_param(params, "message")?).await,
+        "greet" => {
+            service
+                .greet(optional_string_param(params, "name")?.as_deref())
+                .await
+        }
+        "echo" => {
+            service
+                .echo(&required_string_param(params, "message")?)
+                .await
+        }
         "status" => service.status().await,
         "help" => Ok(action_registry().public_help()),
         "elicit_name" => Err(anyhow::anyhow!("action=elicit_name requires an MCP peer")),
