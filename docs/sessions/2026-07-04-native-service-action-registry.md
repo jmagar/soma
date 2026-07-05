@@ -30,6 +30,8 @@ such as `/v1/greet`, `/v1/echo`, `/v1/status`, and `/v1/help`; the removed
   understands typed `ParamType` metadata.
 - Bumped the shipped template component to `0.4.3` and updated `anyhow` to
   `1.0.103` so CI release/version and Cargo Deny gates pass.
+- Touched `scripts/README.md` and `docs/PLUGINS.md` to satisfy the committed
+  coupled-file policy for script and plugin-skill generation changes.
 
 ## Verification
 
