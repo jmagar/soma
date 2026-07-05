@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "provider": {
+    "name": "unsafe-mcp",
+    "kind": "mcp"
+  },
+  "tools": [
+    {
+      "name": "remote-tool",
+      "description": "A remote MCP tool that should not be REST-exposed by default.",
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      },
+      "rest": {
+        "enabled": true,
+        "method": "POST",
+        "path": "/v1/remote-tool"
+      }
+    }
+  ]
+}

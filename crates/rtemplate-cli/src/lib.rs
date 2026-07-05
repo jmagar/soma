@@ -18,7 +18,10 @@ use rtemplate_contracts::{
     actions::{ActionSpec, ExampleAction, ACTION_SPECS},
     config::ExampleConfig,
 };
-use rtemplate_service::{classify_service_error, dispatch_action, ExampleClient, ExampleService};
+use rtemplate_service::{
+    static_provider_registry, ExampleClient, ExampleService, ProviderAuthMode, ProviderCall,
+    ProviderPrincipal, ProviderRequestLimits, ProviderSurface,
+};
 use std::io::{BufRead, IsTerminal, Write};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
@@ -86,6 +89,10 @@ pub enum Command {
         url: Option<String>,
         /// Poll interval in seconds (default: 10).
         interval: u64,
+    },
+    Provider {
+        command: String,
+        json: serde_json::Value,
     },
     Setup(SetupCommand),
 }
@@ -174,7 +181,7 @@ where
                 }
                 _ => None,
             },
-            _ => None,
+            other => Some(parse_provider_command(other, rest)?),
         },
     };
     Ok(command)
@@ -189,17 +196,55 @@ where
 pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     let client = ExampleClient::new(cfg)?;
     let service = ExampleService::new(client);
+    let registry = static_provider_registry(service.clone())?;
     confirm_command_if_destructive(&cmd)?;
 
     let result = match service_action_from_command(&cmd) {
-        Some(action) => match dispatch_action(&service, &action, "cli").await {
-            Ok(value) => value,
+        Some(action) => match registry
+            .dispatch(ProviderCall {
+                provider: String::new(),
+                action: action.name().to_owned(),
+                params: cli_params(&action),
+                principal: ProviderPrincipal::loopback_dev(),
+                auth_mode: ProviderAuthMode::LoopbackDev,
+                surface: ProviderSurface::Cli,
+                destructive_confirmed: false,
+                limits: ProviderRequestLimits::default(),
+                snapshot_id: String::new(),
+            })
+            .await
+        {
+            Ok(output) => output.value,
             Err(error) => {
-                let tool_error = classify_service_error(&error);
-                eprintln!("{}", format_cli_tool_error(&tool_error));
-                return Err(anyhow!(tool_error.message));
+                eprintln!("{}", serde_json::to_string_pretty(&error)?);
+                return Err(anyhow!(error.message));
             }
         },
+        None if matches!(cmd, Command::Provider { .. }) => {
+            let Command::Provider { command, json } = &cmd else {
+                unreachable!()
+            };
+            match registry
+                .dispatch(ProviderCall {
+                    provider: String::new(),
+                    action: command.clone(),
+                    params: json.clone(),
+                    principal: ProviderPrincipal::loopback_dev(),
+                    auth_mode: ProviderAuthMode::LoopbackDev,
+                    surface: ProviderSurface::Cli,
+                    destructive_confirmed: false,
+                    limits: ProviderRequestLimits::default(),
+                    snapshot_id: String::new(),
+                })
+                .await
+            {
+                Ok(output) => output.value,
+                Err(error) => {
+                    eprintln!("{}", serde_json::to_string_pretty(&error)?);
+                    return Err(anyhow!(error.message));
+                }
+            }
+        }
         // Doctor, Watch, and Setup are never dispatched via this function — main.rs
         // handles them directly because they need config.mcp fields.
         None => {
@@ -211,6 +256,7 @@ pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 fn format_cli_tool_error(error: &rtemplate_contracts::errors::ToolError) -> String {
     let mut lines = vec![
         format!("error: {}", error.message),
@@ -247,8 +293,52 @@ fn service_action_from_command(cmd: &Command) -> Option<ExampleAction> {
         }),
         Command::Status => Some(ExampleAction::Status),
         Command::Help => Some(ExampleAction::Help),
-        Command::Doctor { .. } | Command::Watch { .. } | Command::Setup(_) => None,
+        Command::Doctor { .. }
+        | Command::Watch { .. }
+        | Command::Provider { .. }
+        | Command::Setup(_) => None,
     }
+}
+
+fn cli_params(action: &ExampleAction) -> serde_json::Value {
+    match action {
+        ExampleAction::Greet { name } => match name {
+            Some(name) => serde_json::json!({ "name": name }),
+            None => serde_json::json!({}),
+        },
+        ExampleAction::Echo { message } => serde_json::json!({ "message": message }),
+        ExampleAction::Status
+        | ExampleAction::Help
+        | ExampleAction::ElicitName
+        | ExampleAction::ScaffoldIntent => serde_json::json!({}),
+    }
+}
+
+fn parse_provider_command(command: &str, args: &[String]) -> Result<Command> {
+    if reserved_cli_command(command) {
+        return Err(anyhow!("`{command}` is a reserved infrastructure command"));
+    }
+    match args {
+        [flag, payload] if flag == "--json" => Ok(Command::Provider {
+            command: command.to_owned(),
+            json: serde_json::from_str(payload)
+                .map_err(|error| anyhow!("{command} --json must be valid JSON: {error}"))?,
+        }),
+        [] => Ok(Command::Provider {
+            command: command.to_owned(),
+            json: serde_json::json!({}),
+        }),
+        [unexpected, ..] => Err(anyhow!(
+            "{command} requires --json for dynamic provider inputs; unexpected `{unexpected}`"
+        )),
+    }
+}
+
+fn reserved_cli_command(command: &str) -> bool {
+    matches!(
+        command,
+        "serve" | "mcp" | "doctor" | "watch" | "setup" | "tools" | "providers" | "openapi" | "help"
+    )
 }
 
 pub fn confirm_destructive_action_allowed(

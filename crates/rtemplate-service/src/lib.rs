@@ -1,5 +1,9 @@
 pub mod app;
+pub mod capabilities;
 pub mod example;
+pub mod provider_errors;
+pub mod provider_registry;
+pub mod providers;
 
 use anyhow::{anyhow, Result};
 use rtemplate_contracts::{
@@ -10,6 +14,12 @@ use serde_json::Value;
 
 pub use app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent, ScaffoldIntentValidationError};
 pub use example::ExampleClient;
+pub use provider_errors::ProviderError;
+pub use provider_registry::{
+    ProviderAuthMode, ProviderCall, ProviderOutput, ProviderPrincipal, ProviderRegistry,
+    ProviderRequestLimits, ProviderSurface, RegistrySnapshot,
+};
+pub use providers::static_rust::StaticRustProvider;
 
 /// Unified dispatch seam shared by every surface (MCP, REST, CLI).
 ///
@@ -44,6 +54,11 @@ pub async fn dispatch_action(
     record_action_metric(surface, action_name, outcome, elapsed_ms as f64);
 
     result
+}
+
+pub fn static_provider_registry(service: ExampleService) -> Result<ProviderRegistry> {
+    ProviderRegistry::new(vec![std::sync::Arc::new(StaticRustProvider::new(service))])
+        .map_err(|error| anyhow!(error.to_string()))
 }
 
 #[cfg(feature = "observability")]

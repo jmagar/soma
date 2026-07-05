@@ -74,7 +74,7 @@
         "name": { "$ref": "#/$defs/name" },
         "kind": {
           "type": "string",
-          "enum": ["static-rust", "openapi", "ai-sdk", "wasm"]
+          "enum": ["static-rust", "openapi", "ai-sdk", "wasm", "mcp"]
         },
         "title": { "type": "string" },
         "description": { "type": "string" },

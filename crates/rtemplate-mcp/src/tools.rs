@@ -14,12 +14,17 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+#[cfg(test)]
 use std::sync::OnceLock;
 
-use rtemplate_contracts::actions::{ActionTransport, ExampleAction, ACTION_SPECS};
+use rtemplate_contracts::actions::ExampleAction;
+#[cfg(test)]
+use rtemplate_contracts::actions::{ActionTransport, ACTION_SPECS};
 use rtemplate_runtime::server::AppState;
 use rtemplate_service::app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent};
-use rtemplate_service::dispatch_action;
+use rtemplate_service::{
+    ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRequestLimits, ProviderSurface,
+};
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
 ///
@@ -61,7 +66,7 @@ async fn dispatch_example(
     match action {
         ExampleAction::ElicitName => elicit_name(&state.service, peer).await,
         ExampleAction::ScaffoldIntent => scaffold_intent(&state.service, peer).await,
-        other => dispatch_non_elicitation_action(&state.service, &other).await,
+        other => dispatch_non_elicitation_action(state, &other, args).await,
     }
 }
 
@@ -73,17 +78,47 @@ async fn dispatch_example_without_peer(state: &AppState, args: Value) -> anyhow:
             "action={} requires an MCP peer",
             action.name()
         )),
-        other => dispatch_non_elicitation_action(&state.service, &other).await,
+        other => dispatch_non_elicitation_action(state, &other, args).await,
     }
 }
 
 async fn dispatch_non_elicitation_action(
-    service: &ExampleService,
+    state: &AppState,
     action: &ExampleAction,
+    args: Value,
 ) -> anyhow::Result<Value> {
-    match action {
-        ExampleAction::Help => Ok(json!({ "help": help_text() })),
-        other => dispatch_action(service, other, "mcp").await,
+    let params = strip_action_arg(args);
+    let call = ProviderCall {
+        provider: String::new(),
+        action: action.name().to_owned(),
+        params,
+        principal: ProviderPrincipal::loopback_dev(),
+        auth_mode: provider_auth_mode(&state.auth_policy),
+        surface: ProviderSurface::Mcp,
+        destructive_confirmed: false,
+        limits: ProviderRequestLimits::default(),
+        snapshot_id: String::new(),
+    };
+    Ok(state.provider_registry.dispatch(call).await?.value)
+}
+
+fn strip_action_arg(mut args: Value) -> Value {
+    if let Value::Object(map) = &mut args {
+        map.remove("action");
+        map.remove("_response_offset");
+        map.remove("_response_page_bytes");
+        map.remove("_response_cursor");
+    }
+    args
+}
+
+fn provider_auth_mode(policy: &rtemplate_runtime::server::AuthPolicy) -> ProviderAuthMode {
+    match policy {
+        rtemplate_runtime::server::AuthPolicy::LoopbackDev => ProviderAuthMode::LoopbackDev,
+        rtemplate_runtime::server::AuthPolicy::TrustedGatewayUnscoped => {
+            ProviderAuthMode::TrustedGateway
+        }
+        rtemplate_runtime::server::AuthPolicy::Mounted { .. } => ProviderAuthMode::Mounted,
     }
 }
 
@@ -265,12 +300,15 @@ async fn elicit_name(service: &ExampleService, peer: &Peer<RoleServer>) -> anyho
 
 // ── help text ─────────────────────────────────────────────────────────────────
 
+#[cfg(test)]
 static HELP_TEXT: OnceLock<String> = OnceLock::new();
 
+#[cfg(test)]
 fn help_text() -> &'static str {
     HELP_TEXT.get_or_init(build_help_text).as_str()
 }
 
+#[cfg(test)]
 fn build_help_text() -> String {
     let mut text = String::from(
         "# example MCP Tool\n\nA template demonstrating the action-based dispatch pattern for MCP servers.\nSet the `action` argument to select an operation.\n\n## Actions\n",

@@ -31,9 +31,15 @@ fn empty_args_returns_none() {
 }
 
 #[test]
-fn unknown_subcommand_returns_none() {
+fn unknown_subcommand_becomes_dynamic_provider_command() {
     let result = parse_args_from(["unknown-command"]).unwrap();
-    assert!(result.is_none());
+    assert_eq!(
+        result,
+        Some(Command::Provider {
+            command: "unknown-command".to_owned(),
+            json: serde_json::json!({})
+        })
+    );
 }
 
 #[test]

@@ -106,6 +106,23 @@ fn test_doctor_no_json_parsed() {
 }
 
 #[test]
+fn test_dynamic_provider_command_accepts_json_escape_hatch() {
+    assert_eq!(
+        parse_args_from(["weather", "--json", "{\"city\":\"Paris\"}"]).unwrap(),
+        Some(Command::Provider {
+            command: "weather".to_owned(),
+            json: serde_json::json!({"city": "Paris"})
+        })
+    );
+}
+
+#[test]
+fn test_dynamic_provider_command_requires_json_for_complex_inputs() {
+    let error = parse_args_from(["weather", "--city", "Paris"]).unwrap_err();
+    assert!(error.to_string().contains("requires --json"));
+}
+
+#[test]
 fn test_unknown_trailing_args_are_rejected() {
     for args in [
         &["status", "--bogus"][..],

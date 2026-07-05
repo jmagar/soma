@@ -46,8 +46,10 @@ use walkdir::WalkDir;
 mod cargo_generate;
 mod cargo_generate_post;
 mod ci_paths;
+mod generated_surfaces;
 mod no_mcp;
 mod patterns;
+mod provider_manifest;
 mod release_versions;
 mod rmcp_release_monitor;
 mod scaffold;
@@ -100,6 +102,9 @@ fn main() -> Result<()> {
         Some("check-dependency-updates") => scripts_lane_c::check_dependency_updates(&args[1..]),
         Some("check-file-size") => scripts::check_file_size(),
         Some("check-openapi") => scripts_lane_d::check_openapi(&args[1..]),
+        Some("check-openapi-drift") => scripts_lane_d::check_openapi(&args[1..]),
+        Some("check-palette-manifest") => generated_surfaces::check_palette_manifest(&args[1..]),
+        Some("check-provider-manifest-contract") => provider_manifest::check(),
         Some("check-plugin-hook-contract") => {
             scripts_lane_c::check_plugin_hook_contract(&args[1..])
         }

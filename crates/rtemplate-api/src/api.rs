@@ -19,10 +19,13 @@ struct AuthContext {
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use rtemplate_contracts::actions::{required_scope_for_action, ExampleAction};
+use rtemplate_contracts::actions::ExampleAction;
 use rtemplate_contracts::token_limit::MAX_RESPONSE_BYTES;
 use rtemplate_runtime::server::{AppState, AuthPolicy};
-use rtemplate_service::{classify_service_error, dispatch_action};
+use rtemplate_service::{
+    classify_service_error, ProviderAuthMode, ProviderCall, ProviderError, ProviderPrincipal,
+    ProviderRequestLimits, ProviderSurface,
+};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub struct RestRoute {
@@ -222,12 +225,20 @@ async fn run_rest_action(
     action: ExampleAction,
 ) -> axum::response::Response {
     let action_name = action.name();
-    if let Some(response) = enforce_rest_scope(&state, auth, action_name) {
-        return response;
-    }
+    let call = ProviderCall {
+        provider: String::new(),
+        action: action_name.to_owned(),
+        params: rest_params(&action),
+        principal: rest_principal(auth),
+        auth_mode: rest_auth_mode(&state),
+        surface: ProviderSurface::Rest,
+        destructive_confirmed: false,
+        limits: ProviderRequestLimits::default(),
+        snapshot_id: String::new(),
+    };
 
-    match dispatch_action(&state.service, &action, "rest").await {
-        Ok(value) => match cap_rest_response(value) {
+    match state.provider_registry.dispatch(call).await {
+        Ok(output) => match cap_rest_response(output.value) {
             Ok(value) => Json(value).into_response(),
             Err(e) => {
                 tracing::error!(error = %e, action = %action_name, "REST response serialization failed");
@@ -238,7 +249,36 @@ async fn run_rest_action(
                     .into_response()
             }
         },
-        Err(e) => rest_error_response(e, action_name),
+        Err(e) => provider_rest_error_response(e),
+    }
+}
+
+fn rest_params(action: &ExampleAction) -> Value {
+    match action {
+        ExampleAction::Greet { name } => optional_name_params(name.clone()),
+        ExampleAction::Echo { message } => json!({ "message": message }),
+        ExampleAction::Status
+        | ExampleAction::Help
+        | ExampleAction::ElicitName
+        | ExampleAction::ScaffoldIntent => json!({}),
+    }
+}
+
+fn rest_principal(auth: Option<&AuthContext>) -> ProviderPrincipal {
+    match auth {
+        Some(auth) => ProviderPrincipal {
+            subject: auth.sub.clone(),
+            scopes: auth.scopes.clone(),
+        },
+        None => ProviderPrincipal::loopback_dev(),
+    }
+}
+
+fn rest_auth_mode(state: &AppState) -> ProviderAuthMode {
+    match &state.auth_policy {
+        AuthPolicy::LoopbackDev => ProviderAuthMode::LoopbackDev,
+        AuthPolicy::TrustedGatewayUnscoped => ProviderAuthMode::TrustedGateway,
+        AuthPolicy::Mounted { .. } => ProviderAuthMode::Mounted,
     }
 }
 
@@ -275,6 +315,23 @@ fn rest_json_rejection_response(error: JsonRejection) -> axum::response::Respons
     (status, Json(json!({"error": error.to_string()}))).into_response()
 }
 
+fn provider_rest_error_response(error: ProviderError) -> axum::response::Response {
+    let status = match &*error.code {
+        "unknown_action" | "surface_not_exposed" => StatusCode::NOT_FOUND,
+        "insufficient_scope" | "capability_denied" => StatusCode::FORBIDDEN,
+        "input_too_large" | "response_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
+        "input_schema_failed" | "confirmation_required" => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    let (provider, action, code) = error.log_code();
+    tracing::warn!(provider, action, code, "REST provider call failed");
+    (
+        status,
+        Json(serde_json::to_value(error).unwrap_or_else(|_| json!({"error":"provider_error"}))),
+    )
+        .into_response()
+}
+
 fn optional_name_params(name: Option<String>) -> Value {
     match name {
         Some(name) => json!({ "name": name }),
@@ -293,44 +350,6 @@ fn cap_rest_response(value: Value) -> Result<Value> {
         "max_response_bytes": MAX_RESPONSE_BYTES,
         "hint": "Use limit/offset parameters or more specific filters to get a smaller result.",
     }))
-}
-
-fn enforce_rest_scope(
-    state: &AppState,
-    auth: Option<&AuthContext>,
-    action: &str,
-) -> Option<axum::response::Response> {
-    if !matches!(&state.auth_policy, AuthPolicy::Mounted { .. }) {
-        return None;
-    }
-    let required_scope = required_scope_for_action(action)?;
-    let Some(auth) = auth else {
-        tracing::warn!(action = %action, "REST action denied: missing auth context");
-        return Some(
-            (
-                StatusCode::FORBIDDEN,
-                Json(json!({"error": "forbidden: missing auth context"})),
-            )
-                .into_response(),
-        );
-    };
-    let satisfied = rtemplate_contracts::actions::scopes_satisfy(&auth.scopes, required_scope);
-    if satisfied {
-        return None;
-    }
-    tracing::warn!(
-        subject = %auth.sub,
-        action = %action,
-        required_scope = %required_scope,
-        "REST action denied: insufficient scope"
-    );
-    Some(
-        (
-            StatusCode::FORBIDDEN,
-            Json(json!({"error": format!("forbidden: requires scope: {required_scope}")})),
-        )
-            .into_response(),
-    )
 }
 
 /// `GET /health` — liveness probe (unauthenticated).

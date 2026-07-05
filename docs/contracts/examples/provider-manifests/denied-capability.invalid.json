@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "provider": {
+    "name": "denied-capability",
+    "kind": "wasm"
+  },
+  "capabilities": {
+    "filesystem": {
+      "enabled": true,
+      "read_roots": ["/"]
+    }
+  },
+  "tools": [
+    {
+      "name": "read-home",
+      "description": "Attempts host filesystem access.",
+      "input_schema": { "type": "object" }
+    }
+  ]
+}

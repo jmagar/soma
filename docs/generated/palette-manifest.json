@@ -1,0 +1,22 @@
+{
+  "builtins": {
+    "browser": false,
+    "file_explorer": false,
+    "github": false,
+    "terminal": false
+  },
+  "commands": [
+    "echo",
+    "elicit_name",
+    "greet",
+    "help",
+    "scaffold_intent",
+    "status"
+  ],
+  "limits": {
+    "max_examples_per_command": 3,
+    "max_inline_schema_bytes": 16384
+  },
+  "provider_fingerprint": "sha256:2de826c3e56f4c0d5d35f102fa3bdb476781e803a3cda8757caaf4668d94543d",
+  "schema_version": 1
+}
