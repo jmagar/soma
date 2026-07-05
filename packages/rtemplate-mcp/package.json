@@ -1,0 +1,29 @@
+{
+  "name": "rtemplate-mcp",
+  "version": "0.4.5",
+  "description": "Node launcher package for the rmcp-template MCP server.",
+  "license": "MIT",
+  "homepage": "https://github.com/jmagar/rtemplate-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmagar/rtemplate-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "rmcp",
+    "template"
+  ],
+  "bin": {
+    "rtemplate-mcp": "./bin/rtemplate-mcp.js",
+    "rtemplate": "./bin/rtemplate-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "package.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -13,6 +13,7 @@
 //!   cargo-generate Smoke-test cargo-generate output
 //!   cargo-generate-post Apply cargo-generate post-processing rewrites
 //!   generate-docs Generate volatile docs and metadata from canonical specs
+//!   generate-provider-surfaces Generate provider docs and marketplace catalogs
 //!   check-docs    Validate generated docs and metadata are current
 //!   check-stale-claims Fail on stale hardcoded template claims
 //!   sync-web-source Copy apps/web into the bundled rtemplate-web scaffold source
@@ -84,6 +85,7 @@ fn main() -> Result<()> {
         Some("cargo-generate") => cargo_generate(&args[1..]),
         Some("cargo-generate-post") => cargo_generate_post::run(&args[1..]),
         Some("generate-docs") => generate_docs(),
+        Some("generate-provider-surfaces") => generated_surfaces::provider_surfaces(&args[1..]),
         Some("check-docs") => check_docs(),
         Some("check-stale-claims") => check_stale_claims(),
         Some("check-cargo-generate") => scripts_lane_d::check_cargo_generate(&args[1..]),
@@ -282,11 +284,15 @@ fn contract_audit() -> Result<()> {
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [9/10] cargo xtask check-scaffold-intent-contract");
+    println!("==> [9/11] cargo xtask generate-provider-surfaces --check");
+    generated_surfaces::provider_surfaces(&["--check".to_owned()])
+        .context("provider surfaces check failed")?;
+
+    println!("==> [10/11] cargo xtask check-scaffold-intent-contract");
     scripts_lane_d::check_scaffold_intent_contract()
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [10/10] cargo xtask test-template-features");
+    println!("==> [11/11] cargo xtask test-template-features");
     scripts_lane_b::test_template_features(std::path::Path::new("."))
         .context("template feature smoke failed")?;
 

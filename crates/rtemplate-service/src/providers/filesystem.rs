@@ -10,6 +10,7 @@ use serde_json::json;
 use crate::{
     provider_errors::ProviderError,
     provider_registry::{Provider, ProviderCall, ProviderOutput},
+    providers::{mcp::McpProvider, openapi::OpenApiProvider},
 };
 
 #[derive(Debug, Clone)]
@@ -49,7 +50,7 @@ impl FileProviderSource {
             if catalog.provider.enabled == Some(false) {
                 continue;
             }
-            providers.push(std::sync::Arc::new(FileProvider { path, catalog }) as _);
+            providers.push(provider_for_catalog(path, catalog));
         }
         Ok(providers)
     }
@@ -73,6 +74,16 @@ impl std::error::Error for FileProviderLoadError {}
 struct FileProvider {
     path: PathBuf,
     catalog: ProviderCatalog,
+}
+
+fn provider_for_catalog(path: PathBuf, catalog: ProviderCatalog) -> std::sync::Arc<dyn Provider> {
+    match catalog.provider.kind {
+        ProviderKind::Openapi => OpenApiProvider::arc(catalog),
+        ProviderKind::Mcp => McpProvider::arc(catalog),
+        ProviderKind::StaticRust | ProviderKind::AiSdk | ProviderKind::Wasm => {
+            std::sync::Arc::new(FileProvider { path, catalog })
+        }
+    }
 }
 
 #[async_trait]

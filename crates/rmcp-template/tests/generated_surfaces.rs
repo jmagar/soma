@@ -32,6 +32,45 @@ fn generated_docs_do_not_elevate_provider_descriptions_to_instructions() {
     assert!(!text.contains("developer message"));
 }
 
+#[test]
+fn generated_marketplaces_point_at_template_plugin() {
+    let root = workspace_root();
+    let codex: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join(".agents/plugins/marketplace.json")).expect("codex marketplace"),
+    )
+    .expect("codex marketplace JSON");
+    assert_eq!(codex["plugins"][0]["source"]["path"], "./plugins/rtemplate");
+    assert!(codex["plugins"][0].get("version").is_none());
+
+    let claude: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join(".claude-plugin/marketplace.json")).expect("claude marketplace"),
+    )
+    .expect("claude marketplace JSON");
+    assert_eq!(claude["plugins"][0]["source"], "./plugins/rtemplate");
+    assert!(claude["plugins"][0].get("version").is_none());
+}
+
+#[test]
+fn node_package_exposes_npx_launcher() {
+    let root = workspace_root();
+    let package: serde_json::Value = serde_json::from_slice(
+        &fs::read(root.join("packages/rtemplate-mcp/package.json")).expect("package json"),
+    )
+    .expect("package JSON");
+    assert_eq!(package["bin"]["rtemplate-mcp"], "./bin/rtemplate-mcp.js");
+    assert_eq!(package["bin"]["rtemplate"], "./bin/rtemplate-mcp.js");
+
+    let launcher = root.join("packages/rtemplate-mcp/bin/rtemplate-mcp.js");
+    let mode = fs::metadata(&launcher)
+        .expect("launcher metadata")
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_ne!(mode.mode() & 0o111, 0, "launcher should be executable");
+    }
+}
+
 fn workspace_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
