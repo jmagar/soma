@@ -95,6 +95,10 @@ pub fn provider_surfaces(args: &[String]) -> Result<()> {
             render_provider_docs(&snapshot)?,
         ),
         (
+            root.join("docs/generated/plugin.json"),
+            canonical_json(&render_distribution_plugin(&snapshot))?,
+        ),
+        (
             root.join(".agents/plugins/marketplace.json"),
             canonical_json(&render_codex_marketplace())?,
         ),
@@ -174,6 +178,7 @@ fn render_provider_snapshot() -> Result<Value> {
             "cli_actions": surface_actions(&snapshot.catalogs, Surface::Cli),
             "rest_routes": rest_routes(&snapshot.catalogs),
             "docs": "docs/generated/provider-surfaces.md",
+            "plugin": "docs/generated/plugin.json",
             "codex_marketplace": ".agents/plugins/marketplace.json",
             "claude_marketplace": ".claude-plugin/marketplace.json",
             "node_package": "packages/rtemplate-mcp/package.json",
@@ -238,6 +243,30 @@ fn render_provider_docs(snapshot: &Value) -> Result<String> {
         out.push('\n');
     }
     Ok(out)
+}
+
+fn render_distribution_plugin(snapshot: &Value) -> Value {
+    json!({
+        "schema_version": 1,
+        "name": "rtemplate",
+        "description": "Generated distributable plugin surface for rmcp-template.",
+        "provider_fingerprint": snapshot["provider_fingerprint"].clone(),
+        "plugin_root": "plugins/rtemplate",
+        "codex": {
+            "plugin_json": "plugins/rtemplate/.codex-plugin/plugin.json",
+            "marketplace": ".agents/plugins/marketplace.json"
+        },
+        "claude": {
+            "plugin_json": "plugins/rtemplate/.claude-plugin/plugin.json",
+            "marketplace": ".claude-plugin/marketplace.json"
+        },
+        "skills": "plugins/rtemplate/skills",
+        "node_package": "packages/rtemplate-mcp/package.json",
+        "docs": "docs/generated/provider-surfaces.md",
+        "mcp_server": "server.json",
+        "surfaces": snapshot["surfaces"].clone(),
+        "providers": snapshot["providers"].clone()
+    })
 }
 
 fn render_codex_marketplace() -> Value {
