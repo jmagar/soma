@@ -1,5 +1,5 @@
 use rmcp::{
-    model::{CallToolResult, Content},
+    model::{CallToolResult, ContentBlock},
     ErrorData,
 };
 use serde_json::{json, Map, Value};
@@ -161,7 +161,7 @@ pub(super) fn tool_result_from_json(
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     if text.len() <= MAX_RESPONSE_BYTES && page_request.offset == 0 {
         let mut result = CallToolResult::structured(value);
-        result.content = vec![Content::text(text)];
+        result.content = vec![ContentBlock::text(text)];
         return Ok(result);
     }
 
@@ -177,7 +177,7 @@ pub(super) fn tool_result_from_json(
     let text = serde_json::to_string(&payload)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     let mut result = CallToolResult::structured(payload);
-    result.content = vec![Content::text(text)];
+    result.content = vec![ContentBlock::text(text)];
     Ok(result)
 }
 
@@ -206,7 +206,7 @@ pub(super) fn tool_result_from_cached_page(
     let text = serde_json::to_string(&payload)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     let mut result = CallToolResult::structured(payload);
-    result.content = vec![Content::text(text)];
+    result.content = vec![ContentBlock::text(text)];
     Ok(result)
 }
 

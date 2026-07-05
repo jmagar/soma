@@ -58,7 +58,7 @@ fn result_text_json(result: &CallToolResult) -> anyhow::Result<Value> {
     let text = result
         .content
         .first()
-        .and_then(|content| content.raw.as_text())
+        .and_then(|content| content.as_text())
         .map(|text| text.text.as_str())
         .expect("call_tool result should contain JSON text");
     let payload: Value = serde_json::from_str(text)?;
