@@ -103,6 +103,43 @@ async fn test_real_call_tool_path_returns_status_json() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn full_mcp_call_tool_path_uses_service_registry() -> anyhow::Result<()> {
+    let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
+
+    let server_handle = tokio::spawn(async move {
+        rmcp_server(loopback_state())
+            .serve(server_transport)
+            .await?
+            .waiting()
+            .await?;
+        anyhow::Ok(())
+    });
+
+    let mut args = serde_json::Map::new();
+    args.insert("action".to_owned(), json!("echo"));
+    args.insert("message".to_owned(), json!("hello"));
+    let client = ().serve(client_transport).await?;
+    let result = client
+        .call_tool(CallToolRequestParams::new("example").with_arguments(args))
+        .await?;
+
+    let text = result
+        .content
+        .first()
+        .and_then(|content| content.raw.as_text())
+        .map(|text| text.text.as_str())
+        .expect("call_tool result should contain JSON text");
+    let payload: serde_json::Value = serde_json::from_str(text)?;
+
+    assert_eq!(payload["echo"], "hello");
+    assert_eq!(result.structured_content.as_ref(), Some(&payload));
+
+    client.cancel().await?;
+    server_handle.await??;
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_real_call_tool_missing_http_context_returns_structured_auth_error(
 ) -> anyhow::Result<()> {
     let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
