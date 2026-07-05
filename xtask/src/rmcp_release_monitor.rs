@@ -715,7 +715,10 @@ fn append_impact_section(body: &mut String, title: &str, impacts: &[RepoImpact])
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn short_sha(sha: &str) -> &str {
