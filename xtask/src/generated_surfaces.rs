@@ -199,20 +199,56 @@ fn provider_summary(catalog: &ProviderCatalog) -> Value {
         "kind": catalog.provider.kind.as_str(),
         "title": catalog.provider.title,
         "description": catalog.provider.description,
+        "when_to_use": catalog.docs.as_ref().and_then(|docs| docs.when_to_use.clone()),
         "tools": catalog.tools.iter().map(|tool| json!({
             "name": tool.name,
             "description": tool.description,
+            "input_schema": tool.input_schema,
+            "output_schema": tool.output_schema,
+            "scope": tool.scope,
+            "destructive": tool.destructive,
+            "requires_admin": tool.requires_admin,
+            "cost": tool.cost,
+            "env": tool.env.iter().map(|env| json!({
+                "name": env.name,
+                "required": env.required,
+                "sensitive": env.sensitive,
+                "server_prefixed": env.server_prefixed,
+                "allow_unprefixed": env.allow_unprefixed,
+                "description": env.description,
+            })).collect::<Vec<_>>(),
             "mcp": tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
             "cli": tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
-            "cli_command": tool.cli.as_ref().and_then(|cli| cli.command.clone()).unwrap_or_else(|| tool.name.clone()),
+            "cli_command": tool.cli.as_ref().filter(|cli| cli.enabled).and_then(|cli| cli.command.clone()).unwrap_or_else(|| if tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false) { tool.name.clone() } else { "N/A".to_owned() }),
             "cli_aliases": tool.cli.as_ref().map(|cli| cli.aliases.clone()).unwrap_or_default(),
+            "cli_flags": tool.cli.as_ref().map(|cli| cli.flags.clone()).unwrap_or_default(),
+            "cli_default_output": tool.cli.as_ref().and_then(|cli| cli.default_output.clone()),
             "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
-            "rest_route": tool.rest.as_ref().filter(|rest| rest.enabled).map(|rest| format!("{} {}", rest.method.as_deref().unwrap_or("POST"), rest.path.clone().unwrap_or_else(|| format!("/v1/{}", tool.name)))).unwrap_or_default(),
+            "rest_route": tool.rest.as_ref().filter(|rest| rest.enabled).map(|rest| format!("{} {}", rest.method.as_deref().unwrap_or("POST"), rest.path.clone().unwrap_or_else(|| format!("/v1/{}", tool.name)))).unwrap_or_else(|| "N/A".to_owned()),
+            "examples": tool.examples,
         })).collect::<Vec<_>>(),
-        "prompts": catalog.prompts.iter().map(|prompt| &prompt.name).collect::<Vec<_>>(),
-        "resources": catalog.resources.iter().map(|resource| &resource.name).collect::<Vec<_>>(),
-        "tasks": catalog.tasks.iter().map(|task| &task.name).collect::<Vec<_>>(),
-        "elicitation": catalog.elicitation.iter().map(|elicitation| &elicitation.name).collect::<Vec<_>>(),
+        "prompts": catalog.prompts.iter().map(|prompt| json!({
+            "name": prompt.name,
+            "description": prompt.description,
+            "arguments_schema": prompt.arguments_schema,
+        })).collect::<Vec<_>>(),
+        "resources": catalog.resources.iter().map(|resource| json!({
+            "name": resource.name,
+            "description": resource.description,
+            "uri_template": resource.uri_template,
+            "mime_type": resource.mime_type,
+        })).collect::<Vec<_>>(),
+        "tasks": catalog.tasks.iter().map(|task| json!({
+            "name": task.name,
+            "description": task.description,
+            "input_schema": task.input_schema,
+            "output_schema": task.output_schema,
+        })).collect::<Vec<_>>(),
+        "elicitation": catalog.elicitation.iter().map(|elicitation| json!({
+            "name": elicitation.name,
+            "description": elicitation.description,
+            "schema": elicitation.schema,
+        })).collect::<Vec<_>>(),
     })
 }
 
@@ -259,9 +295,36 @@ fn render_provider_skill(provider: &Value) -> Result<String> {
     let description = provider["description"]
         .as_str()
         .unwrap_or("Generated provider skill.");
+    let action_names = provider["tools"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|tool| tool["name"].as_str())
+        .take(4)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let when_to_use = provider["when_to_use"]
+        .as_str()
+        .filter(|value| !value.trim().is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            if action_names.is_empty() {
+                format!("Use when working with the `{name}` provider.")
+            } else {
+                format!("Use when working with `{name}` provider actions such as {action_names}.")
+            }
+        });
     let mut out = format!(
-        "---\nname: {name}\ndescription: Generated skill for the `{name}` provider. Use when working with this provider's generated MCP, CLI, or REST surfaces.\n---\n\n# `{name}` Provider\n\n{description}\n\n## Tools\n\n"
+        "---\nname: {name}\ndescription: {}\n---\n\n# `{name}` Provider\n\n{description}\n\n## When To Use\n\n{when_to_use}\n\n## Surface Selection\n\n",
+        yaml_string(&when_to_use),
     );
+    out.push_str(
+        "- Use MCP first when the server is connected, especially for MCP-only actions.\n",
+    );
+    out.push_str("- Use CLI only when the action's CLI surface is `yes`; do not invent commands for `N/A` entries.\n");
+    out.push_str("- Use REST only when the action's REST surface is `yes`; send JSON bodies matching the action schema.\n");
+    out.push_str("- MCP-only elicitation actions require an elicitation-capable MCP client; do not attempt CLI or REST fallbacks.\n\n");
+    out.push_str("## Tools\n\n");
     out.push_str("| tool | MCP | CLI | REST | CLI command | REST route | purpose |\n");
     out.push_str("|---|---:|---:|---:|---|---|---|\n");
     for tool in provider["tools"].as_array().into_iter().flatten() {
@@ -279,11 +342,221 @@ fn render_provider_skill(provider: &Value) -> Result<String> {
                 .replace('|', "\\|"),
         ));
     }
-    out.push_str("\n## Usage\n\n");
-    out.push_str("- Prefer the MCP action when the server is connected.\n");
-    out.push_str("- Use the CLI command for local scripts and smoke tests.\n");
-    out.push_str("- Use REST routes for HTTP clients when the tool explicitly enables REST.\n");
+    out.push_str("\n## Action Reference\n\n");
+    for tool in provider["tools"].as_array().into_iter().flatten() {
+        render_tool_reference(&mut out, tool);
+    }
+    render_primitive_section(&mut out, "Prompts", &provider["prompts"]);
+    render_primitive_section(&mut out, "Resources", &provider["resources"]);
+    render_primitive_section(&mut out, "Tasks", &provider["tasks"]);
+    render_primitive_section(&mut out, "Elicitation", &provider["elicitation"]);
     Ok(out)
+}
+
+fn render_tool_reference(out: &mut String, tool: &Value) {
+    let name = tool["name"].as_str().unwrap_or("");
+    out.push_str(&format!("### `{name}`\n\n"));
+    out.push_str(tool["description"].as_str().unwrap_or(""));
+    out.push_str("\n\n");
+    out.push_str(&format!(
+        "- Scope: `{}`\n",
+        tool["scope"].as_str().unwrap_or("public/default")
+    ));
+    out.push_str(&format!(
+        "- Cost: `{}`\n",
+        tool["cost"].as_str().unwrap_or("unspecified")
+    ));
+    out.push_str(&format!(
+        "- Destructive: `{}`\n",
+        tool["destructive"].as_bool().unwrap_or(false)
+    ));
+    out.push_str(&format!(
+        "- Requires admin: `{}`\n",
+        tool["requires_admin"].as_bool().unwrap_or(false)
+    ));
+    out.push_str(&format!(
+        "- Required args: `{}`\n",
+        schema_required_args(&tool["input_schema"])
+    ));
+    out.push_str(&format!(
+        "- Optional args: `{}`\n",
+        schema_optional_args(&tool["input_schema"])
+    ));
+    out.push_str(&format!(
+        "- Output: `{}`\n",
+        schema_output_summary(&tool["output_schema"])
+    ));
+    out.push_str(&format!("- MCP: `example(action=\"{name}\")`\n"));
+    if tool["cli"].as_bool().unwrap_or(false) {
+        out.push_str(&format!(
+            "- CLI: `rtemplate {}`\n",
+            tool["cli_command"].as_str().unwrap_or(name)
+        ));
+        if let Some(aliases) = tool["cli_aliases"].as_array() {
+            let aliases = aliases
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ");
+            if !aliases.is_empty() {
+                out.push_str(&format!("- CLI aliases: `{aliases}`\n"));
+            }
+        }
+    } else {
+        out.push_str("- CLI: `N/A` - do not call this action from CLI.\n");
+    }
+    if tool["rest"].as_bool().unwrap_or(false) {
+        out.push_str(&format!(
+            "- REST: `{}`\n",
+            tool["rest_route"].as_str().unwrap_or("")
+        ));
+    } else {
+        out.push_str("- REST: `N/A` - do not invent an HTTP route.\n");
+    }
+    if let Some(env) = env_summary(tool) {
+        out.push_str(&format!("- Env: {env}\n"));
+    }
+    if let Some(examples) = examples_summary(tool) {
+        out.push_str(&format!("- Examples: {examples}\n"));
+    }
+    out.push('\n');
+}
+
+fn yaml_string(value: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_owned())
+}
+
+fn schema_required_args(schema: &Value) -> String {
+    let Some(required) = schema["required"].as_array() else {
+        return "none".to_owned();
+    };
+    let args = required
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|name| format!("{name}: {}", schema_property_type(schema, name)))
+        .collect::<Vec<_>>();
+    if args.is_empty() {
+        "none".to_owned()
+    } else {
+        args.join(", ")
+    }
+}
+
+fn schema_optional_args(schema: &Value) -> String {
+    let required = schema["required"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    let Some(properties) = schema["properties"].as_object() else {
+        return "none".to_owned();
+    };
+    let args = properties
+        .keys()
+        .filter(|name| !required.contains(name.as_str()))
+        .map(|name| format!("{name}: {}", schema_property_type(schema, name)))
+        .collect::<Vec<_>>();
+    if args.is_empty() {
+        "none".to_owned()
+    } else {
+        args.join(", ")
+    }
+}
+
+fn schema_property_type(schema: &Value, name: &str) -> String {
+    let property = &schema["properties"][name];
+    property["type"]
+        .as_str()
+        .or_else(|| property["format"].as_str())
+        .or_else(|| property["$ref"].as_str())
+        .unwrap_or("value")
+        .to_owned()
+}
+
+fn schema_output_summary(schema: &Value) -> String {
+    if schema.is_null() {
+        return "unspecified".to_owned();
+    }
+    if let Some(properties) = schema["properties"].as_object() {
+        let fields = properties
+            .keys()
+            .take(6)
+            .map(|name| format!("{name}: {}", schema_property_type(schema, name)))
+            .collect::<Vec<_>>();
+        if !fields.is_empty() {
+            return fields.join(", ");
+        }
+    }
+    schema["type"]
+        .as_str()
+        .or_else(|| schema["$ref"].as_str())
+        .unwrap_or("structured JSON")
+        .to_owned()
+}
+
+fn env_summary(tool: &Value) -> Option<String> {
+    let env = tool["env"].as_array()?;
+    let entries = env
+        .iter()
+        .filter_map(|item| {
+            let name = item["name"].as_str()?;
+            let mut qualifiers = Vec::new();
+            if item["required"].as_bool().unwrap_or(false) {
+                qualifiers.push("required");
+            }
+            if item["sensitive"].as_bool().unwrap_or(false) {
+                qualifiers.push("sensitive");
+            }
+            if qualifiers.is_empty() {
+                Some(format!("`{name}`"))
+            } else {
+                Some(format!("`{name}` ({})", qualifiers.join(", ")))
+            }
+        })
+        .collect::<Vec<_>>();
+    (!entries.is_empty()).then(|| entries.join(", "))
+}
+
+fn examples_summary(tool: &Value) -> Option<String> {
+    let examples = tool["examples"].as_array()?;
+    let rendered = examples
+        .iter()
+        .take(2)
+        .map(|example| {
+            let name = example["name"].as_str().unwrap_or("example");
+            if let Some(args) = example["args"].as_object() {
+                let args = args
+                    .keys()
+                    .map(|key| format!("`{key}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("`{name}` args: {args}")
+            } else {
+                format!("`{name}`")
+            }
+        })
+        .collect::<Vec<_>>();
+    (!rendered.is_empty()).then(|| rendered.join("; "))
+}
+
+fn render_primitive_section(out: &mut String, title: &str, items: &Value) {
+    let Some(items) = items.as_array() else {
+        return;
+    };
+    if items.is_empty() {
+        return;
+    }
+    out.push_str(&format!("## {title}\n\n"));
+    for item in items {
+        let name = item["name"].as_str().unwrap_or("");
+        let description = item["description"].as_str().unwrap_or("");
+        out.push_str(&format!("- `{name}`: {description}\n"));
+        if let Some(uri) = item["uri_template"].as_str() {
+            out.push_str(&format!("  - URI template: `{uri}`\n"));
+        }
+    }
+    out.push('\n');
 }
 
 fn render_distribution_plugin(snapshot: &Value) -> Value {
@@ -608,9 +881,29 @@ mod tests {
         )
         .expect("skill");
         assert!(skill.contains("name: weather-ts"));
+        assert!(skill.contains("When To Use"));
         assert!(skill.contains("weather_ts"));
         assert!(skill.contains("ship-weather-ts"));
         assert!(skill.contains("POST /v1/providers/weather-ts"));
+        assert!(skill.contains("MCP"));
+        assert!(skill.contains("CLI"));
+        assert!(skill.contains("REST"));
+        assert!(skill.contains("## Action Reference"));
+        assert!(skill.contains("Required args"));
+        assert!(skill.contains("Output"));
+
+        let static_skill = render_provider_skill(
+            snapshot["providers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|provider| provider["name"] == "static-rust")
+                .unwrap(),
+        )
+        .expect("static skill");
+        assert!(static_skill.contains("| `elicit_name` | yes | no | no | `N/A` | `N/A` |"));
+        assert!(static_skill.contains("- CLI: `N/A` - do not call this action from CLI."));
+        assert!(static_skill.contains("- REST: `N/A` - do not invent an HTTP route."));
     }
 
     fn provider_manifest(name: &str, kind: &str, action: &str) -> String {

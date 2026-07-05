@@ -30,63 +30,162 @@
           "cli": true,
           "cli_aliases": [],
           "cli_command": "greet",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cost": "cheap",
           "description": "Return a greeting.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "description": "Name to greet. Omit to greet the world.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
           "mcp": true,
           "name": "greet",
+          "output_schema": null,
+          "requires_admin": false,
           "rest": true,
-          "rest_route": "POST /v1/greet"
+          "rest_route": "POST /v1/greet",
+          "scope": "example:read"
         },
         {
           "cli": true,
           "cli_aliases": [],
           "cli_command": "echo",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cost": "cheap",
           "description": "Echo a message back unchanged.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "description": "Message to echo back. Must not be empty.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "type": "object"
+          },
           "mcp": true,
           "name": "echo",
+          "output_schema": null,
+          "requires_admin": false,
           "rest": true,
-          "rest_route": "POST /v1/echo"
+          "rest_route": "POST /v1/echo",
+          "scope": "example:read"
         },
         {
           "cli": true,
           "cli_aliases": [],
           "cli_command": "status",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cost": "cheap",
           "description": "Return server status and configuration info.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
           "mcp": true,
           "name": "status",
+          "output_schema": null,
+          "requires_admin": false,
           "rest": true,
-          "rest_route": "GET /v1/status"
+          "rest_route": "GET /v1/status",
+          "scope": "example:read"
         },
         {
           "cli": false,
           "cli_aliases": [],
-          "cli_command": "elicit_name",
+          "cli_command": "N/A",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cost": "cheap",
           "description": "Ask the MCP client to collect a name, then return a personalised greeting.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
           "mcp": true,
           "name": "elicit_name",
+          "output_schema": null,
+          "requires_admin": false,
           "rest": false,
-          "rest_route": ""
+          "rest_route": "N/A",
+          "scope": "example:read"
         },
         {
           "cli": false,
           "cli_aliases": [],
-          "cli_command": "scaffold_intent",
+          "cli_command": "N/A",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cost": "moderate",
           "description": "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
           "mcp": true,
           "name": "scaffold_intent",
+          "output_schema": null,
+          "requires_admin": false,
           "rest": false,
-          "rest_route": ""
+          "rest_route": "N/A",
+          "scope": "example:read"
         },
         {
           "cli": true,
           "cli_aliases": [],
           "cli_command": "help",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cost": "cheap",
           "description": "Show the action reference.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {},
+            "type": "object"
+          },
           "mcp": true,
           "name": "help",
+          "output_schema": null,
+          "requires_admin": false,
           "rest": true,
-          "rest_route": "GET /v1/help"
+          "rest_route": "GET /v1/help",
+          "scope": null
         }
-      ]
+      ],
+      "when_to_use": null
     }
   ],
   "schema_version": 1,
