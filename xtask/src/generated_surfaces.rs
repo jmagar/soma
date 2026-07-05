@@ -130,6 +130,7 @@ pub fn provider_surfaces(args: &[String]) -> Result<()> {
             }
         }
     }
+    write_or_check_generated_skills(&root, &snapshot, mode)?;
     if mode.should_check() {
         println!("Provider surface artifacts are current");
     }
@@ -186,6 +187,7 @@ fn render_provider_snapshot() -> Result<Value> {
             "node_package": "packages/rtemplate-mcp/package.json",
             "provider_dir": provider_dir.display().to_string(),
             "provider_files": provider_files(&provider_dir)?,
+            "generated_skills": generated_skill_paths(&snapshot.catalogs),
             "palette": "deferred until Axon tauri-palette port lands"
         }
     }))
@@ -202,7 +204,10 @@ fn provider_summary(catalog: &ProviderCatalog) -> Value {
             "description": tool.description,
             "mcp": tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
             "cli": tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
+            "cli_command": tool.cli.as_ref().and_then(|cli| cli.command.clone()).unwrap_or_else(|| tool.name.clone()),
+            "cli_aliases": tool.cli.as_ref().map(|cli| cli.aliases.clone()).unwrap_or_default(),
             "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
+            "rest_route": tool.rest.as_ref().filter(|rest| rest.enabled).map(|rest| format!("{} {}", rest.method.as_deref().unwrap_or("POST"), rest.path.clone().unwrap_or_else(|| format!("/v1/{}", tool.name)))).unwrap_or_default(),
         })).collect::<Vec<_>>(),
         "prompts": catalog.prompts.iter().map(|prompt| &prompt.name).collect::<Vec<_>>(),
         "resources": catalog.resources.iter().map(|resource| &resource.name).collect::<Vec<_>>(),
@@ -249,6 +254,38 @@ fn render_provider_docs(snapshot: &Value) -> Result<String> {
     Ok(out)
 }
 
+fn render_provider_skill(provider: &Value) -> Result<String> {
+    let name = provider["name"].as_str().unwrap_or("provider");
+    let description = provider["description"]
+        .as_str()
+        .unwrap_or("Generated provider skill.");
+    let mut out = format!(
+        "---\nname: {name}\ndescription: Generated skill for the `{name}` provider. Use when working with this provider's generated MCP, CLI, or REST surfaces.\n---\n\n# `{name}` Provider\n\n{description}\n\n## Tools\n\n"
+    );
+    out.push_str("| tool | MCP | CLI | REST | CLI command | REST route | purpose |\n");
+    out.push_str("|---|---:|---:|---:|---|---|---|\n");
+    for tool in provider["tools"].as_array().into_iter().flatten() {
+        out.push_str(&format!(
+            "| `{}` | {} | {} | {} | `{}` | `{}` | {} |\n",
+            tool["name"].as_str().unwrap_or(""),
+            yes_no(tool["mcp"].as_bool().unwrap_or(false)),
+            yes_no(tool["cli"].as_bool().unwrap_or(false)),
+            yes_no(tool["rest"].as_bool().unwrap_or(false)),
+            tool["cli_command"].as_str().unwrap_or(""),
+            tool["rest_route"].as_str().unwrap_or(""),
+            tool["description"]
+                .as_str()
+                .unwrap_or("")
+                .replace('|', "\\|"),
+        ));
+    }
+    out.push_str("\n## Usage\n\n");
+    out.push_str("- Prefer the MCP action when the server is connected.\n");
+    out.push_str("- Use the CLI command for local scripts and smoke tests.\n");
+    out.push_str("- Use REST routes for HTTP clients when the tool explicitly enables REST.\n");
+    Ok(out)
+}
+
 fn render_distribution_plugin(snapshot: &Value) -> Value {
     json!({
         "schema_version": 1,
@@ -272,6 +309,45 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
         "surfaces": snapshot["surfaces"].clone(),
         "providers": snapshot["providers"].clone()
     })
+}
+
+fn generated_skill_paths(catalogs: &[ProviderCatalog]) -> Vec<String> {
+    let mut paths = catalogs
+        .iter()
+        .map(|catalog| format!("docs/generated/skills/{}/SKILL.md", catalog.provider.name))
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+}
+
+fn write_or_check_generated_skills(root: &Path, snapshot: &Value, mode: Mode) -> Result<()> {
+    let skills_root = root.join("docs/generated/skills");
+    for provider in snapshot["providers"].as_array().into_iter().flatten() {
+        let name = provider["name"].as_str().unwrap_or("provider");
+        let path = skills_root.join(name).join("SKILL.md");
+        let content = render_provider_skill(provider)?;
+        if mode.should_write() {
+            write_if_changed(&path, &content)?;
+            println!("wrote {}", relative_display(root, &path));
+        }
+        if mode.should_check() {
+            if !path.exists() {
+                bail!(
+                    "{} is missing; run cargo xtask generate-provider-surfaces --write",
+                    relative_display(root, &path)
+                );
+            }
+            let current = fs::read_to_string(&path)
+                .with_context(|| format!("failed to read {}", path.display()))?;
+            if current != content {
+                bail!(
+                    "{} is stale; run cargo xtask generate-provider-surfaces --write",
+                    relative_display(root, &path)
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 fn render_codex_marketplace() -> Value {
@@ -518,6 +594,23 @@ mod tests {
             &plugin["provider_files"],
             "providers/github.openapi.json"
         ));
+        assert!(contains_string(
+            &snapshot["surfaces"]["generated_skills"],
+            "docs/generated/skills/weather-ts/SKILL.md"
+        ));
+        let skill = render_provider_skill(
+            snapshot["providers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|provider| provider["name"] == "weather-ts")
+                .unwrap(),
+        )
+        .expect("skill");
+        assert!(skill.contains("name: weather-ts"));
+        assert!(skill.contains("weather_ts"));
+        assert!(skill.contains("ship-weather-ts"));
+        assert!(skill.contains("POST /v1/providers/weather-ts"));
     }
 
     fn provider_manifest(name: &str, kind: &str, action: &str) -> String {

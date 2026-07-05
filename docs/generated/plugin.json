@@ -28,45 +28,63 @@
       "tools": [
         {
           "cli": true,
+          "cli_aliases": [],
+          "cli_command": "greet",
           "description": "Return a greeting.",
           "mcp": true,
           "name": "greet",
-          "rest": true
+          "rest": true,
+          "rest_route": "POST /v1/greet"
         },
         {
           "cli": true,
+          "cli_aliases": [],
+          "cli_command": "echo",
           "description": "Echo a message back unchanged.",
           "mcp": true,
           "name": "echo",
-          "rest": true
+          "rest": true,
+          "rest_route": "POST /v1/echo"
         },
         {
           "cli": true,
+          "cli_aliases": [],
+          "cli_command": "status",
           "description": "Return server status and configuration info.",
           "mcp": true,
           "name": "status",
-          "rest": true
+          "rest": true,
+          "rest_route": "GET /v1/status"
         },
         {
           "cli": false,
+          "cli_aliases": [],
+          "cli_command": "elicit_name",
           "description": "Ask the MCP client to collect a name, then return a personalised greeting.",
           "mcp": true,
           "name": "elicit_name",
-          "rest": false
+          "rest": false,
+          "rest_route": ""
         },
         {
           "cli": false,
+          "cli_aliases": [],
+          "cli_command": "scaffold_intent",
           "description": "Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill.",
           "mcp": true,
           "name": "scaffold_intent",
-          "rest": false
+          "rest": false,
+          "rest_route": ""
         },
         {
           "cli": true,
+          "cli_aliases": [],
+          "cli_command": "help",
           "description": "Show the action reference.",
           "mcp": true,
           "name": "help",
-          "rest": true
+          "rest": true,
+          "rest_route": "GET /v1/help"
         }
       ]
     }
@@ -89,6 +107,9 @@
     ],
     "codex_marketplace": ".agents/plugins/marketplace.json",
     "docs": "docs/generated/provider-surfaces.md",
+    "generated_skills": [
+      "docs/generated/skills/static-rust/SKILL.md"
+    ],
     "mcp_actions": [
       "echo",
       "elicit_name",
