@@ -53,6 +53,11 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Install just
+        uses: taiki-e/install-action@95cc2373c3f00275e315c306e56fef1c7a8854c0 # just
+        with:
+          tool: just
+
       - name: Run official conformance suite
         run: just conformance "$SUITE" 41060
 
