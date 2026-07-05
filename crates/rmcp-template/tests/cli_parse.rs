@@ -117,6 +117,18 @@ fn test_dynamic_provider_command_accepts_json_escape_hatch() {
 }
 
 #[test]
+fn test_package_generate_parsed() {
+    assert_eq!(
+        parse_args_from(["package", "generate", "--write"]).unwrap(),
+        Some(Command::PackageGenerate { write: true })
+    );
+    assert_eq!(
+        parse_args_from(["package", "generate", "--check"]).unwrap(),
+        Some(Command::PackageGenerate { write: false })
+    );
+}
+
+#[test]
 fn test_dynamic_provider_command_accepts_flat_flags() {
     assert_eq!(
         parse_args_from(["weather", "--city", "Paris", "--days", "3"]).unwrap(),

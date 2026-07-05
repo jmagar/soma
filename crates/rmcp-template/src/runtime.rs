@@ -116,6 +116,7 @@ pub async fn run_cli() -> Result<()> {
             cli::watch::run_watch(&base, interval).await
         }
         Some(cli::Command::Setup(command)) => cli::run_setup(&config, command).await,
+        Some(cli::Command::PackageGenerate { write }) => cli::run_package_generate(write),
         Some(cmd) => cli::run(cmd, &config.example).await,
         None => {
             eprintln!("Unknown command. Run `example --help` for usage.");

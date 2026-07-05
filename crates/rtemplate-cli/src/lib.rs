@@ -45,6 +45,7 @@ pub const USAGE: &str = "Usage:
   example setup check               Check plugin setup without mutating appdata
   example setup repair              Create missing appdata/env setup files
   example setup plugin-hook [--no-repair]  Plugin hook JSON contract
+  example package generate [--write|--check]  Refresh generated provider docs, skills, and plugin metadata
 
   example --help                    Show this help
   example --version                 Show version
@@ -93,6 +94,9 @@ pub enum Command {
     Provider {
         command: String,
         json: serde_json::Value,
+    },
+    PackageGenerate {
+        write: bool,
     },
     Setup(SetupCommand),
 }
@@ -179,6 +183,12 @@ where
                     let no_repair = parse_bool_flag(flags, "setup plugin-hook", "--no-repair")?;
                     Some(Command::Setup(SetupCommand::PluginHook { no_repair }))
                 }
+                _ => None,
+            },
+            "package" => match rest {
+                [action, flags @ ..] if action == "generate" => Some(Command::PackageGenerate {
+                    write: parse_package_generate_flags(flags)?,
+                }),
                 _ => None,
             },
             other => Some(parse_provider_command(other, rest)?),
@@ -336,6 +346,7 @@ fn service_action_from_command(cmd: &Command) -> Option<ExampleAction> {
         Command::Doctor { .. }
         | Command::Watch { .. }
         | Command::Provider { .. }
+        | Command::PackageGenerate { .. }
         | Command::Setup(_) => None,
     }
 }
@@ -372,6 +383,17 @@ fn parse_provider_command(command: &str, args: &[String]) -> Result<Command> {
             command: command.to_owned(),
             json: parse_provider_flags(command, args)?,
         }),
+    }
+}
+
+fn parse_package_generate_flags(args: &[String]) -> Result<bool> {
+    match args {
+        [] => Ok(false),
+        [flag] if flag == "--check" => Ok(false),
+        [flag] if flag == "--write" => Ok(true),
+        [unexpected, ..] => Err(anyhow!(
+            "package generate accepts only --write or --check, got `{unexpected}`"
+        )),
     }
 }
 
@@ -415,8 +437,42 @@ fn scalar_json(value: &str) -> serde_json::Value {
 fn reserved_cli_command(command: &str) -> bool {
     matches!(
         command,
-        "serve" | "mcp" | "doctor" | "watch" | "setup" | "tools" | "providers" | "openapi" | "help"
+        "serve"
+            | "mcp"
+            | "doctor"
+            | "watch"
+            | "setup"
+            | "package"
+            | "tools"
+            | "providers"
+            | "openapi"
+            | "help"
     )
+}
+
+pub fn run_package_generate(write: bool) -> Result<()> {
+    let mode = if write { "--write" } else { "--check" };
+    let status = std::process::Command::new("cargo")
+        .args(["xtask", "generate-provider-surfaces", mode])
+        .status()
+        .map_err(|error| {
+            anyhow!("failed to run cargo xtask generate-provider-surfaces: {error}")
+        })?;
+    if !status.success() {
+        return Err(anyhow!(
+            "cargo xtask generate-provider-surfaces {mode} failed with {status}"
+        ));
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "ok": true,
+            "changed": write,
+            "command": "package generate",
+            "mode": if write { "write" } else { "check" }
+        }))?
+    );
+    Ok(())
 }
 
 pub fn confirm_destructive_action_allowed(
