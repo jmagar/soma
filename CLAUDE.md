@@ -164,7 +164,7 @@ with no CLI analogue.
 | `service.status()` | `example(action="status")` | `rtemplate status` | `GET /v1/status` |  |
 | `MCP client interaction` | `example(action="elicit_name")` | `_MCP-only_` | _MCP-only_ | MCP-only; requires elicitation-capable client |
 | `MCP elicitation wizard` | `example(action="scaffold_intent")` | `_MCP-only_` | _MCP-only_ | MCP-only; requires elicitation-capable client |
-| `built-in help` | `example(action="help")` | `rtemplate --help` | `GET /v1/help` |  |
+| `built-in help` | `example(action="help")` | `rtemplate help` | `GET /v1/help` |  |
 <!-- END GENERATED CLAUDE_PARITY_TABLE -->
 **TEMPLATE:** Replace this table with your service's actual actions when you adapt
 the template. The rule is: one row per service method, with both the MCP action name

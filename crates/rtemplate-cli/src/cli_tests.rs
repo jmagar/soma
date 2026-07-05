@@ -127,6 +127,29 @@ fn dynamic_action_command_parses_registered_string_flags() {
 }
 
 #[test]
+fn dynamic_action_command_parses_confirmation_flags() {
+    for flag in ["--yes", "-y"] {
+        let command = parse_args_from(["echo", "--message", "hello", flag])
+            .unwrap()
+            .expect("command should parse");
+        assert_eq!(
+            command,
+            Command::Action {
+                name: "echo".to_owned(),
+                params: json!({"message": "hello"}),
+                yes: true,
+            }
+        );
+    }
+}
+
+#[test]
+fn dynamic_action_rejects_duplicate_confirmation_flags() {
+    let error = parse_args_from(["echo", "--message", "hello", "--yes", "-y"]).unwrap_err();
+    assert!(error.to_string().contains("duplicate flag -y"));
+}
+
+#[test]
 fn dynamic_action_rejects_duplicate_flags() {
     let error = parse_args_from(["echo", "--message", "one", "--message", "two"]).unwrap_err();
     assert!(error.to_string().contains("duplicate flag --message"));

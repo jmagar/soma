@@ -128,15 +128,7 @@ fn build_input_properties() -> Map<String, Value> {
 }
 
 fn param_schema(param: &rtemplate_contracts::actions::ParamSpec) -> Value {
-    let json_type = match param.ty {
-        "string" => "string",
-        "integer" => "integer",
-        "number" => "number",
-        "boolean" => "boolean",
-        "object" => "object",
-        "array" => "array",
-        _ => "string",
-    };
+    let json_type = param.ty.json_schema_type();
     let mut schema = json!({
         "type": json_type,
         "description": param.description,

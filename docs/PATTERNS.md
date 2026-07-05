@@ -1065,8 +1065,8 @@ Use this when creating a new server from rmcp-template:
 - [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
 - [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only)
 - [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (all logic here)
-- [ ] Add tool actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs`
-- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs`
+- [ ] Add tool actions to `crates/rtemplate-service/src/actions.rs`
+- [ ] Regenerate MCP schema docs and OpenAPI after changing the service registry
 - [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific config fields
 - [ ] Set correct port in `config.toml` and `docker-compose.yml`
 - [ ] Update `EXPOSE` in `config/Dockerfile`
@@ -1551,8 +1551,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
 - [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only)
 - [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (ALL logic here)
-- [ ] Add actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs` (thin shim ONLY)
-- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs` (thin shim ONLY)
+- [ ] Add actions to `crates/rtemplate-service/src/actions.rs` and keep MCP/CLI/REST shims registry-driven
+- [ ] Regenerate schema docs and OpenAPI after changing the service registry
 - [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
 - [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
@@ -1752,7 +1752,7 @@ Maintain a parity table in `CLAUDE.md`:
 
 ### Common parity gaps to check
 
-- `help` action in MCP → `example --help` or `example help` in CLI
+- `help` action in MCP → `example help` in CLI; `example --help` remains generic CLI usage
 - Resource listing in MCP → no CLI equivalent needed (resources are MCP-only)
 - Prompts in MCP → no CLI equivalent needed (prompts are MCP-only)
 - `health` action in MCP → `example health` in CLI
@@ -1765,7 +1765,7 @@ Maintain a parity table in `CLAUDE.md`:
 | `service.greet(name)` | `example(action="greet", name="...")` | `example greet [--name N]` |
 | `service.echo(message)` | `example(action="echo", message="...")` | `example echo <message>` |
 | `service.status()` | `example(action="status")` | `example status` |
-| `service.help()` | `example(action="help")` | `example --help` |
+| `service.help()` | `example(action="help")` | `example help` |
 
 ---
 
@@ -2982,8 +2982,10 @@ Port 40060
   ├── /health                → Unauthenticated liveness probe
   ├── /status                → Public redacted runtime state
   ├── /openapi.json          → Public generated REST OpenAPI schema
-  ├── /v1/<service>          → REST API action dispatch
-  │     POST {"action":"greet","params":{"name":"Alice"}}
+  ├── /v1/greet              → Direct REST action route
+  │     POST {"name":"Alice"}
+  ├── /v1/echo               → Direct REST action route
+  │     POST {"message":"Hello"}
   ├── /.well-known/*         → OAuth metadata (when auth_mode=oauth)
   ├── /authorize, /token     → OAuth flow endpoints
   └── /*                     → SPA fallback (serves embedded web UI)
@@ -3287,10 +3289,10 @@ apps/web/
   components/
     ui/                 ← Aurora components (installed via shadcn CLI)
     server-status.tsx   ← Polls /health every 30s
-    tool-runner.tsx     ← Form to call /v1/<service> actions
+    tool-runner.tsx     ← Form to call direct /v1/{action} routes
     log-viewer.tsx      ← Tails /v1/logs (if log API available)
   lib/
-    api.ts              ← Typed client for /v1/<service> REST API
+    api.ts              ← Typed client for direct /v1/{action} REST routes
   next.config.ts        ← output: "export", trailingSlash: true
 ```
 

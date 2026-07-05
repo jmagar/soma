@@ -510,7 +510,7 @@ fn request_schema_for_action(action: &rtemplate_contracts::actions::ActionSpec) 
         });
         if param.required {
             required.push(Value::String(param.name.to_owned()));
-            if param.ty == "string" {
+            if param.ty == rtemplate_contracts::actions::ParamType::String {
                 schema["minLength"] = json!(1);
             }
         }
@@ -533,15 +533,8 @@ fn request_schema_for_action(action: &rtemplate_contracts::actions::ActionSpec) 
     schema
 }
 
-fn openapi_type_for_param(ty: &str) -> &'static str {
-    match ty {
-        "integer" => "integer",
-        "number" => "number",
-        "boolean" => "boolean",
-        "object" => "object",
-        "array" => "array",
-        _ => "string",
-    }
+fn openapi_type_for_param(ty: rtemplate_contracts::actions::ParamType) -> &'static str {
+    ty.json_schema_type()
 }
 
 fn validate_openapi(root: &Path, value: &Value) -> Result<Vec<String>> {
@@ -678,7 +671,7 @@ fn render_schema_docs(root: &Path) -> Result<String> {
     let mut lines = vec![
         "# MCP Schema Contract".to_owned(),
         "".to_owned(),
-        "Generated from `crates/rtemplate-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.".to_owned(),
+        "Generated from `crates/rtemplate-service/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.".to_owned(),
         "".to_owned(),
         "Run:".to_owned(),
         "".to_owned(),
@@ -1252,12 +1245,20 @@ fn validate_policy(value: &Value, source: &Path) -> Result<()> {
 }
 
 fn action_entries(root: &Path) -> Result<Vec<ActionEntry>> {
-    let text = read(root.join("crates/rtemplate-contracts/src/actions.rs"))?;
-    Ok(parse_action_entries(&text))
+    let text = read(root.join("crates/rtemplate-service/src/actions.rs"))?;
+    let action_specs = action_specs_body(&text).unwrap_or(&text);
+    Ok(parse_action_entries(action_specs))
 }
 
 fn extract_actions(root: &Path) -> Result<Vec<ActionEntry>> {
     action_entries(root)
+}
+
+fn action_specs_body(text: &str) -> Option<&str> {
+    let start = text.find("ACTION_SPECS")?;
+    let after_start = &text[start..];
+    let end = after_start.find("];")?;
+    Some(&after_start[..end])
 }
 
 fn parse_action_entries(text: &str) -> Vec<ActionEntry> {
@@ -1295,8 +1296,9 @@ fn parse_action_entries(text: &str) -> Vec<ActionEntry> {
 }
 
 fn action_spec_count(root: &Path) -> Result<usize> {
-    let text = read(root.join("crates/rtemplate-contracts/src/actions.rs"))?;
-    Ok(action_blocks(&text)
+    let text = read(root.join("crates/rtemplate-service/src/actions.rs"))?;
+    let action_specs = action_specs_body(&text).unwrap_or(&text);
+    Ok(action_blocks(action_specs)
         .into_iter()
         .filter(|block| block.trim_start().starts_with("name:"))
         .count())

@@ -17,7 +17,7 @@ use anyhow::{anyhow, Result};
 use rtemplate_contracts::{actions::ActionSpec, config::ExampleConfig};
 use rtemplate_service::{classify_service_error, dispatch_action, ExampleClient, ExampleService};
 use serde_json::{Map, Value};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, IsTerminal, Write};
 
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
@@ -208,18 +208,15 @@ fn format_cli_tool_error(error: &rtemplate_contracts::errors::ToolError) -> Stri
 }
 
 fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {
-    let Command::Action { name, params, yes } = cmd else {
+    let Command::Action { name, yes, .. } = cmd else {
         return Ok(());
     };
-    if *yes {
-        return Ok(());
-    }
-    rtemplate_contracts::actions::require_confirmation_if_destructive_from(
+    confirm_destructive_action_allowed(
         rtemplate_service::action_specs(),
         name,
-        params,
+        *yes,
+        std::io::stdin().is_terminal(),
     )
-    .map_err(|error| anyhow!(error.message.clone()))
 }
 
 pub fn confirm_destructive_action_allowed(

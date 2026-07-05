@@ -316,7 +316,7 @@ fn build_help_text() -> String {
                 text.push_str("  - `");
                 text.push_str(param.name);
                 text.push_str("` (");
-                text.push_str(param.ty);
+                text.push_str(param.ty.as_str());
                 text.push_str(", ");
                 text.push_str(required);
                 text.push_str("): ");

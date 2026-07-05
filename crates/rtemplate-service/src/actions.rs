@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rtemplate_contracts::actions::{
     ActionCost, ActionSpec, ActionTransport, CatalogVisibility, CliFlagSpec, CliSpec, ParamSpec,
-    READ_SCOPE,
+    ParamType, READ_SCOPE,
 };
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -17,7 +17,7 @@ const MAX_STRING_PARAM_LEN: usize = 4096;
 
 const GREET_PARAMS: &[ParamSpec] = &[ParamSpec {
     name: "name",
-    ty: "string",
+    ty: ParamType::String,
     required: false,
     description: "Name to greet. Omit to greet the world.",
     max_len: Some(MAX_STRING_PARAM_LEN),
@@ -26,7 +26,7 @@ const GREET_PARAMS: &[ParamSpec] = &[ParamSpec {
 
 const ECHO_PARAMS: &[ParamSpec] = &[ParamSpec {
     name: "message",
-    ty: "string",
+    ty: ParamType::String,
     required: true,
     description: "Message to echo back. Must not be empty.",
     max_len: Some(MAX_STRING_PARAM_LEN),
@@ -174,6 +174,7 @@ impl ActionRegistry {
         let mut by_cli_command = HashMap::new();
         let mut rest_posts = HashMap::new();
         for spec in specs {
+            assert_supported_rest_shape(spec);
             by_name.insert(spec.name, spec);
             if let Some(cli) = spec.cli {
                 by_cli_command.insert(cli.command, spec);
@@ -276,7 +277,7 @@ fn validate_param_object(
             continue;
         };
         match param.ty {
-            "string" => {
+            ParamType::String => {
                 let Some(text) = value.as_str() else {
                     return Err(rtemplate_contracts::actions::action_error(
                         rtemplate_contracts::actions::ValidationError::WrongType {
@@ -302,7 +303,6 @@ fn validate_param_object(
                     ));
                 }
             }
-            other => return Err(anyhow::anyhow!("unsupported parameter type `{other}`")),
         }
     }
     Ok(())
@@ -406,7 +406,7 @@ pub async fn execute_test_reverse(_service: &ExampleService, params: &Value) -> 
             cost: ActionCost::Cheap,
             params: &[ParamSpec {
                 name: "text",
-                ty: "string",
+                ty: ParamType::String,
                 required: true,
                 description: "Text to reverse.",
                 max_len: Some(MAX_STRING_PARAM_LEN),
@@ -424,4 +424,23 @@ pub async fn execute_test_reverse(_service: &ExampleService, params: &Value) -> 
     let text = required_string_param(params, "text")?;
     let reversed: String = text.chars().rev().collect();
     Ok(json!({"text": text, "reversed": reversed}))
+}
+
+fn assert_supported_rest_shape(spec: &ActionSpec) {
+    if !spec.transport.rest() {
+        return;
+    }
+    let expected_path = format!("/v1/{}", spec.name);
+    assert_eq!(
+        spec.rest_path,
+        Some(expected_path.as_str()),
+        "REST action `{}` must use the mounted /v1/{{action}} route shape",
+        spec.name
+    );
+    let method = spec.rest_method.unwrap_or("POST");
+    assert!(
+        method == "POST" || (method == "GET" && spec.params.is_empty()),
+        "REST action `{}` uses unsupported method/params combination",
+        spec.name
+    );
 }

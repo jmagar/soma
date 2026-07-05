@@ -162,9 +162,28 @@ impl ActionCost {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamType {
+    String,
+}
+
+impl ParamType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::String => "string",
+        }
+    }
+
+    pub fn json_schema_type(self) -> &'static str {
+        match self {
+            Self::String => "string",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ParamSpec {
     pub name: &'static str,
-    pub ty: &'static str,
+    pub ty: ParamType,
     pub required: bool,
     pub description: &'static str,
     pub max_len: Option<usize>,
@@ -213,7 +232,7 @@ pub enum CatalogVisibility {
 
 const GREET_PARAMS: &[ParamSpec] = &[ParamSpec {
     name: "name",
-    ty: "string",
+    ty: ParamType::String,
     required: false,
     description: "Name to greet. Omit to greet the world.",
     max_len: Some(4096),
@@ -222,7 +241,7 @@ const GREET_PARAMS: &[ParamSpec] = &[ParamSpec {
 
 const ECHO_PARAMS: &[ParamSpec] = &[ParamSpec {
     name: "message",
-    ty: "string",
+    ty: ParamType::String,
     required: true,
     description: "Message to echo back. Must not be empty.",
     max_len: Some(4096),
@@ -484,6 +503,8 @@ pub struct ParamDoc {
     pub ty: String,
     pub required: bool,
     pub description: String,
+    pub max_len: Option<usize>,
+    pub enum_values: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -544,9 +565,15 @@ fn action_doc_from_spec(spec: &ActionSpec) -> ActionDoc {
             .iter()
             .map(|param| ParamDoc {
                 name: param.name.to_owned(),
-                ty: param.ty.to_owned(),
+                ty: param.ty.as_str().to_owned(),
                 required: param.required,
                 description: param.description.to_owned(),
+                max_len: param.max_len,
+                enum_values: param
+                    .enum_values
+                    .iter()
+                    .map(|value| (*value).to_owned())
+                    .collect(),
             })
             .collect(),
         returns: spec.returns.to_owned(),

@@ -140,6 +140,35 @@ fn rest_routes_match_action_registry_metadata() {
 }
 
 #[tokio::test]
+async fn advertised_action_routes_are_mounted() {
+    for spec in rtemplate_service::action_specs()
+        .iter()
+        .filter(|spec| spec.transport.rest())
+    {
+        let method = spec.rest_method.expect("REST action should have method");
+        let path = spec.rest_path.expect("REST action should have path");
+        let method = Method::from_bytes(method.as_bytes()).expect("method should parse");
+        let params = rest_params_for(spec.name);
+        let (status, body) =
+            request_json(server::router(loopback_state()), method, path, None, params).await;
+        assert_ne!(status, StatusCode::NOT_FOUND, "{spec:?} returned {body}");
+        assert_ne!(
+            status,
+            StatusCode::METHOD_NOT_ALLOWED,
+            "{spec:?} returned {body}"
+        );
+    }
+}
+
+fn rest_params_for(action: &str) -> Option<Value> {
+    match action {
+        "greet" => Some(json!({"name": "Route"})),
+        "echo" => Some(json!({"message": "route"})),
+        _ => None,
+    }
+}
+
+#[tokio::test]
 async fn direct_rest_greet_accepts_empty_typed_body() {
     let app = server::router(loopback_state());
     let (status, body) = request_json(app, Method::POST, "/v1/greet", None, Some(json!({}))).await;

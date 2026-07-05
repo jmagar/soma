@@ -138,12 +138,10 @@ $ example thing 42 --json
 
 When adding an action, update:
 
-- `crates/rtemplate-contracts/src/actions.rs`
-- `crates/rtemplate-service/src/app.rs`
-- `crates/rtemplate-mcp/src/tools.rs`
-- `crates/rtemplate-mcp/src/schemas.rs`
-- `crates/rtemplate-cli/src/lib.rs` when not MCP-only
-- `crates/rmcp-template/tests/tool_dispatch.rs`
+- `crates/rtemplate-service/src/actions.rs` for metadata, validation, and native dispatch
+- `crates/rtemplate-service/src/app.rs` for business behavior
+- Generated MCP schema docs and OpenAPI after the registry changes
+- `crates/rmcp-template/tests/tool_dispatch.rs`, CLI tests, and REST route tests
 - `docs/MCP_SCHEMA.md`
 - Plugin skill docs
 
