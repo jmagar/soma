@@ -64,7 +64,7 @@ impl Provider for McpProvider {
                 &self.catalog.provider.name,
                 Some(call.action.clone()),
                 format!("upstream MCP tool call exceeded {}ms", timeout.as_millis()),
-                "Increase provider.meta.mcp.timeout_ms or fix the upstream MCP server.",
+                "Increase meta.mcp.timeout_ms or fix the upstream MCP server.",
             )
         })??;
 
@@ -190,7 +190,7 @@ impl McpRuntime {
                     &catalog.provider.name,
                     &call.action,
                     "missing_mcp_runtime",
-                    "MCP provider requires provider.meta.mcp runtime config",
+                    "MCP provider requires meta.mcp runtime config",
                 )
             })?;
         let timeout_ms = meta

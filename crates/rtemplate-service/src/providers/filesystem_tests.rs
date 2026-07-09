@@ -58,9 +58,9 @@ fn inspect_reports_loaded_disabled_and_invalid_files_without_executing_handlers(
     assert_eq!(report.root, providers);
     assert!(report.exists);
     assert_eq!(report.files.len(), 3);
-    assert_eq!(report.providers_loaded, 1);
-    assert_eq!(report.providers_disabled, 1);
-    assert_eq!(report.providers_invalid, 1);
+    assert_eq!(report.providers_loaded(), 1);
+    assert_eq!(report.providers_disabled(), 1);
+    assert_eq!(report.providers_invalid(), 1);
 
     let hello = file_named(&report, "hello.json");
     assert_eq!(hello.status, ProviderFileInspectionStatus::Loaded);
@@ -92,9 +92,9 @@ fn inspect_missing_directory_is_a_valid_empty_report() {
     assert_eq!(report.root, missing);
     assert!(!report.exists);
     assert!(report.files.is_empty());
-    assert_eq!(report.providers_loaded, 0);
-    assert_eq!(report.providers_disabled, 0);
-    assert_eq!(report.providers_invalid, 0);
+    assert_eq!(report.providers_loaded(), 0);
+    assert_eq!(report.providers_disabled(), 0);
+    assert_eq!(report.providers_invalid(), 0);
 }
 
 #[test]
@@ -127,8 +127,8 @@ fn inspect_marks_semantically_invalid_provider_manifests_invalid() {
         .inspect()
         .expect("inspect providers");
 
-    assert_eq!(report.providers_loaded, 0);
-    assert_eq!(report.providers_invalid, 1);
+    assert_eq!(report.providers_loaded(), 0);
+    assert_eq!(report.providers_invalid(), 1);
 
     let duplicate = file_named(&report, "duplicate-tools.json");
     assert_eq!(duplicate.status, ProviderFileInspectionStatus::Invalid);
@@ -137,4 +137,42 @@ fn inspect_marks_semantically_invalid_provider_manifests_invalid() {
         .as_deref()
         .unwrap_or_default()
         .contains("duplicate_tool_name"));
+}
+
+#[test]
+fn inspect_marks_invalid_runtime_provider_config_invalid() {
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+
+    fs::write(
+        providers.join("missing-openapi-base.json"),
+        r#"{
+          "schema_version": 1,
+          "provider": { "name": "missing-openapi-base", "kind": "openapi", "version": "0.1.0" },
+          "tools": [
+            {
+              "name": "call_missing_base",
+              "description": "Missing OpenAPI base URL",
+              "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+              "rest": { "enabled": true, "method": "POST", "path": "/call" }
+            }
+          ]
+        }"#,
+    )
+    .expect("write runtime-invalid provider");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_loaded(), 0);
+    assert_eq!(report.providers_invalid(), 1);
+
+    let provider = file_named(&report, "missing-openapi-base.json");
+    assert_eq!(provider.status, ProviderFileInspectionStatus::Invalid);
+    assert!(provider
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("missing_openapi_base_url"));
 }

@@ -22,7 +22,9 @@ Every provider declares:
 - `schema_version`: numeric manifest contract version, currently `1`.
 - `provider.name`: stable provider identifier shown in inspection output.
 - `provider.kind`: one of `static-rust`, `ai-sdk`, `wasm`, `mcp`, or `openapi`.
-- `tools[].name`: action name exposed through CLI, MCP, and HTTP.
+- `tools[].name`: action name registered in the provider registry.
+- `tools[].cli`: optional CLI overlay; set `enabled` to expose a dynamic CLI command.
+- `tools[].rest`: optional HTTP overlay; set `enabled` to expose an HTTP route.
 - `tools[].input_schema`: JSON Schema object for action input.
 - `tools[].output_schema`: optional JSON Schema for action output.
 
@@ -42,11 +44,16 @@ rtemplate providers validate --dir ./examples/providers
 
 ## Runtime Loading
 
-CLI commands refresh providers on startup:
+CLI commands refresh providers on startup when the tool has an enabled CLI
+overlay:
 
 ```bash
 rtemplate my_provider_action --json '{"message":"hello"}'
 ```
+
+For destructive provider actions, pass `--yes` or `-y` to confirm in
+non-interactive runs. `--yes` is reserved for CLI confirmation; use `--json`
+when a provider needs an input property named `yes`.
 
 MCP servers refresh file providers when clients list tools or read the tools
 resource, so a newly dropped provider appears without rebuilding the binary.
@@ -54,14 +61,16 @@ resource, so a newly dropped provider appears without rebuilding the binary.
 HTTP dispatch uses the same registry:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8080/v1/providers/my_provider_action \
+curl -sS -X POST http://127.0.0.1:40060/v1/providers/my_provider_action \
   -H 'content-type: application/json' \
   -d '{"message":"hello"}'
 ```
 
 ## MCP Providers
 
-`mcp` providers infer their transport from `provider.meta.mcp`: `url` selects
+The HTTP port defaults to `40060`; replace it if `RTEMPLATE_MCP_PORT` is set.
+
+`mcp` providers infer their transport from `meta.mcp`: `url` selects
 Streamable HTTP and `stdio.command` selects stdio. Use `timeout_ms` to bound
 upstream calls, and pin upstream tool mapping in each tool's `meta.mcp` block.
 
@@ -77,7 +86,10 @@ enabled.
 
 `providers list`, `providers status`, and `providers validate` inspect provider
 catalogs only. They do not execute TypeScript handlers, instantiate WASM
-handlers, call MCP upstreams, or fetch OpenAPI URLs.
+handlers, call MCP upstreams, or fetch OpenAPI URLs. Validation checks manifest
+schema, semantic registry rules, JSON Schema compilation, and non-executing
+runtime configuration such as OpenAPI base URLs, MCP transport shape, AI SDK
+handler export presence, and WASM module exports.
 
 ## Examples
 

@@ -70,9 +70,10 @@ cargo run --bin rtemplate -- doctor
 ## Drop-In Providers
 
 Drop `.json`, `.ts`, or `.wasm` provider files into `./providers` and
-`rtemplate` will expose their actions through CLI, MCP, and HTTP without
-rebuilding the binary. Use `RTEMPLATE_PROVIDER_DIR` to point at another
-directory.
+`rtemplate` will register their actions without rebuilding the binary. MCP
+tools are exposed from provider actions; CLI and HTTP surfaces are exposed when
+the manifest enables the matching `tools[].cli` or `tools[].rest` overlay. Use
+`RTEMPLATE_PROVIDER_DIR` to point at another directory.
 
 ```bash
 rtemplate providers validate

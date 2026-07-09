@@ -48,3 +48,18 @@ fn providers_validate_json_marks_invalid_files_and_returns_valid_false() {
     assert_eq!(value["summary"]["invalid"], 1);
     assert_eq!(value["files"][0]["status"], "invalid");
 }
+
+#[test]
+fn providers_validate_json_marks_explicit_missing_directory_invalid() {
+    let temp = tempdir().expect("tempdir");
+    let missing = temp.path().join("missing-providers");
+
+    let value = build_provider_report_json(&ProvidersCommand::Validate {
+        dir: Some(missing),
+        json: true,
+    })
+    .expect("build report");
+
+    assert_eq!(value["exists"], false);
+    assert_eq!(value["valid"], false);
+}

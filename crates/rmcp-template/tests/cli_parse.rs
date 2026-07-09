@@ -111,7 +111,8 @@ fn test_dynamic_provider_command_accepts_json_escape_hatch() {
         parse_args_from(["weather", "--json", "{\"city\":\"Paris\"}"]).unwrap(),
         Some(Command::Provider {
             command: "weather".to_owned(),
-            json: serde_json::json!({"city": "Paris"})
+            json: serde_json::json!({"city": "Paris"}),
+            yes: false
         })
     );
 }
@@ -134,7 +135,8 @@ fn test_dynamic_provider_command_accepts_flat_flags() {
         parse_args_from(["weather", "--city", "Paris", "--days", "3"]).unwrap(),
         Some(Command::Provider {
             command: "weather".to_owned(),
-            json: serde_json::json!({"city": "Paris", "days": 3})
+            json: serde_json::json!({"city": "Paris", "days": 3}),
+            yes: false
         })
     );
 

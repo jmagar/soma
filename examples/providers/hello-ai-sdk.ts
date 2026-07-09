@@ -42,6 +42,6 @@ export default {
 export async function call(input) {
   return {
     ok: true,
-    echoed: input.message ?? null
+    echoed: input.params?.message ?? null
   };
 }

@@ -453,7 +453,7 @@ fn build_snapshot(
 
     for provider in providers {
         let catalog = provider.catalog();
-        validate_provider_manifest(&catalog)?;
+        validate_provider_catalog_for_runtime(&catalog)?;
         for tool in &catalog.tools {
             let input_validator =
                 Arc::new(JSONSchema::compile(&tool.input_schema).map_err(|error| {
@@ -578,6 +578,21 @@ fn build_snapshot(
         cached_catalog_summary,
         cached_palette_manifest,
     })
+}
+
+pub fn validate_provider_catalog_for_runtime(
+    catalog: &ProviderCatalog,
+) -> Result<(), ProviderValidationError> {
+    validate_provider_manifest(catalog)?;
+    for tool in &catalog.tools {
+        JSONSchema::compile(&tool.input_schema).map_err(|error| {
+            ProviderValidationError::new(
+                "input_schema_invalid",
+                format!("tool `{}` has invalid input_schema: {error}", tool.name),
+            )
+        })?;
+    }
+    Ok(())
 }
 
 fn openapi_paths_from_rest_index(rest_index: &HashMap<(String, String), String>) -> Value {

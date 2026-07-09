@@ -4,16 +4,16 @@ use std::{
 };
 
 use async_trait::async_trait;
-use jsonschema::JSONSchema;
-use rtemplate_contracts::{
-    provider_validation::{validate_provider_manifest, ProviderValidationError},
-    providers::{ProviderCatalog, ProviderKind},
-};
+use rtemplate_contracts::providers::{ProviderCatalog, ProviderKind};
 use serde_json::json;
+use url::Url;
+use wasmtime::{Config, Engine, ExternType, Module};
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{
+        validate_provider_catalog_for_runtime, Provider, ProviderCall, ProviderOutput,
+    },
     providers::{
         ai_sdk::AiSdkProvider, mcp::McpProvider, openapi::OpenApiProvider, wasm::WasmProvider,
     },
@@ -29,9 +29,6 @@ pub struct ProviderDirectoryInspection {
     pub root: PathBuf,
     pub exists: bool,
     pub files: Vec<ProviderFileInspection>,
-    pub providers_loaded: usize,
-    pub providers_disabled: usize,
-    pub providers_invalid: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +49,27 @@ pub enum ProviderFileInspectionStatus {
     Invalid,
 }
 
+impl ProviderDirectoryInspection {
+    pub fn providers_loaded(&self) -> usize {
+        self.count_status(ProviderFileInspectionStatus::Loaded)
+    }
+
+    pub fn providers_disabled(&self) -> usize {
+        self.count_status(ProviderFileInspectionStatus::Disabled)
+    }
+
+    pub fn providers_invalid(&self) -> usize {
+        self.count_status(ProviderFileInspectionStatus::Invalid)
+    }
+
+    fn count_status(&self, status: ProviderFileInspectionStatus) -> usize {
+        self.files
+            .iter()
+            .filter(|file| file.status == status)
+            .count()
+    }
+}
+
 impl FileProviderSource {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
@@ -62,15 +80,21 @@ impl FileProviderSource {
     }
 
     pub fn inspect(&self) -> Result<ProviderDirectoryInspection, FileProviderLoadError> {
-        if !self.root.exists() {
-            return Ok(ProviderDirectoryInspection {
-                root: self.root.clone(),
-                exists: false,
-                files: Vec::new(),
-                providers_loaded: 0,
-                providers_disabled: 0,
-                providers_invalid: 0,
-            });
+        match self.root.try_exists() {
+            Ok(false) => {
+                return Ok(ProviderDirectoryInspection {
+                    root: self.root.clone(),
+                    exists: false,
+                    files: Vec::new(),
+                });
+            }
+            Ok(true) => {}
+            Err(source) => {
+                return Err(FileProviderLoadError {
+                    path: self.root.clone(),
+                    message: format!("failed to inspect provider directory: {source}"),
+                });
+            }
         }
 
         let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
@@ -96,7 +120,10 @@ impl FileProviderSource {
                 .to_owned();
 
             match load_catalog(&path) {
-                Ok(catalog) => match validate_catalog_for_inspection(&catalog) {
+                Ok(catalog) => match validate_provider_catalog_for_runtime(&catalog)
+                    .map_err(|error| error.to_string())
+                    .and_then(|_| validate_runtime_config_for_inspection(&path, &catalog))
+                {
                     Ok(()) => {
                         let status = if catalog.provider.enabled == Some(false) {
                             ProviderFileInspectionStatus::Disabled
@@ -136,26 +163,10 @@ impl FileProviderSource {
         }
 
         files.sort_by(|left, right| left.file_name.cmp(&right.file_name));
-        let providers_loaded = files
-            .iter()
-            .filter(|file| file.status == ProviderFileInspectionStatus::Loaded)
-            .count();
-        let providers_disabled = files
-            .iter()
-            .filter(|file| file.status == ProviderFileInspectionStatus::Disabled)
-            .count();
-        let providers_invalid = files
-            .iter()
-            .filter(|file| file.status == ProviderFileInspectionStatus::Invalid)
-            .count();
-
         Ok(ProviderDirectoryInspection {
             root: self.root.clone(),
             exists: true,
             files,
-            providers_loaded,
-            providers_disabled,
-            providers_invalid,
         })
     }
 
@@ -204,17 +215,183 @@ fn invalid_file_inspection(
     }
 }
 
-fn validate_catalog_for_inspection(
+fn validate_runtime_config_for_inspection(
+    path: &Path,
     catalog: &ProviderCatalog,
-) -> Result<(), ProviderValidationError> {
-    validate_provider_manifest(catalog)?;
-    for tool in &catalog.tools {
-        JSONSchema::compile(&tool.input_schema).map_err(|error| {
-            ProviderValidationError::new(
-                "input_schema_invalid",
-                format!("tool `{}` has invalid input_schema: {error}", tool.name),
-            )
+) -> Result<(), String> {
+    match catalog.provider.kind {
+        ProviderKind::StaticRust => Ok(()),
+        ProviderKind::Openapi => validate_openapi_config_for_inspection(catalog),
+        ProviderKind::Mcp => validate_mcp_config_for_inspection(catalog),
+        ProviderKind::AiSdk => validate_ai_sdk_config_for_inspection(path),
+        ProviderKind::Wasm => validate_wasm_config_for_inspection(path),
+    }
+}
+
+fn validate_openapi_config_for_inspection(catalog: &ProviderCatalog) -> Result<(), String> {
+    let base_url = catalog
+        .meta
+        .get("openapi")
+        .and_then(|value| value.get("base_url"))
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            catalog
+                .meta
+                .get("base_url")
+                .and_then(serde_json::Value::as_str)
+        })
+        .ok_or_else(|| {
+            "missing_openapi_base_url: OpenAPI provider requires meta.openapi.base_url".to_owned()
         })?;
+    let base =
+        Url::parse(base_url).map_err(|error| format!("invalid_openapi_base_url: {error}"))?;
+    if !matches!(base.scheme(), "http" | "https") {
+        return Err(
+            "openapi_scheme_denied: OpenAPI provider base_url must use http or https".to_owned(),
+        );
+    }
+    let host = base.host_str().ok_or_else(|| {
+        "openapi_host_required: OpenAPI provider base_url must include a host".to_owned()
+    })?;
+    if let Some(network) = &catalog.capabilities.network {
+        if network.enabled && !network.allowed_hosts.iter().any(|allowed| allowed == host) {
+            return Err(format!(
+                "openapi_host_not_allowed: OpenAPI provider host `{host}` is not declared in allowed_hosts"
+            ));
+        }
+    }
+    for tool in &catalog.tools {
+        let operation_meta = tool.meta.get("openapi");
+        let path = operation_meta
+            .and_then(|value| value.get("path"))
+            .and_then(serde_json::Value::as_str)
+            .or_else(|| tool.rest.as_ref().and_then(|rest| rest.path.as_deref()))
+            .unwrap_or("");
+        if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("//") {
+            return Err(format!(
+                "openapi_absolute_operation_url_denied: tool `{}` operation path must be relative",
+                tool.name
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_mcp_config_for_inspection(catalog: &ProviderCatalog) -> Result<(), String> {
+    let meta = catalog
+        .meta
+        .get("mcp")
+        .or_else(|| catalog.meta.get("runtime"))
+        .ok_or_else(|| {
+            "missing_mcp_runtime: MCP provider requires meta.mcp runtime config".to_owned()
+        })?;
+    let explicit = meta
+        .get("transport")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_ascii_lowercase);
+    let has_url = meta
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .is_some()
+        || meta
+            .get("http")
+            .and_then(|http| http.get("url"))
+            .and_then(serde_json::Value::as_str)
+            .is_some();
+    let has_stdio = meta.get("stdio").is_some()
+        || meta
+            .get("command")
+            .and_then(serde_json::Value::as_str)
+            .is_some();
+
+    match explicit.as_deref() {
+        Some("http" | "streamable-http" | "streamable_http") if !has_url => {
+            return Err("invalid_mcp_transport: transport=http requires url".to_owned());
+        }
+        Some("stdio") if !has_stdio => {
+            return Err(
+                "invalid_mcp_transport: transport=stdio requires stdio.command or command"
+                    .to_owned(),
+            );
+        }
+        Some("http" | "streamable-http" | "streamable_http" | "stdio") => {}
+        Some(other) => {
+            return Err(format!(
+                "invalid_mcp_transport: unsupported MCP transport `{other}`"
+            ));
+        }
+        None if !has_url && !has_stdio => {
+            return Err(
+                "missing_mcp_command: MCP provider stdio runtime requires command".to_owned(),
+            );
+        }
+        None => {}
+    }
+
+    if has_url {
+        let url = meta
+            .get("url")
+            .or_else(|| meta.get("http").and_then(|http| http.get("url")))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let parsed = Url::parse(url).map_err(|error| format!("invalid_mcp_url: {error}"))?;
+        if !matches!(parsed.scheme(), "http" | "https") {
+            return Err(format!(
+                "invalid_mcp_url: url scheme `{}` is not supported",
+                parsed.scheme()
+            ));
+        }
+        if parsed.host_str().is_none() {
+            return Err("invalid_mcp_url: url must include a host".to_owned());
+        }
+    }
+    Ok(())
+}
+
+fn validate_ai_sdk_config_for_inspection(path: &Path) -> Result<(), String> {
+    let text = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read TypeScript provider: {error}"))?;
+    if text.contains("export async function call") || text.contains("export function call") {
+        Ok(())
+    } else {
+        Err("missing_ai_sdk_call_export: AI SDK provider must export a call function".to_owned())
+    }
+}
+
+fn validate_wasm_config_for_inspection(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|error| format!("failed to read WASM provider: {error}"))?;
+    let mut config = Config::new();
+    config.consume_fuel(true);
+    let engine = Engine::new(&config).map_err(|error| format!("wasm_engine_failed: {error}"))?;
+    let module = Module::from_binary(&engine, &bytes)
+        .map_err(|error| format!("wasm_module_invalid: {error}"))?;
+    let exports = module
+        .exports()
+        .map(|export| (export.name().to_owned(), export.ty()))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for name in [
+        "memory",
+        "rtemplate_input_alloc",
+        "rtemplate_input_ptr",
+        "rtemplate_call",
+        "rtemplate_output_ptr",
+        "rtemplate_output_len",
+    ] {
+        let ty = exports
+            .get(name)
+            .ok_or_else(|| format!("wasm_export_missing: WASM provider must export `{name}`"))?;
+        match (name, ty) {
+            ("memory", ExternType::Memory(_)) => {}
+            ("memory", _) => {
+                return Err("wasm_export_invalid: `memory` must be a memory export".to_owned());
+            }
+            (_, ExternType::Func(_)) => {}
+            _ => {
+                return Err(format!(
+                    "wasm_export_invalid: `{name}` must be a function export"
+                ))
+            }
+        }
     }
     Ok(())
 }

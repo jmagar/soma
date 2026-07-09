@@ -71,16 +71,17 @@ pub fn parse_providers_command(args: &[String]) -> Result<ProvidersCommand> {
 
 pub fn run_providers_command(command: ProvidersCommand) -> Result<()> {
     let report = inspect_for_command(&command)?;
+    let valid = report_valid_for_command(&command, &report);
     if command.json() {
         println!(
             "{}",
-            serde_json::to_string_pretty(&provider_report_json(&report))?
+            serde_json::to_string_pretty(&provider_report_json(&report, valid))?
         );
     } else {
-        println!("{}", provider_report_text(&report));
+        println!("{}", provider_report_text(&report, valid));
     }
 
-    if command.validates() && report.providers_invalid > 0 {
+    if command.validates() && !valid {
         std::process::exit(1);
     }
 
@@ -89,12 +90,20 @@ pub fn run_providers_command(command: ProvidersCommand) -> Result<()> {
 
 #[cfg(test)]
 pub fn build_provider_report_json(command: &ProvidersCommand) -> Result<Value> {
-    Ok(provider_report_json(&inspect_for_command(command)?))
+    let report = inspect_for_command(command)?;
+    Ok(provider_report_json(
+        &report,
+        report_valid_for_command(command, &report),
+    ))
 }
 
 #[cfg(test)]
 pub fn build_provider_report_text(command: &ProvidersCommand) -> Result<String> {
-    Ok(provider_report_text(&inspect_for_command(command)?))
+    let report = inspect_for_command(command)?;
+    Ok(provider_report_text(
+        &report,
+        report_valid_for_command(command, &report),
+    ))
 }
 
 fn inspect_for_command(command: &ProvidersCommand) -> Result<ProviderDirectoryInspection> {
@@ -107,15 +116,31 @@ fn inspect_for_command(command: &ProvidersCommand) -> Result<ProviderDirectoryIn
     Ok(FileProviderSource::new(dir).inspect()?)
 }
 
-fn provider_report_json(report: &ProviderDirectoryInspection) -> Value {
+fn report_valid_for_command(
+    command: &ProvidersCommand,
+    report: &ProviderDirectoryInspection,
+) -> bool {
+    report.providers_invalid() == 0 && !requires_existing_provider_dir(command, report)
+}
+
+fn requires_existing_provider_dir(
+    command: &ProvidersCommand,
+    report: &ProviderDirectoryInspection,
+) -> bool {
+    command.validates()
+        && !report.exists
+        && (command.dir().is_some() || std::env::var_os("RTEMPLATE_PROVIDER_DIR").is_some())
+}
+
+fn provider_report_json(report: &ProviderDirectoryInspection, valid: bool) -> Value {
     json!({
         "provider_dir": report.root.display().to_string(),
         "exists": report.exists,
-        "valid": report.providers_invalid == 0,
+        "valid": valid,
         "summary": {
-            "loaded": report.providers_loaded,
-            "disabled": report.providers_disabled,
-            "invalid": report.providers_invalid,
+            "loaded": report.providers_loaded(),
+            "disabled": report.providers_disabled(),
+            "invalid": report.providers_invalid(),
             "files": report.files.len(),
         },
         "files": report.files.iter().map(|file| {
@@ -132,15 +157,21 @@ fn provider_report_json(report: &ProviderDirectoryInspection) -> Value {
     })
 }
 
-fn provider_report_text(report: &ProviderDirectoryInspection) -> String {
+fn provider_report_text(report: &ProviderDirectoryInspection, valid: bool) -> String {
     let mut output = String::new();
 
     output.push_str(&format!("Provider directory: {}\n", report.root.display()));
     output.push_str(&format!("Exists: {}\n", report.exists));
+    output.push_str(&format!("Valid: {valid}\n"));
     output.push_str(&format!(
         "Summary: {} loaded, {} disabled, {} invalid\n",
-        report.providers_loaded, report.providers_disabled, report.providers_invalid
+        report.providers_loaded(),
+        report.providers_disabled(),
+        report.providers_invalid()
     ));
+    if !valid && !report.exists {
+        output.push_str("Error: provider directory does not exist\n");
+    }
 
     if report.files.is_empty() {
         output.push_str("Files: none\n");

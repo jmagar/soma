@@ -4,6 +4,12 @@
 
 **Goal:** Make the already-wired dynamic provider runtime obvious and operable: a user can drop provider files into `providers/`, run first-class CLI checks, see clear docs/examples, and trust that MCP/CLI/HTTP will pick them up without a rebuild.
 
+**Historical note:** This is the executed implementation plan, not the provider
+manifest source of truth. Some inline snippets below are planning sketches from
+before implementation adapted to the live `ProviderManifest` schema. Use
+`docs/PROVIDERS.md`, `examples/providers/`, and
+`docs/contracts/provider-manifest.schema.json` for authoritative manifest shape.
+
 **Architecture:** Keep the existing runtime path intact. `rtemplate-service` remains the source of truth for provider discovery and loading. Add a non-executing inspection API around `FileProviderSource`, then build `rtemplate providers list|validate|status` on top of that same API. Document the workflow in `README.md`, `docs/PROVIDERS.md`, and safe example files under `examples/providers/`.
 
 **Current evidence:**
@@ -995,4 +1001,3 @@ Final response should include:
 - Provider docs/examples added.
 - Verification commands run and result.
 - Any files intentionally left uncommitted.
-

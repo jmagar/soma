@@ -16,7 +16,8 @@ use rtemplate_service::{
 
 use super::{
     confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from,
-    provider_action_from_command, run, service_action_from_command, usage, Command, SetupCommand,
+    provider_action_from_command, run, service_action_from_command, usage, Command,
+    ProvidersCommand, SetupCommand,
 };
 use rtemplate_contracts::config::ExampleConfig;
 
@@ -182,7 +183,13 @@ fn parses_providers_list_with_dir_and_json() {
         .expect("parse command")
         .expect("command");
 
-    assert!(matches!(command, Command::Providers(_)));
+    assert_eq!(
+        command,
+        Command::Providers(ProvidersCommand::List {
+            dir: Some("/tmp/providers".into()),
+            json: true
+        })
+    );
 }
 
 #[test]
@@ -191,7 +198,13 @@ fn parses_providers_validate_as_reserved_command() {
         .expect("parse command")
         .expect("command");
 
-    assert!(matches!(command, Command::Providers(_)));
+    assert_eq!(
+        command,
+        Command::Providers(ProvidersCommand::Validate {
+            dir: None,
+            json: false
+        })
+    );
 }
 
 #[test]
