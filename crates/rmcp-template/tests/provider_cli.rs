@@ -188,6 +188,10 @@ fn documented_ai_sdk_example_reads_cli_params_envelope() {
 }
 
 fn ai_sdk_runtime_available() -> bool {
+    if cfg!(windows) {
+        return false;
+    }
+
     Command::new("node")
         .args([
             "-e",

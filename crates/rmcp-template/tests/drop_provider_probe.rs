@@ -1,7 +1,7 @@
 use std::{
     fs,
     net::TcpListener,
-    process::Stdio,
+    process::{Command as StdCommand, Stdio},
     time::{Duration, Instant},
 };
 
@@ -173,10 +173,14 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
     assert!(after_actions.contains(&"live_mcp_probe".to_owned()));
     assert!(after_actions.contains(&"live_openapi_probe".to_owned()));
 
-    let executable_actions: &[&str] = if cfg!(windows) {
-        &["live_wasm_probe"]
-    } else {
+    let ai_sdk_runtime_available = ai_sdk_runtime_available();
+    let executable_actions: &[&str] = if ai_sdk_runtime_available {
         &["live_ts_probe", "live_wasm_probe"]
+    } else {
+        eprintln!(
+            "skipping live TypeScript provider execution because node is unavailable or unhealthy"
+        );
+        &["live_wasm_probe"]
     };
     for &action in executable_actions {
         let result = service
@@ -193,7 +197,7 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
         assert_eq!(structured["action"], action);
     }
 
-    if !cfg!(windows) {
+    if ai_sdk_runtime_available {
         let cli_output = Command::new(env!("CARGO_BIN_EXE_rtemplate"))
             .arg("live_ts_probe")
             .current_dir(temp.path())
@@ -223,6 +227,20 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
 
     tokio::time::timeout(Duration::from_secs(5), service.cancel()).await??;
     Ok(())
+}
+
+fn ai_sdk_runtime_available() -> bool {
+    if cfg!(windows) {
+        return false;
+    }
+
+    StdCommand::new("node")
+        .args([
+            "-e",
+            "require('node:crypto').randomBytes(1); console.log('ok')",
+        ])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn provider_manifest(name: &str, kind: &str, action: &str) -> String {

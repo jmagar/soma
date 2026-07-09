@@ -72,6 +72,10 @@ export async function call(input) {
 }
 
 fn ai_sdk_runtime_available() -> bool {
+    if cfg!(windows) {
+        return false;
+    }
+
     Command::new("node")
         .args([
             "-e",
