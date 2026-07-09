@@ -14,7 +14,7 @@
 #     greet(name="Alice")    → response MUST contain "Alice" in the greeting string
 #     echo(message="ping")   → response MUST echo back the exact string "ping"
 #     status()               → response MUST have a "status" key
-#     help()                 → response MUST have a "help" key with non-empty content
+#     help()                 → response MUST include an action list with template actions
 #     schema resource        → MUST be valid JSON schema with name="example" and inputSchema
 #
 #   MCP elicitation actions (`elicit_name`, `scaffold_intent`) require a client
@@ -580,7 +580,7 @@ suite_core() {
   # TEMPLATE: Replace "greet" with a keyword that must appear in your help text.
   run_test_semantic "example help: mentions greet action" \
     "example" '{"action":"help"}' \
-    "help" "greet" "contains"
+    "actions" "greet" "contains"
 }
 
 # ── suite_schema_resource ──────────────────────────────────────────────────────
