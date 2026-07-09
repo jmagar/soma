@@ -13,6 +13,26 @@ pub enum ProvidersCommand {
     Status { dir: Option<PathBuf>, json: bool },
 }
 
+impl ProvidersCommand {
+    fn dir(&self) -> &Option<PathBuf> {
+        match self {
+            Self::List { dir, .. } | Self::Validate { dir, .. } | Self::Status { dir, .. } => dir,
+        }
+    }
+
+    fn json(&self) -> bool {
+        match self {
+            Self::List { json, .. } | Self::Validate { json, .. } | Self::Status { json, .. } => {
+                *json
+            }
+        }
+    }
+
+    fn validates(&self) -> bool {
+        matches!(self, Self::Validate { .. })
+    }
+}
+
 pub fn parse_providers_command(args: &[String]) -> Result<ProvidersCommand> {
     let Some(subcommand) = args.first() else {
         return Err(anyhow!(
@@ -50,24 +70,17 @@ pub fn parse_providers_command(args: &[String]) -> Result<ProvidersCommand> {
 }
 
 pub fn run_providers_command(command: ProvidersCommand) -> Result<()> {
-    let json_output = matches!(
-        command,
-        ProvidersCommand::List { json: true, .. }
-            | ProvidersCommand::Validate { json: true, .. }
-            | ProvidersCommand::Status { json: true, .. }
-    );
-
     let report = inspect_for_command(&command)?;
-    if json_output {
+    if command.json() {
         println!(
             "{}",
             serde_json::to_string_pretty(&provider_report_json(&report))?
         );
     } else {
-        println!("{}", provider_report_text(report.clone()));
+        println!("{}", provider_report_text(&report));
     }
 
-    if matches!(command, ProvidersCommand::Validate { .. }) && report.providers_invalid > 0 {
+    if command.validates() && report.providers_invalid > 0 {
         std::process::exit(1);
     }
 
@@ -81,18 +94,15 @@ pub fn build_provider_report_json(command: &ProvidersCommand) -> Result<Value> {
 
 #[cfg(test)]
 pub fn build_provider_report_text(command: &ProvidersCommand) -> Result<String> {
-    Ok(provider_report_text(inspect_for_command(command)?))
+    Ok(provider_report_text(&inspect_for_command(command)?))
 }
 
 fn inspect_for_command(command: &ProvidersCommand) -> Result<ProviderDirectoryInspection> {
-    let dir = match command {
-        ProvidersCommand::List { dir, .. }
-        | ProvidersCommand::Validate { dir, .. }
-        | ProvidersCommand::Status { dir, .. } => dir
-            .clone()
-            .or_else(|| std::env::var_os("RTEMPLATE_PROVIDER_DIR").map(PathBuf::from))
-            .unwrap_or_else(|| PathBuf::from("providers")),
-    };
+    let dir = command
+        .dir()
+        .clone()
+        .or_else(|| std::env::var_os("RTEMPLATE_PROVIDER_DIR").map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("providers"));
 
     Ok(FileProviderSource::new(dir).inspect()?)
 }
@@ -122,7 +132,7 @@ fn provider_report_json(report: &ProviderDirectoryInspection) -> Value {
     })
 }
 
-fn provider_report_text(report: ProviderDirectoryInspection) -> String {
+fn provider_report_text(report: &ProviderDirectoryInspection) -> String {
     let mut output = String::new();
 
     output.push_str(&format!("Provider directory: {}\n", report.root.display()));
@@ -138,7 +148,7 @@ fn provider_report_text(report: ProviderDirectoryInspection) -> String {
     }
 
     output.push_str("Files:\n");
-    for file in report.files {
+    for file in &report.files {
         let provider = file.provider_id.as_deref().unwrap_or("-");
         let kind = file.provider_kind.as_deref().unwrap_or("-");
         let actions = if file.actions.is_empty() {
@@ -156,7 +166,7 @@ fn provider_report_text(report: ProviderDirectoryInspection) -> String {
             actions
         ));
 
-        if let Some(error) = file.error {
+        if let Some(error) = &file.error {
             output.push_str(&format!("    error: {error}\n"));
         }
     }

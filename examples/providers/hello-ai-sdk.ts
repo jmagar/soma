@@ -20,6 +20,17 @@ export default {
       "output_schema": {
         "type": "object",
         "additionalProperties": true
+      },
+      "cli": {
+        "enabled": true,
+        "command": "hello_ai_sdk",
+        "about": "Run the AI SDK provider example."
+      },
+      "rest": {
+        "enabled": true,
+        "method": "POST",
+        "path": "/v1/providers/hello_ai_sdk",
+        "summary": "Run the AI SDK provider example."
       }
     }
   ],

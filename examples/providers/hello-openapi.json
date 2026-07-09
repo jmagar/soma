@@ -21,6 +21,11 @@
         "type": "object",
         "additionalProperties": true
       },
+      "cli": {
+        "enabled": true,
+        "command": "hello_openapi",
+        "about": "Run the OpenAPI provider example."
+      },
       "rest": {
         "enabled": true,
         "method": "POST",

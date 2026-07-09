@@ -20,6 +20,17 @@
       "output_schema": {
         "type": "object",
         "additionalProperties": true
+      },
+      "cli": {
+        "enabled": true,
+        "command": "hello_static",
+        "about": "Run the static provider example."
+      },
+      "rest": {
+        "enabled": true,
+        "method": "POST",
+        "path": "/v1/providers/hello_static",
+        "summary": "Run the static provider example."
       }
     }
   ]

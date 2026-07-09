@@ -4,7 +4,11 @@ use std::{
 };
 
 use async_trait::async_trait;
-use rtemplate_contracts::providers::{ProviderCatalog, ProviderKind};
+use jsonschema::JSONSchema;
+use rtemplate_contracts::{
+    provider_validation::{validate_provider_manifest, ProviderValidationError},
+    providers::{ProviderCatalog, ProviderKind},
+};
 use serde_json::json;
 
 use crate::{
@@ -92,27 +96,33 @@ impl FileProviderSource {
                 .to_owned();
 
             match load_catalog(&path) {
-                Ok(catalog) => {
-                    let status = if catalog.provider.enabled == Some(false) {
-                        ProviderFileInspectionStatus::Disabled
-                    } else {
-                        ProviderFileInspectionStatus::Loaded
-                    };
-                    let actions = catalog
-                        .tools
-                        .iter()
-                        .map(|tool| tool.name.clone())
-                        .collect::<Vec<_>>();
-                    files.push(ProviderFileInspection {
-                        path,
-                        file_name,
-                        status,
-                        provider_id: Some(catalog.provider.name),
-                        provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
-                        actions,
-                        error: None,
-                    });
-                }
+                Ok(catalog) => match validate_catalog_for_inspection(&catalog) {
+                    Ok(()) => {
+                        let status = if catalog.provider.enabled == Some(false) {
+                            ProviderFileInspectionStatus::Disabled
+                        } else {
+                            ProviderFileInspectionStatus::Loaded
+                        };
+                        let actions = catalog
+                            .tools
+                            .iter()
+                            .map(|tool| tool.name.clone())
+                            .collect::<Vec<_>>();
+                        files.push(ProviderFileInspection {
+                            path,
+                            file_name,
+                            status,
+                            provider_id: Some(catalog.provider.name.clone()),
+                            provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
+                            actions,
+                            error: None,
+                        });
+                    }
+                    Err(error) => {
+                        let message = format!("{}: {error}", path.display());
+                        files.push(invalid_file_inspection(path, file_name, message));
+                    }
+                },
                 Err(error) => files.push(ProviderFileInspection {
                     path,
                     file_name,
@@ -176,6 +186,37 @@ impl FileProviderSource {
         }
         Ok(providers)
     }
+}
+
+fn invalid_file_inspection(
+    path: PathBuf,
+    file_name: String,
+    error: String,
+) -> ProviderFileInspection {
+    ProviderFileInspection {
+        path,
+        file_name,
+        status: ProviderFileInspectionStatus::Invalid,
+        provider_id: None,
+        provider_kind: None,
+        actions: Vec::new(),
+        error: Some(error),
+    }
+}
+
+fn validate_catalog_for_inspection(
+    catalog: &ProviderCatalog,
+) -> Result<(), ProviderValidationError> {
+    validate_provider_manifest(catalog)?;
+    for tool in &catalog.tools {
+        JSONSchema::compile(&tool.input_schema).map_err(|error| {
+            ProviderValidationError::new(
+                "input_schema_invalid",
+                format!("tool `{}` has invalid input_schema: {error}", tool.name),
+            )
+        })?;
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

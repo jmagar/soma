@@ -99,6 +99,7 @@ pub enum Command {
     Provider {
         command: String,
         json: serde_json::Value,
+        yes: bool,
     },
     Providers(ProvidersCommand),
     PackageGenerate {
@@ -311,6 +312,9 @@ fn confirm_command_if_destructive(
     if !registry.snapshot().action_requires_confirmation(&action) {
         return Ok(false);
     }
+    if matches!(cmd, Command::Provider { yes: true, .. }) {
+        return Ok(true);
+    }
     if !std::io::stdin().is_terminal() {
         return Err(anyhow!(
             "pass -y / --yes to confirm destructive action `{action}`"
@@ -383,19 +387,34 @@ fn parse_provider_command(command: &str, args: &[String]) -> Result<Command> {
     if reserved_cli_command(command) {
         return Err(anyhow!("`{command}` is a reserved infrastructure command"));
     }
-    match args {
+    let mut yes = false;
+    let filtered_args = args
+        .iter()
+        .filter_map(|arg| match arg.as_str() {
+            "-y" | "--yes" => {
+                yes = true;
+                None
+            }
+            _ => Some(arg.clone()),
+        })
+        .collect::<Vec<_>>();
+
+    match filtered_args.as_slice() {
         [flag, payload] if flag == "--json" => Ok(Command::Provider {
             command: command.to_owned(),
             json: serde_json::from_str(payload)
                 .map_err(|error| anyhow!("{command} --json must be valid JSON: {error}"))?,
+            yes,
         }),
         [] => Ok(Command::Provider {
             command: command.to_owned(),
             json: serde_json::json!({}),
+            yes,
         }),
         _ => Ok(Command::Provider {
             command: command.to_owned(),
-            json: parse_provider_flags(command, args)?,
+            json: parse_provider_flags(command, &filtered_args)?,
+            yes,
         }),
     }
 }

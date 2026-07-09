@@ -4,25 +4,23 @@ use tempfile::tempdir;
 
 use super::providers::{build_provider_report_json, build_provider_report_text, ProvidersCommand};
 
+const HELLO_PROVIDER_JSON: &str = r#"{
+  "schema_version": 1,
+  "provider": { "name": "hello", "kind": "static-rust", "version": "0.1.0" },
+  "tools": [
+    {
+      "name": "hello",
+      "description": "Hello probe",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": { "type": "object", "properties": {}, "additionalProperties": true }
+    }
+  ]
+}"#;
+
 #[test]
 fn providers_list_text_includes_loaded_provider_actions() {
     let temp = tempdir().expect("tempdir");
-    fs::write(
-        temp.path().join("hello.json"),
-        r#"{
-          "schema_version": 1,
-          "provider": { "name": "hello", "kind": "static-rust", "version": "0.1.0" },
-          "tools": [
-            {
-              "name": "hello",
-              "description": "Hello probe",
-              "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
-              "output_schema": { "type": "object", "properties": {}, "additionalProperties": true }
-            }
-          ]
-        }"#,
-    )
-    .expect("write provider");
+    fs::write(temp.path().join("hello.json"), HELLO_PROVIDER_JSON).expect("write provider");
 
     let output = build_provider_report_text(&ProvidersCommand::List {
         dir: Some(temp.path().to_path_buf()),

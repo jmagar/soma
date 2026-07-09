@@ -111,6 +111,14 @@ fn provider_catalog() -> ProviderCatalog {
     }
 }
 
+fn empty_provider_command(command: &str) -> Command {
+    Command::Provider {
+        command: command.to_owned(),
+        json: serde_json::json!({}),
+        yes: false,
+    }
+}
+
 #[test]
 fn empty_args_returns_none() {
     let result = parse_args_from::<_, String>([]).unwrap();
@@ -120,13 +128,7 @@ fn empty_args_returns_none() {
 #[test]
 fn unknown_subcommand_becomes_dynamic_provider_command() {
     let result = parse_args_from(["unknown-command"]).unwrap();
-    assert_eq!(
-        result,
-        Some(Command::Provider {
-            command: "unknown-command".to_owned(),
-            json: serde_json::json!({})
-        })
-    );
+    assert_eq!(result, Some(empty_provider_command("unknown-command")));
 }
 
 #[test]
@@ -141,7 +143,35 @@ fn dynamic_provider_command_accepts_flat_flags_without_json() {
             json: serde_json::json!({
                 "city": "Paris",
                 "units": "metric"
-            })
+            }),
+            yes: false
+        }
+    );
+}
+
+#[test]
+fn dynamic_provider_command_accepts_yes_with_json_or_flat_flags() {
+    let json_command = parse_args_from(["delete-thing", "--json", r#"{"id":1}"#, "--yes"])
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        json_command,
+        Command::Provider {
+            command: "delete-thing".to_owned(),
+            json: serde_json::json!({ "id": 1 }),
+            yes: true
+        }
+    );
+
+    let flat_command = parse_args_from(["delete-thing", "-y", "--id", "1"])
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        flat_command,
+        Command::Provider {
+            command: "delete-thing".to_owned(),
+            json: serde_json::json!({ "id": 1 }),
+            yes: true
         }
     );
 }
@@ -172,25 +202,11 @@ fn dynamic_provider_command_resolves_cli_command_and_alias_to_action() {
     .expect("registry");
 
     assert_eq!(
-        provider_action_from_command(
-            &Command::Provider {
-                command: "forecast".to_owned(),
-                json: serde_json::json!({})
-            },
-            &registry
-        )
-        .unwrap(),
+        provider_action_from_command(&empty_provider_command("forecast"), &registry).unwrap(),
         "weather-current"
     );
     assert_eq!(
-        provider_action_from_command(
-            &Command::Provider {
-                command: "wx".to_owned(),
-                json: serde_json::json!({})
-            },
-            &registry
-        )
-        .unwrap(),
+        provider_action_from_command(&empty_provider_command("wx"), &registry).unwrap(),
         "weather-current"
     );
 }
