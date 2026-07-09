@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, process::Command};
 
 use rtemplate_contracts::config::ExampleConfig;
 use rtemplate_service::{
@@ -10,11 +10,14 @@ use rtemplate_service::{
 use serde_json::json;
 
 #[tokio::test]
-#[cfg_attr(
-    windows,
-    ignore = "Windows CI Node can abort in crypto startup before the provider handler runs"
-)]
 async fn ai_sdk_provider_executes_hot_dropped_typescript_handler() -> anyhow::Result<()> {
+    if !ai_sdk_runtime_available() {
+        eprintln!(
+            "skipping AI SDK provider execution test because node is unavailable or unhealthy"
+        );
+        return Ok(());
+    }
+
     let temp = tempfile::tempdir()?;
     let providers = temp.path().join("providers");
     fs::create_dir(&providers)?;
@@ -66,6 +69,16 @@ export async function call(input) {
     assert_eq!(output.value["action"], "live_ts_exec");
     assert_eq!(output.value["message"], "hello");
     Ok(())
+}
+
+fn ai_sdk_runtime_available() -> bool {
+    Command::new("node")
+        .args([
+            "-e",
+            "require('node:crypto').randomBytes(1); console.log('ok')",
+        ])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn service() -> anyhow::Result<ExampleService> {

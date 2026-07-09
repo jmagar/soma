@@ -164,6 +164,11 @@ fn providers_validate_accepts_documented_examples_directory() {
 
 #[test]
 fn documented_ai_sdk_example_reads_cli_params_envelope() {
+    if !ai_sdk_runtime_available() {
+        eprintln!("skipping documented AI SDK provider execution test because node is unavailable or unhealthy");
+        return;
+    }
+
     let examples = workspace_root().join("examples/providers");
 
     let output = provider_cli()
@@ -180,6 +185,16 @@ fn documented_ai_sdk_example_reads_cli_params_envelope() {
     let value: Value = serde_json::from_slice(&output.stdout).expect("json output");
     assert_eq!(value["ok"], true);
     assert_eq!(value["echoed"], "hello");
+}
+
+fn ai_sdk_runtime_available() -> bool {
+    Command::new("node")
+        .args([
+            "-e",
+            "require('node:crypto').randomBytes(1); console.log('ok')",
+        ])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 #[test]
