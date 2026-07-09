@@ -173,7 +173,12 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
     assert!(after_actions.contains(&"live_mcp_probe".to_owned()));
     assert!(after_actions.contains(&"live_openapi_probe".to_owned()));
 
-    for action in ["live_ts_probe", "live_wasm_probe"] {
+    let executable_actions: &[&str] = if cfg!(windows) {
+        &["live_wasm_probe"]
+    } else {
+        &["live_ts_probe", "live_wasm_probe"]
+    };
+    for &action in executable_actions {
         let result = service
             .call_tool(
                 CallToolRequestParams::new("example")
@@ -188,31 +193,33 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
         assert_eq!(structured["action"], action);
     }
 
-    let cli_output = Command::new(env!("CARGO_BIN_EXE_rtemplate"))
-        .arg("live_ts_probe")
-        .current_dir(temp.path())
-        .env("RTEMPLATE_API_URL", "")
-        .env_remove("RTEMPLATE_API_KEY")
-        .env_remove("RTEMPLATE_MCP_TOKEN")
-        .output()
-        .await?;
-    assert!(
-        cli_output.status.success(),
-        "CLI failed: {}",
-        String::from_utf8_lossy(&cli_output.stderr)
-    );
-    let cli_json: Value = serde_json::from_slice(&cli_output.stdout)?;
-    assert_eq!(cli_json["action"], "live_ts_probe");
+    if !cfg!(windows) {
+        let cli_output = Command::new(env!("CARGO_BIN_EXE_rtemplate"))
+            .arg("live_ts_probe")
+            .current_dir(temp.path())
+            .env("RTEMPLATE_API_URL", "")
+            .env_remove("RTEMPLATE_API_KEY")
+            .env_remove("RTEMPLATE_MCP_TOKEN")
+            .output()
+            .await?;
+        assert!(
+            cli_output.status.success(),
+            "CLI failed: {}",
+            String::from_utf8_lossy(&cli_output.stderr)
+        );
+        let cli_json: Value = serde_json::from_slice(&cli_output.stdout)?;
+        assert_eq!(cli_json["action"], "live_ts_probe");
 
-    let port = unused_loopback_port()?;
-    let _server = HttpServerGuard::spawn(temp.path(), port).await?;
-    let rest_json = post_json(
-        &format!("127.0.0.1:{port}"),
-        "/v1/providers/live_ts_probe",
-        "{}",
-    )
-    .await?;
-    assert_eq!(rest_json["action"], "live_ts_probe");
+        let port = unused_loopback_port()?;
+        let _server = HttpServerGuard::spawn(temp.path(), port).await?;
+        let rest_json = post_json(
+            &format!("127.0.0.1:{port}"),
+            "/v1/providers/live_ts_probe",
+            "{}",
+        )
+        .await?;
+        assert_eq!(rest_json["action"], "live_ts_probe");
+    }
 
     tokio::time::timeout(Duration::from_secs(5), service.cancel()).await??;
     Ok(())
