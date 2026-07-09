@@ -176,3 +176,30 @@ fn inspect_marks_invalid_runtime_provider_config_invalid() {
         .unwrap_or_default()
         .contains("missing_openapi_base_url"));
 }
+
+#[test]
+fn inspect_loads_markdown_files_as_prompt_providers() {
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+
+    fs::write(
+        providers.join("Code Review.md"),
+        "# Code Review\n\nReview this change for correctness and missing tests.\n",
+    )
+    .expect("write markdown prompt");
+    fs::write(providers.join("README.md"), "# Prompt Directory\n").expect("write readme");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.files.len(), 1);
+    assert_eq!(report.providers_loaded(), 1);
+    assert_eq!(report.providers_invalid(), 0);
+
+    let prompt = file_named(&report, "Code Review.md");
+    assert_eq!(prompt.status, ProviderFileInspectionStatus::Loaded);
+    assert_eq!(prompt.provider_id.as_deref(), Some("code-review-prompt"));
+    assert_eq!(prompt.provider_kind.as_deref(), Some("static-rust"));
+    assert!(prompt.actions.is_empty());
+}

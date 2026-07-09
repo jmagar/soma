@@ -236,6 +236,11 @@ impl ServerHandler for ExampleRmcpServer {
     ) -> Result<ListPromptsResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
         let mut result = prompts::list_prompts();
+        refresh_file_providers(&self.state)?;
+        let snapshot = self.state.provider_registry.snapshot();
+        result
+            .prompts
+            .extend(prompts::provider_prompts(&snapshot.catalogs));
         if self.state.config.conformance_fixtures {
             result.prompts.extend(conformance::prompts());
         }
@@ -252,6 +257,11 @@ impl ServerHandler for ExampleRmcpServer {
             if let Some(result) = conformance::get_prompt(request.clone()) {
                 return Ok(result);
             }
+        }
+        refresh_file_providers(&self.state)?;
+        let snapshot = self.state.provider_registry.snapshot();
+        if let Some(result) = prompts::get_provider_prompt(&snapshot.catalogs, &request) {
+            return Ok(result);
         }
         prompts::get_prompt(request).map_err(|e| ErrorData::invalid_params(e.to_string(), None))
     }

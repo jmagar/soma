@@ -159,7 +159,7 @@ fn providers_validate_accepts_documented_examples_directory() {
     let value: Value = serde_json::from_slice(&output.stdout).expect("json output");
     assert_eq!(value["exists"], true);
     assert_eq!(value["valid"], true);
-    assert_eq!(value["summary"]["loaded"], 3);
+    assert_eq!(value["summary"]["loaded"], 4);
 }
 
 #[test]

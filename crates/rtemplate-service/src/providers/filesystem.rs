@@ -467,10 +467,18 @@ impl Provider for FileProvider {
 }
 
 fn is_provider_file(path: &Path) -> bool {
-    matches!(
-        path.extension().and_then(|extension| extension.to_str()),
-        Some("json" | "ts" | "wasm")
-    )
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("json" | "ts" | "wasm") => true,
+        Some("md") => is_markdown_prompt_file(path),
+        _ => false,
+    }
+}
+
+fn is_markdown_prompt_file(path: &Path) -> bool {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(|stem| !stem.eq_ignore_ascii_case("readme"))
+        .unwrap_or(false)
 }
 
 fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
@@ -488,6 +496,7 @@ fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
         }
         Some("ts") => load_ts_catalog(path)?,
         Some("wasm") => load_wasm_catalog(path)?,
+        Some("md") => load_markdown_prompt_catalog(path)?,
         _ => {
             return Err(FileProviderLoadError {
                 path: path.to_path_buf(),
@@ -497,6 +506,98 @@ fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
     };
     ensure_kind_matches(path, &catalog)?;
     Ok(catalog)
+}
+
+fn load_markdown_prompt_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
+    let text = fs::read_to_string(path).map_err(|source| FileProviderLoadError {
+        path: path.to_path_buf(),
+        message: format!("failed to read Markdown prompt: {source}"),
+    })?;
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("prompt");
+    let name = prompt_name_from_file_stem(stem);
+    let description =
+        first_markdown_heading(&text).unwrap_or_else(|| format!("Markdown prompt from {stem}"));
+
+    Ok(ProviderCatalog {
+        schema_version: 1,
+        provider: rtemplate_contracts::providers::ProviderIdentity {
+            name: format!("{name}-prompt"),
+            kind: ProviderKind::StaticRust,
+            title: Some(description.clone()),
+            description: Some(format!(
+                "Markdown prompt provider loaded from {}",
+                path.display()
+            )),
+            homepage: None,
+            source: Some(path.display().to_string()),
+            version: None,
+            enabled: None,
+        },
+        tools: Vec::new(),
+        prompts: vec![rtemplate_contracts::providers::ProviderPrompt {
+            name,
+            description,
+            template: Some(text),
+            arguments_schema: None,
+            scope: None,
+            mcp: None,
+            examples: Vec::new(),
+        }],
+        resources: Vec::new(),
+        tasks: Vec::new(),
+        elicitation: Vec::new(),
+        env: Vec::new(),
+        capabilities: Default::default(),
+        docs: None,
+        plugin: None,
+        ui: None,
+        meta: json!({
+            "markdown_prompt": {
+                "source": path.display().to_string()
+            }
+        }),
+    })
+}
+
+fn prompt_name_from_file_stem(stem: &str) -> String {
+    let mut output = String::new();
+    let mut previous_separator = false;
+    for ch in stem.chars().flat_map(char::to_lowercase) {
+        if ch.is_ascii_alphanumeric() {
+            output.push(ch);
+            previous_separator = false;
+        } else if !previous_separator && !output.is_empty() {
+            output.push('-');
+            previous_separator = true;
+        }
+    }
+    while output.ends_with('-') {
+        output.pop();
+    }
+    if output.is_empty() {
+        return "prompt".to_owned();
+    }
+    if output
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_lowercase())
+    {
+        output
+    } else {
+        format!("prompt-{output}")
+    }
+}
+
+fn first_markdown_heading(text: &str) -> Option<String> {
+    text.lines().find_map(|line| {
+        let trimmed = line.trim();
+        let heading = trimmed.strip_prefix("# ")?;
+        let heading = heading.trim();
+        (!heading.is_empty()).then(|| heading.to_owned())
+    })
 }
 
 fn load_ts_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
