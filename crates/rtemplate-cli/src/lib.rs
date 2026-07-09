@@ -27,9 +27,11 @@ use std::io::{BufRead, IsTerminal, Write};
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
 pub mod doctor;
+mod providers;
 pub mod setup;
 pub mod watch;
 
+pub use providers::ProvidersCommand;
 pub use setup::{apply_plugin_options, run_setup, SetupCommand};
 
 pub const USAGE: &str = "Usage:
@@ -41,6 +43,9 @@ pub const USAGE: &str = "Usage:
   example status                    Show server status
   example help                      Show JSON action reference
   example doctor [--json]           Run environment pre-flight checks
+  example providers list [--dir DIR] [--json]      Inspect drop-in providers
+  example providers validate [--dir DIR] [--json]  Validate drop-in providers
+  example providers status [--dir DIR] [--json]    Summarize drop-in providers
   example watch [--url URL] [--interval N]  Poll /health and emit on state change
   example setup check               Check plugin setup without mutating appdata
   example setup repair              Create missing appdata/env setup files
@@ -95,6 +100,7 @@ pub enum Command {
         command: String,
         json: serde_json::Value,
     },
+    Providers(ProvidersCommand),
     PackageGenerate {
         write: bool,
     },
@@ -185,6 +191,9 @@ where
                 }
                 _ => None,
             },
+            "providers" => Some(Command::Providers(providers::parse_providers_command(
+                rest,
+            )?)),
             "package" => match rest {
                 [action, flags @ ..] if action == "generate" => Some(Command::PackageGenerate {
                     write: parse_package_generate_flags(flags)?,
@@ -204,6 +213,10 @@ where
 /// - All other commands get only `ExampleConfig`; keep it that way.
 /// - Add `--json` support to each new command by forwarding a `json` flag.
 pub async fn run(cmd: Command, cfg: &ExampleConfig) -> Result<()> {
+    if let Command::Providers(command) = cmd {
+        return providers::run_providers_command(command);
+    }
+
     let client = ExampleClient::new(cfg)?;
     let service = ExampleService::new(client);
     let registry = dynamic_provider_registry(service.clone())?;
@@ -346,6 +359,7 @@ fn service_action_from_command(cmd: &Command) -> Option<ExampleAction> {
         Command::Doctor { .. }
         | Command::Watch { .. }
         | Command::Provider { .. }
+        | Command::Providers(_)
         | Command::PackageGenerate { .. }
         | Command::Setup(_) => None,
     }
@@ -474,6 +488,10 @@ pub fn run_package_generate(write: bool) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "providers_tests.rs"]
+mod providers_tests;
 
 pub fn confirm_destructive_action_allowed(
     actions: &[ActionSpec],

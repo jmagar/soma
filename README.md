@@ -67,6 +67,22 @@ cargo run --bin rtemplate -- status
 cargo run --bin rtemplate -- doctor
 ```
 
+## Drop-In Providers
+
+Drop `.json`, `.ts`, or `.wasm` provider files into `./providers` and
+`rtemplate` will expose their actions through CLI, MCP, and HTTP without
+rebuilding the binary. Use `RTEMPLATE_PROVIDER_DIR` to point at another
+directory.
+
+```bash
+rtemplate providers validate
+rtemplate providers list
+rtemplate providers status --json
+```
+
+See [docs/PROVIDERS.md](docs/PROVIDERS.md) and
+[examples/providers/](examples/providers/).
+
 Call the MCP endpoint directly:
 
 ```bash
@@ -176,9 +192,12 @@ Transport shims
   crates/rtemplate-api/src/api.rs        REST extractors to service calls.
   crates/rmcp-template/src/routes.rs     Axum router, auth, MCP, API, web fallback.
 
-Action registry
-  crates/rtemplate-service/src/actions.rs
-  Service-owned action metadata, validation, cached catalog/help, and native dispatch.
+Action and provider registries
+  crates/rtemplate-contracts/src/actions.rs
+  crates/rtemplate-service/src/provider_registry.rs
+  crates/rtemplate-service/src/providers/
+  Contract-owned native action metadata plus the dynamic provider registry used
+  by CLI, MCP, and HTTP dispatch.
 ```
 
 The thin-shim rule is strict:

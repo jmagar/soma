@@ -147,6 +147,24 @@ fn dynamic_provider_command_accepts_flat_flags_without_json() {
 }
 
 #[test]
+fn parses_providers_list_with_dir_and_json() {
+    let command = parse_args_from(["providers", "list", "--dir", "/tmp/providers", "--json"])
+        .expect("parse command")
+        .expect("command");
+
+    assert!(matches!(command, Command::Providers(_)));
+}
+
+#[test]
+fn parses_providers_validate_as_reserved_command() {
+    let command = parse_args_from(["providers", "validate"])
+        .expect("parse command")
+        .expect("command");
+
+    assert!(matches!(command, Command::Providers(_)));
+}
+
+#[test]
 fn dynamic_provider_command_resolves_cli_command_and_alias_to_action() {
     let registry = ProviderRegistry::new(vec![Arc::new(CliProvider {
         catalog: provider_catalog(),

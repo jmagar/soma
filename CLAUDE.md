@@ -55,6 +55,8 @@ A reusable Rust template for building MCP servers with the rmcp crate. The binar
 
 If you find yourself computing, filtering, transforming, or validating data in `tools.rs` or `cli.rs`, stop and move it to `app.rs`.
 
+- Dynamic providers load from `./providers` by default or `RTEMPLATE_PROVIDER_DIR`; use `rtemplate providers validate` before committing provider examples or runtime docs.
+
 ## How to add an action
 
 1. **`crates/rtemplate-service/src/example.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).
