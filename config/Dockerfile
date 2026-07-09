@@ -53,6 +53,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY xtask/ xtask/
 COPY docs/generated/openapi.json docs/generated/openapi.json
+COPY docs/contracts/provider-manifest.schema.json docs/contracts/provider-manifest.schema.json
 # Embed the Next.js static export built in the web stage.
 COPY --from=web /app/apps/web/out/ apps/web/out/
 

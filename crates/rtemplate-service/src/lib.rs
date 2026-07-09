@@ -1,8 +1,10 @@
+pub mod actions;
 pub mod app;
 pub mod capabilities;
 pub mod example;
 pub mod provider_errors;
 pub mod provider_registry;
+mod provider_snapshot;
 pub mod providers;
 
 use anyhow::{anyhow, Result};

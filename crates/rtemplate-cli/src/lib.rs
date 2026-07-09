@@ -27,10 +27,12 @@ use std::io::{BufRead, IsTerminal, Write};
 // TEMPLATE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
 pub mod doctor;
+mod package;
 mod providers;
 pub mod setup;
 pub mod watch;
 
+pub use package::run_package_generate;
 pub use providers::ProvidersCommand;
 pub use setup::{apply_plugin_options, run_setup, SetupCommand};
 
@@ -481,31 +483,6 @@ fn reserved_cli_command(command: &str) -> bool {
             | "openapi"
             | "help"
     )
-}
-
-pub fn run_package_generate(write: bool) -> Result<()> {
-    let mode = if write { "--write" } else { "--check" };
-    let status = std::process::Command::new("cargo")
-        .args(["xtask", "generate-provider-surfaces", mode])
-        .status()
-        .map_err(|error| {
-            anyhow!("failed to run cargo xtask generate-provider-surfaces: {error}")
-        })?;
-    if !status.success() {
-        return Err(anyhow!(
-            "cargo xtask generate-provider-surfaces {mode} failed with {status}"
-        ));
-    }
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&serde_json::json!({
-            "ok": true,
-            "changed": write,
-            "command": "package generate",
-            "mode": if write { "write" } else { "check" }
-        }))?
-    );
-    Ok(())
 }
 
 #[cfg(test)]
