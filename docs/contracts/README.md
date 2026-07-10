@@ -22,6 +22,16 @@ bash scripts/validate-plugin-layout.sh
 cargo test --test plugin_contract
 ```
 
+## Drop-in provider layout
+
+- Contract: `drop-in-provider-layout.md`
+- Spec: `../specs/drop-in-provider-layout.md`
+- Manifest schema: `provider-manifest.schema.json`
+
+The structured provider layout defines the frictionless `providers/tools/`,
+`providers/prompts/`, and `providers/resources/` authoring contract. It covers
+static files, Markdown prompts, static resources, and dynamic resource readers.
+
 ## Scaffold intent
 
 - Schema: `scaffold-intent.schema.json`
