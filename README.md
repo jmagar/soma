@@ -187,6 +187,12 @@ When `TOOLS` is absent, public functions defined in the module become tools.
 Sync and async functions are supported, and common Python type annotations are
 converted into input schemas.
 
+Python provider files are trusted code. Soma imports them during provider
+catalog refresh to discover tools, then executes tool calls in a sidecar with a
+cleared environment plus only declared provider/tool env values. Catalog import
+does not receive provider env; read secrets inside tool functions, not at module
+import time.
+
 Provider manifests can declare:
 
 - tools/actions exposed through MCP by default and through CLI/REST when their

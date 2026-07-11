@@ -150,6 +150,13 @@ the module. Private names are ignored. Function signatures are converted into
 JSON Schema for common Python annotations such as `str`, `int`, `float`, `bool`,
 `dict`, `list`, and typed lists.
 
+Python provider files are trusted code, not inert configuration. Soma imports
+the module to derive the catalog, so top-level Python runs during provider
+refresh. The sidecar starts with a cleared environment and receives only
+declared provider/tool env values during tool execution. Catalog import does
+not receive provider env; provider code must read secrets inside tool functions
+instead of at module import time.
+
 ### Python LangChain and LlamaIndex Providers
 
 Loads `.py` files through a Python sidecar. These providers are for reusing
@@ -189,6 +196,10 @@ The provider imports the module, reads `PROVIDER` and `TOOLS`, converts
 LangChain/LlamaIndex tool metadata into provider tool schemas, and executes tool
 calls in a Python sidecar. `RTEMPLATE_PYTHON_COMMAND` may point at a virtualenv
 or `uv`/Python wrapper when the default `python3` is not the right interpreter.
+These provider files have the same trusted-code behavior as plain Python
+providers: module import happens during catalog refresh, while tool execution
+runs with only declared environment values. Framework tools should avoid
+constructing env-dependent clients at module import time.
 
 ### WASM Provider
 

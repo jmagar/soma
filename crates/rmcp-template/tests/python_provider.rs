@@ -1,7 +1,9 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
 
 use rtemplate_contracts::config::ExampleConfig;
@@ -127,6 +129,105 @@ TOOLS = [LookupTool()]
 }
 
 #[tokio::test]
+async fn real_langchain_provider_smoke_when_available() -> anyhow::Result<()> {
+    if !python_module_available("langchain_core.tools") {
+        eprintln!("skipping real LangChain smoke: langchain_core.tools is not installed");
+        return Ok(());
+    }
+
+    let temp = test_dir("real-langchain")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("real_langchain.py"),
+        r#"
+from langchain_core.tools import tool
+
+PROVIDER = {"name": "real-langchain", "kind": "langchain"}
+
+@tool
+def real_langchain_multiply(a: int, b: int) -> dict:
+    """Multiply two integers with a real LangChain tool."""
+    return {"product": a * b}
+
+TOOLS = [real_langchain_multiply]
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let snapshot = registry.snapshot();
+    let catalog = snapshot
+        .catalogs
+        .iter()
+        .find(|catalog| catalog.provider.name == "real-langchain")
+        .expect("real LangChain catalog");
+    let tool = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.name == "real_langchain_multiply")
+        .expect("real LangChain tool");
+    assert_eq!(tool.input_schema["properties"]["a"]["type"], "integer");
+    assert_eq!(tool.input_schema["properties"]["b"]["type"], "integer");
+
+    let output = dispatch(
+        &registry,
+        "real_langchain_multiply",
+        json!({"a": 6, "b": 7}),
+    )
+    .await?;
+    assert_eq!(output["product"], 42);
+    Ok(())
+}
+
+#[tokio::test]
+async fn real_llamaindex_provider_smoke_when_available() -> anyhow::Result<()> {
+    if !python_module_available("llama_index.core.tools") {
+        eprintln!("skipping real LlamaIndex smoke: llama_index.core.tools is not installed");
+        return Ok(());
+    }
+
+    let temp = test_dir("real-llamaindex")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("real_llamaindex.py"),
+        r#"
+from llama_index.core.tools import FunctionTool
+
+PROVIDER = {"name": "real-llamaindex", "kind": "llamaindex"}
+
+def real_llamaindex_add(a: int, b: int) -> dict:
+    """Add two integers with a real LlamaIndex FunctionTool."""
+    return {"sum": a + b}
+
+TOOLS = [FunctionTool.from_defaults(real_llamaindex_add, name="real_llamaindex_add")]
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let snapshot = registry.snapshot();
+    let catalog = snapshot
+        .catalogs
+        .iter()
+        .find(|catalog| catalog.provider.name == "real-llamaindex")
+        .expect("real LlamaIndex catalog");
+    let tool = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.name == "real_llamaindex_add")
+        .expect("real LlamaIndex tool");
+    assert_eq!(tool.input_schema["properties"]["a"]["type"], "integer");
+    assert_eq!(tool.input_schema["properties"]["b"]["type"], "integer");
+
+    let output = dispatch(&registry, "real_llamaindex_add", json!({"a": 2, "b": 3})).await?;
+    assert!(
+        output.to_string().contains('5'),
+        "real LlamaIndex output should include the computed sum: {output}"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn plain_python_provider_discovers_and_executes_public_functions() -> anyhow::Result<()> {
     let temp = test_dir("plain")?;
     let providers = temp.join("providers");
@@ -182,6 +283,258 @@ def _private() -> str:
     Ok(())
 }
 
+#[tokio::test]
+async fn python_provider_ignores_provider_stdout_noise() -> anyhow::Result<()> {
+    let temp = test_dir("stdout-noise")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("noisy.py"),
+        r#"
+print("import log line")
+
+PROVIDER = {"name": "noisy-python", "kind": "python"}
+
+def noisy(value: str) -> dict:
+    """Return a value while printing to stdout."""
+    print("call log line")
+    return {"value": value}
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let output = dispatch(&registry, "noisy", json!({"value": "kept"})).await?;
+
+    assert_eq!(output, json!({"value": "kept"}));
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_provider_kills_timed_out_tool_process() -> anyhow::Result<()> {
+    let temp = test_dir("timeout")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("slow.py"),
+        r#"
+PROVIDER = {
+    "name": "timeout-python",
+    "kind": "python",
+    "meta": {"python": {"timeout_ms": 100}},
+}
+
+def slow(marker: str) -> dict:
+    """Sleep long enough to exceed the configured timeout."""
+    import pathlib
+    import time
+
+    time.sleep(0.5)
+    pathlib.Path(marker).write_text("still running")
+    return {"done": True}
+"#,
+    )?;
+    let marker = temp.join("timed-out-sidecar.txt");
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let result = dispatch(&registry, "slow", json!({"marker": marker})).await;
+
+    assert!(result.is_err(), "slow provider call should time out");
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    assert!(
+        !marker.exists(),
+        "timed-out Python sidecar should not continue running after timeout"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_provider_passes_only_declared_environment() -> anyhow::Result<()> {
+    let temp = test_dir("env-boundary")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("env_reader.py"),
+        r#"
+import os
+
+PROVIDER = {
+    "name": "env-python",
+    "kind": "python",
+    "env": [
+        {
+            "name": "PYTHON_PROVIDER_DECLARED_SECRET",
+            "server_prefixed": False,
+            "required": True,
+            "sensitive": True,
+            "default": "allowed",
+        }
+    ],
+}
+
+def read_env() -> dict:
+    """Read declared and undeclared environment values."""
+    return {
+        "declared": os.environ.get("PYTHON_PROVIDER_DECLARED_SECRET"),
+        "undeclared_path": os.environ.get("PATH", "missing"),
+    }
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let result = dispatch(&registry, "read_env", json!({})).await?;
+    assert_eq!(
+        result,
+        json!({"declared": "allowed", "undeclared_path": "missing"})
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn json_manifest_cannot_claim_python_provider_kind() -> anyhow::Result<()> {
+    let temp = test_dir("json-python-kind")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("bad-python.json"),
+        r#"
+{
+  "schema_version": 1,
+  "provider": {
+    "name": "bad-python-json",
+    "kind": "python"
+  },
+  "tools": [
+    {
+      "name": "bad_python_json",
+      "description": "A Python provider kind declared from JSON.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    }
+  ]
+}
+"#,
+    )?;
+
+    let error = match dynamic_provider_registry_from_dir(service()?, &providers) {
+        Ok(_) => anyhow::bail!("JSON manifests must not claim Python provider kinds"),
+        Err(error) => error,
+    };
+
+    assert!(error.to_string().contains("requires a .py file"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_provider_registers_module_during_import() -> anyhow::Result<()> {
+    let temp = test_dir("sys-modules")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("module_identity.py"),
+        r#"
+import sys
+
+PROVIDER = {"name": "module-identity", "kind": "python"}
+
+MODULE_PRESENT_DURING_IMPORT = __name__ in sys.modules
+
+def module_present() -> dict:
+    """Return whether the provider module was registered during import."""
+    return {"present": MODULE_PRESENT_DURING_IMPORT}
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let output = dispatch(&registry, "module_present", json!({})).await?;
+
+    assert_eq!(output, json!({"present": true}));
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_provider_handles_union_annotations_without_union_type() -> anyhow::Result<()> {
+    let temp = test_dir("union-type")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("union_type.py"),
+        r#"
+from __future__ import annotations
+
+PROVIDER = {"name": "union-python", "kind": "python"}
+
+def maybe(value: str | None = None) -> dict:
+    """Return an optional value."""
+    return {"value": value}
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let snapshot = registry.snapshot();
+    let catalog = snapshot
+        .catalogs
+        .iter()
+        .find(|catalog| catalog.provider.name == "union-python")
+        .expect("union python provider catalog");
+    let maybe = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.name == "maybe")
+        .expect("maybe tool");
+
+    assert_eq!(
+        maybe.input_schema["properties"]["value"]["type"],
+        json!("string")
+    );
+    assert!(maybe.input_schema.get("required").is_none());
+    Ok(())
+}
+
+#[tokio::test]
+async fn python_provider_schema_does_not_require_types_union_type() -> anyhow::Result<()> {
+    let temp = test_dir("missing-union-type")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("missing_union_type.py"),
+        r#"
+import types
+import typing
+
+if hasattr(types, "UnionType"):
+    delattr(types, "UnionType")
+
+PROVIDER = {"name": "missing-union-type", "kind": "python"}
+
+def maybe(value: typing.Optional[str] = None) -> dict:
+    """Return an optional value."""
+    return {"value": value}
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let snapshot = registry.snapshot();
+    let catalog = snapshot
+        .catalogs
+        .iter()
+        .find(|catalog| catalog.provider.name == "missing-union-type")
+        .expect("missing-union-type catalog");
+    let maybe = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.name == "maybe")
+        .expect("maybe tool");
+
+    assert_eq!(
+        maybe.input_schema["properties"]["value"]["type"],
+        json!("string")
+    );
+    Ok(())
+}
+
 async fn dispatch(
     registry: &rtemplate_service::ProviderRegistry,
     action: &str,
@@ -209,6 +562,16 @@ fn service() -> anyhow::Result<ExampleService> {
         api_key: "test".to_owned(),
     })?;
     Ok(ExampleService::new(client))
+}
+
+fn python_module_available(module: &str) -> bool {
+    let code = format!(
+        "import importlib.util, sys\ntry:\n    found = importlib.util.find_spec({module:?}) is not None\nexcept ModuleNotFoundError:\n    found = False\nsys.exit(0 if found else 1)"
+    );
+    Command::new("python3")
+        .args(["-c", &code])
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn test_dir(name: &str) -> anyhow::Result<PathBuf> {

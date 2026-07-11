@@ -286,7 +286,22 @@ fn ensure_kind_matches(
     path: &Path,
     catalog: &ProviderCatalog,
 ) -> Result<(), FileProviderLoadError> {
-    let expected = match path.extension().and_then(|extension| extension.to_str()) {
+    let extension = path.extension().and_then(|extension| extension.to_str());
+    if matches!(
+        catalog.provider.kind,
+        ProviderKind::Python | ProviderKind::Langchain | ProviderKind::Llamaindex
+    ) && extension != Some("py")
+    {
+        return Err(FileProviderLoadError {
+            path: path.to_path_buf(),
+            message: format!(
+                "provider kind `{}` requires a .py file",
+                catalog.provider.kind.as_str()
+            ),
+        });
+    }
+
+    let expected = match extension {
         Some("ts") => Some(ProviderKind::AiSdk),
         Some("wasm") => Some(ProviderKind::Wasm),
         Some("py")

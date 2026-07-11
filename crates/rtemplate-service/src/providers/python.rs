@@ -72,6 +72,8 @@ impl Provider for PythonProvider {
         let started = TokioInstant::now();
         let mut child = Command::new(&runtime.command)
             .args(["-c", PYTHON_BRIDGE])
+            .kill_on_drop(true)
+            .env_clear()
             .envs(runtime.env)
             .stdin(StdStdio::piped())
             .stdout(StdStdio::piped())
@@ -202,14 +204,18 @@ impl PythonRuntime {
         tool: &ProviderTool,
         call: &ProviderCall,
     ) -> Result<Self, ProviderError> {
-        let meta = tool
-            .meta
-            .get("python")
-            .or_else(|| catalog.meta.get("python"));
-        let command = meta
+        let provider_meta = catalog.meta.get("python");
+        let tool_meta = tool.meta.get("python");
+        let command = tool_meta
             .and_then(|value| value.get("command"))
             .and_then(Value::as_str)
             .map(str::to_owned)
+            .or_else(|| {
+                provider_meta
+                    .and_then(|value| value.get("command"))
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
             .or_else(|| std::env::var("RTEMPLATE_PYTHON_COMMAND").ok())
             .unwrap_or_else(|| "python3".to_owned());
         let timeout_ms = tool
@@ -217,7 +223,13 @@ impl PythonRuntime {
             .as_ref()
             .and_then(|limits| limits.timeout_ms)
             .or_else(|| {
-                meta.and_then(|value| value.get("timeout_ms"))
+                tool_meta
+                    .and_then(|value| value.get("timeout_ms"))
+                    .and_then(Value::as_u64)
+            })
+            .or_else(|| {
+                provider_meta
+                    .and_then(|value| value.get("timeout_ms"))
                     .and_then(Value::as_u64)
             })
             .unwrap_or(DEFAULT_TIMEOUT_MS);
@@ -283,6 +295,7 @@ fn collect_env(
 fn run_catalog_sidecar(runtime: &PythonRuntime, input: &[u8]) -> Result<Vec<u8>, String> {
     let mut child = StdCommand::new(&runtime.command)
         .args(["-c", PYTHON_BRIDGE])
+        .env_clear()
         .stdin(StdStdio::piped())
         .stdout(StdStdio::piped())
         .stderr(StdStdio::piped())
@@ -320,6 +333,7 @@ fn run_catalog_sidecar(runtime: &PythonRuntime, input: &[u8]) -> Result<Vec<u8>,
         }
         if Instant::now() >= deadline {
             let _ = child.kill();
+            let _ = child.wait();
             return Err(format!(
                 "Python provider catalog exceeded {}ms timeout",
                 runtime.timeout_ms
@@ -331,6 +345,7 @@ fn run_catalog_sidecar(runtime: &PythonRuntime, input: &[u8]) -> Result<Vec<u8>,
 
 const PYTHON_BRIDGE: &str = r#"
 import asyncio
+import contextlib
 import dataclasses
 import importlib.util
 import inspect
@@ -349,6 +364,7 @@ def load_module(path):
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot import provider file {path}")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -492,7 +508,11 @@ def annotation_schema(annotation):
 
     origin = typing.get_origin(annotation)
     args = typing.get_args(annotation)
-    if origin in (typing.Union, types.UnionType):
+    union_origins = [typing.Union]
+    union_type = getattr(types, "UnionType", None)
+    if union_type is not None:
+        union_origins.append(union_type)
+    if origin in union_origins:
         non_none = [item for item in args if item is not type(None)]
         if len(non_none) == 1:
             return annotation_schema(non_none[0])
@@ -596,6 +616,9 @@ def catalog(path):
         "tools": [],
         "meta": config.get("meta") or {},
     }
+    for key in ("env", "capabilities", "docs", "plugin", "ui"):
+        if key in config:
+            output[key] = config[key]
     for tool in tools:
         name = tool_name(tool, kind)
         if not name:
@@ -670,12 +693,13 @@ async def execute(path, action, params):
 async def main():
     payload = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
     mode = payload.get("mode")
-    if mode == "catalog":
-        result = catalog(payload["path"])
-    elif mode == "call":
-        result = await execute(payload["path"], payload["action"], payload.get("params") or {})
-    else:
-        raise RuntimeError(f"unknown Python bridge mode {mode!r}")
+    with contextlib.redirect_stdout(sys.stderr):
+        if mode == "catalog":
+            result = catalog(payload["path"])
+        elif mode == "call":
+            result = await execute(payload["path"], payload["action"], payload.get("params") or {})
+        else:
+            raise RuntimeError(f"unknown Python bridge mode {mode!r}")
     sys.stdout.write(json.dumps(jsonable(result), separators=(",", ":")))
 
 
