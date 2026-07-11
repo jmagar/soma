@@ -256,7 +256,7 @@ version = "0.4.1"
         );
         write(
             &self.path("packages/rtemplate-mcp/package.json"),
-            r#"{"name":"@jmagar/soma","version":"0.4.1"}"#,
+            r#"{"name":"soma-rmcp","version":"0.4.1"}"#,
         );
         write(
             &self.path("plugins/rtemplate/.claude-plugin/plugin.json"),

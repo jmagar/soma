@@ -19,7 +19,7 @@
     "soma"
   ],
   "license": "MIT",
-  "name": "@jmagar/soma",
+  "name": "soma-rmcp",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/jmagar/soma.git"
