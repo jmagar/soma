@@ -26,6 +26,7 @@ docs/
   ├── GEMINI.md                       ← symlink → CLAUDE.md (Gemini CLI)
   │
   ├── PATTERNS.md                     ← canonical pattern catalog (normative)
+  ├── RMCP_README_TEMPLATE.md         ← root README shape for generated Rust MCP servers
   ├── MCP_SCHEMA.md                   ← MCP action/scope/schema contract
   ├── MCP-REGISTRY-PUBLISH-GUIDE.md  ← how to publish to the MCP registry
   │
@@ -93,6 +94,7 @@ docs/
 | `docs/*.md` | Stable orientation, architecture narrative, and how-to guides. The map, not the territory. |
 | `README.md` | Canonical server surface and binary/transport profile policy for template users. |
 | `docs/PATTERNS.md` | Normative patterns for the entire rmcp server family. Deviation requires an explicit recorded decision. |
+| `docs/RMCP_README_TEMPLATE.md` | Reusable root README structure distilled from the current Rust MCP server family. |
 | `docs/adr/` | Accepted architecture decisions. Use ADRs for cross-cutting choices that future adapters must preserve or explicitly supersede. Number new ADRs after the highest accepted record and add them to `docs/adr/README.md`. |
 | `docs/contracts/` | Machine-readable JSON schemas and example payloads checked by CI scripts. Committed. |
 | `docs/generated/` | Small artifacts produced by `just openapi`, `just schema-docs`, etc. Only commit when the artifact is part of CI/API compatibility checking. |
