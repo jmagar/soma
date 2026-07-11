@@ -165,8 +165,8 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
     checks.check_result("Claude plugin manifest is valid JSON", || {
         read_json(&layout.claude).map(|_| ())
     });
-    checks.check_result("Claude plugin name is rtemplate", || {
-        json_field_eq(&layout.claude, "/name", "rtemplate")
+    checks.check_result("Claude plugin name is soma", || {
+        json_field_eq(&layout.claude, "/name", "soma")
     });
     checks.check_result("Claude plugin has no version field", || {
         json_has_no_version(&layout.claude)
@@ -203,8 +203,8 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
     checks.check_result("Codex plugin manifest is valid JSON", || {
         read_json(&layout.codex).map(|_| ())
     });
-    checks.check_result("Codex plugin name is rtemplate-mcp", || {
-        json_field_eq(&layout.codex, "/name", "rtemplate-mcp")
+    checks.check_result("Codex plugin name is soma", || {
+        json_field_eq(&layout.codex, "/name", "soma")
     });
     checks.check_result("Codex plugin has no version field", || {
         json_has_no_version(&layout.codex)
@@ -219,8 +219,8 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
     checks.check_result("Gemini extension manifest is valid JSON", || {
         read_json(&layout.gemini).map(|_| ())
     });
-    checks.check_result("Gemini extension name is rtemplate-mcp", || {
-        json_field_eq(&layout.gemini, "/name", "rtemplate-mcp")
+    checks.check_result("Gemini extension name is soma", || {
+        json_field_eq(&layout.gemini, "/name", "soma")
     });
     checks.check_result("Gemini extension has no version field", || {
         json_has_no_version(&layout.gemini)
@@ -253,8 +253,13 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
             .unwrap_or("<unknown>");
+        let expected_skill_name = if skill_dir == "rtemplate" {
+            "soma"
+        } else {
+            skill_dir
+        };
         checks.check_result(&format!("skill {skill_dir} has front matter name"), || {
-            skill_has_name(skill_file, skill_dir)
+            skill_has_name(skill_file, expected_skill_name)
         });
         checks.check_result(&format!("skill {skill_dir} has description"), || {
             skill_has_description(skill_file)
@@ -590,8 +595,7 @@ fn hook_command_exists(path: &Path, event: &str, matcher: Option<&str>) -> Resul
             .and_then(Value::as_array)
             .is_some_and(|hooks| {
                 hooks.iter().any(|hook| {
-                    hook.get("command").and_then(Value::as_str)
-                        == Some("rtemplate setup plugin-hook")
+                    hook.get("command").and_then(Value::as_str) == Some("soma setup plugin-hook")
                 })
             })
     });

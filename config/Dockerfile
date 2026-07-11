@@ -3,10 +3,10 @@
 # Dockerfile — Template for building an rmcp-based MCP server
 #
 # TEMPLATE: Replace all occurrences of "example" with your binary name.
-#           The server binary name must match Cargo.toml [[bin]] name = "rtemplate-server".
+#           The server binary name must match Cargo.toml [[bin]] name = "soma-server".
 #
 # Key substitutions:
-#   "rtemplate-server"     → your server binary name (e.g. "myservice-server")
+#   "soma-server"     → your server binary name (e.g. "myservice-server")
 #   "example-cargo-*"      → your cache mount IDs (e.g. "myservice-cargo-*")
 #   "template-rmcp"          → your systemd/Docker service name
 #   EXPOSE 40060            → your port (must match config.toml [mcp] port)
@@ -63,8 +63,8 @@ COPY --from=web /app/apps/web/out/ apps/web/out/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked -p rmcp-template --bin rtemplate-server --features full && \
-    cp target/release/rtemplate-server /usr/local/bin/rtemplate-server
+    cargo build --release --locked -p soma --bin soma-server --features full && \
+    cp target/release/soma-server /usr/local/bin/soma-server
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Minimal Debian image — no Rust toolchain, no build tools.
@@ -86,8 +86,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
-# TEMPLATE: Replace "rtemplate-server" with your server binary name in both COPY and target path.
-COPY --from=builder /usr/local/bin/rtemplate-server /usr/local/bin/rtemplate-server
+# TEMPLATE: Replace "soma-server" with your server binary name in both COPY and target path.
+COPY --from=builder /usr/local/bin/soma-server /usr/local/bin/soma-server
 
 # Wire in the entrypoint.
 # TEMPLATE: entrypoint.sh lives at the repo root. It runs as root, fixes /data

@@ -1,12 +1,12 @@
 {
-  "name": "rmcp-template",
+  "name": "soma",
   "plugins": [
     {
       "category": "Infrastructure",
       "interface": {
-        "displayName": "Example MCP"
+        "displayName": "Soma"
       },
-      "name": "rtemplate",
+      "name": "soma",
       "policy": {
         "authentication": "ON_INSTALL",
         "installation": "AVAILABLE"

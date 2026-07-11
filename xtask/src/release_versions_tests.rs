@@ -54,7 +54,7 @@ fn plugin_manifest_version_key_is_rejected_recursively() {
 fn cargo_lock_package_version_round_trips() {
     let content = r#"# generated
 [[package]]
-name = "rmcp-template"
+name = "soma"
 version = "0.4.1"
 
 [[package]]
@@ -62,25 +62,24 @@ name = "xtask"
 version = "0.1.0"
 "#;
     assert_eq!(
-        read_cargo_lock_package_version(content, Some("rmcp-template")).unwrap(),
+        read_cargo_lock_package_version(content, Some("soma")).unwrap(),
         "0.4.1"
     );
-    let updated =
-        replace_cargo_lock_package_version(content, Some("rmcp-template"), "0.4.2").unwrap();
+    let updated = replace_cargo_lock_package_version(content, Some("soma"), "0.4.2").unwrap();
     assert!(updated.contains("version = \"0.4.2\""));
     assert!(updated.contains("name = \"xtask\"\nversion = \"0.1.0\""));
 }
 
 #[test]
 fn oci_identifier_version_uses_tag_suffix() {
-    let content = r#"{"packages":[{"identifier":"ghcr.io/jmagar/rtemplate-mcp:0.4.1"}]}"#;
+    let content = r#"{"packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1"}]}"#;
     assert_eq!(
         read_oci_identifier_version(content, Some("/packages/0/identifier")).unwrap(),
         "0.4.1"
     );
     let updated =
         replace_oci_identifier_version(content, Some("/packages/0/identifier"), "0.4.2").unwrap();
-    assert!(updated.contains("ghcr.io/jmagar/rtemplate-mcp:0.4.2"));
+    assert!(updated.contains("ghcr.io/jmagar/soma:0.4.2"));
 }
 
 #[test]
@@ -88,7 +87,7 @@ fn parity_checks_registry_openapi_and_plugin_no_version() {
     let fixture = Fixture::new();
     fs::write(
         fixture.path("server.json"),
-        r#"{"version":"0.4.0","packages":[{"identifier":"ghcr.io/jmagar/rtemplate-mcp:0.4.1","version":"0.4.1"}]}"#,
+        r#"{"version":"0.4.0","packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"}]}"#,
     )
     .unwrap();
     fs::write(
@@ -98,7 +97,7 @@ fn parity_checks_registry_openapi_and_plugin_no_version() {
     .unwrap();
     fs::write(
         fixture.path("plugins/rtemplate/.claude-plugin/plugin.json"),
-        r#"{"name":"rtemplate","version":"0.4.1"}"#,
+        r#"{"name":"soma","version":"0.4.1"}"#,
     )
     .unwrap();
     let manifest = load_manifest(fixture.root()).unwrap();
@@ -235,21 +234,21 @@ members = ["crates/rmcp-template"]
         write(
             &self.path("crates/rmcp-template/Cargo.toml"),
             r#"[package]
-name = "rmcp-template"
+name = "soma"
 version = "0.4.1"
 "#,
         );
         write(
             &self.path("Cargo.lock"),
             r#"[[package]]
-name = "rmcp-template"
+name = "soma"
 version = "0.4.1"
 "#,
         );
         write(&self.path("CHANGELOG.md"), "# Changelog\n\n## [0.4.1]\n");
         write(
             &self.path("server.json"),
-            r#"{"version":"0.4.1","packages":[{"identifier":"ghcr.io/jmagar/rtemplate-mcp:0.4.1","version":"0.4.1"}]}"#,
+            r#"{"version":"0.4.1","packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"}]}"#,
         );
         write(
             &self.path("docs/generated/openapi.json"),
@@ -257,19 +256,19 @@ version = "0.4.1"
         );
         write(
             &self.path("packages/rtemplate-mcp/package.json"),
-            r#"{"name":"rtemplate-mcp","version":"0.4.1"}"#,
+            r#"{"name":"@jmagar/soma","version":"0.4.1"}"#,
         );
         write(
             &self.path("plugins/rtemplate/.claude-plugin/plugin.json"),
-            r#"{"name":"rtemplate"}"#,
+            r#"{"name":"soma"}"#,
         );
         write(
             &self.path("plugins/rtemplate/.codex-plugin/plugin.json"),
-            r#"{"name":"rtemplate"}"#,
+            r#"{"name":"soma"}"#,
         );
         write(
             &self.path("plugins/rtemplate/gemini-extension.json"),
-            r#"{"name":"rtemplate"}"#,
+            r#"{"name":"soma"}"#,
         );
         write(
             &self.path("crates/rmcp-template/src/lib.rs"),

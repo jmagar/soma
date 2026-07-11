@@ -24,10 +24,7 @@ fn secret_keys_are_marked_secret() {
 #[test]
 fn plugin_option_mapping_is_derived_from_specs() {
     let mappings: Vec<_> = plugin_option_mappings().collect();
-    assert!(mappings.contains(&(
-        "CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL",
-        "RTEMPLATE_API_URL"
-    )));
+    assert!(mappings.contains(&("CLAUDE_PLUGIN_OPTION_SOMA_API_URL", "RTEMPLATE_API_URL")));
     assert!(mappings.contains(&("CLAUDE_PLUGIN_OPTION_API_TOKEN", "RTEMPLATE_MCP_TOKEN")));
     assert!(mappings.contains(&(
         "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET",

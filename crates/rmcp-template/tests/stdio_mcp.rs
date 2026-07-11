@@ -12,7 +12,7 @@ async fn stdio_client() -> anyhow::Result<(
     rmcp::service::RunningService<rmcp::RoleClient, ()>,
     Option<tokio::process::ChildStderr>,
 )> {
-    let binary = env!("CARGO_BIN_EXE_rtemplate");
+    let binary = env!("CARGO_BIN_EXE_soma");
     let (transport, stderr) = TokioChildProcess::builder(Command::new(binary).configure(|cmd| {
         cmd.arg("mcp")
             .env("RUST_LOG", "warn")

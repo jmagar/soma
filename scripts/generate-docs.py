@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ACTION_RS = ROOT / "crates/rtemplate-service/src/actions.rs"
+ACTION_RS = ROOT / "crates/rtemplate-contracts/src/actions.rs"
 CONFIG_RS = ROOT / "crates/rtemplate-contracts/src/config.rs"
 ENV_REGISTRY_RS = ROOT / "crates/rtemplate-contracts/src/env_registry.rs"
 ENV_DOC = ROOT / "docs/ENV.md"
@@ -641,10 +641,6 @@ def load_plugin_surface() -> dict:
 
 def plugin_setting_key(plugin_option: str) -> str:
     raw = plugin_option.removeprefix("CLAUDE_PLUGIN_OPTION_").lower()
-    if raw == "rtemplate_api_url":
-        return "rtemplate_api_url"
-    if raw == "rtemplate_api_key":
-        return "rtemplate_api_key"
     if raw == "api_token":
         return "api_token"
     return raw
@@ -660,8 +656,8 @@ def plugin_setting_title(key: str) -> str:
         "google_client_id": "Google OAuth client ID",
         "google_client_secret": "Google OAuth client secret",
         "auth_admin_email": "OAuth admin email",
-        "rtemplate_api_url": "Service API URL",
-        "rtemplate_api_key": "Service API key",
+        "soma_api_url": "Service API URL",
+        "soma_api_key": "Service API key",
     }.get(key, key.replace("_", " ").title())
 
 
@@ -675,8 +671,8 @@ def plugin_setting_description(key: str, env_key: str) -> str:
         "google_client_id": "Google OAuth client ID used when auth_mode=oauth.",
         "google_client_secret": "Google OAuth client secret from the same Google Cloud Console credential.",
         "auth_admin_email": "Bootstrap allowed Google account for OAuth mode.",
-        "rtemplate_api_url": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. Maps to RTEMPLATE_API_URL.",
-        "rtemplate_api_key": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. Maps to RTEMPLATE_API_KEY.",
+        "soma_api_url": "Optional upstream API URL for dropped-in tools that use the bundled ExampleClient compatibility layer. Maps to RTEMPLATE_API_URL.",
+        "soma_api_key": "Optional upstream API key for dropped-in tools that use the bundled ExampleClient compatibility layer. Maps to RTEMPLATE_API_KEY.",
     }
     return descriptions.get(key, f"Maps to {env_key}.")
 
@@ -718,7 +714,7 @@ def render_claude_plugin_json() -> str:
         "use_docker": {
             "type": "boolean",
             "title": "Deploy with Docker",
-            "description": "TEMPLATE: Keep this. True uses docker compose; false uses a systemd user service.",
+            "description": "True uses docker compose; false uses a systemd user service.",
             "required": True,
             "default": False,
         }
@@ -827,14 +823,14 @@ def params_summary(action: Action) -> str:
 
 def cli_command(action: Action) -> str:
     commands = {
-        "greet": "rtemplate greet [--name N]",
-        "echo": "rtemplate echo --message <msg>",
-        "status": "rtemplate status",
-        "help": "rtemplate --help",
+        "greet": "soma greet [--name N]",
+        "echo": "soma echo --message <msg>",
+        "status": "soma status",
+        "help": "soma --help",
     }
     if action.transport != "Any":
         return "_MCP-only_"
-    return commands.get(action.name, f"rtemplate {action.name.replace('_', '-')}")
+    return commands.get(action.name, f"soma {action.name.replace('_', '-')}")
 
 
 def action_table_markdown() -> str:

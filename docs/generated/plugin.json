@@ -7,14 +7,14 @@
     "marketplace": ".agents/plugins/marketplace.json",
     "plugin_json": "plugins/rtemplate/.codex-plugin/plugin.json"
   },
-  "description": "Generated distributable plugin surface for rmcp-template.",
+  "description": "Generated distributable plugin surface for Soma.",
   "docs": "docs/generated/provider-surfaces.md",
   "mcp_server": "server.json",
-  "name": "rtemplate",
+  "name": "soma",
   "node_package": "packages/rtemplate-mcp/package.json",
   "plugin_root": "plugins/rtemplate",
   "provider_files": [],
-  "provider_fingerprint": "sha256:c0c63fc4531f0e7610bcdb717e75ad3bf7b2c6da6deaddedd809759cdeeed08d",
+  "provider_fingerprint": "sha256:fd31a31d4a192850070820f443438aa3527e5a478e5cfdf9bbf18d7fab46b86e",
   "providers": [
     {
       "description": "Native service actions compiled into the template.",
@@ -238,7 +238,7 @@
           "scope": null
         }
       ],
-      "when_to_use": "Use for rmcp-template built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
+      "when_to_use": "Use for Soma built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
     }
   ],
   "schema_version": 1,

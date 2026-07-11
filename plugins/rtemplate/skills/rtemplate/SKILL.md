@@ -1,5 +1,5 @@
 ---
-name: rtemplate
+name: soma
 description: TEMPLATE SKILL — Replace this description with your service's trigger phrases. This skill should be used when the user asks to interact with the Example service via MCP. Trigger phrases should describe what your service does, e.g. "query my service", "check example status", "call example API". The description is what the AI reads to decide when to invoke this skill — be specific and use the exact phrases your users will say.
 ---
 
@@ -26,7 +26,7 @@ description: TEMPLATE SKILL — Replace this description with your service's tri
 # Example Skill
 
 <!-- TEMPLATE: Replace this paragraph with your service description -->
-Rust-based MCP server template. Exposes a single `example` MCP tool with action-based dispatch for interacting with an example remote service. The plugin default is local stdio MCP (`rtemplate mcp` from PATH); for platform deployments the local adapter calls the deployed API configured by `rtemplate_api_url`.
+Soma RMCP runtime. Exposes a single `example` MCP tool with action-based dispatch for interacting with an example remote service. The plugin default is local stdio MCP (`soma mcp` from PATH); for platform deployments the local adapter calls the deployed API configured by `soma_api_url`.
 
 ## Tool
 
@@ -42,9 +42,9 @@ A single MCP tool, `mcp__example__example`, dispatches on a required `action` ar
 | `greet` | Return a greeting. | `name` (optional string) |
 | `echo` | Echo a message back unchanged. | `message` (required string) |
 | `status` | Return server status and configuration info. | none |
-| `help` | Show the action reference. | none |
 | `elicit_name` | Ask the MCP client to collect a name, then return a personalised greeting. | none |
 | `scaffold_intent` | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. | none |
+| `help` | Show the action reference. | none |
 <!-- END GENERATED SKILL_ACTION_TABLE -->
 **Always prefer the MCP tool**. The default plugin path is stdio. Fall back to HTTP curl only when MCP is unavailable or when explicitly debugging a remote HTTP deployment.
 
@@ -100,7 +100,7 @@ mcp__example__example(action="echo", message="Hello, world!")
 
 ### `action="status"` — Server status
 
-No parameters. Returns status from the local stub or from the deployed API when `rtemplate_api_url` / `RTEMPLATE_API_URL` is configured.
+No parameters. Returns status from the local stub or from the deployed API when `soma_api_url` / `RTEMPLATE_API_URL` is configured.
 
 ```
 mcp__example__example(action="status")
@@ -218,11 +218,11 @@ mcp__example__example(action="help")
      The CLAUDE_PLUGIN_OPTION_* env vars are injected by the plugin runtime. -->
 
 Use only when the stdio MCP tool is unavailable or when debugging a remote HTTP
-deployment. The plugin default launches `rtemplate mcp`
+deployment. The plugin default launches `soma mcp`
 and passes:
 
-- `CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL` — deployed platform API or upstream URL
-- `CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_KEY` — deployed API bearer token or upstream key
+- `CLAUDE_PLUGIN_OPTION_SOMA_API_URL` — deployed platform API or upstream URL
+- `CLAUDE_PLUGIN_OPTION_SOMA_API_KEY` — deployed API bearer token or upstream key
 
 For HTTP fallback, configure:
 

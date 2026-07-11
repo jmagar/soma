@@ -1,10 +1,10 @@
-# rtemplate-mcp
+# @jmagar/soma
 
-Node launcher package for the `rtemplate` MCP server binary.
+Node launcher package for the `soma` RMCP runtime binary.
 
 ```bash
-npx rtemplate-mcp mcp
+npx @jmagar/soma mcp
 ```
 
-The package expects the Rust `rtemplate` binary on `PATH`. Set
-`RTEMPLATE_BIN=/absolute/path/to/rtemplate` to launch a specific binary.
+The package expects the Rust `soma` binary on `PATH`. Set
+`SOMA_BIN=/absolute/path/to/soma` to launch a specific binary.

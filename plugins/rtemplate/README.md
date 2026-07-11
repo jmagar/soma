@@ -3,15 +3,15 @@
 Multi-platform plugin package that connects Claude Code, Codex, and Gemini CLI to the Example MCP server.
 
 The default MCP connection is the installed local stdio adapter:
-`rtemplate mcp`. For platform deployments, set
-`rtemplate_api_url` to the deployed `example-server` REST API base URL so the local
+`soma mcp`. For platform deployments, set
+`soma_api_url` to the deployed `example-server` REST API base URL so the local
 adapter forwards business actions to that API. HTTP MCP remains available as a
 manual fallback for remote/gateway deployments.
 
 ## Structure
 
 ```
-plugins/rtemplate/
+plugins/soma/
 ├── .claude-plugin/
 │   └── plugin.json         # Claude Code manifest
 ├── .codex-plugin/
@@ -50,11 +50,11 @@ stdio mode and passes the user-configured API target into the child process:
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "rtemplate",
+      "command": "soma",
       "args": ["mcp"],
       "env": {
-        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
-        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
+        "RTEMPLATE_API_URL": "${user_config.soma_api_url}",
+        "RTEMPLATE_API_KEY": "${user_config.soma_api_key}",
         "RUST_LOG": "warn"
       }
     }
@@ -69,7 +69,7 @@ from each platform's user-configurable settings at runtime.
 
 ## Hooks
 
-`hooks/hooks.json` runs `rtemplate setup plugin-hook` directly on `SessionStart` and `ConfigChange` (no shell wrapper).
+`hooks/hooks.json` runs `soma setup plugin-hook` directly on `SessionStart` and `ConfigChange` (no shell wrapper).
 
 The binary maps plugin settings (`CLAUDE_PLUGIN_OPTION_*`) to its `RTEMPLATE_*` environment variables via `apply_plugin_options()` (`src/cli/setup.rs`), self-installs into `~/.local/bin`, prepares appdata, and runs setup checks/repair.
 
@@ -82,7 +82,7 @@ It is not registered by default because the plugin's default MCP path is stdio
 and does not require a local HTTP server. Projects that ship the full
 `example-server` HTTP profile can opt into this monitor from the Claude manifest.
 
-When enabled, it runs `rtemplate watch` from `PATH` and delivers each
+When enabled, it runs `soma watch` from `PATH` and delivers each
 stdout line to Claude as a notification whenever the HTTP server changes state.
 
 The monitor emits only on state transitions — Claude is not notified while the server is stable. Three states:
@@ -91,7 +91,7 @@ The monitor emits only on state transitions — Claude is not notified while the
 - `DOWN` — connection refused / timeout
 - `DEGRADED(HTTP N)` — non-2xx HTTP response
 
-The command requires `rtemplate` to be installed on `PATH` before enabling the monitor:
+The command requires `soma` to be installed on `PATH` before enabling the monitor:
 
 ```bash
 just install-local

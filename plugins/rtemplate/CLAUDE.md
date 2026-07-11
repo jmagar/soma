@@ -1,4 +1,4 @@
-# plugins/rtemplate — Claude Code instructions
+# plugins/soma — Claude Code instructions
 
 ## What this directory is
 
@@ -12,7 +12,7 @@ Multi-platform plugin package for the Example MCP server. Contains manifests for
 | `.codex-plugin/plugin.json` | Codex manifest — same data + Codex UI fields (`interface`) |
 | `gemini-extension.json` | Gemini CLI manifest — uses `settings` array instead of `userConfig` |
 | `.mcp.json` | Shared MCP server connection config used by all three platforms |
-| `hooks/hooks.json` | Lifecycle hook definitions: `SessionStart`, `ConfigChange` — call `rtemplate setup plugin-hook` directly (no shell wrapper) |
+| `hooks/hooks.json` | Lifecycle hook definitions: `SessionStart`, `ConfigChange` — call `soma setup plugin-hook` directly (no shell wrapper) |
 | `monitors/monitors.json` | Background health monitor config (requires Claude Code v2.1.105+) |
 | `skills/example/SKILL.md` | Three-tier tool documentation shared by Claude and Codex |
 
@@ -28,7 +28,7 @@ When changing user-configurable settings, update all three manifests: `userConfi
 
 ## Monitors (Claude Code v2.1.105+)
 
-`.mcp.json` runs `rtemplate mcp` as the default stdio MCP server. The binary must
+`.mcp.json` runs `soma mcp` as the default stdio MCP server. The binary must
 be installed on `PATH` before the plugin is installed. Install it with:
 
 ```bash
@@ -39,7 +39,7 @@ just install-local
 command uses `${user_config.server_url}` substitution — this is resolved at
 runtime from the user's plugin settings. Do not hardcode URLs in `monitors.json`.
 
-When adding a new monitor: add an entry to `monitors.json` and reference the installed `rtemplate` binary or scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`.
+When adding a new monitor: add an entry to `monitors.json` and reference the installed `soma` binary or scripts under `${CLAUDE_PLUGIN_ROOT}/scripts/`.
 
 ## Updating the skill
 

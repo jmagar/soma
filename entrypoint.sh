@@ -27,7 +27,7 @@
 # =============================================================================
 set -e
 
-SERVICE_NAME="rtemplate-server"
+SERVICE_NAME="soma-server"
 BINARY="/usr/local/bin/${SERVICE_NAME}"
 
 # ── Data directory ─────────────────────────────────────────────────────────────

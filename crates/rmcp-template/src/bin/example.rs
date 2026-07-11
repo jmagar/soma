@@ -1,7 +1,7 @@
 //! Local CLI + stdio MCP binary entry point.
 //!
 //! This is the lightweight plugin/local profile. It does not start the HTTP
-//! server; use `example-server serve` for the full API/Web/HTTP MCP profile.
+//! server; use `soma-server serve` for the full API/Web/HTTP MCP profile.
 
 use anyhow::{bail, Result};
 use rmcp_template::{cli, runtime};
@@ -16,11 +16,11 @@ async fn main() -> Result<()> {
             return Ok(());
         }
         [f] if matches!(f.as_str(), "--version" | "-V" | "version") => {
-            println!("example {}", env!("CARGO_PKG_VERSION"));
+            println!("soma {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
         [] | [_, ..] if is_http_server_request(&args) => {
-            bail!("HTTP server mode lives in `example-server`; run `example-server serve`")
+            bail!("HTTP server mode lives in `soma-server`; run `soma-server serve`")
         }
         _ => {}
     }

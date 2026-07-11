@@ -1,26 +1,29 @@
 # =============================================================================
-# Cargo.toml — Facade and binary crate for the rmcp-template project
+# Cargo.toml — Facade and binary crate for the Soma project
 #
-# TEMPLATE: This crate owns the public facade plus the rtemplate and
-# rtemplate-server entrypoints. Implementation lives in sibling crates.
+# This crate owns the public facade plus the soma and
+# soma-server entrypoints. Implementation lives in sibling crates.
 # =============================================================================
 
 [package]
-name = "rmcp-template"
+name = "soma"
 version = "0.4.6"
 edition = "2021"
 rust-version = "1.96"
-description = "Template for building MCP servers with the rmcp crate"
+description = "Batteries-included RMCP server runtime for drop-in provider capabilities"
 license = "MIT"
 autobins = false
 
+[lib]
+name = "rmcp_template"
+
 [[bin]]
-name = "rtemplate"
+name = "soma"
 path = "src/bin/example.rs"
 required-features = ["local-adapter"]
 
 [[bin]]
-name = "rtemplate-server"
+name = "soma-server"
 path = "src/main.rs"
 required-features = ["server"]
 
@@ -82,7 +85,7 @@ test-support = ["rtemplate-mcp?/test-support"]
 
 [dev-dependencies]
 async-trait = "0.1"
-rmcp-template = { path = ".", features = ["test-support"] }
+rmcp-template = { path = ".", package = "soma", features = ["test-support"] }
 rtemplate-contracts = { path = "../rtemplate-contracts" }
 rtemplate-service = { path = "../rtemplate-service" }
 rtemplate-test-support = { path = "../rtemplate-test-support" }

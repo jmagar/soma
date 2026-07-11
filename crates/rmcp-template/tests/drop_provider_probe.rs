@@ -19,7 +19,7 @@ use tokio::{
 async fn stdio_client_in(
     cwd: &std::path::Path,
 ) -> anyhow::Result<rmcp::service::RunningService<rmcp::RoleClient, ()>> {
-    let binary = env!("CARGO_BIN_EXE_rtemplate");
+    let binary = env!("CARGO_BIN_EXE_soma");
     let (transport, _stderr) = TokioChildProcess::builder(Command::new(binary).configure(|cmd| {
         cmd.arg("mcp")
             .current_dir(cwd)
@@ -102,7 +102,7 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
             "meta": {
                 "mcp": {
                     "stdio": {
-                        "command": env!("CARGO_BIN_EXE_rtemplate"),
+                        "command": env!("CARGO_BIN_EXE_soma"),
                         "args": ["mcp"],
                         "cwd": temp.path().display().to_string()
                     },
@@ -188,7 +188,7 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
         assert_eq!(structured["action"], action);
     }
 
-    let cli_output = Command::new(env!("CARGO_BIN_EXE_rtemplate"))
+    let cli_output = Command::new(env!("CARGO_BIN_EXE_soma"))
         .arg("live_ts_probe")
         .current_dir(temp.path())
         .env("RTEMPLATE_API_URL", "")
@@ -259,7 +259,7 @@ struct HttpServerGuard {
 
 impl HttpServerGuard {
     async fn spawn(cwd: &std::path::Path, port: u16) -> anyhow::Result<Self> {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtemplate-server"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_soma-server"))
             .arg("serve")
             .current_dir(cwd)
             .env("RUST_LOG", "warn")

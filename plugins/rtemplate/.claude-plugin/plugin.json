@@ -1,15 +1,15 @@
 {
-  "name": "rtemplate",
-  "description": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server - a Rust-based MCP server built from rmcp-template.",
+  "name": "soma",
+  "description": "Soma connects Claude Code to a batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
   "author": {
     "name": "Jacob Magar"
   },
-  "repository": "https://github.com/jmagar/rtemplate-mcp",
+  "repository": "https://github.com/jmagar/soma",
   "license": "MIT",
   "keywords": [
-    "example",
     "mcp",
-    "template",
+    "rmcp",
+    "soma",
     "homelab"
   ],
   "hooks": "./hooks/hooks.json",
@@ -18,21 +18,21 @@
     "use_docker": {
       "type": "boolean",
       "title": "Deploy with Docker",
-      "description": "TEMPLATE: Keep this. True uses docker compose; false uses a systemd user service.",
+      "description": "True uses docker compose; false uses a systemd user service.",
       "required": true,
       "default": false
     },
-    "rtemplate_api_url": {
+    "soma_api_url": {
       "type": "string",
       "title": "Service API URL",
-      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. Maps to RTEMPLATE_API_URL.",
+      "description": "Optional upstream API URL for dropped-in tools that use the bundled ExampleClient compatibility layer. Maps to RTEMPLATE_API_URL.",
       "required": false,
       "default": ""
     },
-    "rtemplate_api_key": {
+    "soma_api_key": {
       "type": "string",
       "title": "Service API key",
-      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. Maps to RTEMPLATE_API_KEY.",
+      "description": "Optional upstream API key for dropped-in tools that use the bundled ExampleClient compatibility layer. Maps to RTEMPLATE_API_KEY.",
       "required": false,
       "default": "",
       "sensitive": true

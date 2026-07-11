@@ -179,7 +179,7 @@ jobs:
         uses: taiki-e/install-action@95cc2373c3f00275e315c306e56fef1c7a8854c0 # cargo-nextest
 
       - name: Build stdio test binary
-        run: cargo build --bin rtemplate
+        run: cargo build --bin soma
 
       - name: cargo nextest run --profile ci
         run: cargo nextest run --profile ci
@@ -270,16 +270,16 @@ jobs:
           restore-keys: ${{ github.repository }}-build-linux-
 
       - name: cargo build local binary
-        run: cargo build --release --locked --bin rtemplate --no-default-features --features local-adapter
+        run: cargo build --release --locked --bin soma --no-default-features --features local-adapter
 
       - name: cargo build server binary
-        run: cargo build --release --locked --bin rtemplate-server --features full
+        run: cargo build --release --locked --bin soma-server --features full
 
       - name: Upload Linux binary
         uses: actions/upload-artifact@v7
         with:
-          name: rtemplate-linux-x86_64
-          path: target/release/rtemplate
+          name: soma-linux-x86_64
+          path: target/release/soma
           if-no-files-found: error
 
   build-windows:
@@ -348,7 +348,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $process = Start-Process `
             -FilePath cargo `
-            -ArgumentList @("build", "--release", "--locked", "--bin", "rtemplate", "--no-default-features", "--features", "local-adapter") `
+            -ArgumentList @("build", "--release", "--locked", "--bin", "soma", "--no-default-features", "--features", "local-adapter") `
             -NoNewWindow `
             -PassThru
 
@@ -369,7 +369,7 @@ jobs:
           $ErrorActionPreference = "Stop"
           $process = Start-Process `
             -FilePath cargo `
-            -ArgumentList @("build", "--release", "--locked", "--bin", "rtemplate-server", "--features", "full") `
+            -ArgumentList @("build", "--release", "--locked", "--bin", "soma-server", "--features", "full") `
             -NoNewWindow `
             -PassThru
 
@@ -385,8 +385,8 @@ jobs:
       - name: Upload Windows binary
         uses: actions/upload-artifact@v7
         with:
-          name: rtemplate-windows-x86_64
-          path: target/release/rtemplate.exe
+          name: soma-windows-x86_64
+          path: target/release/soma.exe
           if-no-files-found: error
 
   # -- mcp-smoke: live MCP HTTP tool/resource smoke through mcporter -----------
@@ -427,8 +427,8 @@ jobs:
           sudo apt-get install -y jq
           npm install -g mcporter@0.7.3
 
-      - name: Build rtemplate server binary
-        run: cargo build --locked --bin rtemplate-server --features full
+      - name: Build Soma server binary
+        run: cargo build --locked --bin soma-server --features full
 
       - name: Start MCP server
         env:
@@ -438,15 +438,15 @@ jobs:
           RUST_LOG: info,rmcp=warn
         run: |
           set -euo pipefail
-          ./target/debug/rtemplate-server serve mcp > /tmp/rtemplate-mcp.log 2>&1 &
-          echo "$!" > /tmp/rtemplate-mcp.pid
+          ./target/debug/soma-server serve mcp > /tmp/soma-mcp.log 2>&1 &
+          echo "$!" > /tmp/soma-mcp.pid
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:40123/health >/dev/null 2>&1; then
               exit 0
             fi
             sleep 1
           done
-          cat /tmp/rtemplate-mcp.log
+          cat /tmp/soma-mcp.log
           exit 1
 
       - name: Run mcporter smoke tests
@@ -461,7 +461,7 @@ jobs:
         with:
           name: mcp-smoke-logs
           path: |
-            /tmp/rtemplate-mcp.log
+            /tmp/soma-mcp.log
             /tmp/test-mcp.*.log
           if-no-files-found: warn
           retention-days: 14
@@ -469,7 +469,7 @@ jobs:
       - name: Stop MCP server
         if: always()
         run: |
-          kill "$(cat /tmp/rtemplate-mcp.pid 2>/dev/null)" 2>/dev/null || true
+          kill "$(cat /tmp/soma-mcp.pid 2>/dev/null)" 2>/dev/null || true
 
   # -- container-smoke: compose config plus Docker build on PRs/main ------------
   container-smoke:

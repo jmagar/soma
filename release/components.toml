@@ -2,7 +2,7 @@ schema_version = 1
 
 [[components]]
 id = "template"
-name = "rmcp-template"
+name = "soma"
 tag_prefix = "v"
 release_workflow = "release.yml"
 shipping_paths = [
@@ -18,10 +18,10 @@ shipping_paths = [
   "packages/rtemplate-mcp",
   "scripts/repair.sh",
 ]
-version_source = { kind = "cargo_package", path = "crates/rmcp-template/Cargo.toml", package = "rmcp-template" }
+version_source = { kind = "cargo_package", path = "crates/rmcp-template/Cargo.toml", package = "soma" }
 version_files = [
-  { kind = "cargo_package", path = "crates/rmcp-template/Cargo.toml", package = "rmcp-template" },
-  { kind = "cargo_lock_package", path = "Cargo.lock", package = "rmcp-template" },
+  { kind = "cargo_package", path = "crates/rmcp-template/Cargo.toml", package = "soma" },
+  { kind = "cargo_lock_package", path = "Cargo.lock", package = "soma" },
   { kind = "json_version", path = "server.json", json_pointer = "/version" },
   { kind = "json_version", path = "server.json", json_pointer = "/packages/0/version" },
   { kind = "json_version", path = "packages/rtemplate-mcp/package.json", json_pointer = "/version" },

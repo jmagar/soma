@@ -1,20 +1,20 @@
 {
-  "name": "rtemplate-mcp",
-  "description": "TEMPLATE: Replace with a one-line description of your MCP server for the Codex plugin registry. E.g.: 'Gotify notification server MCP bridge for Codex.'",
-  "homepage": "https://github.com/jmagar/rtemplate-mcp",
-  "repository": "https://github.com/jmagar/rtemplate-mcp",
+  "name": "soma",
+  "description": "Soma is a batteries-included RMCP runtime for drop-in provider-backed agent capabilities.",
+  "homepage": "https://github.com/jmagar/soma",
+  "repository": "https://github.com/jmagar/soma",
   "license": "MIT",
   "keywords": [
-    "example",
     "mcp",
-    "template",
+    "rmcp",
+    "soma",
     "homelab"
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Example MCP",
-    "shortDescription": "TEMPLATE: Short tagline shown in Codex plugin listings (50 chars max). E.g.: 'Query and manage Example service'.",
-    "longDescription": "TEMPLATE: Full paragraph describing what this MCP server does, what data it exposes, what operations it supports, and what permissions it needs. This appears on the plugin detail page in Codex.",
+    "displayName": "Soma",
+    "shortDescription": "Drop-in RMCP runtime.",
+    "longDescription": "Soma runs a batteries-included RMCP server runtime. Drop in provider manifests or modules for tools, prompts, resources, and provider-backed actions; the runtime supplies MCP, CLI, REST, auth, setup, and generated metadata.",
     "developerName": "Jacob Magar",
     "category": "Infrastructure",
     "capabilities": [
@@ -23,11 +23,11 @@
     ],
     "brandColor": "#6366F1",
     "defaultPrompt": [
-      "TEMPLATE: Replace with 3 natural-language prompts that demonstrate your server's most useful actions.",
-      "Check Example service status.",
-      "Show all available Example actions."
+      "Check Soma runtime status.",
+      "Show available Soma provider actions.",
+      "Help me add a drop-in provider to Soma."
     ],
-    "websiteURL": "https://github.com/jmagar/rtemplate-mcp",
+    "websiteURL": "https://github.com/jmagar/soma",
     "composerIcon": "./assets/icon.png",
     "logo": "./assets/logo.svg"
   },

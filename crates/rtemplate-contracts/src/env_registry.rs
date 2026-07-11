@@ -68,7 +68,7 @@ pub const ENV_KEY_SPECS: &[EnvKeySpec] = &[
         Some("example.api_url"),
         LegacyBehavior::Canonical,
         false,
-        Some("CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_URL"),
+        Some("CLAUDE_PLUGIN_OPTION_SOMA_API_URL"),
     ),
     spec(
         "RTEMPLATE_API_KEY",
@@ -77,7 +77,7 @@ pub const ENV_KEY_SPECS: &[EnvKeySpec] = &[
         Some("example.api_key"),
         LegacyBehavior::Canonical,
         true,
-        Some("CLAUDE_PLUGIN_OPTION_RTEMPLATE_API_KEY"),
+        Some("CLAUDE_PLUGIN_OPTION_SOMA_API_KEY"),
     ),
     spec(
         "RTEMPLATE_MCP_TOKEN",

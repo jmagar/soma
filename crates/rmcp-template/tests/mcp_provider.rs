@@ -62,7 +62,7 @@ async fn hot_dropped_mcp_provider_proxies_upstream_tool_call() -> anyhow::Result
             "meta": {
                 "mcp": {
                     "stdio": {
-                        "command": env!("CARGO_BIN_EXE_rtemplate"),
+                        "command": env!("CARGO_BIN_EXE_soma"),
                         "args": ["mcp"],
                         "cwd": upstream.display().to_string()
                     },
@@ -151,7 +151,7 @@ async fn mcp_provider_infers_http_transport_from_url() -> anyhow::Result<()> {
 async fn stdio_client_in(
     cwd: &std::path::Path,
 ) -> anyhow::Result<rmcp::service::RunningService<rmcp::RoleClient, ()>> {
-    let binary = env!("CARGO_BIN_EXE_rtemplate");
+    let binary = env!("CARGO_BIN_EXE_soma");
     let (transport, _stderr) = TokioChildProcess::builder(Command::new(binary).configure(|cmd| {
         cmd.arg("mcp")
             .current_dir(cwd)
@@ -186,7 +186,7 @@ struct HttpServerGuard {
 
 impl HttpServerGuard {
     async fn spawn(port: u16) -> anyhow::Result<Self> {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rtemplate-server"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_soma-server"))
             .arg("serve")
             .env("RUST_LOG", "warn")
             .env("RTEMPLATE_MCP_HOST", "127.0.0.1")

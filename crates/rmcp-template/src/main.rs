@@ -1,9 +1,9 @@
 //! Full server binary entry point.
 //!
 //! Modes:
-//!   `example-server [serve]`  Start Streamable HTTP MCP + REST + web server
-//!   `example-server mcp`      Start stdio MCP transport
-//!   `example-server <cmd>`    Run CLI command
+//!   `soma-server [serve]`  Start Streamable HTTP MCP + REST + web server
+//!   `soma-server mcp`      Start stdio MCP transport
+//!   `soma-server <cmd>`    Run CLI command
 
 use anyhow::Result;
 use rmcp_template::{cli, runtime};
@@ -18,7 +18,7 @@ async fn main() -> Result<()> {
             return Ok(());
         }
         [f] if matches!(f.as_str(), "--version" | "-V" | "version") => {
-            println!("example-server {}", env!("CARGO_PKG_VERSION"));
+            println!("soma-server {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
         _ => {}

@@ -7,7 +7,7 @@
 #   BINARY_NAME  → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
 #   PORT         → your service port (e.g. 6970 for unraid, 9158 for gotify)
 #
-# Replace every occurrence of "rmcp-template", "rtemplate-mcp", and "example"
+# Replace every occurrence of "Soma", "soma", and "example"
 # in this file with your actual values.
 #
 # Triggers:
@@ -25,8 +25,8 @@ on:
     tags: ["v*"]
 
 env:
-  # TEMPLATE: Replace "jmagar/rtemplate-mcp" with "your-org/your-image-name"
-  IMAGE_NAME: ghcr.io/jmagar/rtemplate-mcp
+  # TEMPLATE: Replace "jmagar/soma" with "your-org/your-image-name"
+  IMAGE_NAME: ghcr.io/jmagar/soma
   # Set this as a GitHub Actions repository variable instead of committing the
   # domain into the template: gh variable set MCP_REGISTRY_DOMAIN --body <domain>
   MCP_REGISTRY_DOMAIN: ${{ vars.MCP_REGISTRY_DOMAIN }}
@@ -60,7 +60,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          # TEMPLATE: Replace "rtemplate-mcp" with your image name.
+          # TEMPLATE: Replace "soma" with your image name.
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
@@ -98,7 +98,7 @@ jobs:
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a0b350d16c55eb73629 # 0.31.0
         with:
           # TEMPLATE: Replace with your image name.
-          image-ref: ghcr.io/jmagar/rtemplate-mcp:latest
+          image-ref: ghcr.io/jmagar/soma:latest
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH

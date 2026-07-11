@@ -93,7 +93,7 @@ fn static_catalog() -> ProviderCatalog {
         capabilities: Default::default(),
         docs: Some(DocsOverlay {
             when_to_use: Some(
-                "Use for rmcp-template built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
+                "Use for Soma built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
                     .to_owned(),
             ),
             examples: Vec::new(),

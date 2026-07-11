@@ -28,8 +28,8 @@
 -->
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "description": "TEMPLATE: Replace with your server description — one sentence describing what service this MCP server exposes.",
-  "name": "tv.tootie/rtemplate-mcp",
+  "description": "Soma is a batteries-included RMCP runtime for drop-in tools, prompts, resources, and provider-backed agent capabilities.",
+  "name": "tv.tootie/soma",
   "packages": [
     {
       "environmentVariables": [
@@ -52,7 +52,7 @@
           "name": "RTEMPLATE_MCP_TOKEN"
         }
       ],
-      "identifier": "ghcr.io/jmagar/rtemplate-mcp:0.4.6",
+      "identifier": "ghcr.io/jmagar/soma:0.4.6",
       "registryType": "oci",
       "version": "0.4.6"
     }
@@ -65,8 +65,8 @@
   ],
   "repository": {
     "source": "github",
-    "url": "https://github.com/jmagar/rtemplate-mcp"
+    "url": "https://github.com/jmagar/soma"
   },
-  "title": "Example MCP",
+  "title": "Soma",
   "version": "0.4.6"
 }

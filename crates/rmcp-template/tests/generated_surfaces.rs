@@ -86,8 +86,7 @@ fn node_package_exposes_npx_launcher() {
         &fs::read(root.join("packages/rtemplate-mcp/package.json")).expect("package json"),
     )
     .expect("package JSON");
-    assert_eq!(package["bin"]["rtemplate-mcp"], "./bin/rtemplate-mcp.js");
-    assert_eq!(package["bin"]["rtemplate"], "./bin/rtemplate-mcp.js");
+    assert_eq!(package["bin"]["soma"], "./bin/rtemplate-mcp.js");
 
     let launcher = root.join("packages/rtemplate-mcp/bin/rtemplate-mcp.js");
     let mode = fs::metadata(&launcher)

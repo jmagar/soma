@@ -1,13 +1,13 @@
 {
-  "name": "rtemplate-mcp",
-  "description": "TEMPLATE: Replace with a one-line description of your MCP server. E.g.: 'Gotify notification server MCP bridge for Gemini CLI.'",
+  "name": "soma",
+  "description": "Soma is a batteries-included RMCP runtime for drop-in provider-backed agent capabilities.",
   "author": "Jacob Magar",
-  "repository": "https://github.com/jmagar/rtemplate-mcp",
+  "repository": "https://github.com/jmagar/soma",
   "license": "MIT",
   "keywords": [
-    "example",
     "mcp",
-    "template",
+    "rmcp",
+    "soma",
     "homelab"
   ],
   "contextFileName": "GEMINI.md",
@@ -15,13 +15,13 @@
   "hooks": "./hooks/hooks.json",
   "settings": [
     {
-      "name": "rtemplate_api_url",
-      "description": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. Maps to RTEMPLATE_API_URL.",
+      "name": "soma_api_url",
+      "description": "Optional upstream API URL for dropped-in tools that use the bundled ExampleClient compatibility layer. Maps to RTEMPLATE_API_URL.",
       "required": false
     },
     {
-      "name": "rtemplate_api_key",
-      "description": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. Maps to RTEMPLATE_API_KEY.",
+      "name": "soma_api_key",
+      "description": "Optional upstream API key for dropped-in tools that use the bundled ExampleClient compatibility layer. Maps to RTEMPLATE_API_KEY.",
       "required": false,
       "sensitive": true
     },

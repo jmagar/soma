@@ -1,32 +1,32 @@
 {
-  "name": "rtemplate",
-  "packageName": "rtemplate-mcp",
+  "name": "soma",
+  "packageName": "soma",
   "serviceName": "example",
-  "binary": "rtemplate",
-  "repository": "https://github.com/jmagar/rtemplate-mcp",
-  "homepage": "https://github.com/jmagar/rtemplate-mcp",
+  "binary": "soma",
+  "repository": "https://github.com/jmagar/soma",
+  "homepage": "https://github.com/jmagar/soma",
   "license": "MIT",
-  "keywords": ["example", "mcp", "template", "homelab"],
+  "keywords": ["mcp", "rmcp", "soma", "homelab"],
   "author": {
     "name": "Jacob Magar",
     "email": "jmagar@users.noreply.github.com",
     "url": "https://github.com/jmagar"
   },
-  "claudeDescription": "TEMPLATE: Replace 'example'/'Example'/'EXAMPLE' with your service name throughout this file and throughout the entire plugin directory. This plugin connects Claude Code to the Example MCP server - a Rust-based MCP server built from rmcp-template.",
-  "codexDescription": "TEMPLATE: Replace with a one-line description of your MCP server for the Codex plugin registry. E.g.: 'Gotify notification server MCP bridge for Codex.'",
-  "geminiDescription": "TEMPLATE: Replace with a one-line description of your MCP server. E.g.: 'Gotify notification server MCP bridge for Gemini CLI.'",
+  "claudeDescription": "Soma connects Claude Code to a batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
+  "codexDescription": "Soma is a batteries-included RMCP runtime for drop-in provider-backed agent capabilities.",
+  "geminiDescription": "Soma is a batteries-included RMCP runtime for drop-in provider-backed agent capabilities.",
   "codexInterface": {
-    "displayName": "Example MCP",
-    "shortDescription": "TEMPLATE: Short tagline shown in Codex plugin listings (50 chars max). E.g.: 'Query and manage Example service'.",
-    "longDescription": "TEMPLATE: Full paragraph describing what this MCP server does, what data it exposes, what operations it supports, and what permissions it needs. This appears on the plugin detail page in Codex.",
+    "displayName": "Soma",
+    "shortDescription": "Drop-in RMCP runtime.",
+    "longDescription": "Soma runs a batteries-included RMCP server runtime. Drop in provider manifests or modules for tools, prompts, resources, and provider-backed actions; the runtime supplies MCP, CLI, REST, auth, setup, and generated metadata.",
     "developerName": "Jacob Magar",
     "category": "Infrastructure",
     "capabilities": ["Read", "Write"],
     "brandColor": "#6366F1",
     "defaultPrompt": [
-      "TEMPLATE: Replace with 3 natural-language prompts that demonstrate your server's most useful actions.",
-      "Check Example service status.",
-      "Show all available Example actions."
+      "Check Soma runtime status.",
+      "Show available Soma provider actions.",
+      "Help me add a drop-in provider to Soma."
     ]
   }
 }

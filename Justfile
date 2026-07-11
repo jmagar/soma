@@ -1,7 +1,7 @@
 # =============================================================================
-# Justfile — Development and deployment commands for the Example MCP server
+# Justfile — Development and deployment commands for Soma
 #
-# TEMPLATE: Replace "example" with your binary/service name throughout.
+# TEMPLATE: Soma is the product binary; internal crate names still use rtemplate in this compatibility pass.
 #           Replace port 40060 with your service's port if different.
 #
 # Usage: just <recipe>   (install just: cargo install just)
@@ -16,19 +16,19 @@ default:
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
 # WARNING: RTEMPLATE_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
 dev:
-    RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run --bin rtemplate-server -- serve mcp
+    RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run --bin soma-server -- serve mcp
 
 # Run in stdio MCP transport mode (for Claude Desktop or direct pipe)
 mcp:
-    cargo run --bin rtemplate -- mcp
+    cargo run --bin soma -- mcp
 
 # Run a quick CLI greeting (smoke test without a running server)
 greet:
-    cargo run --bin rtemplate -- greet --name "Developer"
+    cargo run --bin soma -- greet --name "Developer"
 
 # Run the doctor pre-flight check
 doctor:
-    cargo run --bin rtemplate -- doctor
+    cargo run --bin soma -- doctor
 
 # ── Building ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ build:
 
 # Compile the lightweight local/plugin binary only
 build-local:
-    cargo build --bin rtemplate --no-default-features --features local-adapter
+    cargo build --bin soma --no-default-features --features local-adapter
 
 # Compile optimized release build (slower compile, much faster runtime)
 build-release:
@@ -46,11 +46,11 @@ build-release:
 
 # Compile the lightweight local/plugin release binary only
 build-local-release:
-    cargo build --release --bin rtemplate --no-default-features --features local-adapter
+    cargo build --release --bin soma --no-default-features --features local-adapter
 
 # Compile the full server release binary only
 build-server-release:
-    cargo build --release --bin rtemplate-server --features full
+    cargo build --release --bin soma-server --features full
 
 # Build the Next.js web UI static export (required before cargo build embeds it)
 # Output lands in apps/web/out/ and is baked into the binary via the `web` feature
@@ -309,7 +309,7 @@ setup:
 
 # Build the Docker image from source (does not start the container)
 docker-build:
-    docker build -f config/Dockerfile -t rtemplate-mcp .
+    docker build -f config/Dockerfile -t soma .
 
 # Start the Docker Compose stack in detached mode
 # TEMPLATE: The compose file references the "jakenet" external network.
@@ -340,7 +340,7 @@ docker-rebuild:
 # Uses the `release-fast` profile (release opts, no LTO, many codegen units) so
 # the binary behaves like release while compiling in a fraction of the time.
 build-fast:
-    cargo build --profile release-fast --bin rtemplate-server --features full
+    cargo build --profile release-fast --bin soma-server --features full
 
 # Fast "edit → rebuild image → check in browser" loop.
 # Unlike docker-rebuild's --no-cache full build, this reuses BuildKit layer and
@@ -374,7 +374,7 @@ health:
 
 # Verify that the running Docker/systemd service matches the current artifact
 runtime-current:
-    cargo xtask check-runtime-current --expected-binary target/release/rtemplate-server
+    cargo xtask check-runtime-current --expected-binary target/release/soma-server
 
 # Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
 auth-smoke:
@@ -412,8 +412,8 @@ install: install-local
 # Install the release binary on the local PATH for runtime smoke testing
 install-local: build-local-release
     mkdir -p "${HOME}/.local/bin"
-    install -m 755 target/release/rtemplate "${HOME}/.local/bin/rtemplate"
-    @echo "Installed ${HOME}/.local/bin/rtemplate"
+    install -m 755 target/release/soma "${HOME}/.local/bin/soma"
+    @echo "Installed ${HOME}/.local/bin/soma"
 
 # Validate all plugin manifests, MCP config, hooks, and skills
 validate-plugin:
@@ -458,11 +458,11 @@ conformance suite="active" port="41060":
         exit 1
     fi
     echo "Building server (default features)..."
-    cargo build --bin rtemplate-server
+    cargo build --bin soma-server
     echo "Starting loopback no-auth server on ${PORT}..."
     RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=${PORT} RTEMPLATE_MCP_NO_AUTH=true \
         RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true \
-        ./target/debug/rtemplate-server serve mcp >/tmp/rtemplate-conformance-server.log 2>&1 &
+        ./target/debug/soma-server serve mcp >/tmp/soma-conformance-server.log 2>&1 &
     SERVER_PID=$!
     trap 'kill ${SERVER_PID} 2>/dev/null || true' EXIT
     echo "Waiting for /health on ${PORT}..."
@@ -473,7 +473,7 @@ conformance suite="active" port="41060":
     # Hard guard: ensure OUR server is the one answering, not a pre-existing one.
     if ! kill -0 ${SERVER_PID} 2>/dev/null; then
         echo "Server failed to start (likely bind error). Log:"
-        cat /tmp/rtemplate-conformance-server.log
+        cat /tmp/soma-conformance-server.log
         exit 1
     fi
     echo "Running MCP conformance suite '{{suite}}' against ${URL}..."

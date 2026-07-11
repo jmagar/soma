@@ -40,34 +40,20 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     let codex = json("plugins/rtemplate/.codex-plugin/plugin.json");
     let gemini = json("plugins/rtemplate/gemini-extension.json");
 
-    assert_eq!(claude["name"], "rtemplate");
-    assert_eq!(codex["name"], "rtemplate-mcp");
-    assert_eq!(gemini["name"], "rtemplate-mcp");
+    assert_eq!(claude["name"], "soma");
+    assert_eq!(codex["name"], "soma");
+    assert_eq!(gemini["name"], "soma");
     assert!(
         claude.get("experimental").is_none(),
         "stdio-first plugin should not auto-register HTTP health monitors"
     );
 
-    assert!(claude["repository"]
-        .as_str()
-        .unwrap()
-        .ends_with("rtemplate-mcp"));
-    assert!(codex["repository"]
-        .as_str()
-        .unwrap()
-        .ends_with("rtemplate-mcp"));
-    assert!(gemini["repository"]
-        .as_str()
-        .unwrap()
-        .ends_with("rtemplate-mcp"));
+    assert!(claude["repository"].as_str().unwrap().ends_with("soma"));
+    assert!(codex["repository"].as_str().unwrap().ends_with("soma"));
+    assert!(gemini["repository"].as_str().unwrap().ends_with("soma"));
 
     let user_config = claude["userConfig"].as_object().unwrap();
-    for key in [
-        "server_url",
-        "api_token",
-        "rtemplate_api_url",
-        "rtemplate_api_key",
-    ] {
+    for key in ["server_url", "api_token", "soma_api_url", "soma_api_key"] {
         assert!(
             user_config.contains_key(key),
             "Claude userConfig missing {key}"
@@ -80,12 +66,7 @@ fn plugin_manifests_share_identity_and_connection_settings() {
         .iter()
         .map(|setting| setting["name"].as_str().unwrap())
         .collect();
-    for key in [
-        "server_url",
-        "api_token",
-        "rtemplate_api_url",
-        "rtemplate_api_key",
-    ] {
+    for key in ["server_url", "api_token", "soma_api_url", "soma_api_key"] {
         assert!(
             gemini_settings.contains(&key),
             "Gemini settings missing {key}"
@@ -103,7 +84,7 @@ fn claude_hooks_call_binary_setup_plugin_hook_directly() {
         let command = hooks["hooks"][hook_name][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert_eq!(command, "rtemplate setup plugin-hook");
+        assert_eq!(command, "soma setup plugin-hook");
     }
 }
 
@@ -122,7 +103,7 @@ fn plugin_hook_standard_is_documented() {
 }
 
 fn example_bin() -> std::path::PathBuf {
-    const BIN_NAME: &str = "rtemplate";
+    const BIN_NAME: &str = "soma";
     let key = format!("CARGO_BIN_EXE_{BIN_NAME}");
     let alt_key = format!("CARGO_BIN_EXE_{}", BIN_NAME.replace('-', "_"));
     std::env::var_os(&key)

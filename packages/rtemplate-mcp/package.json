@@ -1,9 +1,8 @@
 {
   "bin": {
-    "rtemplate": "./bin/rtemplate-mcp.js",
-    "rtemplate-mcp": "./bin/rtemplate-mcp.js"
+    "soma": "./bin/rtemplate-mcp.js"
   },
-  "description": "Node launcher package for the rmcp-template MCP server.",
+  "description": "Node launcher package for the Soma RMCP runtime.",
   "engines": {
     "node": ">=18"
   },
@@ -12,18 +11,18 @@
     "README.md",
     "package.json"
   ],
-  "homepage": "https://github.com/jmagar/rtemplate-mcp",
+  "homepage": "https://github.com/jmagar/soma",
   "keywords": [
     "mcp",
     "model-context-protocol",
     "rmcp",
-    "template"
+    "soma"
   ],
   "license": "MIT",
-  "name": "rtemplate-mcp",
+  "name": "@jmagar/soma",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jmagar/rtemplate-mcp.git"
+    "url": "git+https://github.com/jmagar/soma.git"
   },
   "version": "0.4.6"
 }

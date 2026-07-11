@@ -44,10 +44,11 @@ Claude Code plugin manifest. Defines the plugin identity, lifecycle hooks, and u
 | `google_client_id` | string (sensitive) | Google OAuth client ID |
 | `google_client_secret` | string (sensitive) | Google OAuth client secret |
 | `auth_admin_email` | string | OAuth admin email |
-| `rtemplate_api_url` | string | Deployed platform API or upstream service URL used by stdio adapter |
-| `rtemplate_api_key` | string (sensitive) | Deployed API bearer token or upstream service API key |
+| `soma_api_url` | string | Deployed platform API or upstream service URL used by stdio adapter |
+| `soma_api_key` | string (sensitive) | Deployed API bearer token or upstream service API key |
 
-**TEMPLATE**: Replace `rtemplate_api_url` / `rtemplate_api_key` with your service's credential fields.
+Soma maps these plugin options into the current `RTEMPLATE_API_URL` /
+`RTEMPLATE_API_KEY` runtime env names for compatibility.
 
 ### `.codex-plugin/plugin.json`
 
