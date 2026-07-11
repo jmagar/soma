@@ -11,7 +11,7 @@ manual fallback for remote/gateway deployments.
 ## Structure
 
 ```
-plugins/soma/
+plugins/rtemplate/
 ├── .claude-plugin/
 │   └── plugin.json         # Claude Code manifest
 ├── .codex-plugin/

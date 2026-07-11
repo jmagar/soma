@@ -1,6 +1,6 @@
 {
   "name": "soma",
-  "packageName": "soma",
+  "packageName": "soma-rmcp",
   "serviceName": "example",
   "binary": "soma",
   "repository": "https://github.com/jmagar/soma",

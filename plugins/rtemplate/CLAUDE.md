@@ -1,4 +1,4 @@
-# plugins/soma — Claude Code instructions
+# plugins/rtemplate — Soma plugin instructions
 
 ## What this directory is
 
