@@ -27,7 +27,7 @@
 # =============================================================================
 set -e
 
-SERVICE_NAME="example-server"
+SERVICE_NAME="rtemplate-server"
 BINARY="/usr/local/bin/${SERVICE_NAME}"
 
 # ── Data directory ─────────────────────────────────────────────────────────────

@@ -46,9 +46,15 @@ tower-http = { version = "0.7", features = ["cors", "limit", "trace"], optional 
 
 [features]
 default = ["full"]
-cli = ["dep:rtemplate-cli"]
+cli = ["dep:rtemplate-cli", "rtemplate-service/client"]
 mcp = ["dep:rtemplate-mcp"]
-mcp-stdio = ["mcp", "dep:rmcp", "rmcp/transport-io", "rtemplate-mcp/stdio"]
+mcp-stdio = [
+  "mcp",
+  "dep:rmcp",
+  "rmcp/transport-io",
+  "rtemplate-mcp/stdio",
+  "rtemplate-service/client",
+]
 api = ["auth", "dep:rtemplate-api"]
 auth = [
   "dep:rtemplate-auth",
@@ -59,7 +65,15 @@ auth = [
 oauth = ["auth", "rtemplate-api?/oauth", "rtemplate-mcp?/oauth", "rtemplate-runtime/oauth"]
 observability = ["dep:rtemplate-observability", "rtemplate-service/observability"]
 plugin = ["cli", "dep:rtemplate-plugin-support"]
-mcp-http = ["api", "mcp", "dep:axum", "dep:serde_json", "dep:tower-http", "rtemplate-mcp/http"]
+mcp-http = [
+  "api",
+  "mcp",
+  "dep:axum",
+  "dep:serde_json",
+  "dep:tower-http",
+  "rtemplate-mcp/http",
+  "rtemplate-service/client",
+]
 web = ["api", "dep:rtemplate-web"]
 local-adapter = ["cli", "mcp-stdio"]
 server = ["cli", "api", "mcp-http", "mcp-stdio"]

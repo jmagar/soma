@@ -62,6 +62,9 @@ docs/*
 !docs/generated/
 docs/generated/*
 !docs/generated/openapi.json
+!docs/contracts/
+docs/contracts/*
+!docs/contracts/provider-manifest.schema.json
 scripts
 specs
 *.md
