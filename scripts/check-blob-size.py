@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper. Canonical implementation: cargo xtask check-blob-size."""
+"""Thin wrapper. Canonical implementation: cargo xtask check-blob-size."""
 
 from __future__ import annotations
 

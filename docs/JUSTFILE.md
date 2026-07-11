@@ -2,11 +2,11 @@
 title: "Justfile"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-06-18"
 ---
@@ -19,13 +19,13 @@ last_reviewed: "2026-06-18"
 
 | Recipe | Purpose |
 |---|---|
-| `just dev` | Run HTTP MCP server on loopback in no-auth dev mode (`RTEMPLATE_MCP_NO_AUTH=true`). |
-| `just mcp` | Run stdio MCP transport (`example mcp`). |
+| `just dev` | Run HTTP MCP server on loopback in no-auth dev mode (`SOMA_MCP_NO_AUTH=true`). |
+| `just mcp` | Run stdio MCP transport (`soma mcp`). |
 | `just greet` | Quick CLI smoke test. |
-| `just doctor` | Pre-flight environment/connectivity checks (`example doctor`). |
+| `just doctor` | Pre-flight environment/connectivity checks (`soma doctor`). |
 | `just build` / `just build-release` | Debug/release Rust builds. |
-| `just build-local` / `just build-local-release` | Build only the lightweight `example` CLI + stdio MCP binary. |
-| `just build-server-release` | Build only the full `example-server` API + Web + HTTP MCP binary. |
+| `just build-local` / `just build-local-release` | Build only the lightweight `soma` CLI + stdio MCP binary. |
+| `just build-server-release` | Build only the full `soma-server` API + Web + HTTP MCP binary. |
 | `just build-web` | Build static Next.js web assets (`apps/web/out`). |
 | `just web-check` | Run frontend lint, typecheck, tests, and static build. |
 | `just build-full` | Build web assets then the full server release binary (CI/Docker use). |
@@ -36,7 +36,7 @@ last_reviewed: "2026-06-18"
 | Recipe | Purpose |
 |---|---|
 | `just verify` | `fmt-check` + `lint` + `check` + `test`. |
-| `just template-check` | Pattern/plugin/schema/template checks. |
+| `just soma-check` | Pattern/plugin/schema/Soma checks. |
 | `just pre-release` | Full release-readiness gate (`cargo xtask pre-release-check`). |
 | `just fmt` | Format Rust and TOML. |
 | `just fmt-check` | Check formatting (CI). |
@@ -86,28 +86,28 @@ refresh-docs-dry:       cargo xtask refresh-docs --dry-run
 ## Doctor output
 
 ```
-$ example doctor
+$ soma doctor
 
-rtemplate-mcp v0.1.0 — environment check
+soma-mcp v0.1.0 — environment check
 
   Config
   ──────────────────────────────────────────
-  ✓ Config file:       ~/.example/config.toml
-  ✓ Data directory:    ~/.example/ (writable)
+  ✓ Config file:       ~/.soma/config.toml
+  ✓ Data directory:    ~/.soma/ (writable)
   ✓ Binary in PATH:    /home/user/.local/bin/example
 
   Service credentials
   ──────────────────────────────────────────
-  ✓ RTEMPLATE_API_URL:   https://example.internal/api (set)
-  ✗ RTEMPLATE_API_KEY:   not set
-    → Set RTEMPLATE_API_KEY in ~/.example/.env
+  ✓ SOMA_API_URL:   https://example.internal/api (set)
+  ✗ SOMA_API_KEY:   not set
+    → Set SOMA_API_KEY in ~/.soma/.env
 
   Connectivity
   ──────────────────────────────────────────
   ✓ Upstream reachable: https://example.internal/api → 200 OK (42 ms)
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1 issue found. Fix it before running: example-server serve
+  1 issue found. Fix it before running: soma-server serve
 ```
 
 Exit code 0 = ready. Exit code 1 = issues found.

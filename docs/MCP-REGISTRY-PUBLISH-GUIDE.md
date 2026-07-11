@@ -4,15 +4,15 @@ This guide explains how to publish your MCP server to the
 [official MCP registry](https://modelcontextprotocol.io/registry/quickstart)
 using the `server.json` manifest at the repo root.
 
-<!-- TEMPLATE: This entire guide is reusable as-is. The only values you need to
+<!-- CUSTOMIZE: This entire guide is reusable as-is. The only values you need to
      change are your domain name, GitHub org/username, and service name.
-     Search for "TEMPLATE:" in server.json to find the fields that need updating. -->
+     Search for "CUSTOMIZE:" in server.json to find the fields that need updating. -->
 
 ---
 
 ## Prerequisites
 
-- You own the domain used in the `name` field (e.g. `tv.tootie` in `tv.tootie/rtemplate-mcp`)
+- You own the domain used in the `name` field (e.g. `tv.tootie` in `tv.tootie/soma-mcp`)
 - Your Docker image is published to a container registry (e.g. `ghcr.io`)
 - Your GitHub repo is public
 
@@ -20,7 +20,7 @@ using the `server.json` manifest at the repo root.
 
 ## Step 1 — Update server.json
 
-Edit `server.json` in the repo root. Every field marked `TEMPLATE:` must be replaced:
+Edit `server.json` in the repo root. Every field marked `CUSTOMIZE:` must be replaced:
 
 | Field | Replace with |
 |---|---|
@@ -70,7 +70,7 @@ The private key must correspond to a DNS TXT record you publish at
 ```
 
 This grants you the `github.com/<your-username>/` namespace automatically,
-e.g. `github.com/jmagar/rtemplate-mcp`.
+e.g. `github.com/jmagar/soma-mcp`.
 
 ---
 
@@ -88,7 +88,7 @@ On success, your server appears at:
 
 ## Step 5 — Automate via CI (recommended)
 
-The `docker-publish.yml` workflow in this template already includes a publish step
+The `docker-publish.yml` workflow in Soma already includes a publish step
 that runs automatically when you push a version tag (e.g. `v1.2.3`).
 
 The relevant workflow snippet:
@@ -98,7 +98,7 @@ The relevant workflow snippet:
   run: |
     VERSION="${GITHUB_REF_NAME#v}"
     jq --arg v "$VERSION" \
-       --arg img "ghcr.io/jmagar/rtemplate-mcp:${VERSION}" \
+       --arg img "ghcr.io/jmagar/soma-mcp:${VERSION}" \
        '.version = $v | .packages[0].identifier = $img | .packages[0].version = $v' \
        server.json > server.tmp && mv server.tmp server.json
 
@@ -138,8 +138,8 @@ the MCP registry.
 ### "Name not in your namespace"
 
 You must authenticate for the domain or GitHub user that prefixes your server name.
-If your `name` is `tv.tootie/rtemplate-mcp`, you must authenticate with DNS for
-`tv.tootie`. If your `name` is `github.com/jmagar/rtemplate-mcp`, use GitHub OAuth.
+If your `name` is `tv.tootie/soma-mcp`, you must authenticate with DNS for
+`tv.tootie`. If your `name` is `github.com/jmagar/soma-mcp`, use GitHub OAuth.
 
 ### "Invalid schema"
 
@@ -164,4 +164,4 @@ Push to GHCR first, then publish to the registry.
 | `github.com/<org>/<name>` | GitHub OAuth |
 | `tv.tootie/<name>` | DNS TXT record (author's domain — do not use) |
 
-<!-- TEMPLATE: Remove the tv.tootie row from the table above if you don't own that domain. -->
+<!-- CUSTOMIZE: Remove the tv.tootie row from the table above if you don't own that domain. -->

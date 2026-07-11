@@ -2,7 +2,7 @@
 title: "ADR 0006: Generate TypeScript clients from REST OpenAPI"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

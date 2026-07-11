@@ -1,7 +1,7 @@
 # =============================================================================
 # docker-compose.yml — Local development stack for an rmcp-based MCP server
 #
-# TEMPLATE: Replace all occurrences of "example" with your service name.
+# CUSTOMIZE: Replace all occurrences of "example" with your service name.
 #           Replace all occurrences of "EXAMPLE" with your service name in caps.
 #
 # Usage:
@@ -10,15 +10,15 @@
 #   docker compose down            # stop and remove containers
 # =============================================================================
 
-name: template-rmcp
+name: soma
 
 services:
-  # TEMPLATE: Replace "template-rmcp" with your service name throughout this file.
-  template-rmcp:
+  # CUSTOMIZE: Replace "soma" with your service name throughout this file.
+  soma:
     extends:
       file: docker-compose.prod.yml
-      service: template-rmcp
-    image: template-rmcp:dev
+      service: soma
+    image: soma:dev
     pull_policy: build
     build:
       context: .

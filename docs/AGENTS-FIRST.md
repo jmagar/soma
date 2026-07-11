@@ -2,18 +2,18 @@
 title: "Agents-First Design"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-05-15"
 ---
 
 # Agents-first design
 
-This template is optimized for AI agents as primary operators and consumers. Design rule: if an agent can't use it cleanly, fix the output, not the agent.
+Soma is optimized for AI agents as primary operators and consumers. Design rule: if an agent can't use it cleanly, fix the output, not the agent.
 
 ## Design rules
 
@@ -53,7 +53,7 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
             "has_more": true
         },
         "continuation": {
-            "tool": "example",
+            "tool": "soma",
             "arguments": {
                 "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
@@ -94,7 +94,7 @@ Ok(CallToolResult::structured_error(json!({
     "kind": "mcp_tool_error",
     "schema_version": 1,
     "code": "validation_error",
-    "tool": "example",
+    "tool": "soma",
     "action": action,
     "message": reason,
     "retryable": true,
@@ -114,34 +114,34 @@ Never return opaque `"internal error"` messages. Never leak secrets in error tex
 Agents may use:
 
 1. **MCP tool calls** through `/mcp` or stdio (preferred — full tool schema, scope enforcement)
-2. **CLI commands** for local shell workflows (`example greet --name Alice`)
+2. **CLI commands** for local shell workflows (`soma greet --name Alice`)
 3. **Direct REST routes** when MCP tooling is unavailable (`POST /v1/greet {"name":"Alice"}`)
 4. **Plugin skills** as human/agent guidance
 
-The action metadata in `crates/rtemplate-service/src/actions.rs` keeps these surfaces aligned. Every non-MCP-only action that the MCP tool exposes must also be reachable from the CLI and direct REST routes when its transport metadata allows those surfaces.
+The action metadata in `crates/soma-service/src/actions.rs` keeps these surfaces aligned. Every non-MCP-only action that the MCP tool exposes must also be reachable from the CLI and direct REST routes when its transport metadata allows those surfaces.
 
 ## Summarize by default, expand on request
 
 ```
 # Default: summary view (fits on screen)
-$ example things
+$ soma things
   ID   NAME               STATE    UPDATED
   42   my-thing           active   2m ago
   43   other-thing        idle     1h ago
 
 # Full detail: --verbose or specific action
-$ example thing 42
-$ example thing 42 --json
+$ soma thing 42
+$ soma thing 42 --json
 ```
 
 ## Documentation contract
 
 When adding an action, update:
 
-- `crates/rtemplate-service/src/actions.rs` for metadata, validation, and native dispatch
-- `crates/rtemplate-service/src/app.rs` for business behavior
+- `crates/soma-service/src/actions.rs` for metadata, validation, and native dispatch
+- `crates/soma-service/src/app.rs` for business behavior
 - Generated MCP schema docs and OpenAPI after the registry changes
-- `crates/rmcp-template/tests/tool_dispatch.rs`, CLI tests, and REST route tests
+- `crates/soma/tests/tool_dispatch.rs`, CLI tests, and REST route tests
 - `docs/MCP_SCHEMA.md`
 - Plugin skill docs
 

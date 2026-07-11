@@ -1,6 +1,6 @@
 # scripts
 
-Maintenance and automation scripts for the template. Shell scripts target Bash and
+Maintenance and automation scripts for Soma. Shell scripts target Bash and
 generally use `set -euo pipefail`; Python scripts run with `python3`.
 
 This README is the index for everything under `scripts/`. When a script is added,
@@ -39,9 +39,9 @@ usage text, Justfile wiring, CI references, and hook integration.
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `pre-release-check.sh` | Bash wrapper | `cargo xtask pre-release-check`, `just pre-release` | Delegates to xtask for the release-readiness gate: patterns, plugin layout, schema/OpenAPI docs, scaffold contract, template smoke tests, release version checks, blob size, ASCII hygiene, `just verify`, plugin build, and optional mcporter tests. |
-| `bump-version.sh` | Bash wrapper | `cargo xtask bump-version template <major|minor|patch>` | Compatibility wrapper for the xtask version bumper. |
-| `check-version-sync.sh` | Bash wrapper | `cargo xtask check-version-sync` | Compatibility wrapper for the xtask manifest-backed version sync gate. |
+| `pre-release-check.sh` | Bash wrapper | `cargo xtask pre-release-check`, `just pre-release` | Delegates to xtask for the release-readiness gate: patterns, plugin layout, schema/OpenAPI docs, scaffold contract, Soma smoke tests, release version checks, blob size, ASCII hygiene, `just verify`, plugin build, and optional mcporter tests. |
+| `bump-version.sh` | Bash wrapper | `cargo xtask bump-version soma <major|minor|patch>` | Thin wrapper for the xtask version bumper. |
+| `check-version-sync.sh` | Bash wrapper | `cargo xtask check-version-sync` | Thin wrapper for the xtask manifest-backed version sync gate. |
 | `check-dependency-updates.sh` | Bash wrapper | `cargo xtask check-dependency-updates`, `just deps-check` | Delegates to xtask for a read-only dependency drift report using `cargo update --dry-run` plus optional crates.io latest-version checks. |
 | `check-blob-size.py` | Python wrapper | `cargo xtask check-blob-size`, `just blob-size-check`, CI | Delegates to xtask to block changed git blobs above the configured size budget unless allowlisted. |
 | `blob-size-allowlist.txt` | Data | used by `check-blob-size.py` | Allowlist patterns for intentional large artifacts. |
@@ -53,7 +53,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 | `check-schema-docs.py` | Python wrapper | `cargo xtask check-schema-docs`, `just schema-docs`, `just schema-docs-check`, CI | Delegates to xtask to generate/check `docs/MCP_SCHEMA.md` and related action references from the canonical action specs. |
 | `check-openapi.py` | Python wrapper | `cargo xtask check-openapi`, `just openapi`, `just openapi-check`, CI | Delegates to xtask to generate/check `docs/generated/openapi.json` for the REST API surface. |
 | `generate-docs.py` | Python | `cargo xtask generate-docs`, `cargo xtask check-docs`, CI | Generates/checks volatile docs and metadata from the service-owned `ACTION_SPECS`, `ENV_KEY_SPECS`, and typed config defaults. |
-| `check-stale-claims.py` | Python | `cargo xtask check-stale-claims`, CI | Fails when known stale hardcoded template claims reappear. |
+| `check-stale-claims.py` | Python | `cargo xtask check-stale-claims`, CI | Fails when known stale hardcoded Soma claims reappear. |
 | `check-scaffold-intent-contract.py` | Python wrapper | `cargo xtask check-scaffold-intent-contract`, `just scaffold-contract-check`, CI | Delegates to xtask to validate the scaffold intent JSON schema and checked-in examples without third-party packages. |
 | `check-coupled-files.sh` | Bash wrapper | `cargo xtask check-coupled-files`, `just coupled-files-check`, CI | Delegates to xtask to warn when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
 | `refresh-docs.sh` | Bash wrapper | `cargo xtask refresh-docs`, `just refresh-docs*` | Delegates to xtask to refresh ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
@@ -70,21 +70,21 @@ usage text, Justfile wiring, CI references, and hook integration.
 | `generate-cli.sh` | Bash wrapper | `cargo xtask generate-cli`, `just generate-cli` | Delegates to xtask to use mcporter to generate a standalone CLI from a running MCP server schema. |
 | `sync-cargo.sh` | Bash wrapper | `cargo xtask sync-cargo`, plugin hook/runtime support | Delegates to xtask to copy `Cargo.lock` into plugin data directories, falling back to `cargo fetch` if needed. |
 
-### Template And Local Runtime Checks
+### Soma And Local Runtime Checks
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `test-template-features.sh` | Bash wrapper | `cargo xtask test-template-features`, `just template-features`, CI | Delegates to xtask for fast template invariant smoke tests. |
-| `check-cargo-generate.py` | Python wrapper | `cargo xtask cargo-generate`, docs | Compatibility wrapper for the xtask-owned cargo-generate smoke test. |
+| `test-soma-features.sh` | Bash wrapper | `cargo xtask test-soma-features`, `just soma-features`, CI | Delegates to xtask for fast Soma invariant smoke tests. |
+| `check-cargo-generate.py` | Python wrapper | `cargo xtask cargo-generate`, docs | Thin wrapper for the xtask-owned cargo-generate smoke test. |
 | `check-runtime-current.sh` | Bash wrapper | `cargo xtask check-runtime-current`, `just runtime-current` | Delegates to xtask to check whether the running systemd unit or Docker container uses the expected/current artifact. |
-| `repair.sh` | Bash wrapper | `cargo xtask repair`, `just repair` | Delegates to xtask to stop, rebuild, and restart the local `rtemplate-mcp` service through systemd or Docker Compose. |
+| `repair.sh` | Bash wrapper | `cargo xtask repair`, `just repair` | Delegates to xtask to stop, rebuild, and restart the local `soma-mcp` service through systemd or Docker Compose. |
 
 ### Hygiene And Developer Workflow
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `ci/changed_paths.py` | Python | `scripts/ci/pre_push.py`, future CI routing | Classifies changed paths into coarse categories such as rust, web, docker, MCP, release, security, and template. |
-| `ci/pre_push.py` | Python | `lefthook` pre-push, `just pre-push`, `just pre-push-plan` | Runs a path-aware local pre-push plan. Full local validation is opt-in with `RTEMPLATE_FULL_PRE_PUSH=1` or `just pre-push-full`. |
+| `ci/changed_paths.py` | Python | `scripts/ci/pre_push.py`, future CI routing | Classifies changed paths into coarse categories such as rust, web, docker, MCP, release, security, and Soma. |
+| `ci/pre_push.py` | Python | `lefthook` pre-push, `just pre-push`, `just pre-push-plan` | Runs a path-aware local pre-push plan. Full local validation is opt-in with `SOMA_FULL_PRE_PUSH=1` or `just pre-push-full`. |
 | `with_timeout.sh` | Bash | `lefthook.yml` | Applies a wall-clock budget to local hook commands so one check cannot stall commits indefinitely. |
 | `check_lefthook_pre_commit_speed.py` | Python | `lefthook.yml`, `just lefthook-speed-check`, CI | Fails if the pre-commit stage grows workspace-scale cargo/test/build commands. |
 | `block-env-commits.sh` | Bash wrapper | `cargo xtask block-env-commits`, lefthook pre-commit | Delegates to xtask to prevent staged `.env*` secret files from being committed, except `.env.example`. |
@@ -126,7 +126,7 @@ allowlisted instead of failing the size budget.
 cargo xtask block-env-commits
 ```
 
-Compatibility wrapper for `cargo xtask block-env-commits`.
+Thin wrapper for `cargo xtask block-env-commits`.
 
 The xtask command inspects the git staging area and rejects staged `.env`,
 `.env.local`, `.env.prod`, `.env.staging`, or other `.env*` files. `.env.example`
@@ -157,13 +157,13 @@ scripts/bump-version.sh minor
 scripts/bump-version.sh major
 ```
 
-Compatibility wrapper for:
+Thin wrapper for:
 
 ```bash
-cargo xtask bump-version template <major|minor|patch>
+cargo xtask bump-version soma <major|minor|patch>
 ```
 
-It updates every version-bearing file declared for the `template` component in
+It updates every version-bearing file declared for the `soma` component in
 `release/components.toml`. Plugin manifests intentionally remain versionless.
 
 ### `check-blob-size.py`
@@ -188,7 +188,7 @@ cargo xtask check-cargo-generate
 cargo xtask check-cargo-generate --help
 ```
 
-Compatibility wrapper for `cargo xtask cargo-generate`. It runs:
+Thin wrapper for `cargo xtask cargo-generate`. It runs:
 
 ```bash
 cargo xtask cargo-generate <args>
@@ -205,14 +205,14 @@ cargo xtask check-coupled-files origin/main HEAD
 just coupled-files-check
 ```
 
-Compatibility wrapper for `cargo xtask check-coupled-files`.
+Thin wrapper for `cargo xtask check-coupled-files`.
 
 The xtask command checks changed paths and reports likely documentation or
 automation drift:
 
 - `Justfile` without `lefthook.yml`, or vice versa.
 - `scripts/*` without `scripts/README.md`.
-- `crates/rtemplate-mcp/src/schemas.rs` without `docs/MCP_SCHEMA.md`.
+- `crates/soma-mcp/src/schemas.rs` without `docs/MCP_SCHEMA.md`.
 - plugin package changes without `docs/PLUGINS.md`.
 
 Used in CI as a guardrail. It intentionally reports coupled-file concerns rather
@@ -261,7 +261,7 @@ MAX_RS=450 MAX_TS=350 cargo xtask check-file-size
 just file-size-check
 ```
 
-Compatibility wrapper for `cargo xtask check-file-size`.
+Thin wrapper for `cargo xtask check-file-size`.
 
 The xtask command checks staged `.rs`, `.ts`, and `.tsx` files against effective
 production-line budgets. Test files are exempt. Rust trailing inline
@@ -285,15 +285,15 @@ just openapi
 just openapi-check
 ```
 
-Generates `docs/generated/openapi.json` for the template REST API surface:
+Generates `docs/generated/openapi.json` for Soma REST API surface:
 
 - public `/health` and `/status`
 - direct `/v1/*` business routes
 - `/v1/capabilities`
-- deprecated `/v1/example` compatibility envelope
+- deprecated `retired REST action-envelope route` compatibility envelope
 
 The version comes from `Cargo.toml`. The REST action enum is derived from
-`crates/rtemplate-contracts/src/actions.rs`, excluding MCP-only actions.
+`crates/soma-contracts/src/actions.rs`, excluding MCP-only actions.
 
 ### `generate-docs.py`
 
@@ -308,7 +308,7 @@ Generates volatile docs and metadata from canonical Rust specs:
 
 - `docs/ENV.md`
 - `.env.example`
-- `config.example.toml`
+- `config.soma.toml`
 - `apps/web/lib/generated-actions.ts`
 - `docs/generated/plugin-settings.md`
 - `docs/generated/scripts-index.md`
@@ -322,7 +322,7 @@ python3 scripts/check-stale-claims.py
 cargo xtask check-stale-claims
 ```
 
-Scans non-generated source/docs for template claims that should not reappear,
+Scans non-generated source/docs for Soma claims that should not reappear,
 such as stale old local-port examples, old MCP port defaults, or explicit
 plugin manifest `version` fields.
 
@@ -344,10 +344,10 @@ This is an operator/release audit tool, not a normal per-commit check.
 
 ```bash
 cargo xtask check-plugin-stdio-smoke
-BIN=rtemplate TIMEOUT_SECS=10 cargo xtask check-plugin-stdio-smoke
+BIN=soma TIMEOUT_SECS=10 cargo xtask check-plugin-stdio-smoke
 ```
 
-Compatibility wrapper for `cargo xtask check-plugin-stdio-smoke`.
+Thin wrapper for `cargo xtask check-plugin-stdio-smoke`.
 
 The xtask command smoke-tests the installed stdio MCP binary used by plugin
 manifests. It sends a
@@ -355,7 +355,7 @@ minimal JSON-RPC sequence:
 
 1. `initialize`
 2. `notifications/initialized`
-3. `tools/call` for the `example` tool with `action=status`
+3. `tools/call` for the `soma` tool with `action=status`
 
 The response is parsed in Rust; the command passes only when the status result is
 `ok`.
@@ -364,14 +364,14 @@ Environment:
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `BIN` | `rtemplate` | Binary to execute from `PATH`. |
+| `BIN` | `soma` | Binary to execute from `PATH`. |
 | `TIMEOUT_SECS` | `5` | Timeout for the stdio exchange. |
 
 ### `check-runtime-current.sh`
 
 ```bash
 scripts/check-runtime-current.sh
-scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/rtemplate-server
+scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/soma-server
 scripts/check-runtime-current.sh --mode docker --pull --compose-dir .
 just runtime-current
 ```
@@ -390,12 +390,12 @@ Options:
 |---|---|
 | `--mode auto|systemd|docker` | Runtime to inspect. Default: `auto`. |
 | `--pull` | Docker mode only: pull before comparing. |
-| `--unit NAME` | Systemd user unit. Default: `rtemplate-mcp.service`. |
-| `--service NAME` | Docker Compose service/container. Default: `rtemplate-mcp`. |
+| `--unit NAME` | Systemd user unit. Default: `soma-mcp.service`. |
+| `--service NAME` | Docker Compose service/container. Default: `soma-mcp`. |
 | `--compose-dir DIR` | Docker Compose project directory. Default: current directory. |
 | `--expected-binary PATH` | Systemd mode: also compare against this binary. |
 
-Template adapters should rename `RTEMPLATE_*`, service, and binary defaults.
+Soma adopters should rename `SOMA_*`, service, and binary defaults.
 
 ### `check-scaffold-intent-contract.py`
 
@@ -420,7 +420,7 @@ just schema-docs
 just schema-docs-check
 ```
 
-Treats `crates/rtemplate-contracts/src/actions.rs::ACTION_SPECS` as canonical
+Treats `crates/soma-contracts/src/actions.rs::ACTION_SPECS` as canonical
 and generates/checks `docs/MCP_SCHEMA.md`.
 
 It also checks that action docs stay mentioned in key user-facing surfaces such
@@ -435,7 +435,7 @@ cargo xtask check-version-sync
 cargo xtask check-version-sync /path/to/project
 ```
 
-Compatibility wrapper for:
+Thin wrapper for:
 
 ```bash
 cargo xtask check-version-sync
@@ -448,7 +448,7 @@ and plugin-manifest versionlessness.
 ### `generate-cli.sh`
 
 ```bash
-RTEMPLATE_MCP_TOKEN=... cargo xtask generate-cli
+SOMA_MCP_TOKEN=... cargo xtask generate-cli
 just generate-cli
 ```
 
@@ -462,13 +462,13 @@ Requirements:
 
 - a running MCP server on `http://localhost:40060/mcp`
 - `mcporter` available on `PATH`
-- optional `RTEMPLATE_MCP_TOKEN` for bearer-authenticated schema fetches
+- optional `SOMA_MCP_TOKEN` for bearer-authenticated schema fetches
 
 The script fetches `/mcp/tools/list`, hashes the schema, and skips regeneration
-when `dist/.cache/example-cli.schema_hash` already matches and `dist/example-cli`
+when `dist/.cache/soma-cli.schema_hash` already matches and `dist/soma-cli`
 exists. The generated CLI embeds the token; do not commit or share it.
 
-Template adapters must update the port, generated binary name, and token env var.
+Soma adopters must update the port, generated binary name, and token env var.
 
 ### `pre-release-check.sh`
 
@@ -488,7 +488,7 @@ Always runs:
 - `cargo xtask check-schema-docs --check`
 - `cargo xtask check-openapi --check`
 - `cargo xtask check-scaffold-intent-contract`
-- `cargo xtask test-template-features`
+- `cargo xtask test-soma-features`
 - `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr`
 - `cargo xtask check-blob-size`
 - `just ascii-check`
@@ -525,8 +525,8 @@ Environment:
 | `AXON_OUTPUT_DIR` | `~/.axon/output` | Axon host output directory. |
 | `REPOMIX_BIN` | auto-detected | Repomix executable; falls back to `npx --yes repomix`. |
 
-Template adapters should add service-specific docs and repos in the marked
-`TEMPLATE:` sections.
+Soma adopters should add service-specific docs and repos in the marked
+`CUSTOMIZE:` sections.
 
 ### `repair.sh`
 
@@ -535,13 +535,13 @@ cargo xtask repair
 just repair
 ```
 
-Stops, rebuilds, and restarts the local `rtemplate-mcp` service.
+Stops, rebuilds, and restarts the local `soma-mcp` service.
 
 Flow:
 
-1. Stop `rtemplate-mcp.service` if active.
-2. Otherwise stop a Docker container named `rtemplate-mcp` if active.
-3. Build `target/release/rtemplate-server` with `--features full`.
+1. Stop `soma-mcp.service` if active.
+2. Otherwise stop a Docker container named `soma-mcp` if active.
+3. Build `target/release/soma-server` with `--features full`.
 4. If the systemd unit exists, install the binary into `~/.local/bin/` and start
    the unit.
 5. Otherwise, if `docker-compose.yml` exists, rebuild and recreate with Docker
@@ -557,7 +557,7 @@ just ascii-check
 just ascii-fix
 ```
 
-Compatibility wrapper for `cargo xtask run-ascii-check`.
+Thin wrapper for `cargo xtask run-ascii-check`.
 
 The xtask command collects tracked text-like files and runs
 `scripts/asciicheck.py`.
@@ -587,7 +587,7 @@ cargo xtask sync-cargo
 CLAUDE_PLUGIN_ROOT=/path/to/repo CLAUDE_PLUGIN_DATA=/path/to/data cargo xtask sync-cargo
 ```
 
-Compatibility wrapper for `cargo xtask sync-cargo`.
+Thin wrapper for `cargo xtask sync-cargo`.
 
 The xtask command copies `Cargo.lock` from `CLAUDE_PLUGIN_ROOT` to
 `CLAUDE_PLUGIN_DATA` when the destination is missing or stale. If the copy fails,
@@ -600,7 +600,7 @@ directory.
 ### `test-mcp-auth.sh`
 
 ```bash
-RTEMPLATE_MCP_TOKEN=... cargo xtask test-mcp-auth
+SOMA_MCP_TOKEN=... cargo xtask test-mcp-auth
 cargo xtask test-mcp-auth --url http://localhost:40060/mcp --token ...
 cargo xtask test-mcp-auth --check-x-api-key
 just test-mcp-auth
@@ -614,17 +614,17 @@ Smoke-tests HTTP MCP bearer auth:
 - `/mcp` accepts the configured bearer token.
 - `--check-x-api-key` optionally checks `x-api-key` behavior.
 
-The default URL is the template's local MCP endpoint. Template adapters should
+The default URL is Soma's local MCP endpoint. Soma adopters should
 update examples and env var names.
 
-### `test-template-features.sh`
+### `test-soma-features.sh`
 
 ```bash
-cargo xtask test-template-features
-just template-features
+cargo xtask test-soma-features
+just soma-features
 ```
 
-Fast shell smoke tests for template invariants that are awkward to express as
+Fast shell smoke tests for Soma invariants that are awkward to express as
 Rust tests.
 
 Current checks:
@@ -641,7 +641,7 @@ Current checks:
 
 ```bash
 cargo xtask validate-plugin-layout
-PLUGIN_ROOT=plugins/rtemplate cargo xtask validate-plugin-layout
+PLUGIN_ROOT=plugins/soma cargo xtask validate-plugin-layout
 just validate-plugin
 ```
 
@@ -693,7 +693,7 @@ CI-facing checks:
 - `check-schema-docs.py --check`
 - `check-openapi.py --check`
 - `check-scaffold-intent-contract.py`
-- `test-template-features.sh`
+- `test-soma-features.sh`
 - `check-blob-size.py`
 - `check-coupled-files.sh`
 - `run-ascii-check.sh`

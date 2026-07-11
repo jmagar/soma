@@ -1,7 +1,7 @@
 # =============================================================================
 # lefthook.yml — Fast local hooks
 #
-# TEMPLATE: Copy this file unchanged to any new server repo.
+# CUSTOMIZE: Copy this file unchanged to any new server repo.
 #           Install: cargo install lefthook   OR   mise use lefthook
 #           Enable:  lefthook install
 #
@@ -19,7 +19,7 @@
 #   5. lefthook_speed — keep this pre-commit stage fast (< 1s)
 #
 # Pre-push runs `scripts/ci/pre_push.py`, which chooses checks by changed
-# paths. Full local validation remains opt-in with RTEMPLATE_FULL_PRE_PUSH=1.
+# paths. Full local validation remains opt-in with SOMA_FULL_PRE_PUSH=1.
 #
 # NOT in pre-commit (too slow / too blocking for rapid commits):
 #   - cargo clippy    → runs in CI (.github/workflows/ci.yml)
@@ -30,10 +30,10 @@
 #   - cargo audit     → network call; runs in CI
 #   - gitleaks        → heavy scan; runs in CI
 #   - just conformance → boots a server and runs the official MCP conformance suite; CI/manual only
-#   - cargo xtask patterns → full-repo contract scan; runs in CI and `just template-check`
+#   - cargo xtask patterns → full-repo contract scan; runs in CI and `just soma-check`
 #   - cargo xtask check-release-versions → PR/main release gate; runs in CI and release scripts
 #
-# TEMPLATE: Resist the urge to add more hooks here. If something slows down
+# CUSTOMIZE: Resist the urge to add more hooks here. If something slows down
 #           your commit flow, developers will start using --no-verify, which
 #           defeats the purpose entirely.
 # =============================================================================
@@ -52,7 +52,7 @@ pre-commit:
     # ── 2. toml_fmt ───────────────────────────────────────────────────────────
     # Runs taplo check only on staged .toml files — fast because it only checks
     # changed files, not the whole project.
-    # TEMPLATE: Remove this hook if you don't use taplo.
+    # CUSTOMIZE: Remove this hook if you don't use taplo.
     toml_fmt:
       glob: "*.toml"
       run: scripts/with_timeout.sh 30 -- taplo check {staged_files}
@@ -72,7 +72,7 @@ pre-commit:
         '
 
     # ── 4. file_size ──────────────────────────────────────────────────────────
-    # Blocks staged production source files that exceed template line budgets.
+    # Blocks staged production source files that exceed Soma line budgets.
     # Test files and Rust inline #[cfg(test)] modules are exempt.
     file_size:
       glob: "**/*.{rs,ts,tsx}"

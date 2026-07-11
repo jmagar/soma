@@ -1,13 +1,13 @@
 ---
 date: 2026-05-15 18:33:18 EST
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: e3a7391
 plan: none
 agent: Claude (claude-sonnet-4-6)
 session id: 191d2a6c-515e-46a7-b3a8-a50a9e26b84f
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/191d2a6c-515e-46a7-b3a8-a50a9e26b84f.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/191d2a6c-515e-46a7-b3a8-a50a9e26b84f.jsonl
+working directory: /home/jmagar/workspace/soma
 ---
 
 ## User Request
@@ -35,7 +35,7 @@ Added `x86_64-pc-windows-gnu` as a third build target to `.github/workflows/rele
 
 ## Key Findings
 
-- `actions/upload-artifact@v7` does not exist — latest is v4; the template had a speculative version number
+- `actions/upload-artifact@v7` does not exist — latest is v4; Soma had a speculative version number
 - `softprops/action-gh-release@v3` is real (confirmed via `gh api repos/softprops/action-gh-release/releases`)
 - `CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER` was missing — without it, MinGW linker is never found and the link step fails
 - Artifact upload name had `-linux-` hardcoded for all targets: Windows artifact would have been named `example-linux-windows-x86_64`

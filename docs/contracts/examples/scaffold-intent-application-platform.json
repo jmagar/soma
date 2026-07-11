@@ -1,5 +1,5 @@
 {
-  "kind": "rmcp_template_scaffold_intent",
+  "kind": "soma_scaffold_intent",
   "schema_version": 1,
   "server_category": "application-platform",
   "required_surfaces": ["api", "cli", "mcp", "web"],

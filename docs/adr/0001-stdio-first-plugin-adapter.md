@@ -2,11 +2,11 @@
 title: "ADR 0001: Stdio-first plugin adapter"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: true
 last_reviewed: "2026-05-26"
 ---
@@ -19,12 +19,12 @@ Accepted, 2026-05-26.
 
 ## Context
 
-The template now supports two binary profiles:
+Soma now supports two binary profiles:
 
 | Binary | Profile | Required surfaces |
 |---|---|---|
 | `example` | Lightweight local adapter | CLI + stdio MCP |
-| `example-server` | Full platform server | REST API + Web + Streamable HTTP MCP + health/auth |
+| `soma-server` | Full platform server | REST API + Web + Streamable HTTP MCP + health/auth |
 
 Upstream-client MCP servers should be cheap to install locally and should not
 run a local REST/Web mirror only because the upstream service has an HTTP API.
@@ -39,22 +39,22 @@ server.
 ## Decision
 
 - Plugin installs default to stdio MCP through the installed local binary.
-- Claude Code and Codex use `plugins/rtemplate/.mcp.json` with:
+- Claude Code and Codex use `plugins/soma/.mcp.json` with:
   - `"type": "stdio"`
   - `"command": "example"`
   - `"args": ["mcp"]`
 - Gemini uses the equivalent extension-local command:
   - `"command": "example"`
   - `"args": ["mcp"]`
-- Plugin settings inject `RTEMPLATE_API_URL` and `RTEMPLATE_API_KEY` into the
+- Plugin settings inject `SOMA_API_URL` and `SOMA_API_KEY` into the
   stdio child process.
-- Empty `RTEMPLATE_API_URL` means template stub mode for local smoke tests and
+- Empty `SOMA_API_URL` means offline stub mode for local smoke tests and
   scaffolded examples.
-- Non-empty `RTEMPLATE_API_URL` makes the local adapter forward business actions
-  to direct REST routes such as `POST {RTEMPLATE_API_URL}/v1/echo` and
-  `GET {RTEMPLATE_API_URL}/v1/status`; `RTEMPLATE_API_KEY` is sent as bearer auth
+- Non-empty `SOMA_API_URL` makes the local adapter forward business actions
+  to direct REST routes such as `POST {SOMA_API_URL}/v1/echo` and
+  `GET {SOMA_API_URL}/v1/status`; `SOMA_API_KEY` is sent as bearer auth
   when set.
-- HTTP MCP remains available from `example-server serve` for Docker, remote
+- HTTP MCP remains available from `soma-server serve` for Docker, remote
   clients, gateway catalogs, and full platform deployments.
 - Plugin manifests must not auto-register HTTP health monitors by default.
   HTTP MCP and health monitor use are explicit remote/gateway choices, not the
@@ -67,8 +67,8 @@ The normative profile contract lives in
 
 The short version:
 
-- `example` must provide CLI commands and `example mcp`.
-- `example-server` must provide direct `/v1/*` business routes, `/v1/capabilities`,
+- `example` must provide CLI commands and `soma mcp`.
+- `soma-server` must provide direct `/v1/*` business routes, `/v1/capabilities`,
   `/mcp`, `/health`, `/status`, `/openapi.json`, and the optional web/static
   surface.
 - The stdio adapter calls the business REST API, not the MCP protocol endpoint.

@@ -853,14 +853,14 @@ export interface ResourceTemplate extends BaseMetadata, Icons {
   uriTemplate: string;
 
   /**
-   * A description of what this template is for.
+   * A description of what Soma is for.
    *
    * This can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a "hint" to the model.
    */
   description?: string;
 
   /**
-   * The MIME type for all resources that match this template. This should only be included if all resources matching this template have the same type.
+   * The MIME type for all resources that match Soma. This should only be included if all resources matching Soma have the same type.
    */
   mimeType?: string;
 

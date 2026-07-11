@@ -1,4 +1,4 @@
-//! xtask — Repo automation for rmcp-template.
+//! xtask — Repo automation for soma.
 //!
 //! Invoked via: `cargo xtask <command>`
 //!
@@ -9,14 +9,14 @@
 //!   check-env    Validate required environment variables are set
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
-//!   scaffold     Plan, generate, or verify a new project from this template
+//!   scaffold     Plan, generate, or verify a new project from Soma
 //!   cargo-generate Smoke-test cargo-generate output
 //!   cargo-generate-post Apply cargo-generate post-processing rewrites
 //!   generate-docs Generate volatile docs and metadata from canonical specs
 //!   generate-provider-surfaces Generate provider docs and marketplace catalogs
 //!   check-docs    Validate generated docs and metadata are current
-//!   check-stale-claims Fail on stale hardcoded template claims
-//!   sync-web-source Copy apps/web into the bundled rtemplate-web scaffold source
+//!   check-stale-claims Fail on stale hardcoded Soma claims
+//!   sync-web-source Copy apps/web into the bundled soma-web scaffold source
 //!   check-web-source-sync Validate bundled web source matches apps/web
 //!   update-aurora-web Refresh Aurora components, validate apps/web, then sync bundle
 //!   block-env-commits Prevent staged .env secrets from being committed
@@ -32,7 +32,7 @@
 //!   bump-version Bump a release component version
 //!   changed-paths Classify changed files into CI routing categories
 //!
-//! TEMPLATE: Add your own commands by adding arms to the match block below.
+//! CUSTOMIZE: Add your own commands by adding arms to the match block below.
 //!           Keep each command as a separate `fn` for readability.
 //!
 //! Philosophy: xtask replaces ad-hoc shell scripts. It gets type-checked by the
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
     // `cargo xtask`. Change into the workspace root so all commands work
     // regardless of the cwd from which the user invoked cargo.
     //
-    // TEMPLATE: This path navigation assumes xtask/ is a direct child of the
+    // CUSTOMIZE: This path navigation assumes xtask/ is a direct child of the
     //           workspace root. If you restructure, adjust the `..` accordingly.
     let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -120,7 +120,7 @@ fn main() -> Result<()> {
         Some("sync-cargo") => scripts::sync_cargo(),
         Some("pre-release-check") => scripts_lane_b::pre_release_check(&args[1..]),
         Some("refresh-docs") => scripts_lane_c::refresh_docs(&args[1..]),
-        Some("test-template-features") => scripts_lane_b::test_template_features(workspace_root),
+        Some("test-soma-features") => scripts_lane_b::test_soma_features(workspace_root),
         Some("validate-plugin-layout") => {
             let plugin_root = std::env::var_os("PLUGIN_ROOT").map(std::path::PathBuf::from);
             scripts_lane_b::validate_plugin_layout(workspace_root, plugin_root.as_deref())
@@ -133,7 +133,7 @@ fn main() -> Result<()> {
         Some("release-plan") => release_plan_cmd(workspace_root, &args[1..]),
         Some("rmcp-release-monitor") => rmcp_release_monitor::run(&args[1..]),
         Some("bump-version") => bump_version_cmd(workspace_root, &args[1..]),
-        Some("bump-template-version") => scripts_lane_b::bump_version(workspace_root, &args[1..]),
+        Some("bump-soma-version") => scripts_lane_b::bump_version(workspace_root, &args[1..]),
         Some("changed-paths") => ci_paths::run(&args[1..]),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
@@ -240,7 +240,7 @@ fn parse_bump_level(value: &str) -> Result<release_versions::BumpLevel> {
 }
 
 // =============================================================================
-// cargo-generate — Smoke-test generated template output
+// cargo-generate — Smoke-test generated scaffold output
 // =============================================================================
 
 fn cargo_generate(args: &[String]) -> Result<()> {
@@ -251,7 +251,7 @@ fn cargo_generate(args: &[String]) -> Result<()> {
 // contract-audit — Safe local contract/spec checks for REST-client MCP servers
 // =============================================================================
 
-/// Run the local, non-destructive audit suite for the template contract.
+/// Run the local, non-destructive audit suite for the Soma contract.
 ///
 /// This command intentionally avoids live upstream services. REST-client
 /// behavior belongs in per-server mock-upstream tests; this command verifies
@@ -292,9 +292,9 @@ fn contract_audit() -> Result<()> {
     scripts_lane_d::check_scaffold_intent_contract()
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [11/11] cargo xtask test-template-features");
-    scripts_lane_b::test_template_features(std::path::Path::new("."))
-        .context("template feature smoke failed")?;
+    println!("==> [11/11] cargo xtask test-soma-features");
+    scripts_lane_b::test_soma_features(std::path::Path::new("."))
+        .context("Soma feature smoke failed")?;
 
     println!("==> contract-audit: passed; no live upstream services were contacted");
     Ok(())
@@ -325,11 +325,11 @@ fn check_stale_claims() -> Result<()> {
 /// Build the release binary. Distribution is handled by package/release tooling;
 /// plugins reference an installed PATH binary and do not bundle artifacts.
 ///
-/// TEMPLATE: Replace "rtemplate" with your binary name throughout this function.
+/// CUSTOMIZE: Replace "soma" with your binary name throughout this function.
 ///           The binary name must match Cargo.toml `[[bin]] name = "..."`.
 fn dist() -> Result<()> {
-    // TEMPLATE: Replace "rtemplate" with your binary name.
-    const BINARY_NAME: &str = "rtemplate";
+    // CUSTOMIZE: Replace "soma" with your binary name.
+    const BINARY_NAME: &str = "soma";
 
     println!("==> Building release binary: {BINARY_NAME}");
     run_cargo(&["build", "--release", "--locked", "--bin", BINARY_NAME])?;
@@ -356,7 +356,7 @@ fn dist() -> Result<()> {
 /// This mirrors what `.github/workflows/ci.yml` runs. Use it to catch failures
 /// before pushing.
 ///
-/// TEMPLATE: Add or remove steps to match your CI pipeline.
+/// CUSTOMIZE: Add or remove steps to match your CI pipeline.
 fn ci() -> Result<()> {
     println!("==> [1/12] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
@@ -366,7 +366,7 @@ fn ci() -> Result<()> {
 
     println!("==> [3/12] cargo nextest run --profile ci");
     // Falls back to cargo test if nextest isn't installed.
-    // TEMPLATE: Remove the fallback once nextest is in your CI environment.
+    // CUSTOMIZE: Remove the fallback once nextest is in your CI environment.
     if command_exists("cargo-nextest") {
         run_cargo(&["nextest", "run", "--profile", "ci"]).context("nextest failed")?;
     } else {
@@ -375,7 +375,7 @@ fn ci() -> Result<()> {
     }
 
     println!("==> [4/12] taplo check");
-    // TEMPLATE: Remove this step if you don't use taplo.
+    // CUSTOMIZE: Remove this step if you don't use taplo.
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
     } else {
@@ -406,7 +406,7 @@ fn ci() -> Result<()> {
     web_source::check().context("web source bundle drifted from apps/web")?;
 
     println!("==> [12/12] cargo audit");
-    // TEMPLATE: Remove if you don't want advisory audits in local CI.
+    // CUSTOMIZE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
     } else {
@@ -523,15 +523,15 @@ fn check_test_siblings() -> Result<()> {
 
 fn crate_src_roots() -> Vec<std::path::PathBuf> {
     [
-        "crates/rmcp-template/src",
-        "crates/rtemplate-api/src",
-        "crates/rtemplate-cli/src",
-        "crates/rtemplate-contracts/src",
-        "crates/rtemplate-mcp/src",
-        "crates/rtemplate-observability/src",
-        "crates/rtemplate-runtime/src",
-        "crates/rtemplate-service/src",
-        "crates/rtemplate-web/src",
+        "crates/soma/src",
+        "crates/soma-api/src",
+        "crates/soma-cli/src",
+        "crates/soma-contracts/src",
+        "crates/soma-mcp/src",
+        "crates/soma-observability/src",
+        "crates/soma-runtime/src",
+        "crates/soma-service/src",
+        "crates/soma-web/src",
     ]
     .into_iter()
     .map(std::path::PathBuf::from)
@@ -570,7 +570,7 @@ fn patterns_cmd(args: &[String]) -> Result<()> {
 /// This applies to ALL CLAUDE.md files in the repo, not just the root — nested
 /// CLAUDE.md files in plugins/, xtask/, etc. all get symlinks.
 ///
-/// TEMPLATE: No changes needed here — this works for any repo using CLAUDE.md.
+/// CUSTOMIZE: No changes needed here — this works for any repo using CLAUDE.md.
 ///
 /// Run after adding any new CLAUDE.md file:
 ///   cargo xtask symlink-docs
@@ -641,35 +641,35 @@ fn symlink_docs() -> Result<()> {
 /// Run this to get a clear error message before starting the server, rather
 /// than a cryptic runtime failure.
 ///
-/// TEMPLATE: Replace the variable names in REQUIRED_VARS with your service's
+/// CUSTOMIZE: Replace the variable names in REQUIRED_VARS with your service's
 ///           actual required environment variables.
 ///
 /// Variables listed as "optional" are checked for presence but not required —
 /// the server will start without them but some features may be unavailable.
 fn check_env() -> Result<()> {
-    // TEMPLATE: Add or remove required variables for your service.
+    // CUSTOMIZE: Add or remove required variables for your service.
     //   Format: (&str, &str)  →  (ENV_VAR_NAME, "description of what it's for")
     //
-    // The template's ExampleClient doesn't require API credentials to boot
+    // Soma's SomaClient doesn't require API credentials to boot
     // (stub mode works without them). Your real service likely does — update
     // REQUIRED_VARS accordingly.
     const REQUIRED_VARS: &[(&str, &str)] = &[
-        // TEMPLATE: Uncomment and adapt once you have a real upstream service:
-        // ("RTEMPLATE_API_URL", "Full base URL of the upstream service (e.g. https://api.example.com/v1)"),
-        // ("RTEMPLATE_API_KEY", "API key or bearer token for the upstream service"),
+        // CUSTOMIZE: Uncomment and adapt once you have a real upstream service:
+        // ("SOMA_API_URL", "Full base URL of the upstream service (e.g. https://api.example.com/v1)"),
+        // ("SOMA_API_KEY", "API key or bearer token for the upstream service"),
     ];
 
-    // TEMPLATE: Optional variables — server boots without them but warns.
+    // CUSTOMIZE: Optional variables — server boots without them but warns.
     const OPTIONAL_VARS: &[(&str, &str)] = &[
         (
-            "RTEMPLATE_MCP_TOKEN",
+            "SOMA_MCP_TOKEN",
             "Static bearer token for /mcp (required in production; omit only in loopback dev mode)",
         ),
         (
-            "RTEMPLATE_MCP_HOST",
+            "SOMA_MCP_HOST",
             "Bind host (default 127.0.0.1 — set to 0.0.0.0 only with auth or trusted gateway)",
         ),
-        ("RTEMPLATE_MCP_PORT", "Bind port (default 40060)"),
+        ("SOMA_MCP_PORT", "Bind port (default 40060)"),
         (
             "RUST_LOG",
             "Log filter (e.g. info,rmcp=warn — default: info in server mode, warn in stdio/cli)",
@@ -764,9 +764,9 @@ pub(crate) fn command_exists(name: &str) -> bool {
 }
 
 fn print_help() {
-    // TEMPLATE: Update binary name and command descriptions as you add commands.
+    // CUSTOMIZE: Update binary name and command descriptions as you add commands.
     eprintln!(
-        "cargo xtask — repo automation for rmcp-template
+        "cargo xtask — repo automation for soma
 
 USAGE:
   cargo xtask <command>
@@ -779,20 +779,20 @@ COMMANDS:
   check-test-siblings   Verify every src/*.rs has a sibling *_tests.rs
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
   contract-audit        Run local static/spec checks without live upstream calls
-  scaffold             Plan/apply/verify a generated project from this template
+  scaffold             Plan/apply/verify a generated project from Soma
   cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
   cargo-generate-post   Internal generated-project rewrite command
   generate-docs         Generate volatile docs and metadata from canonical specs
   check-docs            Validate generated docs and metadata are current
-  check-stale-claims    Fail on stale hardcoded template claims
-  check-cargo-generate  Compatibility alias for cargo-generate
-  sync-web-source       Copy apps/web into crates/rtemplate-web/assets/source
+  check-stale-claims    Fail on stale hardcoded Soma claims
+  check-cargo-generate  Validate cargo-generate output
+  sync-web-source       Copy apps/web into crates/soma-web/assets/source
   check-web-source-sync Validate bundled web source matches apps/web
   update-aurora-web     Refresh Aurora registry components, validate, then sync
   build-web             Build optional apps/web static export
   web-watch             Watch apps/web and rebuild on changes
-  generate-cli          Generate dist/example-cli through mcporter
-  repair                Rebuild and restart local rtemplate-mcp runtime
+  generate-cli          Generate dist/soma-cli through mcporter
+  repair                Rebuild and restart local soma-mcp runtime
   test-mcp-auth         Smoke-test HTTP MCP bearer auth
   asciicheck            Check/fix explicit files for non-ASCII characters
   check-blob-size       Check changed git blobs against size budget
@@ -817,20 +817,20 @@ COMMANDS:
   sync-cargo            Copy Cargo.lock into plugin data directories
   pre-release-check     Run release-readiness gate
   refresh-docs          Refresh ignored reference docs
-  test-template-features
-                        Run template invariant smoke tests
+  test-soma-features
+                        Run Soma invariant smoke tests
   validate-plugin-layout
                         Validate Claude/Codex/Gemini plugin package layout
   check-version-sync    Validate release manifest version-file parity
   check-release-versions [--base REF] [--head REF] [--mode pr|main] [--json]
                         Validate changed release components have fresh versions/tags
   release-plan          Print changed release components and candidate tags
-  bump-version          Bump a component: cargo xtask bump-version template patch
-  bump-template-version Bump template component: cargo xtask bump-template-version patch
+  bump-version          Bump a component: cargo xtask bump-version soma patch
+  bump-soma-version Bump Soma component: cargo xtask bump-soma-version patch
   changed-paths         Classify changed files into CI routing categories
   help                  Show this help
 
-TEMPLATE:
+CUSTOMIZE:
   Add commands by extending the match block in xtask/src/main.rs.
   Keep dependencies minimal — xtask should compile in seconds."
     );

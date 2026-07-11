@@ -2966,183 +2966,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rtemplate-api"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "axum",
- "rtemplate-auth",
- "rtemplate-contracts",
- "rtemplate-runtime",
- "rtemplate-service",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
-name = "rtemplate-auth"
-version = "0.4.1"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "chacha20poly1305",
- "dashmap",
- "getrandom 0.4.3",
- "httpdate",
- "jsonwebtoken",
- "rand 0.10.2",
- "reqwest 0.12.28",
- "rsa 0.10.0-rc.18",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "subtle",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
- "tracing-subscriber",
- "url",
- "wiremock",
-]
-
-[[package]]
-name = "rtemplate-cli"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "dirs",
- "reqwest 0.12.28",
- "rtemplate-contracts",
- "rtemplate-runtime",
- "rtemplate-service",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "rtemplate-contracts"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "dirs",
- "dotenvy",
- "jsonschema",
- "schemars",
- "serde",
- "serde_json",
- "serial_test",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "rtemplate-mcp"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "axum",
- "http 1.4.2",
- "rmcp",
- "rtemplate-auth",
- "rtemplate-contracts",
- "rtemplate-runtime",
- "rtemplate-service",
- "schemars",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "rtemplate-observability"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "chrono",
- "metrics",
- "metrics-exporter-prometheus",
- "serde_json",
- "tempfile",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "rtemplate-plugin-support"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "rtemplate-contracts",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "rtemplate-runtime"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "rtemplate-auth",
- "rtemplate-contracts",
- "rtemplate-service",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "rtemplate-service"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "jsonschema",
- "metrics",
- "reqwest 0.12.28",
- "rmcp",
- "rtemplate-contracts",
- "rtemplate-observability",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "tokio",
- "tracing",
- "url",
- "wasmtime",
-]
-
-[[package]]
-name = "rtemplate-test-support"
-version = "0.4.1"
-dependencies = [
- "rtemplate-api",
- "rtemplate-auth",
- "rtemplate-contracts",
- "rtemplate-service",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "rtemplate-web"
-version = "0.4.1"
-dependencies = [
- "axum",
- "include_dir",
- "tempfile",
-]
-
-[[package]]
 name = "rusqlite"
 version = "0.40.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3558,19 +3381,19 @@ dependencies = [
  "async-trait",
  "axum",
  "rmcp",
- "rtemplate-api",
- "rtemplate-auth",
- "rtemplate-cli",
- "rtemplate-contracts",
- "rtemplate-mcp",
- "rtemplate-observability",
- "rtemplate-plugin-support",
- "rtemplate-runtime",
- "rtemplate-service",
- "rtemplate-test-support",
- "rtemplate-web",
  "serde_json",
  "soma",
+ "soma-api",
+ "soma-auth",
+ "soma-cli",
+ "soma-contracts",
+ "soma-mcp",
+ "soma-observability",
+ "soma-plugin-support",
+ "soma-runtime",
+ "soma-service",
+ "soma-test-support",
+ "soma-web",
  "tempfile",
  "tokio",
  "tower",
@@ -3578,6 +3401,183 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wat",
+]
+
+[[package]]
+name = "soma-api"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "axum",
+ "serde",
+ "serde_json",
+ "soma-auth",
+ "soma-contracts",
+ "soma-runtime",
+ "soma-service",
+ "tracing",
+]
+
+[[package]]
+name = "soma-auth"
+version = "0.4.1"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "chacha20poly1305",
+ "dashmap",
+ "getrandom 0.4.3",
+ "httpdate",
+ "jsonwebtoken",
+ "rand 0.10.2",
+ "reqwest 0.12.28",
+ "rsa 0.10.0-rc.18",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subtle",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wiremock",
+]
+
+[[package]]
+name = "soma-cli"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "dirs",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "soma-contracts",
+ "soma-runtime",
+ "soma-service",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "soma-contracts"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "dotenvy",
+ "jsonschema",
+ "schemars",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
+name = "soma-mcp"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "axum",
+ "http 1.4.2",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "soma-auth",
+ "soma-contracts",
+ "soma-runtime",
+ "soma-service",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "soma-observability"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "soma-plugin-support"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "soma-contracts",
+]
+
+[[package]]
+name = "soma-runtime"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "soma-auth",
+ "soma-contracts",
+ "soma-service",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "soma-service"
+version = "0.4.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "jsonschema",
+ "metrics",
+ "reqwest 0.12.28",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "soma-contracts",
+ "soma-observability",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "url",
+ "wasmtime",
+]
+
+[[package]]
+name = "soma-test-support"
+version = "0.4.1"
+dependencies = [
+ "soma-api",
+ "soma-auth",
+ "soma-contracts",
+ "soma-service",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "soma-web"
+version = "0.4.1"
+dependencies = [
+ "axum",
+ "include_dir",
+ "tempfile",
 ]
 
 [[package]]
@@ -4881,12 +4881,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "jsonschema",
- "rtemplate-contracts",
- "rtemplate-service",
  "semver",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "soma-contracts",
+ "soma-service",
  "tempfile",
  "toml",
  "walkdir",

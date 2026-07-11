@@ -2,12 +2,12 @@
 title: "Windows CI Runner"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "operators"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-06-27"
 ---
@@ -15,18 +15,18 @@ last_reviewed: "2026-06-27"
 # Windows CI Runner
 
 This guide explains the Linux + Windows build workflow and the Windows runner
-setup used by repos derived from `rmcp-template`.
+setup used by repos derived from `soma`.
 
-The template can run on GitHub-hosted runners, but this repo's Windows job is
+Soma can run on GitHub-hosted runners, but this repo's Windows job is
 currently wired to the steamy self-hosted runner:
 
-- `build-linux`: `[self-hosted, tootie, rmcp-template]`, builds `target/release/rtemplate` and `target/release/rtemplate-server`
-- `build-windows`: `[self-hosted, Windows, rmcp-template, steamy]`, builds
-  `target/release/rtemplate.exe` and `target/release/rtemplate-server.exe`
+- `build-linux`: `[self-hosted, tootie, soma]`, builds `target/release/soma` and `target/release/soma-server`
+- `build-windows`: `[self-hosted, Windows, soma, steamy]`, builds
+  `target/release/soma.exe` and `target/release/soma-server.exe`
 
 Both jobs are wired through `.github/workflows/ci.yml` and run when the
 path-aware `Changes` job marks native artifact checks as relevant. They upload
-artifacts named `rtemplate-linux-x86_64` and `rtemplate-windows-x86_64` so PR
+artifacts named `soma-linux-x86_64` and `soma-windows-x86_64` so PR
 review can test the exact compiled binary before a release tag exists.
 
 ## Why Native Windows Builds
@@ -115,12 +115,12 @@ committed `.cargo/config.toml`.
 
 The active runner is:
 
-- GitHub repo: `jmagar/template-rmcp`
-- Runner name: `rmcp-template-windows-1`
-- Runner path: `C:\Users\jmaga\actions-runner\rmcp-template`
-- Labels: `self-hosted`, `Windows`, `X64`, `rmcp-template`, `steamy`
+- GitHub repo: `jmagar/soma`
+- Runner name: `soma-windows-1`
+- Runner path: `C:\Users\jmaga\actions-runner\soma`
+- Labels: `self-hosted`, `Windows`, `X64`, `soma`, `steamy`
 - Startup file:
-  `C:\Users\jmaga\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\rmcp-template-runner.vbs`
+  `C:\Users\jmaga\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\soma-runner.vbs`
 
 The runner is nested under the existing Axon runner directory so all GitHub
 Actions runner state for steamy stays under `C:\Users\jmaga\actions-runner`.
@@ -146,18 +146,18 @@ access, specialized desktop testing, or a known Windows host.
 3. Choose Windows x64 and follow GitHub's generated download/config commands.
 4. Run the runner as a service so builds survive logouts.
 5. Add stable labels such as `self-hosted`, `Windows`, and a repo-family label
-   such as `rmcp-template`.
+   such as `soma`.
 
 Then change the Windows job:
 
 ```yaml
-runs-on: [self-hosted, Windows, rmcp-template]
+runs-on: [self-hosted, Windows, soma]
 ```
 
 If Linux should also use a self-hosted runner, change the Linux job similarly:
 
 ```yaml
-runs-on: [self-hosted, tootie, rmcp-template]
+runs-on: [self-hosted, tootie, soma]
 ```
 
 Keep labels repo-family-specific. Avoid labels tied to one machine name unless
@@ -225,29 +225,29 @@ After a workflow run:
 
 ```bash
 gh run list --workflow CI --limit 5
-gh run download <run-id> --name rtemplate-windows-x86_64 --dir /tmp/rtemplate-win
+gh run download <run-id> --name soma-windows-x86_64 --dir /tmp/soma-win
 ```
 
-Then copy `rtemplate.exe` to a Windows host and run:
+Then copy `soma.exe` to a Windows host and run:
 
 ```powershell
-.\rtemplate.exe --version
-.\rtemplate.exe status
-.\rtemplate.exe doctor
+.\soma.exe --version
+.\soma.exe status
+.\soma.exe doctor
 ```
 
 For MCP transport smoke testing:
 
 ```powershell
-.\rtemplate.exe mcp
+.\soma.exe mcp
 ```
 
 For HTTP smoke testing:
 
 ```powershell
-$env:RTEMPLATE_MCP_HOST = "127.0.0.1"
-$env:RTEMPLATE_MCP_NO_AUTH = "true"
-.\rtemplate.exe serve
+$env:SOMA_MCP_HOST = "127.0.0.1"
+$env:SOMA_MCP_NO_AUTH = "true"
+.\soma.exe serve
 ```
 
 Then from another shell:
@@ -264,7 +264,7 @@ If the Windows artifact crashes on another machine:
 - Recheck the self-hosted runner user's Cargo config.
 - Confirm `RUSTFLAGS` is set on both `cargo test` and `cargo build`.
 - Rebuild with `windows-latest` to separate repo issues from host issues.
-- Test `rtemplate.exe --version` before testing MCP or HTTP behavior.
+- Test `soma.exe --version` before testing MCP or HTTP behavior.
 
 If pnpm fails on Windows:
 

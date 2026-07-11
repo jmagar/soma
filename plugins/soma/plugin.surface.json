@@ -1,0 +1,32 @@
+{
+  "name": "soma",
+  "packageName": "soma-rmcp",
+  "serviceName": "soma",
+  "binary": "soma",
+  "repository": "https://github.com/jmagar/soma",
+  "homepage": "https://github.com/jmagar/soma",
+  "license": "MIT",
+  "keywords": ["mcp", "rmcp", "soma", "homelab"],
+  "author": {
+    "name": "Jacob Magar",
+    "email": "jmagar@users.noreply.github.com",
+    "url": "https://github.com/jmagar"
+  },
+  "claudeDescription": "Soma connects Claude Code to a batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
+  "codexDescription": "Soma is a batteries-included RMCP runtime for drop-in provider-backed agent capabilities.",
+  "geminiDescription": "Soma is a batteries-included RMCP runtime for drop-in provider-backed agent capabilities.",
+  "codexInterface": {
+    "displayName": "Soma",
+    "shortDescription": "Drop-in RMCP runtime.",
+    "longDescription": "Soma runs a batteries-included RMCP server runtime. Drop in provider manifests or modules for tools, prompts, resources, and provider-backed actions; the runtime supplies MCP, CLI, REST, auth, setup, and generated metadata.",
+    "developerName": "Jacob Magar",
+    "category": "Infrastructure",
+    "capabilities": ["Read", "Write"],
+    "brandColor": "#6366F1",
+    "defaultPrompt": [
+      "Check Soma runtime status.",
+      "Show available Soma provider actions.",
+      "Help me add a drop-in provider to Soma."
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 # =============================================================================
 # .dockerignore — Files excluded from the Docker build context
 #
-# TEMPLATE: Copy this file unchanged when creating a new server.
+# CUSTOMIZE: Copy this file unchanged when creating a new server.
 #           The key invariant: src/, Cargo.toml, Cargo.lock, and config/ are
 #           the only things the builder stage needs. Everything else is noise
 #           that slows the image build and risks leaking secrets.
@@ -56,7 +56,7 @@ backups
 data
 
 # ── Documentation (not needed at runtime) ────────────────────────────────────
-# TEMPLATE: Keep README.md here so it's excluded. Only runtime files belong
+# CUSTOMIZE: Keep README.md here so it's excluded. Only runtime files belong
 #           in the image.
 docs/*
 !docs/generated/
@@ -81,7 +81,7 @@ htmlcov
 .hypothesis
 
 # ── Node.js (from any bundler steps) ─────────────────────────────────────────
-# TEMPLATE: Remove this section if your server has no JS/TS components.
+# CUSTOMIZE: Remove this section if your server has no JS/TS components.
 node_modules
 dist
 coverage

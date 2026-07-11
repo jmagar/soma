@@ -2,7 +2,7 @@
 title: "ADR 0002: Extract reusable platform and product packages"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

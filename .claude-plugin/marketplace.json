@@ -11,7 +11,7 @@
       "category": "infrastructure",
       "description": "Soma RMCP runtime plugin.",
       "name": "soma",
-      "source": "./plugins/rtemplate"
+      "source": "./plugins/soma"
     }
   ]
 }

@@ -1,18 +1,18 @@
 # =============================================================================
-# docker-compose.prod.yml — Production deployment template
+# docker-compose.prod.yml — Production deployment sample
 #
-# TEMPLATE: Replace all occurrences of "example" with your service name.
+# CUSTOMIZE: Replace all occurrences of "example" with your service name.
 #           Replace all occurrences of "EXAMPLE" with your service name in caps.
 #
 # Key substitutions:
-#   "template-rmcp"          -> your Docker service/container name
-#   "template-rmcp-data"     -> your Docker volume name
+#   "soma"          -> your Docker service/container name
+#   "soma-data"     -> your Docker volume name
 #   "ghcr.io/.../example"  -> your published Docker image path
 #   port 40060             -> your service's MCP port
-#   RTEMPLATE_*              -> your env var prefix
+#   SOMA_*              -> your env var prefix
 # =============================================================================
 
-name: template-rmcp
+name: soma
 
 x-common-service: &common-service
   networks:
@@ -32,19 +32,19 @@ x-common-service: &common-service
       compress: "true"
 
 services:
-  template-rmcp:
+  soma:
     <<: *common-service
-    # TEMPLATE: Replace with your image path.
-    image: ghcr.io/your-org/template-rmcp:${RTEMPLATE_MCP_VERSION:-latest}
-    container_name: template-rmcp
+    # CUSTOMIZE: Replace with your image path.
+    image: ghcr.io/your-org/soma:${SOMA_MCP_VERSION:-latest}
+    container_name: soma
     env_file:
       - path: .env
         required: false
     environment:
-      RTEMPLATE_MCP_HOST: 0.0.0.0
-      RTEMPLATE_NOAUTH: "true"
+      SOMA_MCP_HOST: 0.0.0.0
+      SOMA_NOAUTH: "true"
     ports:
-      - "${RTEMPLATE_MCP_HOST_PORT:-40060}:40060/tcp"
+      - "${SOMA_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
       - ${HOME}/.example:/data
     cap_drop:
@@ -68,7 +68,7 @@ services:
           cpus: '0.5'
 
 volumes:
-  template-rmcp-data:
+  soma-data:
 
 networks:
   mcp:

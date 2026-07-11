@@ -2,11 +2,11 @@
 title: "xtasks"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-05-15"
 ---
@@ -35,8 +35,8 @@ xtask/
 | `cargo xtask patterns` | Check static contracts derived from `docs/PATTERNS.md`. |
 | `cargo xtask generate-docs` | Regenerate volatile docs and metadata from canonical Rust specs. |
 | `cargo xtask check-docs` | Fail when generated docs or metadata drift from canonical Rust specs. |
-| `cargo xtask check-stale-claims` | Fail when known stale hardcoded template claims reappear. |
-| `cargo xtask sync-web-source` | Copy editable `apps/web` source into `crates/rtemplate-web/assets/source` with generated artifacts excluded. |
+| `cargo xtask check-stale-claims` | Fail when known stale hardcoded Soma claims reappear. |
+| `cargo xtask sync-web-source` | Copy editable `apps/web` source into `crates/soma-web/assets/source` with generated artifacts excluded. |
 | `cargo xtask check-web-source-sync` | Fail if the bundled web source has drifted from `apps/web`. |
 | `cargo xtask update-aurora-web` | Refresh the known Aurora registry components, validate `apps/web`, then sync the bundle. |
 | `cargo xtask changed-paths` | Classify changed files into CI routing categories consumed by path-aware GitHub workflow gates. |
@@ -54,7 +54,7 @@ symlink-docs:
 
 `cargo xtask patterns` verifies important architecture contracts:
 
-- required template files exist
+- required Soma files exist
 - no `mod.rs` files
 - file size warnings and hard limits
 - MCP/CLI shims remain thin (no business logic)
@@ -66,16 +66,16 @@ symlink-docs:
 ### What the pattern checker catches
 
 ```
-WARN  crates/rtemplate-mcp/src/tools.rs  line 42: potential business logic in MCP shim
-WARN  crates/rtemplate-cli/src/lib.rs  line 87: potential business logic in CLI shim
-ERROR crates/rtemplate-service/src/app/mod.rs: mod.rs files are banned
-ERROR crates/rtemplate-mcp/src/tools.rs: action "new_action" in ACTION_SPECS missing from dispatch
-ERROR crates/rmcp-template/tests/tool_dispatch.rs: action "new_action" has no test
+WARN  crates/soma-mcp/src/tools.rs  line 42: potential business logic in MCP shim
+WARN  crates/soma-cli/src/lib.rs  line 87: potential business logic in CLI shim
+ERROR crates/soma-service/src/app/mod.rs: mod.rs files are banned
+ERROR crates/soma-mcp/src/tools.rs: action "new_action" in ACTION_SPECS missing from dispatch
+ERROR crates/soma/tests/tool_dispatch.rs: action "new_action" has no test
 ## Web Source Sync
 
-`rtemplate-web` bundles editable Aurora frontend source for generated projects.
+`soma-web` bundles editable Aurora frontend source for generated projects.
 The source of truth is `apps/web`; the bundled copy lives at
-`crates/rtemplate-web/assets/source`.
+`crates/soma-web/assets/source`.
 
 ```bash
 cargo xtask sync-web-source
@@ -86,14 +86,14 @@ The sync excludes generated artifacts: `.next`, `node_modules`, `out`,
 `tsconfig.tsbuildinfo`, and `.DS_Store`. `cargo xtask ci` runs
 `check-web-source-sync` so drift is caught before merge.
 
-To pull the current Aurora registry versions into the template web app:
+To pull the current Aurora registry versions into Soma web app:
 
 ```bash
 cargo xtask update-aurora-web
 ```
 
 That command refreshes the Aurora tokens plus the Aurora UI components currently
-used by the template, runs `pnpm --dir apps/web validate`, then syncs the bundled
+used by Soma, runs `pnpm --dir apps/web validate`, then syncs the bundled
 source.
 
 ## Generated Docs
@@ -104,10 +104,10 @@ It renders volatile tables and metadata from `ACTION_SPECS`,
 
 - `docs/ENV.md`
 - `.env.example`
-- `config.example.toml`
-- `plugins/rtemplate/.claude-plugin/plugin.json`
-- `plugins/rtemplate/.codex-plugin/plugin.json`
-- `plugins/rtemplate/gemini-extension.json`
+- `config.soma.toml`
+- `plugins/soma/.claude-plugin/plugin.json`
+- `plugins/soma/.codex-plugin/plugin.json`
+- `plugins/soma/gemini-extension.json`
 - `apps/web/lib/generated-actions.ts`
 - README and skill action tables
 - `docs/generated/plugin-settings.md`
@@ -135,9 +135,9 @@ Run `just symlink-docs` after adding any new `CLAUDE.md` file.
 `cargo xtask check-env` reports missing or misconfigured environment before startup:
 
 ```
-✓ RTEMPLATE_API_URL:   https://example.internal/api (set)
-✗ RTEMPLATE_API_KEY:   not set
-  → Set RTEMPLATE_API_KEY in ~/.example/.env or your environment
+✓ SOMA_API_URL:   https://example.internal/api (set)
+✗ SOMA_API_KEY:   not set
+  → Set SOMA_API_KEY in ~/.soma/.env or your environment
 ```
 
 See `docs/PATTERNS.md` §24 and §48 for the xtask and doctor patterns.
@@ -158,5 +158,5 @@ cargo xtask changed-paths \
 ```
 
 Outputs: `all`, `docs`, `workflow`, `rust`, `web`, `native`, `mcp`, `docker`,
-`toml`, `template`, `security`, `secrets`, and `release`. Workflow changes,
+`toml`, `soma`, `security`, `secrets`, and `release`. Workflow changes,
 manual dispatch, and empty changed-file sets fail safe to full CI.

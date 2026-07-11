@@ -2,11 +2,11 @@
 title: "Web UI"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -15,9 +15,9 @@ last_reviewed: "2026-05-22"
 
 # Web UI
 
-The optional web UI lives under `apps/web/`. The template treats it two ways:
+The optional web UI lives under `apps/web/`. Soma treats it two ways:
 
-- Editable scaffold source is bundled by `rtemplate-web` from `crates/rtemplate-web/assets/source/`, copied from `apps/web/` without generated artifacts.
+- Editable scaffold source is bundled by `soma-web` from `crates/soma-web/assets/source/`, copied from `apps/web/` without generated artifacts.
 - Runtime web serving embeds the static Next.js export from `apps/web/out/` into the Rust binary at compile time using `include_dir!`.
 
 ## Build flow
@@ -27,10 +27,10 @@ apps/web/           ← Next.js app source
   next.config.ts    ← output: "export" (static HTML/CSS/JS)
   out/              ← compiled static output (gitignored, built in CI)
 
-crates/rtemplate-web/assets/source/
+crates/soma-web/assets/source/
                     ← bundled editable source for generated/scaffolded apps
 
-crates/rtemplate-web/src/web.rs
+crates/soma-web/src/web.rs
                     ← Rust: embeds source scaffold + out/ runtime assets
 ```
 
@@ -52,11 +52,11 @@ pnpm -C apps/web start  # preview apps/web/out after build
 
 ### Scaffold source
 
-`rtemplate-web` bundles editable Aurora frontend source so a generated server can
+`soma-web` bundles editable Aurora frontend source so a generated server can
 materialize an `apps/web` directory without relying on prebuilt assets:
 
 ```rust
-use rtemplate_web::{web_source_available, write_web_source_to};
+use soma_web::{web_source_available, write_web_source_to};
 
 if web_source_available() {
     write_web_source_to("apps/web", false)?;
@@ -73,7 +73,7 @@ cargo xtask sync-web-source
 cargo xtask check-web-source-sync
 ```
 
-`cargo xtask ci` runs the sync check. To refresh the template from the Aurora
+`cargo xtask ci` runs the sync check. To refresh Soma from the Aurora
 registry first, run:
 
 ```bash
@@ -125,7 +125,7 @@ Local builds:
 
 ```bash
 just build-web   # scripts/build-web.sh: frozen pnpm install if needed, then pnpm build
-just build-full  # build web assets, then cargo build --release --bin example-server --features full
+just build-full  # build web assets, then cargo build --release --bin soma-server --features full
 ```
 
 Docker builds use the `web` stage in `config/Dockerfile`, run
@@ -152,7 +152,7 @@ include_dir = { version = "0.7", optional = true }
 
 ## Runtime configuration
 
-`apps/web/lib/template.ts` defines the service display name, direct REST endpoints, and optional API base URL. `NEXT_PUBLIC_RTEMPLATE_API_BASE_URL` should be empty by default so the UI uses same-origin API calls when served by the Rust binary.
+`apps/web/lib/soma.ts` defines the service display name, direct REST endpoints, and optional API base URL. `NEXT_PUBLIC_SOMA_API_BASE_URL` should be empty by default so the UI uses same-origin API calls when served by the Rust binary.
 
 Use `apps/web/.env.example` for local web development overrides only.
 
@@ -206,7 +206,7 @@ cd apps/web
 pnpm dlx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
 ```
 
-Prefer `cargo xtask update-aurora-web` for template maintenance because it
+Prefer `cargo xtask update-aurora-web` for Soma maintenance because it
 refreshes the known component set, validates the frontend, and updates the
 bundled scaffold source in one pass.
 

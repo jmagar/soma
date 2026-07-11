@@ -1,0 +1,270 @@
+//! Unit tests for SomaClient — sidecar file for src/soma.rs
+//!
+//! # Sidecar test pattern
+//!
+//! Tests live in a separate `*_tests.rs` file (this file) rather than inline in
+//! `soma.rs`. The parent module declares them with:
+//!
+//! ```rust
+//! #[cfg(test)]
+//! #[path = "soma_tests.rs"]
+//! mod tests;
+//! ```
+//!
+//! Benefits of the sidecar pattern:
+//!   - `soma.rs` stays focused on production code — no test boilerplate
+//!   - Tests can be found quickly (always `<module>_tests.rs`)
+//!   - Large test suites don't inflate the source file line count
+//!   - IDE navigation: open `soma.rs`, jump to `mod tests`, find the file
+//!
+//! **Customize**: Copy this pattern for every module that needs unit tests.
+//!   1. Create `src/<module>_tests.rs`
+//!   2. Add `#[cfg(test)] #[path = "<module>_tests.rs"] mod tests;` to `src/<module>.rs`
+//!   3. Write tests here — they can access `pub(crate)` items via `super::*`
+
+use super::*;
+use axum::{
+    extract::State,
+    http::HeaderMap,
+    routing::{get, post},
+    Json, Router,
+};
+use serde_json::{json, Value};
+use soma_contracts::config::SomaConfig;
+use std::sync::{Arc, Mutex};
+use tokio::net::TcpListener;
+
+/// Helper: build a stub SomaConfig.
+/// Tests do not make real network calls unless they opt into a mock deployed API.
+fn stub_config() -> SomaConfig {
+    SomaConfig {
+        // Empty URL selects offline stub mode — safe for offline tests.
+        // CUSTOMIZE: Replace with your service's config struct fields.
+        api_url: String::new(),
+        api_key: "test-key".to_string(),
+    }
+}
+
+#[tokio::test]
+async fn test_greet_returns_greeting_field() {
+    // CUSTOMIZE: Replace greet() with your client's first operation.
+    //           Test that the response has the expected JSON shape.
+    let client = SomaClient::new(&stub_config()).expect("stub client should build");
+    let result = client.greet(None).await.expect("greet should succeed");
+
+    assert!(
+        result.get("greeting").is_some(),
+        "greet response should have 'greeting' field, got: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_greet_with_name_includes_name_in_response() {
+    // CUSTOMIZE: Test that input parameters are reflected in the output.
+    //           This is a semantic test — not just "did it return JSON" but
+    //           "did it return the RIGHT JSON for this input".
+    let client = SomaClient::new(&stub_config()).expect("stub client should build");
+    let result = client
+        .greet(Some("Alice"))
+        .await
+        .expect("greet Alice should succeed");
+
+    let greeting = result
+        .get("greeting")
+        .and_then(|v| v.as_str())
+        .expect("greeting field should be a string");
+
+    assert!(
+        greeting.contains("Alice"),
+        "greeting should include the provided name 'Alice', got: {greeting}"
+    );
+}
+
+#[tokio::test]
+async fn test_greet_default_name_is_world() {
+    // CUSTOMIZE: Test default/fallback behavior explicitly.
+    let client = SomaClient::new(&stub_config()).expect("stub client should build");
+    let result = client.greet(None).await.expect("greet should succeed");
+
+    let target = result
+        .get("target")
+        .and_then(|v| v.as_str())
+        .expect("target field should be present");
+
+    assert_eq!(target, "World", "default greeting target should be 'World'");
+}
+
+#[tokio::test]
+async fn test_echo_returns_exact_message() {
+    // CUSTOMIZE: For operations that pass data through, verify the round-trip exactly.
+    //           "is it JSON?" is not a good test. "does it contain the right value?" is.
+    let client = SomaClient::new(&stub_config()).expect("stub client should build");
+    let message = "hello from the test suite";
+    let result = client.echo(message).await.expect("echo should succeed");
+
+    let echo = result
+        .get("echo")
+        .and_then(|v| v.as_str())
+        .expect("echo field should be present");
+
+    assert_eq!(echo, message, "echo should return the exact input message");
+}
+
+#[tokio::test]
+async fn test_status_returns_ok() {
+    // CUSTOMIZE: Status/health operations should always return a known good value.
+    let client = SomaClient::new(&stub_config()).expect("stub client should build");
+    let result = client.status().await.expect("status should succeed");
+
+    let status = result
+        .get("status")
+        .and_then(|v| v.as_str())
+        .expect("status field should be present");
+
+    assert_eq!(status, "ok");
+}
+
+#[test]
+fn test_client_builds_with_empty_config() {
+    // CUSTOMIZE: Verify that the client can be constructed even with empty credentials.
+    //           In Soma, this is intentional (the stub allows it).
+    //           A real server would error here — update this test to expect an Err.
+    let config = SomaConfig {
+        api_url: String::new(),
+        api_key: String::new(),
+    };
+    let result = SomaClient::new(&config);
+    // CUSTOMIZE: Change to assert!(result.is_err()) once you add real validation
+    assert!(
+        result.is_ok(),
+        "stub client should build even with empty config (real server should validate)"
+    );
+}
+
+#[test]
+fn test_api_action_url_preserves_base_path() {
+    let root = Url::parse("https://example.test/").unwrap();
+    let nested = Url::parse("https://example.test/api").unwrap();
+    let nested_slash = Url::parse("https://example.test/api/").unwrap();
+
+    assert_eq!(
+        api_url(&root, "v1/status").unwrap().as_str(),
+        "https://example.test/v1/status"
+    );
+    assert_eq!(
+        api_url(&nested, "v1/echo").unwrap().as_str(),
+        "https://example.test/api/v1/echo"
+    );
+    assert_eq!(
+        api_url(&nested_slash, "v1/greet").unwrap().as_str(),
+        "https://example.test/api/v1/greet"
+    );
+}
+
+#[tokio::test]
+async fn test_client_forwards_actions_to_deployed_api_when_configured() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+    })
+    .expect("remote client should build");
+
+    let greeting = client
+        .greet(Some("Ada"))
+        .await
+        .expect("remote greet should succeed");
+    let echo = client
+        .echo("hello")
+        .await
+        .expect("remote echo should succeed");
+    let status = client.status().await.expect("remote status should succeed");
+
+    handle.abort();
+
+    assert_eq!(greeting["source"], "deployed-api");
+    assert_eq!(greeting["greeting"], "Hello, Ada!");
+    assert_eq!(echo["echo"], "hello");
+    assert_eq!(status["status"], "remote-ok");
+
+    let observed = observed.lock().expect("observed requests should lock");
+    assert_eq!(observed.len(), 3);
+    assert!(observed
+        .iter()
+        .all(|request| request.bearer == "Bearer secret-token"));
+    assert_eq!(observed[0].path, "/v1/greet");
+    assert_eq!(observed[0].body["name"], "Ada");
+    assert_eq!(observed[1].path, "/v1/echo");
+    assert_eq!(observed[1].body["message"], "hello");
+    assert_eq!(observed[2].path, "/v1/status");
+    assert!(observed[2].body.is_null());
+}
+
+#[derive(Debug, Clone)]
+struct ObservedRequest {
+    path: String,
+    body: Value,
+    bearer: String,
+}
+
+type ObservedRequests = Arc<Mutex<Vec<ObservedRequest>>>;
+
+async fn mock_deployed_api(
+    observed: ObservedRequests,
+) -> (String, tokio::task::JoinHandle<std::io::Result<()>>) {
+    let app = Router::new()
+        .route("/v1/greet", post(mock_greet))
+        .route("/v1/echo", post(mock_echo))
+        .route("/v1/status", get(mock_status))
+        .with_state(observed);
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock API should bind");
+    let addr = listener.local_addr().expect("mock API should have addr");
+    let handle = tokio::spawn(async move { axum::serve(listener, app.into_make_service()).await });
+    (format!("http://{addr}/"), handle)
+}
+
+async fn mock_greet(
+    State(observed): State<ObservedRequests>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    push_observed(&observed, &headers, "/v1/greet", body.clone());
+    Json(json!({
+        "source": "deployed-api",
+        "greeting": format!("Hello, {}!", body["name"].as_str().unwrap_or("World")),
+    }))
+}
+
+async fn mock_echo(
+    State(observed): State<ObservedRequests>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    push_observed(&observed, &headers, "/v1/echo", body.clone());
+    Json(json!({ "echo": body["message"] }))
+}
+
+async fn mock_status(State(observed): State<ObservedRequests>, headers: HeaderMap) -> Json<Value> {
+    push_observed(&observed, &headers, "/v1/status", Value::Null);
+    Json(json!({ "status": "remote-ok" }))
+}
+
+fn push_observed(observed: &ObservedRequests, headers: &HeaderMap, path: &str, body: Value) {
+    let bearer = headers
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    observed
+        .lock()
+        .expect("observed requests should lock")
+        .push(ObservedRequest {
+            path: path.to_owned(),
+            body,
+            bearer,
+        });
+}

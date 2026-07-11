@@ -43,7 +43,7 @@ Before publishing or committing a generated project, prove the scaffold shape:
 cargo xtask scaffold --verify ../generated/myservice-mcp
 ```
 
-The verifier rejects copied template-only files, plugin manifests containing a
+The verifier rejects copied scaffold-only files, plugin manifests containing a
 `version` key, and missing `AGENTS.md` / `GEMINI.md` symlinks when `CLAUDE.md`
 exists. By default it also runs `cargo check --workspace --all-targets`; pass
 `--no-cargo-check` for a static-only check while iterating.

@@ -27,8 +27,8 @@ const CORE_RUST_FORBIDDEN: &[&str] = &[
     "std::fs",
     "std::process::Command",
     "Command::new",
-    "ExampleClient::new",
-    "crate::example::ExampleClient",
+    "SomaClient::new",
+    "crate::soma::SomaClient",
 ];
 
 const WEB_FORBIDDEN: &[&str] = &[
@@ -36,7 +36,7 @@ const WEB_FORBIDDEN: &[&str] = &[
     "node:child_process",
     "fs.",
     "node:fs",
-    "process.env.RTEMPLATE_",
+    "process.env.SOMA_",
     "fetch(\"https://",
     "fetch('https://",
 ];
@@ -78,7 +78,7 @@ pub(super) fn thin_surfaces(reporter: &mut PatternReporter) -> Result<()> {
         reporter.fail(
             "surfaces",
             format!(
-                "business/IO logic appears in surface files: {}. Hint: CLI/API/MCP/web surfaces should parse inputs, delegate to ExampleService or API endpoints, and format responses only.",
+                "business/IO logic appears in surface files: {}. Hint: CLI/API/MCP/web surfaces should parse inputs, delegate to SomaService or API endpoints, and format responses only.",
                 failures.join("; ")
             ),
         );
@@ -124,9 +124,9 @@ fn check_core_rust_surface(
 
     let is_dispatch_surface = matches!(
         file.path.as_str(),
-        "crates/rtemplate-api/src/api.rs"
-            | "crates/rtemplate-mcp/src/tools.rs"
-            | "crates/rtemplate-cli/src/lib.rs"
+        "crates/soma-api/src/api.rs"
+            | "crates/soma-mcp/src/tools.rs"
+            | "crates/soma-cli/src/lib.rs"
     );
     if is_dispatch_surface
         && !RUST_DELEGATION_TOKENS
@@ -149,8 +149,11 @@ fn check_core_rust_surface(
 }
 
 fn core_token_applies(file: &SurfaceFile, token: &str) -> bool {
-    if file.path == "crates/rtemplate-cli/src/lib.rs"
-        && matches!(token, "std::fs" | "ExampleClient::new")
+    if file.path == "crates/soma-cli/src/lib.rs"
+        && matches!(
+            token,
+            "std::fs" | "std::process::Command" | "Command::new" | "SomaClient::new"
+        )
     {
         return false;
     }
@@ -159,8 +162,8 @@ fn core_token_applies(file: &SurfaceFile, token: &str) -> bool {
 
 fn check_operational_surface(file: &SurfaceFile, text: &str, warnings: &mut Vec<String>) {
     // doctor/ and watch.rs use reqwest for health/connectivity pings — explicitly diagnostics-only.
-    let is_diagnostics = file.path.starts_with("crates/rtemplate-cli/src/doctor/")
-        || file.path == "crates/rtemplate-cli/src/watch.rs";
+    let is_diagnostics = file.path.starts_with("crates/soma-cli/src/doctor/")
+        || file.path == "crates/soma-cli/src/watch.rs";
     for token in ["reqwest::", "sqlx::", "rusqlite::"] {
         if text.contains(token) && !(token == "reqwest::" && is_diagnostics) {
             warnings.push(format!(
@@ -183,9 +186,9 @@ fn check_web_surface(
         }
     }
 
-    // template.ts is the canonical action metadata definition for the web UI — it is
+    // soma.ts is the canonical action metadata definition for the web UI — it is
     // expected to list all action names and is explicitly excluded from this check.
-    let is_definition_file = file.path == "apps/web/lib/template.ts";
+    let is_definition_file = file.path == "apps/web/lib/soma.ts";
     if !is_definition_file {
         let hardcoded_action_count = ["greet", "echo", "status", "scaffold_intent"]
             .iter()
@@ -223,16 +226,16 @@ fn surface_files() -> Result<Vec<SurfaceFile>> {
 fn surface_file(path: &str) -> Option<SurfaceFile> {
     let kind = if matches!(
         path,
-        "crates/rtemplate-api/src/api.rs"
-            | "crates/rmcp-template/src/routes.rs"
-            | "crates/rtemplate-mcp/src/tools.rs"
-            | "crates/rtemplate-mcp/src/rmcp_server.rs"
-            | "crates/rtemplate-mcp/src/schemas.rs"
-            | "crates/rtemplate-mcp/src/prompts.rs"
-            | "crates/rtemplate-cli/src/lib.rs"
+        "crates/soma-api/src/api.rs"
+            | "crates/soma/src/routes.rs"
+            | "crates/soma-mcp/src/tools.rs"
+            | "crates/soma-mcp/src/rmcp_server.rs"
+            | "crates/soma-mcp/src/schemas.rs"
+            | "crates/soma-mcp/src/prompts.rs"
+            | "crates/soma-cli/src/lib.rs"
     ) {
         SurfaceKind::CoreRust
-    } else if path.starts_with("crates/rtemplate-cli/src/") && path.ends_with(".rs") {
+    } else if path.starts_with("crates/soma-cli/src/") && path.ends_with(".rs") {
         SurfaceKind::OperationalRust
     } else if is_web_surface(path) {
         SurfaceKind::Web
@@ -262,15 +265,14 @@ mod tests {
 
     #[test]
     fn classifies_core_rust_surfaces() {
-        let file =
-            surface_file("crates/rtemplate-mcp/src/tools.rs").expect("tools should be a surface");
+        let file = surface_file("crates/soma-mcp/src/tools.rs").expect("tools should be a surface");
         assert_eq!(file.kind, SurfaceKind::CoreRust);
     }
 
     #[test]
     fn classifies_operational_cli_surfaces() {
         let file =
-            surface_file("crates/rtemplate-cli/src/doctor.rs").expect("doctor should be a surface");
+            surface_file("crates/soma-cli/src/doctor.rs").expect("doctor should be a surface");
         assert_eq!(file.kind, SurfaceKind::OperationalRust);
     }
 
@@ -282,7 +284,7 @@ mod tests {
 
     #[test]
     fn ignores_web_test_files() {
-        assert!(surface_file("apps/web/lib/template.test.ts").is_none());
+        assert!(surface_file("apps/web/lib/soma.test.ts").is_none());
     }
 
     #[test]

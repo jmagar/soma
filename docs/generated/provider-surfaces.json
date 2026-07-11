@@ -1,8 +1,8 @@
 {
-  "provider_fingerprint": "sha256:fd31a31d4a192850070820f443438aa3527e5a478e5cfdf9bbf18d7fab46b86e",
+  "provider_fingerprint": "sha256:c78f53c0de1d4a2086964ad7cfa20f441d87a14c384781035568fa3b0dddd7ac",
   "providers": [
     {
-      "description": "Native service actions compiled into the template.",
+      "description": "Native service actions compiled into Soma.",
       "elicitation": [],
       "kind": "static-rust",
       "name": "static-rust",
@@ -24,7 +24,7 @@
               "value_name": "NAME"
             }
           ],
-          "cli_usage": "example greet [--name NAME]",
+          "cli_usage": "soma greet [--name NAME]",
           "cost": "cheap",
           "description": "Return a greeting.",
           "destructive": false,
@@ -42,7 +42,7 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example greet [--name NAME]",
+            "cli_usage": "soma greet [--name NAME]",
             "returns": "Greeting",
             "scaffold_fallback": null
           },
@@ -51,7 +51,7 @@
           "requires_admin": false,
           "rest": true,
           "rest_route": "POST /v1/greet",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": true,
@@ -66,7 +66,7 @@
               "value_name": "MSG"
             }
           ],
-          "cli_usage": "example echo --message MSG",
+          "cli_usage": "soma echo --message MSG",
           "cost": "cheap",
           "description": "Echo a message back unchanged.",
           "destructive": false,
@@ -88,7 +88,7 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example echo --message MSG",
+            "cli_usage": "soma echo --message MSG",
             "returns": "EchoResult",
             "scaffold_fallback": null
           },
@@ -97,7 +97,7 @@
           "requires_admin": false,
           "rest": true,
           "rest_route": "POST /v1/echo",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": true,
@@ -105,7 +105,7 @@
           "cli_command": "status",
           "cli_default_output": null,
           "cli_flags": [],
-          "cli_usage": "example status",
+          "cli_usage": "soma status",
           "cost": "cheap",
           "description": "Return server status and configuration info.",
           "destructive": false,
@@ -118,7 +118,7 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example status",
+            "cli_usage": "soma status",
             "returns": "Status",
             "scaffold_fallback": null
           },
@@ -127,7 +127,7 @@
           "requires_admin": false,
           "rest": true,
           "rest_route": "GET /v1/status",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": false,
@@ -157,7 +157,7 @@
           "requires_admin": false,
           "rest": false,
           "rest_route": "N/A",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": false,
@@ -190,7 +190,7 @@
           "requires_admin": false,
           "rest": false,
           "rest_route": "N/A",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": true,
@@ -198,7 +198,7 @@
           "cli_command": "help",
           "cli_default_output": null,
           "cli_flags": [],
-          "cli_usage": "example help",
+          "cli_usage": "soma help",
           "cost": "cheap",
           "description": "Show the action reference.",
           "destructive": false,
@@ -211,7 +211,7 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example help",
+            "cli_usage": "soma help",
             "returns": "HelpPayload",
             "scaffold_fallback": null
           },
@@ -254,7 +254,7 @@
       "scaffold_intent",
       "status"
     ],
-    "node_package": "packages/rtemplate-mcp/package.json",
+    "node_package": "packages/soma-rmcp/package.json",
     "palette": "deferred until Axon tauri-palette port lands",
     "plugin": "docs/generated/plugin.json",
     "provider_dir": "providers",

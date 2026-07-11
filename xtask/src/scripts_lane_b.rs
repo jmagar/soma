@@ -1,6 +1,6 @@
 //! Lane B Rust ports for release and plugin-layout shell scripts.
 //!
-//! The shell scripts remain as compatibility wrappers; these functions are the
+//! The shell scripts remain as thin wrappers; these functions are the
 //! canonical implementations.
 
 use anyhow::{bail, Context, Result};
@@ -15,8 +15,8 @@ use crate::{scripts, scripts_lane_d};
 
 pub fn bump_version(root: &Path, args: &[String]) -> Result<()> {
     let arg = args.first().map(String::as_str).unwrap_or("");
-    let level = parse_legacy_bump_level(arg)?;
-    release_versions::bump(root, "template", level)?;
+    let level = parse_bump_wrapper_level(arg)?;
+    release_versions::bump(root, "soma", level)?;
     println!("Done. Review CHANGELOG.md before tagging.");
     Ok(())
 }
@@ -54,9 +54,9 @@ pub fn pre_release_check(args: &[String]) -> Result<()> {
         &["xtask", "check-scaffold-intent-contract"],
     );
     runner.run(
-        "template feature smoke",
+        "Soma feature smoke",
         "cargo",
-        &["xtask", "test-template-features"],
+        &["xtask", "test-soma-features"],
     );
     runner.run(
         "release version gate",
@@ -88,9 +88,9 @@ pub fn pre_release_check(args: &[String]) -> Result<()> {
     runner.finish()
 }
 
-pub fn test_template_features(repo_root: &Path) -> Result<()> {
+pub fn test_soma_features(repo_root: &Path) -> Result<()> {
     let mut smoke = SmokeRunner::default();
-    let temp_root = TempDir::create("rtemplate-feature-smoke")?;
+    let temp_root = TempDir::create("soma-feature-smoke")?;
     let repo = temp_root.path().join("repo");
 
     run_silent_in(repo_root, "git", &["init", "-q", path_str(&repo)?])
@@ -101,7 +101,7 @@ pub fn test_template_features(repo_root: &Path) -> Result<()> {
         "git",
         &["config", "user.email", "test@example.invalid"],
     )?;
-    run_silent_in(&repo, "git", &["config", "user.name", "Template Test"])?;
+    run_silent_in(&repo, "git", &["config", "user.name", "Soma Test"])?;
     std::fs::write(repo.join(".env.example"), "safe=true\n")?;
     std::fs::write(repo.join(".env"), "secret=true\n")?;
     run_silent_in(&repo, "git", &["add", ".env.example"])?;
@@ -148,12 +148,12 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
     let plugin_root = plugin_root
         .map(PathBuf::from)
         .or_else(|| env_path("PLUGIN_ROOT"))
-        .unwrap_or_else(|| PathBuf::from("plugins/rtemplate"));
+        .unwrap_or_else(|| PathBuf::from("plugins/soma"));
     let plugin_root = repo_root.join(plugin_root);
     let layout = PluginLayout::new(&plugin_root);
     let mut checks = PluginChecks::default();
 
-    println!("=== Validating rmcp-template Plugin Layout ===");
+    println!("=== Validating soma Plugin Layout ===");
     println!("Plugin root: {}", display_relative(repo_root, &plugin_root));
     println!();
 
@@ -253,7 +253,7 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
             .and_then(Path::file_name)
             .and_then(OsStr::to_str)
             .unwrap_or("<unknown>");
-        let expected_skill_name = if skill_dir == "rtemplate" {
+        let expected_skill_name = if skill_dir == "soma" {
             "soma"
         } else {
             skill_dir
@@ -400,7 +400,7 @@ impl SmokeRunner {
         if self.fail == 0 {
             Ok(())
         } else {
-            bail!("template feature smoke failed")
+            bail!("Soma feature smoke failed")
         }
     }
 }
@@ -496,7 +496,7 @@ impl Drop for TempDir {
     }
 }
 
-fn parse_legacy_bump_level(arg: &str) -> Result<BumpLevel> {
+fn parse_bump_wrapper_level(arg: &str) -> Result<BumpLevel> {
     match arg {
         "patch" => Ok(BumpLevel::Patch),
         "minor" => Ok(BumpLevel::Minor),
@@ -824,22 +824,22 @@ fn display_relative<'a>(root: &'a Path, path: &'a Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        contains_json_key, json_has_no_version, parse_legacy_bump_level, skill_has_description,
+        contains_json_key, json_has_no_version, parse_bump_wrapper_level, skill_has_description,
         skill_has_name, PreReleaseOptions,
     };
     use crate::release_versions::BumpLevel;
     use serde_json::json;
 
     #[test]
-    fn legacy_bump_parser_matches_wrapper_contract() {
-        assert_eq!(parse_legacy_bump_level("patch").unwrap(), BumpLevel::Patch);
-        assert_eq!(parse_legacy_bump_level("minor").unwrap(), BumpLevel::Minor);
-        assert_eq!(parse_legacy_bump_level("major").unwrap(), BumpLevel::Major);
-        assert!(parse_legacy_bump_level("")
+    fn bump_wrapper_parser_matches_contract() {
+        assert_eq!(parse_bump_wrapper_level("patch").unwrap(), BumpLevel::Patch);
+        assert_eq!(parse_bump_wrapper_level("minor").unwrap(), BumpLevel::Minor);
+        assert_eq!(parse_bump_wrapper_level("major").unwrap(), BumpLevel::Major);
+        assert!(parse_bump_wrapper_level("")
             .unwrap_err()
             .to_string()
             .contains("Usage:"));
-        assert!(parse_legacy_bump_level("template")
+        assert!(parse_bump_wrapper_level("soma")
             .unwrap_err()
             .to_string()
             .contains("component-aware bumps"));
@@ -869,7 +869,7 @@ mod tests {
             &json!({"nested": [{"version": "1"}]}),
             "version"
         ));
-        assert!(!contains_json_key(&json!({"name": "rtemplate"}), "version"));
+        assert!(!contains_json_key(&json!({"name": "soma"}), "version"));
     }
 
     #[test]
@@ -882,12 +882,12 @@ mod tests {
     #[test]
     fn skill_front_matter_checks_match_shell_awk_rules() {
         let temp = tempfile::NamedTempFile::new().unwrap();
-        std::fs::write(temp.path(), "name: rtemplate\ndescription: Useful skill\n").unwrap();
-        assert!(skill_has_name(temp.path(), "rtemplate").is_ok());
+        std::fs::write(temp.path(), "name: soma\ndescription: Useful skill\n").unwrap();
+        assert!(skill_has_name(temp.path(), "soma").is_ok());
         assert!(skill_has_description(temp.path()).is_ok());
 
         std::fs::write(temp.path(), "name: other\ndescription:\n").unwrap();
-        assert!(skill_has_name(temp.path(), "rtemplate").is_err());
+        assert!(skill_has_name(temp.path(), "soma").is_err());
         assert!(skill_has_description(temp.path()).is_err());
     }
 }

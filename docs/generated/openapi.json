@@ -44,7 +44,7 @@
     },
     "schemas": {
       "ActionName": {
-        "description": "REST-capable action names from crates/rtemplate-contracts/src/actions.rs.",
+        "description": "REST-capable action names from crates/soma-contracts/src/actions.rs.",
         "enum": [
           "greet",
           "echo",
@@ -310,8 +310,8 @@
     }
   },
   "info": {
-    "description": "Generated OpenAPI schema for rmcp-template's direct REST surface. TEMPLATE: rename Example identifiers and action schemas when adapting. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses RTEMPLATE_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
-    "title": "Example MCP REST API",
+    "description": "Generated OpenAPI schema for soma's direct REST surface. CUSTOMIZE: rename Soma identifiers and action schemas when adapting. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
+    "title": "Soma MCP REST API",
     "version": "0.4.6"
   },
   "openapi": "3.1.0",
@@ -638,7 +638,7 @@
       "name": "direct-rest"
     }
   ],
-  "x-template": {
+  "x-soma": {
     "action_costs": {
       "echo": "cheap",
       "elicit_name": "cheap",
@@ -647,7 +647,7 @@
       "scaffold_intent": "moderate",
       "status": "cheap"
     },
-    "action_metadata": "crates/rtemplate-contracts/src/actions.rs",
+    "action_metadata": "crates/soma-contracts/src/actions.rs",
     "direct_rest_routes": {
       "echo": {
         "method": "POST",

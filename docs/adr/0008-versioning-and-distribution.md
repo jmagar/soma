@@ -2,7 +2,7 @@
 title: "ADR 0008: Use semver with workspace-first extraction and git tags"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
@@ -46,7 +46,7 @@ REST APIs stay under explicit versions such as `/v1`. OpenAPI documents and MCP
 action-contract manifests carry versions because they are separate surfaces.
 
 `release/components.toml` is the versioning source of truth for this repository.
-It declares the single shipped `template` component, the `v` tag prefix, the
+It declares the single shipped `soma` component, the `v` tag prefix, the
 release workflow, shipping paths that require a version bump, and every
 version-bearing file. The manifest also records files that must stay
 versionless, such as Claude/Codex/Gemini plugin manifests whose marketplace
@@ -64,7 +64,7 @@ semver tag.
 - Breaking changes to REST routes, response shapes, auth requirements, MCP
   action params, package exports, or dependency direction require a major
   version bump or compatibility alias.
-- Runtime shipping-path changes require the `template` component version to be
+- Runtime shipping-path changes require the `soma` component version to be
   greater than the latest `v*` semver tag before merge.
 - The externalization decision is deferred until in-repo boundaries pass tests
   and have consumer fixtures.

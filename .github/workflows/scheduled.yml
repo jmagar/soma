@@ -8,7 +8,7 @@
 # The per-PR `audit` job in ci.yml still gates merges; this workflow is the
 # safety net that catches advisories filed against already-merged code.
 #
-# TEMPLATE: keep this file. Adjust the cron if 06:43 UTC Monday clashes with
+# CUSTOMIZE: keep this file. Adjust the cron if 06:43 UTC Monday clashes with
 # other scheduled load.
 # =============================================================================
 
@@ -43,7 +43,7 @@ jobs:
   # ── advisories: weekly RUSTSEC refresh + on-demand full dependency audit ──────
   advisories:
     name: Dependency Advisories
-    runs-on: [self-hosted, tootie, rmcp-template]
+    runs-on: [self-hosted, tootie, soma]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

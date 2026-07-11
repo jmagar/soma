@@ -1,0 +1,28 @@
+{
+  "bin": {
+    "soma": "./bin/soma-rmcp.js"
+  },
+  "description": "Node launcher package for the Soma RMCP runtime.",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "package.json"
+  ],
+  "homepage": "https://github.com/jmagar/soma",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "rmcp",
+    "soma"
+  ],
+  "license": "MIT",
+  "name": "soma-rmcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jmagar/soma.git"
+  },
+  "version": "0.4.6"
+}

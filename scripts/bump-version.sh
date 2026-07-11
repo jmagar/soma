@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compatibility wrapper. Canonical implementation: cargo xtask bump-template-version.
+# Thin wrapper. Canonical implementation: cargo xtask bump-soma-version.
 #
 # Usage:
 #   ./scripts/bump-version.sh patch   # auto-increment patch
@@ -18,5 +18,5 @@ case "$ARG" in
 esac
 
 cd "${REPO_ROOT}"
-cargo xtask bump-template-version "${ARG}"
+cargo xtask bump-soma-version "${ARG}"
 echo "Done. Review CHANGELOG.md before tagging."

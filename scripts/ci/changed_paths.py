@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify changed files into local/CI routing categories for rmcp-template."""
+"""Classify changed files into local/CI routing categories for soma."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ OUTPUT_KEYS = [
     "mcp",
     "release",
     "security",
-    "template",
+    "soma",
 ]
 
 
@@ -46,7 +46,7 @@ def classify(event: str, paths: list[str]) -> dict[str, bool]:
         lambda p: starts(p, "crates/", "xtask/", "tests/", ".cargo/", ".config/")
         or p in {"Cargo.toml", "Cargo.lock", "build.rs", "rust-toolchain.toml", "Justfile"},
     )
-    web = any_match(paths, lambda p: starts(p, "apps/web/", "crates/rtemplate-web/assets/source/"))
+    web = any_match(paths, lambda p: starts(p, "apps/web/", "crates/soma-web/assets/source/"))
     compose = any_match(
         paths,
         lambda p: starts(p, "config/")
@@ -57,17 +57,17 @@ def classify(event: str, paths: list[str]) -> dict[str, bool]:
         paths,
         lambda p: starts(
             p,
-            "crates/rtemplate-mcp/",
-            "crates/rmcp-template/tests/mcporter/",
+            "crates/soma-mcp/",
+            "crates/soma/tests/mcporter/",
             "docs/generated/",
             "docs/MCP",
         ),
     )
     release = rust or web or any_match(paths, lambda p: starts(p, "release/") or p in {"server.json"})
     security = rust or any_match(paths, lambda p: p in {"Cargo.lock", "deny.toml"} or starts(p, ".cargo/"))
-    template = any_match(
+    soma = any_match(
         paths,
-        lambda p: starts(p, "template/", "plugins/", "scripts/")
+        lambda p: starts(p, "scaffold/", "plugins/", "scripts/")
         or p
         in {
             "cargo-generate.toml",
@@ -90,7 +90,7 @@ def classify(event: str, paths: list[str]) -> dict[str, bool]:
         "mcp": mcp,
         "release": release,
         "security": security,
-        "template": template,
+        "soma": soma,
     }
     return result
 

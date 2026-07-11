@@ -1,0 +1,16 @@
+[package]
+name = "soma-test-support"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.96"
+description = "Test helpers for soma crates"
+license = "MIT"
+publish = false
+
+[dependencies]
+soma-api = { path = "../soma-api", features = ["auth"] }
+soma-auth = { path = "../soma-auth" }
+soma-contracts = { path = "../soma-contracts" }
+soma-service = { path = "../soma-service", default-features = false, features = ["observability"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt"] }

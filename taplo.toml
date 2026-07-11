@@ -1,7 +1,7 @@
 # =============================================================================
 # taplo.toml — TOML formatter configuration
 #
-# TEMPLATE: Copy this file unchanged to any new server repo.
+# CUSTOMIZE: Copy this file unchanged to any new server repo.
 #           taplo is the canonical TOML formatter for the rmcp server family.
 #
 # Install: cargo install taplo-cli
@@ -34,7 +34,7 @@ compact_inline_tables = false
 
 # Maximum line width before taplo wraps. 100 is the sweet spot — wider than
 # the common 80 but still readable in side-by-side diffs.
-# TEMPLATE: Adjust if your team has a different preference.
+# CUSTOMIZE: Adjust if your team has a different preference.
 column_width = 100
 
 # Two-space indentation throughout.

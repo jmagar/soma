@@ -2,12 +2,12 @@
 title: "Linux CI Runner"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "operators"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-06-27"
 ---
@@ -17,36 +17,36 @@ last_reviewed: "2026-06-27"
 Linux GitHub Actions jobs run on a Dockerized self-hosted runner on TOOTIE:
 
 ```yaml
-runs-on: [self-hosted, tootie, rmcp-template]
+runs-on: [self-hosted, tootie, soma]
 ```
 
-The runner is repo-scoped to `jmagar/template-rmcp` and mirrors the proven lab
+The runner is repo-scoped to `jmagar/soma` and mirrors the proven lab
 runner layout.
 
 ## Live Layout
 
 | Purpose | Path on TOOTIE |
 |---|---|
-| Compose project | `/mnt/cache/compose/actions-runner/rmcp-template` |
-| Compose file | `/mnt/cache/compose/actions-runner/rmcp-template/docker-compose.yml` |
-| Startup script | `/mnt/cache/compose/actions-runner/rmcp-template/start.sh` |
-| GitHub PAT env file | `/mnt/cache/compose/actions-runner/rmcp-template/.env` |
-| Persistent runner home | `/mnt/cache/appdata/actions-runner/rmcp-template/home` |
-| Persistent work/cache root | `/mnt/cache/appdata/actions-runner/rmcp-template/work` |
-| Persistent temp dir | `/mnt/cache/appdata/actions-runner/rmcp-template/tmp` (`1777`, sticky world-writable) |
+| Compose project | `/mnt/cache/compose/actions-runner/soma` |
+| Compose file | `/mnt/cache/compose/actions-runner/soma/docker-compose.yml` |
+| Startup script | `/mnt/cache/compose/actions-runner/soma/start.sh` |
+| GitHub PAT env file | `/mnt/cache/compose/actions-runner/soma/.env` |
+| Persistent runner home | `/mnt/cache/appdata/actions-runner/soma/home` |
+| Persistent work/cache root | `/mnt/cache/appdata/actions-runner/soma/work` |
+| Persistent temp dir | `/mnt/cache/appdata/actions-runner/soma/tmp` (`1777`, sticky world-writable) |
 
 Current runners:
 
 | Runner | Labels |
 |---|---|
-| `tootie-rmcp-template-linux-a` | `self-hosted`, `Linux`, `X64`, `rmcp-template`, `tootie` |
-| `tootie-rmcp-template-linux-b` | `self-hosted`, `Linux`, `X64`, `rmcp-template`, `tootie` |
-| `tootie-rmcp-template-linux-c` | `self-hosted`, `Linux`, `X64`, `rmcp-template`, `tootie` |
+| `tootie-soma-linux-a` | `self-hosted`, `Linux`, `X64`, `soma`, `tootie` |
+| `tootie-soma-linux-b` | `self-hosted`, `Linux`, `X64`, `soma`, `tootie` |
+| `tootie-soma-linux-c` | `self-hosted`, `Linux`, `X64`, `soma`, `tootie` |
 
 Verify from this repo:
 
 ```bash
-gh api repos/jmagar/template-rmcp/actions/runners \
+gh api repos/jmagar/soma/actions/runners \
   -q '.runners[] | [.name,.status,.busy,(.labels|map(.name)|join(","))] | @tsv'
 ```
 
@@ -57,19 +57,19 @@ registration, and a repo-scoped runner name:
 
 ```yaml
 services:
-  rmcp-template-linux-runner:
+  soma-linux-runner:
     image: ghcr.io/actions/actions-runner:2.335.1
-    container_name: rmcp-template-linux-runner
+    container_name: soma-linux-runner
     restart: unless-stopped
     group_add:
       - "281"
     working_dir: /home/runner
     environment:
-      - RUNNER_REPO=jmagar/template-rmcp
-      - RUNNER_NAME=tootie-rmcp-template-linux
-      - RUNNER_LABELS=rmcp-template,tootie,self-hosted,linux,x64
+      - RUNNER_REPO=jmagar/soma
+      - RUNNER_NAME=tootie-soma-linux
+      - RUNNER_LABELS=soma,tootie,self-hosted,linux,x64
       - RUNNER_WORKDIR=/home/runner/_work
-      - RUNNER_URL=https://github.com/jmagar/template-rmcp
+      - RUNNER_URL=https://github.com/jmagar/soma
       - RUNNER_USE_JIT=1
       - TMPDIR=/tmp
       - TMP=/tmp
@@ -83,10 +83,10 @@ services:
       - .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /mnt/cache/appdata/actions-runner/rmcp-template/home:/home/runner
-      - /mnt/cache/appdata/actions-runner/rmcp-template/work:/home/runner/_work
-      - /mnt/cache/appdata/actions-runner/rmcp-template/tmp:/tmp
-      - /mnt/cache/compose/actions-runner/rmcp-template/start.sh:/start.sh:ro
+      - /mnt/cache/appdata/actions-runner/soma/home:/home/runner
+      - /mnt/cache/appdata/actions-runner/soma/work:/home/runner/_work
+      - /mnt/cache/appdata/actions-runner/soma/tmp:/tmp
+      - /mnt/cache/compose/actions-runner/soma/start.sh:/start.sh:ro
     command: ["/start.sh"]
 ```
 
@@ -105,7 +105,7 @@ first start, then let `start.sh` remove stale local registration files.
 The persistent temp mount must be sticky world-writable:
 
 ```bash
-chmod 1777 /mnt/cache/appdata/actions-runner/rmcp-template/tmp
+chmod 1777 /mnt/cache/appdata/actions-runner/soma/tmp
 ```
 
 Without that, Linux package tools fail before the Rust setup step can install a
@@ -115,7 +115,7 @@ C linker.
 
 ```bash
 ssh tootie
-cd /mnt/cache/compose/actions-runner/rmcp-template
+cd /mnt/cache/compose/actions-runner/soma
 docker compose ps
 docker compose logs -f
 docker compose up -d
@@ -168,7 +168,7 @@ The runner container needs:
 
 - Docker socket access for `container-smoke` and Docker publish workflows.
 - Network access to GitHub, crates.io, npm, and GHCR.
-- A persistent `/mnt/cache/appdata/actions-runner/rmcp-template` tree.
+- A persistent `/mnt/cache/appdata/actions-runner/soma` tree.
 - `GITHUB_PAT` in the compose `.env` file for runner registration.
 
 Rust, sccache, and basic Linux build prerequisites (`build-essential`,
@@ -191,10 +191,10 @@ outside contributors need CI feedback, route fork PRs to GitHub-hosted runners.
 ## Troubleshooting
 
 - **Runner appears offline immediately after start**: check
-  `docker logs rmcp-template-linux-runner`; if `run.sh` is missing, seed the
+  `docker logs soma-linux-runner`; if `run.sh` is missing, seed the
   persistent home with the runner distribution files.
 - **Job waits for a runner**: verify the workflow labels exactly match
-  `self-hosted`, `tootie`, and `rmcp-template`.
+  `self-hosted`, `tootie`, and `soma`.
 - **Cargo ignores sccache**: check the setup action output for
   `RUSTC_WRAPPER=sccache` and `CARGO_BUILD_RUSTC_WRAPPER=sccache`.
 - **Docker jobs fail**: confirm `/var/run/docker.sock` is mounted and the host

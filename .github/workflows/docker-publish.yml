@@ -1,13 +1,13 @@
 # =============================================================================
 # .github/workflows/docker-publish.yml — Build and publish Docker image
 #
-# TEMPLATE substitutions required:
+# CUSTOMIZATION NOTES:
 #   REPO_NAME    → your GitHub repo name (e.g. "myservice-mcp")
 #   IMAGE_NAME   → your Docker image name (e.g. "myservice-mcp")
 #   BINARY_NAME  → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
 #   PORT         → your service port (e.g. 6970 for unraid, 9158 for gotify)
 #
-# Replace every occurrence of "Soma", "soma", and "example"
+# Customize the image and binary names
 # in this file with your actual values.
 #
 # Triggers:
@@ -15,7 +15,7 @@
 #     (no longer builds on every push to main — release tags only)
 #
 # Registry: ghcr.io/jmagar/<IMAGE_NAME>
-# TEMPLATE: Replace "jmagar" with your GitHub org/username.
+# CUSTOMIZE: Replace "jmagar" with your GitHub org/username.
 # =============================================================================
 
 name: Docker Publish
@@ -25,16 +25,16 @@ on:
     tags: ["v*"]
 
 env:
-  # TEMPLATE: Replace "jmagar/soma" with "your-org/your-image-name"
+  # CUSTOMIZE: Replace "jmagar/soma" with "your-org/your-image-name"
   IMAGE_NAME: ghcr.io/jmagar/soma
   # Set this as a GitHub Actions repository variable instead of committing the
-  # domain into the template: gh variable set MCP_REGISTRY_DOMAIN --body <domain>
+  # domain into Soma: gh variable set MCP_REGISTRY_DOMAIN --body <domain>
   MCP_REGISTRY_DOMAIN: ${{ vars.MCP_REGISTRY_DOMAIN }}
 
 jobs:
   docker:
     name: Build & Push Docker image
-    runs-on: [self-hosted, tootie, rmcp-template]
+    runs-on: [self-hosted, tootie, soma]
     timeout-minutes: 60
     permissions:
       contents: read
@@ -60,7 +60,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v6
         with:
-          # TEMPLATE: Replace "soma" with your image name.
+          # CUSTOMIZE: Replace "soma" with your image name.
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
@@ -72,7 +72,7 @@ jobs:
         uses: docker/build-push-action@v7.2.0
         with:
           context: .
-          # TEMPLATE: Dockerfile lives at config/Dockerfile.
+          # CUSTOMIZE: Dockerfile lives at config/Dockerfile.
           file: config/Dockerfile
           platforms: linux/amd64
           push: true
@@ -85,7 +85,7 @@ jobs:
   trivy:
     name: Trivy Vulnerability Scan
     needs: docker
-    runs-on: [self-hosted, tootie, rmcp-template]
+    runs-on: [self-hosted, tootie, soma]
     timeout-minutes: 20
     permissions:
       contents: read
@@ -97,7 +97,7 @@ jobs:
       - name: Run Trivy
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a0b350d16c55eb73629 # 0.31.0
         with:
-          # TEMPLATE: Replace with your image name.
+          # CUSTOMIZE: Replace with your image name.
           image-ref: ghcr.io/jmagar/soma:latest
           format: sarif
           output: trivy-results.sarif
@@ -114,7 +114,7 @@ jobs:
     name: Publish MCP Registry Manifest
     needs: docker
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: [self-hosted, tootie, rmcp-template]
+    runs-on: [self-hosted, tootie, soma]
     timeout-minutes: 20
     permissions:
       contents: read

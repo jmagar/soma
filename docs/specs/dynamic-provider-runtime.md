@@ -6,7 +6,7 @@ Draft specification for the provider-based runtime direction.
 
 ## Goal
 
-Turn the template into a batteries-included runtime shell where users focus on
+Turn Soma into a batteries-included runtime shell where users focus on
 creating and testing tools while the server supplies the repeated platform work:
 
 - MCP server with one compact action-dispatched service tool
@@ -24,7 +24,7 @@ for every new business capability.
 
 ## Non-Goals
 
-- Do not bring back a REST action envelope such as `POST /v1/example`.
+- Do not bring back a REST action envelope such as `the retired REST action-envelope route`.
 - Do not require users to hand-write large JSON manifests for the happy path.
 - Do not expose MCP-native prompts/resources/tasks/elicitation through REST or
   CLI by default.
@@ -111,7 +111,7 @@ fast custom logic and AI-native glue code.
 Minimal authoring should look like:
 
 ```ts
-import { defineTool } from "@rtemplate/tools";
+import { defineTool } from "@soma/tools";
 import { z } from "zod";
 
 export default defineTool({
@@ -160,7 +160,7 @@ instead of at module import time.
 ### Python LangChain and LlamaIndex Providers
 
 Loads `.py` files through a Python sidecar. These providers are for reusing
-existing Python tool ecosystems rather than inventing a template-specific Python
+existing Python tool ecosystems rather than inventing a Soma-specific Python
 tool API.
 
 Minimal LangChain authoring should look like:
@@ -194,7 +194,7 @@ TOOLS = [FunctionTool.from_defaults(add, name="add")]
 
 The provider imports the module, reads `PROVIDER` and `TOOLS`, converts
 LangChain/LlamaIndex tool metadata into provider tool schemas, and executes tool
-calls in a Python sidecar. `RTEMPLATE_PYTHON_COMMAND` may point at a virtualenv
+calls in a Python sidecar. `SOMA_PYTHON_COMMAND` may point at a virtualenv
 or `uv`/Python wrapper when the default `python3` is not the right interpreter.
 These provider files have the same trusted-code behavior as plain Python
 providers: module import happens during catalog refresh, while tool execution
@@ -302,7 +302,7 @@ All provider tools become dynamic subcommands:
 example weather --city Paris
 example qdrant-search --query "rmcp tracing"
 example summarize --text ./notes.md
-example help weather
+soma help weather
 ```
 
 The CLI derives flags and optional positionals from the provider schema and CLI
@@ -384,7 +384,7 @@ The generated OpenAPI should contain a registry fingerprint:
 
 ```json
 {
-  "x-rtemplate": {
+  "x-soma": {
     "provider_fingerprint": "sha256:...",
     "providers": []
   }
@@ -396,7 +396,7 @@ manifests, TypeScript tool metadata, server config affecting exposed actions,
 and runtime schema version.
 
 Client generation should be recipes and helper commands by default, not stale
-SDK packages checked into the template. Recommended TypeScript default:
+SDK packages checked into Soma. Recommended TypeScript default:
 
 ```bash
 npx openapi-typescript http://localhost:40060/openapi.json -o src/generated/api.d.ts

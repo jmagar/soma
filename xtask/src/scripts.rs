@@ -1,4 +1,4 @@
-//! Rust implementations for small scripts that still have compatibility wrappers
+//! Rust implementations for small scripts that have thin wrappers
 //! in `scripts/`.
 
 use anyhow::{bail, Context, Result};
@@ -59,12 +59,12 @@ pub fn check_coupled_files(args: &[String]) -> Result<()> {
     if changed_path(&changed, "scripts/*") && !changed_path(&changed, "scripts/README.md") {
         issues.push("scripts changed but scripts/README.md did not; document new or changed script behavior.");
     }
-    if changed_path(&changed, "crates/rtemplate-mcp/src/schemas.rs")
+    if changed_path(&changed, "crates/soma-mcp/src/schemas.rs")
         && !changed_path(&changed, "docs/MCP_SCHEMA.md")
     {
-        issues.push("crates/rtemplate-mcp/src/schemas.rs changed but docs/MCP_SCHEMA.md did not; run scripts/check-schema-docs.py --write.");
+        issues.push("crates/soma-mcp/src/schemas.rs changed but docs/MCP_SCHEMA.md did not; run scripts/check-schema-docs.py --write.");
     }
-    if changed_path(&changed, "plugins/rtemplate/*") && !changed_path(&changed, "docs/PLUGINS.md") {
+    if changed_path(&changed, "plugins/soma/*") && !changed_path(&changed, "docs/PLUGINS.md") {
         issues.push("plugin package changed but docs/PLUGINS.md did not; confirm plugin docs are still current.");
     }
 
@@ -200,7 +200,7 @@ pub fn run_ascii_check(args: &[String]) -> Result<()> {
 }
 
 pub fn check_plugin_stdio_smoke() -> Result<()> {
-    let bin = std::env::var("BIN").unwrap_or_else(|_| "rtemplate".to_owned());
+    let bin = std::env::var("BIN").unwrap_or_else(|_| "soma".to_owned());
     let timeout_secs = std::env::var("TIMEOUT_SECS").unwrap_or_else(|_| "5".to_owned());
 
     if !command_on_path(&bin) {
@@ -210,7 +210,7 @@ pub fn check_plugin_stdio_smoke() -> Result<()> {
     let input = [
         r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"plugin-stdio-smoke","version":"0.0.0"}}}"#,
         r#"{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}"#,
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"example","arguments":{"action":"status"}}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"soma","arguments":{"action":"status"}}}"#,
     ]
     .join("\n");
 
@@ -218,7 +218,7 @@ pub fn check_plugin_stdio_smoke() -> Result<()> {
         .arg(format!("{timeout_secs}s"))
         .arg(&bin)
         .arg("mcp")
-        .env("RTEMPLATE_API_URL", "")
+        .env("SOMA_API_URL", "")
         .env("RUST_LOG", "warn")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -476,10 +476,7 @@ mod tests {
     #[test]
     fn matches_bash_style_single_star_patterns_used_by_coupled_check() {
         assert!(glob_match("scripts/*", "scripts/check-coupled-files.sh"));
-        assert!(glob_match(
-            "plugins/rtemplate/*",
-            "plugins/rtemplate/hooks/setup.sh"
-        ));
+        assert!(glob_match("plugins/soma/*", "plugins/soma/hooks/setup.sh"));
         assert!(glob_match("Justfile", "Justfile"));
         assert!(!glob_match("Justfile", "docs/Justfile"));
     }
@@ -493,7 +490,7 @@ mod tests {
 
     #[test]
     fn command_on_path_handles_absolute_missing_path() {
-        assert!(!command_on_path("/definitely/not/a/real/rtemplate"));
+        assert!(!command_on_path("/definitely/not/a/real/soma"));
     }
 
     #[test]

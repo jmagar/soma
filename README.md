@@ -5,12 +5,12 @@ for bringing new agent capabilities online with as little custom Rust as
 possible. It locks in the production patterns that every server in the family
 keeps rediscovering: one compact MCP tool, stdio and Streamable HTTP transports,
 CLI parity, direct REST routes, auth/OAuth, observability, plugin packaging,
-web fallback, Docker/runtime templates, generated contracts, and release
+web fallback, Docker/runtime samples, generated contracts, and release
 automation.
 
-The repository can still scaffold a renamed project, but it is no longer just a
-template. The default product path is to run `soma` or `soma-server`,
-drop provider files into `providers/` (or point `RTEMPLATE_PROVIDER_DIR`
+The repository can still scaffold a renamed project, but Soma is now a shipped
+runtime first. The default product path is to run `soma` or `soma-server`,
+drop provider files into `providers/` (or point `SOMA_PROVIDER_DIR`
 elsewhere), and let the provider registry project those capabilities across MCP,
 CLI, REST, OpenAPI, Palette summaries, generated docs, and plugin metadata.
 Provider manifests also carry MCP-native prompt, resource, task, and elicitation
@@ -28,7 +28,7 @@ distributable repo with the same locked-in runtime.
 
 ## Batteries Included
 
-- One compact MCP service tool (`example`) with `action` dispatch, so agent tool
+- One compact MCP service tool (`soma`) with `action` dispatch, so agent tool
   lists stay small even as provider catalogs grow.
 - Two binaries: `soma` for local CLI + stdio MCP, and `soma-server`
   for REST API + Streamable HTTP MCP + stdio MCP + optional web UI.
@@ -102,13 +102,13 @@ Call the MCP endpoint directly:
 curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"greet","name":"Alice"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"soma","arguments":{"action":"greet","name":"Alice"}}}'
 ```
 
 ## Drop In A Provider
 
 The fastest path for a new server is provider-first. Add a provider manifest or
-module to `providers/`, then run the same binary. Use `RTEMPLATE_PROVIDER_DIR`
+module to `providers/`, then run the same binary. Use `SOMA_PROVIDER_DIR`
 when the provider catalog should live outside the working directory.
 
 ```bash
@@ -170,7 +170,7 @@ curl -s -X POST http://localhost:40060/v1/hello-local \
 curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"hello_local","name":"Alice"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"soma","arguments":{"action":"hello_local","name":"Alice"}}}'
 ```
 
 Plain Python functions can also be dropped directly into `providers/`:
@@ -301,28 +301,28 @@ OpenAPI, plugin, or docs code.
 
 ```text
 ProviderRegistry
-  crates/rtemplate-service/src/provider_registry.rs
+  crates/soma-service/src/provider_registry.rs
   Validates provider manifests, computes snapshots/fingerprints, indexes tools,
   prompts, resources, CLI commands, REST routes, and MCP primitives.
 
 Provider sources
-  crates/rtemplate-service/src/providers/
+  crates/soma-service/src/providers/
   Static Rust, file-backed JSON manifests, TypeScript AI SDK sidecars, Python
   LangChain/LlamaIndex sidecars, WASM, OpenAPI-backed providers, and upstream
   MCP providers.
 
-ExampleService
-  crates/rtemplate-service/src/app.rs
+SomaService
+  crates/soma-service/src/app.rs
   Built-in product/service logic used by the static Rust provider.
 
 Transport shims
-  crates/rtemplate-cli/src/lib.rs        CLI parser and output formatting.
-  crates/rtemplate-mcp/src/tools.rs      MCP JSON args to service calls.
-  crates/rtemplate-api/src/api.rs        REST extractors to service calls.
-  crates/rmcp-template/src/routes.rs     Axum router, auth, MCP, API, web fallback.
+  crates/soma-cli/src/lib.rs        CLI parser and output formatting.
+  crates/soma-mcp/src/tools.rs      MCP JSON args to service calls.
+  crates/soma-api/src/api.rs        REST extractors to service calls.
+  crates/soma/src/routes.rs     Axum router, auth, MCP, API, web fallback.
 
 Built-in action metadata
-  crates/rtemplate-contracts/src/actions.rs
+  crates/soma-contracts/src/actions.rs
   Native action metadata, validation, cached catalog/help, and native dispatch.
 ```
 
@@ -355,7 +355,7 @@ soma setup check        # plugin/appdata setup checks
 ```
 
 Both binaries load the provider registry. File providers default to
-`./providers` and can be moved with `RTEMPLATE_PROVIDER_DIR`. CLI startup,
+`./providers` and can be moved with `SOMA_PROVIDER_DIR`. CLI startup,
 MCP dispatch, and dynamic REST routes refresh file providers before execution,
 then enforce the active provider snapshot's schema, surface, scope, capability,
 destructive-action, and response-limit rules.
@@ -376,11 +376,11 @@ HTTP routes in the server profile:
 | `/mcp/.well-known/*` | OAuth metadata when OAuth is enabled. |
 | `/*` | Embedded web UI fallback when built with `web`. |
 
-REST is direct-route-only: there is no `/v1/example` action envelope. MCP remains one `example` tool with an `action` argument.
+REST is direct-route-only: there is no `/v1/soma` action envelope. MCP remains one `soma` tool with an `action` argument.
 
 ## MCP Tool Actions
 
-The runtime exposes one compact MCP tool, `example`, with an `action` argument.
+The runtime exposes one compact MCP tool, `soma`, with an `action` argument.
 Built-in actions and dropped provider tools share that same dispatch path. This
 keeps MCP discovery small while allowing the provider catalog to grow behind the
 single tool.
@@ -389,11 +389,11 @@ single tool.
 <!-- Generated by scripts/generate-docs.py; do not edit by hand. -->
 | Action | Scope | Cost | Transport | REST route | CLI | Parameters | Description |
 |---|---|---|---|---|---|---|---|
-| `greet` | `example:read` | `cheap` | MCP + CLI + REST | `POST /v1/greet` | `soma greet [--name N]` | `name` (optional string) | Return a greeting. |
-| `echo` | `example:read` | `cheap` | MCP + CLI + REST | `POST /v1/echo` | `soma echo --message <msg>` | `message` (required string) | Echo a message back unchanged. |
-| `status` | `example:read` | `cheap` | MCP + CLI + REST | `GET /v1/status` | `soma status` | none | Return server status and configuration info. |
-| `elicit_name` | `example:read` | `cheap` | MCP-only | - | `_MCP-only_` | none | Ask the MCP client to collect a name, then return a personalised greeting. |
-| `scaffold_intent` | `example:read` | `moderate` | MCP-only | - | `_MCP-only_` | none | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
+| `greet` | `soma:read` | `cheap` | MCP + CLI + REST | `POST /v1/greet` | `soma greet [--name N]` | `name` (optional string) | Return a greeting. |
+| `echo` | `soma:read` | `cheap` | MCP + CLI + REST | `POST /v1/echo` | `soma echo --message <msg>` | `message` (required string) | Echo a message back unchanged. |
+| `status` | `soma:read` | `cheap` | MCP + CLI + REST | `GET /v1/status` | `soma status` | none | Return server status and configuration info. |
+| `elicit_name` | `soma:read` | `cheap` | MCP-only | - | `_MCP-only_` | none | Ask the MCP client to collect a name, then return a personalised greeting. |
+| `scaffold_intent` | `soma:read` | `moderate` | MCP-only | - | `_MCP-only_` | none | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
 | `help` | public | `cheap` | MCP + CLI + REST | `GET /v1/help` | `soma --help` | none | Show the action reference. |
 <!-- END GENERATED README_ACTION_TABLE -->
 
@@ -413,10 +413,10 @@ The HTTP server supports four auth policies:
 
 | Policy | When | Effect |
 |---|---|---|
-| Loopback development | Loopback bind, or `RTEMPLATE_MCP_NO_AUTH=true` on loopback | No auth middleware, no scope checks. |
-| Bearer token | `RTEMPLATE_MCP_TOKEN` set | `/mcp` and `/v1/*` require `Authorization: Bearer <token>`. |
-| OAuth | `RTEMPLATE_MCP_AUTH_MODE=oauth` with Google OAuth settings | Browser-based Google OAuth issues JWT bearer tokens. |
-| Trusted gateway | `RTEMPLATE_NOAUTH=true` on non-loopback | Local auth and scope checks disabled because an upstream gateway is responsible. |
+| Loopback development | Loopback bind, or `SOMA_MCP_NO_AUTH=true` on loopback | No auth middleware, no scope checks. |
+| Bearer token | `SOMA_MCP_TOKEN` set | `/mcp` and `/v1/*` require `Authorization: Bearer <token>`. |
+| OAuth | `SOMA_MCP_AUTH_MODE=oauth` with Google OAuth settings | Browser-based Google OAuth issues JWT bearer tokens. |
+| Trusted gateway | `SOMA_NOAUTH=true` on non-loopback | Local auth and scope checks disabled because an upstream gateway is responsible. |
 
 The startup guard refuses non-loopback unauthenticated binds unless bearer,
 OAuth, or trusted-gateway mode is configured. `/health`, `/readyz`, `/status`,
@@ -427,34 +427,34 @@ See [docs/AUTH.md](docs/AUTH.md) for the detailed auth model.
 ## Configuration
 
 Values load from `config.toml`, local appdata files, and environment variables;
-explicit environment variables win. The template stub works without real
+explicit environment variables win. Soma stub works without real
 credentials, but generated projects should mark their real upstream/platform
 credentials as required.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `RTEMPLATE_API_URL` | no | empty | Deployed platform API or upstream service URL. Empty selects stub/offline behavior. |
-| `RTEMPLATE_API_KEY` | no | empty | Bearer token or upstream service API key. |
-| `RTEMPLATE_PROVIDER_DIR` | no | `providers` | Directory scanned for drop-in provider files. Relative paths resolve from the current working directory. |
-| `RTEMPLATE_MCP_HOST` | no | `127.0.0.1` | HTTP server bind host. |
-| `RTEMPLATE_MCP_PORT` | no | `40060` | HTTP server bind port. |
-| `RTEMPLATE_MCP_SERVER_NAME` | no | `soma` | MCP server name advertised to clients. |
-| `RTEMPLATE_MCP_NO_AUTH` | no | `false` | Disable auth for loopback development. |
-| `RTEMPLATE_NOAUTH` | no | `false` | Trusted-gateway non-loopback no-auth mode. |
-| `RTEMPLATE_MCP_TOKEN` | bearer | empty | Static bearer token. |
-| `RTEMPLATE_MCP_ALLOWED_HOSTS` | no | empty | Extra comma-separated Host header values. |
-| `RTEMPLATE_MCP_ALLOWED_ORIGINS` | no | empty | Extra comma-separated CORS origins. |
-| `RTEMPLATE_MCP_AUTH_MODE` | no | `bearer` | `bearer` or `oauth`. |
-| `RTEMPLATE_MCP_PUBLIC_URL` | OAuth | empty | Public URL for OAuth metadata and callbacks. |
-| `RTEMPLATE_MCP_GOOGLE_CLIENT_ID` | OAuth | empty | Google OAuth client ID. |
-| `RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET` | OAuth | empty | Google OAuth client secret. |
-| `RTEMPLATE_MCP_AUTH_ADMIN_EMAIL` | OAuth | empty | Initial/admin OAuth email. |
+| `SOMA_API_URL` | no | empty | Deployed platform API or upstream service URL. Empty selects stub/offline behavior. |
+| `SOMA_API_KEY` | no | empty | Bearer token or upstream service API key. |
+| `SOMA_PROVIDER_DIR` | no | `providers` | Directory scanned for drop-in provider files. Relative paths resolve from the current working directory. |
+| `SOMA_MCP_HOST` | no | `127.0.0.1` | HTTP server bind host. |
+| `SOMA_MCP_PORT` | no | `40060` | HTTP server bind port. |
+| `SOMA_MCP_SERVER_NAME` | no | `soma` | MCP server name advertised to clients. |
+| `SOMA_MCP_NO_AUTH` | no | `false` | Disable auth for loopback development. |
+| `SOMA_NOAUTH` | no | `false` | Trusted-gateway non-loopback no-auth mode. |
+| `SOMA_MCP_TOKEN` | bearer | empty | Static bearer token. |
+| `SOMA_MCP_ALLOWED_HOSTS` | no | empty | Extra comma-separated Host header values. |
+| `SOMA_MCP_ALLOWED_ORIGINS` | no | empty | Extra comma-separated CORS origins. |
+| `SOMA_MCP_AUTH_MODE` | no | `bearer` | `bearer` or `oauth`. |
+| `SOMA_MCP_PUBLIC_URL` | OAuth | empty | Public URL for OAuth metadata and callbacks. |
+| `SOMA_MCP_GOOGLE_CLIENT_ID` | OAuth | empty | Google OAuth client ID. |
+| `SOMA_MCP_GOOGLE_CLIENT_SECRET` | OAuth | empty | Google OAuth client secret. |
+| `SOMA_MCP_AUTH_ADMIN_EMAIL` | OAuth | empty | Initial/admin OAuth email. |
 | `RUST_LOG` | no | `info` | Log filter. Stdio mode suppresses noisy logs to avoid corrupting JSON-RPC. |
 
-Templates:
+Samples:
 
 - [.env.example](.env.example) for secrets, URLs, and runtime env.
-- [config.example.toml](config.example.toml) for non-secret defaults.
+- [config.soma.toml](config.soma.toml) for non-secret defaults.
 
 ## Development Commands
 
@@ -513,8 +513,8 @@ Stdio:
       "command": "/path/to/soma",
       "args": ["mcp"],
       "env": {
-        "RTEMPLATE_API_URL": "https://api.example.com/v1",
-        "RTEMPLATE_API_KEY": "YOUR_API_KEY",
+        "SOMA_API_URL": "https://api.example.com/v1",
+        "SOMA_API_KEY": "YOUR_API_KEY",
         "RUST_LOG": "warn"
       }
     }
@@ -522,12 +522,12 @@ Stdio:
 }
 ```
 
-For generated projects, replace `soma`, `RTEMPLATE_*`, tool names, scopes,
+For generated projects, replace `soma`, `SOMA_*`, tool names, scopes,
 and paths with the generated service names.
 
 ## Plugin Surfaces
 
-The repo ships one shared Soma plugin package under [plugins/rtemplate](plugins/rtemplate)
+The repo ships one shared Soma plugin package under [plugins/soma](plugins/soma)
 for Claude Code, Codex, and Gemini surfaces. Plugin manifests are versionless;
 release tooling derives version identity from git state. The plugin package can
 use the local stdio adapter and includes setup/doctor support for appdata and
@@ -536,13 +536,13 @@ environment files.
 Primary docs:
 
 - [docs/PLUGINS.md](docs/PLUGINS.md)
-- [plugins/rtemplate/.codex-plugin/README.md](plugins/rtemplate/.codex-plugin/README.md)
-- [plugins/rtemplate/skills/rtemplate/SKILL.md](plugins/rtemplate/skills/rtemplate/SKILL.md)
-- [plugins/rtemplate/skills/scaffold-project/SKILL.md](plugins/rtemplate/skills/scaffold-project/SKILL.md)
+- [plugins/soma/.codex-plugin/README.md](plugins/soma/.codex-plugin/README.md)
+- [plugins/soma/skills/soma/SKILL.md](plugins/soma/skills/soma/SKILL.md)
+- [plugins/soma/skills/scaffold-project/SKILL.md](plugins/soma/skills/scaffold-project/SKILL.md)
 
 ## Web UI
 
-The `web` feature serves the static export bundled by `rtemplate-web`. Editable
+The `web` feature serves the static export bundled by `soma-web`. Editable
 frontend source lives in [apps/web](apps/web), and `cargo xtask sync-web-source`
 copies that source into the Rust crate bundle.
 
@@ -558,10 +558,10 @@ pnpm -C apps/web validate
 Generated projects that do not need a human UI should use `local-adapter`,
 `server`, or a custom feature set without `web`.
 
-## Deployment Templates
+## Deployment Samples
 
 The full server profile is designed for one deployable binary. The repository
-also includes Docker and Compose templates:
+also includes Docker and Compose samples:
 
 - [config/Dockerfile](config/Dockerfile)
 - [docker-compose.prod.yml](docker-compose.prod.yml)
@@ -569,7 +569,7 @@ also includes Docker and Compose templates:
 
 When adapting a generated project, verify the server binary name, exposed port,
 healthcheck port, image labels, service user/group, data volume, and required
-environment variables. The scaffold verifier catches several template-only
+environment variables. The scaffold verifier catches several scaffold-only
 artifacts, but deployment files still need service-specific review before
 publishing an image.
 
@@ -597,13 +597,13 @@ cargo xtask scaffold \
 This writes `docs/action-starters/` in the generated project with snippets for
 action metadata, MCP dispatch, CLI variants, service stubs, and test coverage.
 
-1. Replace the stub client in `crates/rtemplate-service/src/example.rs` only when the provider file path is not enough.
-2. Put domain logic in `crates/rtemplate-service/src/app.rs` or focused service modules.
+1. Replace the stub client in `crates/soma-service/src/soma.rs` only when the provider file path is not enough.
+2. Put domain logic in `crates/soma-service/src/app.rs` or focused service modules.
 3. Register native provider/action metadata so MCP, CLI, REST, docs, and plugins stay registry-driven.
 4. Regenerate MCP schema docs, provider surface docs, and OpenAPI so generated surfaces reflect the provider registry.
 5. Add REST handlers only for infrastructure routes; business actions should stay registry-backed direct routes.
-6. Update config fields and env prefixes in `crates/rtemplate-contracts/src/config.rs`.
-7. Update `.env.example`, `config.example.toml`, plugin options, and setup mappings.
+6. Update config fields and env prefixes in `crates/soma-contracts/src/config.rs`.
+7. Update `.env.example`, `config.soma.toml`, plugin options, and setup mappings.
 8. Update `server.json`, plugin metadata, repository URLs, Docker labels, and release metadata.
 9. Add tests for MCP dispatch, CLI parsing, REST routes, provider loading, and service behavior.
 10. Run scaffold verification and the local quality gates.
@@ -626,7 +626,7 @@ configuration, and secret-scanning allowlists before publishing.
 | Plugins | [docs/PLUGINS.md](docs/PLUGINS.md) |
 | Release/versioning | [release/components.toml](release/components.toml), [docs/MCP-REGISTRY-PUBLISH-GUIDE.md](docs/MCP-REGISTRY-PUBLISH-GUIDE.md) |
 | Automation | [xtask/README.md](xtask/README.md), [scripts/README.md](scripts/README.md) |
-| Tests | [crates/rmcp-template/tests/README.md](crates/rmcp-template/tests/README.md) |
+| Tests | [crates/soma/tests/README.md](crates/soma/tests/README.md) |
 
 ## Verification
 

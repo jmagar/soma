@@ -4,18 +4,18 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]
-fn manifest_models_single_template_component() {
+fn manifest_models_single_soma_component() {
     let manifest = load_manifest(&repo_root()).expect("manifest");
     assert_eq!(manifest.schema_version, 1);
     assert_eq!(manifest.components.len(), 1);
     let component = &manifest.components[0];
-    assert_eq!(component.id, "template");
+    assert_eq!(component.id, "soma");
     assert_eq!(component.tag_prefix, "v");
     assert_eq!(component.release_workflow, "release.yml");
     assert!(component.shipping_paths.contains(&"crates".to_owned()));
     assert!(component
         .shipping_paths
-        .contains(&"plugins/rtemplate".to_owned()));
+        .contains(&"plugins/soma".to_owned()));
     assert!(component
         .version_files
         .iter()
@@ -32,14 +32,14 @@ fn exact_json_pointer_reads_nested_openapi_version() {
 }
 
 #[test]
-fn json_reader_allows_template_comment_prefix() {
-    let content = "<!-- TEMPLATE -->\n{\"version\":\"0.4.1\"}\n";
+fn json_reader_allows_custom_comment_prefix() {
+    let content = "<!-- CUSTOMIZE -->\n{\"version\":\"0.4.1\"}\n";
     assert_eq!(
         read_json_version(content, Some("/version")).expect("version"),
         "0.4.1"
     );
     let updated = replace_json_version(content, Some("/version"), "0.4.2").unwrap();
-    assert!(updated.starts_with("<!-- TEMPLATE -->"));
+    assert!(updated.starts_with("<!-- CUSTOMIZE -->"));
     assert!(updated.contains("\"version\": \"0.4.2\""));
 }
 
@@ -96,7 +96,7 @@ fn parity_checks_registry_openapi_and_plugin_no_version() {
     )
     .unwrap();
     fs::write(
-        fixture.path("plugins/rtemplate/.claude-plugin/plugin.json"),
+        fixture.path("plugins/soma/.claude-plugin/plugin.json"),
         r#"{"name":"soma","version":"0.4.1"}"#,
     )
     .unwrap();
@@ -114,11 +114,11 @@ fn shipping_change_requires_version_greater_than_latest_tag() {
     fixture.init_repo();
     fixture.git(&["tag", "v0.4.1"]);
     fs::write(
-        fixture.path("crates/rmcp-template/src/lib.rs"),
+        fixture.path("crates/soma/src/lib.rs"),
         "pub fn changed() {}\n",
     )
     .unwrap();
-    fixture.git(&["add", "crates/rmcp-template/src/lib.rs"]);
+    fixture.git(&["add", "crates/soma/src/lib.rs"]);
     fixture.git(&["commit", "-m", "change source"]);
 
     let error = check(fixture.root(), Some("v0.4.1"), "HEAD", GateMode::Pr, false)
@@ -151,11 +151,11 @@ fn pr_mode_uses_merge_base_not_direct_base_diff() {
     fixture.git(&["commit", "-m", "docs"]);
     fixture.git(&["checkout", "main"]);
     fs::write(
-        fixture.path("crates/rmcp-template/src/lib.rs"),
+        fixture.path("crates/soma/src/lib.rs"),
         "pub fn main_changed() {}\n",
     )
     .unwrap();
-    fixture.git(&["add", "crates/rmcp-template/src/lib.rs"]);
+    fixture.git(&["add", "crates/soma/src/lib.rs"]);
     fixture.git(&["commit", "-m", "main source change"]);
     fixture.git(&["checkout", "feature"]);
 
@@ -170,11 +170,11 @@ fn main_mode_uses_latest_semver_tag() {
     fixture.git(&["tag", "v0.4.0"]);
     fixture.git(&["tag", "v0.4.1"]);
     fs::write(
-        fixture.path("crates/rmcp-template/src/lib.rs"),
+        fixture.path("crates/soma/src/lib.rs"),
         "pub fn changed() {}\n",
     )
     .unwrap();
-    fixture.git(&["add", "crates/rmcp-template/src/lib.rs"]);
+    fixture.git(&["add", "crates/soma/src/lib.rs"]);
     fixture.git(&["commit", "-m", "change source"]);
 
     let plans = plan(fixture.root(), None, "HEAD", GateMode::Main).unwrap();
@@ -228,11 +228,11 @@ impl Fixture {
         write(
             &self.path("Cargo.toml"),
             r#"[workspace]
-members = ["crates/rmcp-template"]
+members = ["crates/soma"]
 "#,
         );
         write(
-            &self.path("crates/rmcp-template/Cargo.toml"),
+            &self.path("crates/soma/Cargo.toml"),
             r#"[package]
 name = "soma"
 version = "0.4.1"
@@ -255,23 +255,23 @@ version = "0.4.1"
             r#"{"info":{"version":"0.4.1"}}"#,
         );
         write(
-            &self.path("packages/rtemplate-mcp/package.json"),
+            &self.path("packages/soma-rmcp/package.json"),
             r#"{"name":"soma-rmcp","version":"0.4.1"}"#,
         );
         write(
-            &self.path("plugins/rtemplate/.claude-plugin/plugin.json"),
+            &self.path("plugins/soma/.claude-plugin/plugin.json"),
             r#"{"name":"soma"}"#,
         );
         write(
-            &self.path("plugins/rtemplate/.codex-plugin/plugin.json"),
+            &self.path("plugins/soma/.codex-plugin/plugin.json"),
             r#"{"name":"soma"}"#,
         );
         write(
-            &self.path("plugins/rtemplate/gemini-extension.json"),
+            &self.path("plugins/soma/gemini-extension.json"),
             r#"{"name":"soma"}"#,
         );
         write(
-            &self.path("crates/rmcp-template/src/lib.rs"),
+            &self.path("crates/soma/src/lib.rs"),
             "pub fn original() {}\n",
         );
         write(&self.path("apps/web/.keep"), "");

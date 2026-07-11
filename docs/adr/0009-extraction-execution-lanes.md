@@ -2,7 +2,7 @@
 title: "ADR 0009: Execute extraction with isolated lanes and integration ownership"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

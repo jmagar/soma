@@ -17,7 +17,7 @@ concurrency:
 jobs:
   monitor:
     name: Watch rmcp crate releases
-    runs-on: [self-hosted, tootie, rmcp-template]
+    runs-on: [self-hosted, tootie, soma]
     timeout-minutes: 15
     env:
       CARGO_INCREMENTAL: "0"
@@ -39,7 +39,7 @@ jobs:
       - name: Fetch rmcp crate metadata
         run: |
           curl -fsSL \
-            -H "User-Agent: jmagar/template-rmcp rmcp-release-monitor" \
+            -H "User-Agent: jmagar/soma rmcp-release-monitor" \
             https://crates.io/api/v1/crates/rmcp \
             -o rmcp-crate.json
 
@@ -112,7 +112,7 @@ jobs:
           )"
           if [ -n "$existing" ]; then
             gh issue comment "$existing" \
-              --body "The template rmcp pin, MCP schema baseline, and MCP conformance baseline are current; closing this release-monitor issue."
+              --body "The Soma rmcp pin, MCP schema baseline, and MCP conformance baseline are current; closing this release-monitor issue."
             gh issue close "$existing" \
               --comment "rmcp release monitor resolved."
           fi

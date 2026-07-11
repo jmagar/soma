@@ -2,11 +2,11 @@
 title: "Documentation Instructions"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/references/mcp/"
@@ -17,7 +17,7 @@ last_reviewed: "2026-06-27"
 
 This directory contains stable guides, generated compatibility artifacts,
 durable contracts/specs, external reference snapshots, and working records for
-the rmcp-template project and the Rust MCP server family it governs.
+the soma project and the Rust MCP server family it governs.
 
 Both humans and LLM agents operate this codebase. Write docs, contracts, specs, examples, and commands assuming both audiences. Prefer structured, runnable, and self-contained content. Avoid prose that only makes sense in context of a prior conversation.
 
@@ -78,19 +78,24 @@ Do not treat seed transcripts or conversation context as sufficient evidence for
 
 ## Naming
 
-- The binary and template identifiers use `example` / `Example` / `RTEMPLATE_` as placeholders. These are renamed when the template is adapted.
-- The pattern family is `rmcp-server`. Member servers include `lab`, `axon_rust`, `syslog-mcp`, `rustify`, `rustifi`, `apprise-mcp`, `rustscale`, `unrust`, and this template.
+- Product identifiers are Soma-first: binaries are `soma` and `soma-server`,
+  crates use the `soma-*` prefix, and runtime env vars use the `SOMA_*` prefix.
+- The pattern family is `rmcp-server`. Member servers include `lab`, `axon_rust`, `syslog-mcp`, `rustify`, `rustifi`, `apprise-mcp`, `rustscale`, `unrust`, and Soma.
 - Do not rewrite captured reference snapshots or upstream repopacks to match current naming. Those files preserve provenance.
 
 ---
 
-## Template Adaptation
+## Soma Product Guidance
 
-This repo is a template. Every doc in this directory contains `TEMPLATE:` markers where values must be changed when the template is adapted for a real service. When editing docs:
+This repo now ships Soma as the product runtime. Keep end-user docs focused on
+using and extending Soma through drop-in providers. Generated scaffolding,
+cargo-generate, and historical docs may still discuss scaffolds as a
+capability, but stable docs should not describe Soma itself as a placeholder.
 
-- Keep template markers in place unless you are explicitly adapting the template, not just editing it.
-- Do not remove the `TEMPLATE:` sections from `PATTERNS.md` — they govern the entire family.
-- The `PATTERNS.md` patterns are normative across all family members. Deviation requires an explicit decision recorded in that repo.
+- Do not add compatibility aliases for previous product names or env prefixes.
+- Keep `PATTERNS.md` family guidance accurate for Soma-derived servers.
+- The `PATTERNS.md` patterns are normative across all family members.
+  Deviation requires an explicit decision recorded in that repo.
 
 ---
 
@@ -114,6 +119,6 @@ appropriate stable guide, contract, or ADR.
 - Examples should be runnable as written. Verify port numbers, command names, and flag names against the code before committing.
 - Keep generated or historical material out of guides. If something belongs in a guide, distill it; don't paste.
 - Do not move broad architecture into narrow docs only. Top-level docs should remain the map.
-- Env var names are authoritative in `crates/rtemplate-contracts/src/config.rs`. If a doc disagrees with the code, update the doc.
+- Env var names are authoritative in `crates/soma-contracts/src/config.rs`. If a doc disagrees with the code, update the doc.
 - Runner labels and trust boundaries must be documented in `docs/CI.md` plus
   the focused runner runbook. Do not leave runner behavior only in session notes.

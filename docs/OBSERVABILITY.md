@@ -2,11 +2,11 @@
 title: "Observability"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -15,7 +15,7 @@ last_reviewed: "2026-05-15"
 
 # Observability
 
-The template exposes fast, redacted status surfaces for humans, agents, and deployment automation. Design principle: glass house, not black box.
+Soma exposes fast, redacted status surfaces for humans, agents, and deployment automation. Design principle: glass house, not black box.
 
 ## HTTP endpoints
 
@@ -47,7 +47,7 @@ The template exposes fast, redacted status surfaces for humans, agents, and depl
 ```json
 {
   "status": "ok",
-  "server": "rtemplate-mcp",
+  "server": "soma-mcp",
   "version": "0.1.0",
   "transport": "http"
 }
@@ -68,12 +68,12 @@ file logging support, but dual console+file logging is not wired by default.
 | Destination | Format | Writer |
 |---|---|---|
 | Console (stderr) | Human-readable | `tracing_subscriber::fmt` |
-| File (`~/.example/logs/example.log`) | Structured JSON | available through `rtemplate-observability`; not enabled by default |
+| File (`~/.soma/logs/example.log`) | Structured JSON | available through `soma-observability`; not enabled by default |
 
 Use `RUST_LOG` to control log level:
 
 ```bash
-RUST_LOG=info,rmcp=warn example-server serve
+RUST_LOG=info,rmcp=warn soma-server serve
 ```
 
 Log file: one file, 10 MB cap. On overflow, truncate and restart. Never multiple files.
@@ -90,7 +90,7 @@ Console log format:
 File log format:
 
 ```json
-{"timestamp":"2026-05-13T14:32:05Z","level":"INFO","message":"MCP tool call","tool":"example","action":"greet","elapsed_ms":12}
+{"timestamp":"2026-05-13T14:32:05Z","level":"INFO","message":"MCP tool call","tool":"soma","action":"greet","elapsed_ms":12}
 ```
 
 ## Tracing spans

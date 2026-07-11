@@ -12,7 +12,7 @@
         "installation": "AVAILABLE"
       },
       "source": {
-        "path": "./plugins/rtemplate",
+        "path": "./plugins/soma",
         "source": "local"
       }
     }

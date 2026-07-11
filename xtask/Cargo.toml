@@ -7,7 +7,7 @@
 # on a cold cache. Do NOT add heavy runtime crates (tokio, reqwest, etc.) here.
 # If you need async, use std::process::Command + shell scripts instead.
 #
-# TEMPLATE: Keep "xtask" as the crate name — cargo's xtask convention relies on it.
+# CUSTOMIZE: Keep "xtask" as the crate name — cargo's xtask convention relies on it.
 #           Add dependencies only if absolutely necessary.
 # =============================================================================
 
@@ -20,13 +20,13 @@ license = "MIT"
 publish = false
 
 [dependencies]
-# TEMPLATE: anyhow for ergonomic errors, walkdir for filesystem traversal.
+# CUSTOMIZE: anyhow for ergonomic errors, walkdir for filesystem traversal.
 #           These are the only deps needed for the four required commands.
 #           Add more only if a new command truly requires it.
 anyhow = "1"
 jsonschema = "0.17"
-rtemplate-contracts = { path = "../crates/rtemplate-contracts" }
-rtemplate-service = { path = "../crates/rtemplate-service", default-features = false }
+soma-contracts = { path = "../crates/soma-contracts" }
+soma-service = { path = "../crates/soma-service", default-features = false }
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

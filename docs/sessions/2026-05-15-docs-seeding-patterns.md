@@ -1,14 +1,14 @@
 ---
 date: 2026-05-15 01:42:33 EST
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: full-review-remediation
 head: ddead81
 agent: Claude
 session id: 98d56d90-3e9e-44d5-a01e-cf5604843317
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/98d56d90-3e9e-44d5-a01e-cf5604843317.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template  ddead81 [full-review-remediation]
-pr: 7 "Add pattern contract xtask checks" https://github.com/jmagar/rmcp-template/pull/7
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/98d56d90-3e9e-44d5-a01e-cf5604843317.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma  ddead81 [full-review-remediation]
+pr: 7 "Add pattern contract xtask checks" https://github.com/jmagar/soma/pull/7
 ---
 
 # Session: Seed all docs/ guides from PATTERNS.md
@@ -116,7 +116,7 @@ Commits produced this session (oldest → newest):
 | DOCS.md | 6-entry table, 56 lines | Full directory tree, what-goes-where table, frontmatter schema, 180 lines |
 | PATTERNS.md coverage | No systematic mapping | Every §0–§50 + §A1–§A6 section has a home in at least one guide doc |
 | PHILOSOPHY.md | 7 sections | 13 sections — added thin shim absolute, graceful degradation, destructive protection, binary-owned hooks, three-tier skill, fail fast, small modules |
-| QUICKSTART.md | No adaptation guidance | 27-item checklist for creating a new server from the template |
+| QUICKSTART.md | No adaptation guidance | 27-item checklist for creating a new server from Soma |
 
 ## Verification Evidence
 
