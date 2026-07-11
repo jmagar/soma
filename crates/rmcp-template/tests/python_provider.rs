@@ -126,6 +126,62 @@ TOOLS = [LookupTool()]
     Ok(())
 }
 
+#[tokio::test]
+async fn plain_python_provider_discovers_and_executes_public_functions() -> anyhow::Result<()> {
+    let temp = test_dir("plain")?;
+    let providers = temp.join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(
+        providers.join("plain_math.py"),
+        r#"
+PROVIDER = {"name": "plain-python", "kind": "python"}
+
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+
+async def reflect_message(message: str) -> dict:
+    """Echo a message."""
+    return {"message": message}
+
+def _private() -> str:
+    return "hidden"
+"#,
+    )?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let snapshot = registry.snapshot();
+    let catalog = snapshot
+        .catalogs
+        .iter()
+        .find(|catalog| catalog.provider.name == "plain-python")
+        .expect("plain python provider catalog");
+    assert_eq!(catalog.provider.kind.as_str(), "python");
+    assert!(catalog.tools.iter().any(|tool| tool.name == "add"));
+    assert!(catalog
+        .tools
+        .iter()
+        .any(|tool| tool.name == "reflect_message"));
+    assert!(!catalog.tools.iter().any(|tool| tool.name == "_private"));
+
+    let add = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.name == "add")
+        .expect("add tool");
+    assert_eq!(add.description, "Add two integers.");
+    assert_eq!(add.input_schema["properties"]["a"]["type"], "integer");
+    assert_eq!(add.input_schema["properties"]["b"]["type"], "integer");
+    assert_eq!(add.input_schema["required"], json!(["a", "b"]));
+
+    let output = dispatch(&registry, "add", json!({"a": 2, "b": 3})).await?;
+    assert_eq!(output, json!(5));
+
+    let output = dispatch(&registry, "reflect_message", json!({"message": "hi"})).await?;
+    assert_eq!(output, json!({"message": "hi"}));
+    Ok(())
+}
+
 async fn dispatch(
     registry: &rtemplate_service::ProviderRegistry,
     action: &str,

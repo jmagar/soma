@@ -59,6 +59,7 @@ pub enum ProviderKind {
     AiSdk,
     Wasm,
     Mcp,
+    Python,
     Langchain,
     Llamaindex,
 }
@@ -71,6 +72,7 @@ impl ProviderKind {
             Self::AiSdk => "ai-sdk",
             Self::Wasm => "wasm",
             Self::Mcp => "mcp",
+            Self::Python => "python",
             Self::Langchain => "langchain",
             Self::Llamaindex => "llamaindex",
         }

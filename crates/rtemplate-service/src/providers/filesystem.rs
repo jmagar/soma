@@ -88,7 +88,9 @@ fn provider_for_catalog(path: PathBuf, catalog: ProviderCatalog) -> std::sync::A
         ProviderKind::Mcp => McpProvider::arc(catalog),
         ProviderKind::AiSdk => AiSdkProvider::arc(path, catalog),
         ProviderKind::Wasm => WasmProvider::arc(path, catalog),
-        ProviderKind::Langchain | ProviderKind::Llamaindex => PythonProvider::arc(path, catalog),
+        ProviderKind::Python | ProviderKind::Langchain | ProviderKind::Llamaindex => {
+            PythonProvider::arc(path, catalog)
+        }
         ProviderKind::StaticRust => std::sync::Arc::new(FileProvider { path, catalog }),
     }
 }
@@ -290,7 +292,7 @@ fn ensure_kind_matches(
         Some("py")
             if !matches!(
                 catalog.provider.kind,
-                ProviderKind::Langchain | ProviderKind::Llamaindex
+                ProviderKind::Python | ProviderKind::Langchain | ProviderKind::Llamaindex
             ) =>
         {
             return Err(FileProviderLoadError {

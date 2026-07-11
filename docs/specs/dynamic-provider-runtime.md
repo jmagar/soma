@@ -42,6 +42,9 @@ ProviderRegistry
   OpenApiProvider
   McpProvider
   AiSdkToolProvider
+  PythonFunctionProvider
+  LangChainProvider
+  LlamaIndexProvider
   WasmProvider
 ```
 
@@ -122,6 +125,30 @@ export default defineTool({
 
 The provider infers the action name from `weather.tool.ts`, converts Zod schemas
 to JSON Schema, and exposes the action everywhere.
+
+### Python Function Provider
+
+Loads `.py` files through a Python sidecar. This is the lowest-friction Python
+path for users who already have functions and do not need a framework adapter.
+
+Minimal authoring should look like:
+
+```python
+PROVIDER = {"name": "math-tools", "kind": "python"}
+
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+
+async def echo(message: str) -> dict:
+    """Echo a message."""
+    return {"message": message}
+```
+
+When `TOOLS` is absent, the provider autodiscovers public functions defined by
+the module. Private names are ignored. Function signatures are converted into
+JSON Schema for common Python annotations such as `str`, `int`, `float`, `bool`,
+`dict`, `list`, and typed lists.
 
 ### Python LangChain and LlamaIndex Providers
 

@@ -337,6 +337,8 @@ import inspect
 import json
 import re
 import sys
+import types
+import typing
 from pathlib import Path
 
 
@@ -379,11 +381,23 @@ def expand_tools(module):
     return expanded
 
 
+def public_functions(module):
+    functions = []
+    for name, value in vars(module).items():
+        if name.startswith("_"):
+            continue
+        if inspect.isfunction(value) and getattr(value, "__module__", None) == module.__name__:
+            functions.append(value)
+    return functions
+
+
 def detect_kind(module, tools, config):
     kind = config.get("kind") or getattr(module, "PROVIDER_KIND", None)
     if kind:
         return kind
     for tool in tools:
+        if inspect.isfunction(tool):
+            return "python"
         metadata = getattr(tool, "metadata", None)
         if metadata is not None and (
             hasattr(metadata, "fn_schema") or hasattr(metadata, "get_parameters_dict")
@@ -462,6 +476,78 @@ def llamaindex_schema(tool):
     return object_schema(None)
 
 
+def annotation_schema(annotation):
+    if annotation is inspect._empty:
+        return {}
+    if isinstance(annotation, str):
+        simple = {
+            "str": "string",
+            "int": "integer",
+            "float": "number",
+            "bool": "boolean",
+            "dict": "object",
+            "list": "array",
+        }.get(annotation)
+        return {"type": simple} if simple else {}
+
+    origin = typing.get_origin(annotation)
+    args = typing.get_args(annotation)
+    if origin in (typing.Union, types.UnionType):
+        non_none = [item for item in args if item is not type(None)]
+        if len(non_none) == 1:
+            return annotation_schema(non_none[0])
+        variants = [annotation_schema(item) for item in non_none]
+        variants = [variant for variant in variants if variant]
+        return {"anyOf": variants} if variants else {}
+    if origin in (list, tuple, set, frozenset):
+        item_schema = annotation_schema(args[0]) if args else {}
+        return {"type": "array", "items": item_schema}
+    if origin is dict:
+        return {"type": "object", "additionalProperties": True}
+
+    mapping = {
+        str: "string",
+        int: "integer",
+        float: "number",
+        bool: "boolean",
+        dict: "object",
+        list: "array",
+    }
+    schema_type = mapping.get(annotation)
+    return {"type": schema_type} if schema_type else {}
+
+
+def function_schema(tool):
+    hints = {}
+    try:
+        hints = typing.get_type_hints(tool)
+    except Exception:
+        pass
+    properties = {}
+    required = []
+    signature = inspect.signature(tool)
+    for name, parameter in signature.parameters.items():
+        if name in ("self", "cls"):
+            continue
+        if parameter.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        annotation = hints.get(name, parameter.annotation)
+        properties[name] = annotation_schema(annotation)
+        if parameter.default is inspect._empty:
+            required.append(name)
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+    }
+    if required:
+        schema["required"] = required
+    return schema
+
+
 def tool_name(tool, kind):
     if kind == "llamaindex":
         metadata = getattr(tool, "metadata", None)
@@ -481,6 +567,8 @@ def tool_description(tool, kind):
 
 
 def tool_schema(tool, kind):
+    if kind == "python":
+        return function_schema(tool)
     if kind == "llamaindex":
         return llamaindex_schema(tool)
     return langchain_schema(tool)
@@ -490,8 +578,10 @@ def catalog(path):
     module = load_module(path)
     config = provider_config(module)
     tools = expand_tools(module)
+    if not tools:
+        tools = public_functions(module)
     kind = detect_kind(module, tools, config)
-    if kind not in ("langchain", "llamaindex"):
+    if kind not in ("python", "langchain", "llamaindex"):
         raise RuntimeError(f"unsupported Python provider kind {kind!r}")
     provider = {
         "name": config.get("name") or slug(Path(path).stem),
@@ -522,6 +612,8 @@ def catalog(path):
 def resolve_tool(module, action):
     config = provider_config(module)
     tools = expand_tools(module)
+    if not tools:
+        tools = public_functions(module)
     kind = detect_kind(module, tools, config)
     for tool in tools:
         if tool_name(tool, kind) == action:
@@ -559,9 +651,17 @@ async def call_llamaindex(tool, params):
     raise RuntimeError("LlamaIndex tool is not callable")
 
 
+async def call_python(tool, params):
+    if callable(tool):
+        return await maybe_await(tool(**params))
+    raise RuntimeError("Python tool is not callable")
+
+
 async def execute(path, action, params):
     module = load_module(path)
     kind, tool = resolve_tool(module, action)
+    if kind == "python":
+        return await call_python(tool, params)
     if kind == "llamaindex":
         return await call_llamaindex(tool, params)
     return await call_langchain(tool, params)

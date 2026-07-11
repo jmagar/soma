@@ -173,6 +173,20 @@ curl -s -X POST http://localhost:40060/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"hello_local","name":"Alice"}}}'
 ```
 
+Plain Python functions can also be dropped directly into `providers/`:
+
+```python
+PROVIDER = {"name": "math-tools", "kind": "python"}
+
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+```
+
+When `TOOLS` is absent, public functions defined in the module become tools.
+Sync and async functions are supported, and common Python type annotations are
+converted into input schemas.
+
 Provider manifests can declare:
 
 - tools/actions exposed through MCP by default and through CLI/REST when their
@@ -185,7 +199,7 @@ Provider manifests can declare:
   metadata
 
 Supported provider kinds are `static-rust`, `openapi`, `ai-sdk`, `wasm`, `mcp`,
-`langchain`, and `llamaindex`. See
+`python`, `langchain`, and `llamaindex`. See
 [docs/specs/dynamic-provider-runtime.md](docs/specs/dynamic-provider-runtime.md),
 [docs/contracts/provider-manifest.schema.json](docs/contracts/provider-manifest.schema.json),
 and [docs/generated/provider-surfaces.md](docs/generated/provider-surfaces.md).
