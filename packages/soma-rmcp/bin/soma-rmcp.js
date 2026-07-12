@@ -2,7 +2,7 @@
 
 const { spawn } = require("node:child_process");
 
-const binary = process.env.SOMA_BIN || process.env.SOMA_BIN || "soma";
+const binary = process.env.SOMA_BIN || "soma";
 const child = spawn(binary, process.argv.slice(2), {
   stdio: "inherit",
   env: process.env,

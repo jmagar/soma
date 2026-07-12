@@ -1,6 +1,6 @@
 {
   "bin": {
-    "soma": "./bin/soma-rmcp.js"
+    "soma": "bin/soma-rmcp.js"
   },
   "description": "Node launcher package for the Soma RMCP runtime.",
   "engines": {
