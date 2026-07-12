@@ -19,7 +19,8 @@ use crate::{
     provider_errors::{redact_public, ProviderError},
     provider_registry::{Provider, ProviderCall, ProviderOutput},
     providers::sidecar::{
-        collect_provider_env, output_exceeded_message, run_bounded_sidecar, SidecarError,
+        collect_provider_env, output_exceeded_message, resolve_sidecar_command,
+        run_bounded_sidecar, sidecar_base_env, SidecarError,
     },
 };
 
@@ -287,14 +288,17 @@ fn default_python_command() -> &'static str {
 }
 
 fn run_catalog_sidecar(runtime: &PythonRuntime, input: &[u8]) -> Result<Vec<u8>, String> {
-    let mut child = StdCommand::new(&runtime.command)
+    let mut command = StdCommand::new(resolve_sidecar_command(&runtime.command));
+    command
         .args(["-c", PYTHON_BRIDGE])
         .env_clear()
         .stdin(StdStdio::piped())
         .stdout(StdStdio::piped())
-        .stderr(StdStdio::piped())
-        .spawn()
-        .map_err(|error| error.to_string())?;
+        .stderr(StdStdio::piped());
+    for (key, value) in sidecar_base_env() {
+        command.env(key, value);
+    }
+    let mut child = command.spawn().map_err(|error| error.to_string())?;
     let stdout = child
         .stdout
         .take()

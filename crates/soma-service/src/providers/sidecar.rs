@@ -1,4 +1,7 @@
-use std::{io, process::Output, process::Stdio, time::Duration};
+use std::{ffi::OsString, io, path::PathBuf, process::Output, process::Stdio, time::Duration};
+
+#[cfg(windows)]
+use std::path::Path;
 
 use soma_contracts::providers::EnvRequirement;
 use tokio::{
@@ -43,7 +46,8 @@ pub(crate) async fn run_bounded_sidecar(
     timeout_ms: u64,
     max_output_bytes: usize,
 ) -> Result<BoundedOutput, SidecarError> {
-    let mut command = Command::new(command);
+    let resolved_command = resolve_sidecar_command(command);
+    let mut command = Command::new(resolved_command);
     command
         .args(args)
         .kill_on_drop(true)
@@ -106,15 +110,82 @@ pub(crate) async fn run_bounded_sidecar(
 
 #[cfg(windows)]
 fn apply_sidecar_base_env(command: &mut Command) {
-    for key in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"] {
-        if let Some(value) = std::env::var_os(key) {
-            command.env(key, value);
-        }
+    for (key, value) in sidecar_base_env() {
+        command.env(key, value);
     }
 }
 
 #[cfg(not(windows))]
 fn apply_sidecar_base_env(_command: &mut Command) {}
+
+#[cfg(windows)]
+pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
+    let mut env = Vec::new();
+    for key in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(key) {
+            env.push((OsString::from(key), value));
+        }
+    }
+    env
+}
+
+#[cfg(not(windows))]
+pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
+    Vec::new()
+}
+
+#[cfg(windows)]
+pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
+    let command_path = Path::new(command);
+    if command_path.components().count() > 1 || command_path.is_absolute() {
+        return command_path.to_path_buf();
+    }
+
+    let Some(path_env) = std::env::var_os("PATH") else {
+        return command_path.to_path_buf();
+    };
+    for dir in std::env::split_paths(&path_env) {
+        if command_path.extension().is_some() {
+            let candidate = dir.join(command_path);
+            if candidate.is_file() {
+                return candidate;
+            }
+            continue;
+        }
+        let direct_candidate = dir.join(command_path);
+        if direct_candidate.is_file() {
+            return direct_candidate;
+        }
+        for extension in windows_path_extensions() {
+            let candidate = dir.join(format!("{command}{extension}"));
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+    command_path.to_path_buf()
+}
+
+#[cfg(not(windows))]
+pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
+    PathBuf::from(command)
+}
+
+#[cfg(windows)]
+fn windows_path_extensions() -> Vec<String> {
+    std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned())
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| {
+            if extension.starts_with('.') {
+                extension.to_owned()
+            } else {
+                format!(".{extension}")
+            }
+        })
+        .collect()
+}
 
 pub(crate) fn output_exceeded_message(stream: &str, max_output_bytes: usize) -> String {
     format!("sidecar {stream} output exceeds {max_output_bytes} bytes")
