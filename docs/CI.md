@@ -137,13 +137,14 @@ Use for: tag-time binary packaging and GitHub Release creation.
 Do not use for: PR validation. PRs should use `ci.yml`; release only runs on
 `v*` tags.
 
-It builds Linux and Windows release artifacts, writes SHA256 sums, and creates
-the GitHub Release. Release Cargo builds use sccache through the same wrapper
-environment as CI. Linux release jobs cross-compile the Windows GNU target from
-the TOOTIE runner; the native Windows build is a PR-time `ci.yml` check, not the
-tag packaging path. The LFS write-back job is intentionally isolated here
-because it can push to `main`; audit that behavior before reusing it in a
-derived repo.
+It builds Linux and Windows release artifacts, writes SHA256 sums, publishes the
+`soma-rmcp` npm launcher package with provenance/trusted publishing support, and
+creates the GitHub Release. Release Cargo builds use sccache through the same
+wrapper environment as CI. Linux release jobs cross-compile the Windows GNU
+target from the TOOTIE runner; the native Windows build is a PR-time `ci.yml`
+check, not the tag packaging path. The LFS write-back job is intentionally
+isolated here because it can push to `main`; audit that behavior before reusing
+it in a derived repo.
 
 ### `.github/workflows/docker-publish.yml`
 
@@ -160,18 +161,6 @@ Tag jobs:
 - Docker build and push
 - Trivy vulnerability scan
 - MCP Registry manifest publish when credentials are configured
-
-### `.github/workflows/npm-publish.yml`
-
-Use for: publishing the `soma-rmcp` launcher package after a release tag exists.
-
-Do not use for: PR validation or manual metadata patching. npm package versions
-are immutable, so refreshed package metadata ships with the next release version.
-
-Runs only on `v*` tags. It verifies the tag matches
-`packages/soma-rmcp/package.json`, skips already-published versions for reruns,
-packs the package for inspection, and publishes with npm provenance/trusted
-publishing support.
 
 ### `.github/workflows/scheduled.yml`
 

@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::Value;
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
 use tokio::time::Instant;
 
@@ -38,12 +38,13 @@ impl Provider for AiSdkProvider {
     async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
         let tool = self.tool(&call)?;
         let runtime = SidecarRuntime::from_tool(&self.catalog, tool, &call)?;
-        let input = serde_json::to_vec(&json!({
-            "action": call.action,
-            "params": call.params,
-            "provider": self.catalog.provider.name,
-        }))
-        .map_err(|error| ProviderError::execution(&self.catalog.provider.name, "", error))?;
+        let source = self.path.display().to_string();
+        let input = call.execution_payload().map_err(|error| {
+            ProviderError::execution(&self.catalog.provider.name, "", error)
+                .with_provider_kind("ai-sdk")
+                .with_source(source.clone())
+                .with_phase("input-serialization")
+        })?;
 
         if input.len() > runtime.max_input_bytes {
             return Err(ProviderError::validation(
@@ -51,11 +52,17 @@ impl Provider for AiSdkProvider {
                 &call.action,
                 "ai_sdk_input_too_large",
                 format!("AI SDK input exceeds {} bytes", runtime.max_input_bytes),
-            ));
+            )
+            .with_provider_kind("ai-sdk")
+            .with_source(source)
+            .with_phase("input-validation"));
         }
 
         let wrapper = SidecarWrapper::new(&self.path).map_err(|error| {
             ProviderError::execution(&self.catalog.provider.name, call.action.clone(), error)
+                .with_provider_kind("ai-sdk")
+                .with_source(source.clone())
+                .with_phase("runtime-load")
         })?;
         let started = Instant::now();
         let sidecar = match run_bounded_sidecar(
@@ -76,14 +83,20 @@ impl Provider for AiSdkProvider {
                     Some(call.action.clone()),
                     format!("AI SDK provider exceeded {}ms timeout", runtime.timeout_ms),
                     "Increase tool.limits.timeout_ms or fix the provider handler.",
-                ));
+                )
+                .with_provider_kind("ai-sdk")
+                .with_source(source)
+                .with_phase("execution"));
             }
             Err(error) => {
                 return Err(ProviderError::execution(
                     &self.catalog.provider.name,
                     call.action.clone(),
                     error,
-                ));
+                )
+                .with_provider_kind("ai-sdk")
+                .with_source(source)
+                .with_phase("execution"));
             }
         };
         let output = sidecar.output;
@@ -106,7 +119,10 @@ impl Provider for AiSdkProvider {
                 &call.action,
                 "ai_sdk_output_too_large",
                 output_exceeded_message(stream, runtime.max_output_bytes),
-            ));
+            )
+            .with_provider_kind("ai-sdk")
+            .with_source(source)
+            .with_phase("output-validation"));
         }
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -116,7 +132,10 @@ impl Provider for AiSdkProvider {
                 Some(call.action),
                 format!("AI SDK provider failed: {}", redact_public(&stderr)),
                 "Fix the TypeScript provider handler and retry.",
-            ));
+            )
+            .with_provider_kind("ai-sdk")
+            .with_source(source)
+            .with_phase("execution"));
         }
 
         let value = serde_json::from_slice(&output.stdout).map_err(|error| {
@@ -126,6 +145,9 @@ impl Provider for AiSdkProvider {
                 "ai_sdk_invalid_json_output",
                 error.to_string(),
             )
+            .with_provider_kind("ai-sdk")
+            .with_source(source)
+            .with_phase("output-validation")
         })?;
         Ok(ProviderOutput::json(value))
     }

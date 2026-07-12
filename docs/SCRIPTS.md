@@ -25,7 +25,7 @@ by `cargo xtask generate-docs`.
 | Category | Scripts |
 |---|---|
 | Release gates | `cargo xtask pre-release-check`, `check-version-sync`, `check-blob-size`, `check-coupled-files` |
-| Hygiene | `cargo xtask asciicheck`, `check-file-size`, `block-env-commits`, `run-ascii-check`, `check-stale-claims` |
+| Hygiene | `cargo xtask asciicheck`, `check-file-size`, `block-env-commits`, `run-ascii-check`, `check-stale-claims`, `check-readme-guide` |
 | MCP/plugin validation | `cargo xtask check-schema-docs`, `validate-plugin-layout`, `check-plugin-hook-contract`, `test-mcp-auth` |
 | Runtime/deploy | `cargo xtask check-runtime-current`, `sync-cargo`, `bump-soma-version` |
 | Reference docs | `cargo xtask refresh-docs`, `generate-docs`, `check-docs` |
@@ -37,6 +37,7 @@ cargo xtask pre-release-check
 cargo xtask pre-release-check --mcporter   # include live MCP tests
 cargo xtask refresh-docs --dry-run
 cargo xtask test-mcp-auth --url http://localhost:40060/mcp --token <token>
+python3 scripts/check-readme-guide.py README.md
 ```
 
 ## pre-release-check

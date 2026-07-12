@@ -150,7 +150,7 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
         .iter()
         .find(|package| package["registryType"] == "oci")
         .expect("missing OCI package metadata");
-    assert_eq!(oci["identifier"], "ghcr.io/jmagar/soma:0.4.6");
+    assert_eq!(oci["identifier"], "ghcr.io/jmagar/soma:0.4.7");
     assert_eq!(oci["runtimeHint"], "docker");
     assert_eq!(oci["transport"]["type"], "streamable-http");
     assert_eq!(oci["transport"]["url"], "http://127.0.0.1:40060/mcp");

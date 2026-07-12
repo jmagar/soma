@@ -1,4 +1,26 @@
 {
+  "operator_commands": {
+    "check": "cargo xtask generate-provider-surfaces --check",
+    "inspect": "soma providers inspect",
+    "regenerate": "cargo xtask generate-provider-surfaces --write",
+    "test": "soma providers test ACTION --json '{...}'",
+    "validate": "soma providers validate"
+  },
+  "provider_execution_abi": {
+    "request_fields": [
+      "schema_version",
+      "provider",
+      "action",
+      "params",
+      "surface",
+      "snapshot_id"
+    ],
+    "schema_version": 1,
+    "wasm_manifest_sources": [
+      "<provider>.wasm.json",
+      "soma.provider custom section"
+    ]
+  },
   "provider_fingerprint": "sha256:3be19b2149cbe295823a623c7ec548fce543d0761d7909eb9f06d402666b756b",
   "providers": [
     {

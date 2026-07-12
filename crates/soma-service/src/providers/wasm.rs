@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::Value;
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
 use tokio::time::timeout;
 use wasmtime::{Config, Engine, Instance, Memory, Module, Store, TypedFunc};
@@ -37,13 +37,14 @@ impl Provider for WasmProvider {
         let tool = self.tool(&call)?.clone();
         let provider = self.catalog.provider.name.clone();
         let action = call.action.clone();
+        let source = self.path.display().to_string();
         let path = self.path.clone();
-        let input = serde_json::to_vec(&json!({
-            "action": action,
-            "params": call.params,
-            "provider": provider,
-        }))
-        .map_err(|error| ProviderError::execution(&provider, call.action.clone(), error))?;
+        let input = call.execution_payload().map_err(|error| {
+            ProviderError::execution(&provider, call.action.clone(), error)
+                .with_provider_kind("wasm")
+                .with_source(source.clone())
+                .with_phase("input-serialization")
+        })?;
         let limits = WasmRuntimeLimits::from_tool(&tool);
         if input.len() > limits.max_input_bytes {
             return Err(ProviderError::validation(
@@ -51,7 +52,10 @@ impl Provider for WasmProvider {
                 call.action,
                 "wasm_input_too_large",
                 format!("WASM input exceeds {} bytes", limits.max_input_bytes),
-            ));
+            )
+            .with_provider_kind("wasm")
+            .with_source(source)
+            .with_phase("input-validation"));
         }
 
         let timeout_ms = limits.timeout_ms;
@@ -66,9 +70,22 @@ impl Provider for WasmProvider {
                     format!("WASM provider exceeded {timeout_ms}ms timeout"),
                     "Increase tool.limits.timeout_ms or fix the WASM provider.",
                 )
+                .with_provider_kind("wasm")
+                .with_source(source.clone())
+                .with_phase("execution")
             })?
-            .map_err(|error| ProviderError::execution(&provider, action.clone(), error))?
-            .map_err(|error| ProviderError::execution(&provider, action.clone(), error))?;
+            .map_err(|error| {
+                ProviderError::execution(&provider, action.clone(), error)
+                    .with_provider_kind("wasm")
+                    .with_source(source.clone())
+                    .with_phase("execution")
+            })?
+            .map_err(|error| {
+                ProviderError::execution(&provider, action.clone(), error)
+                    .with_provider_kind("wasm")
+                    .with_source(source.clone())
+                    .with_phase("execution")
+            })?;
 
         let value = serde_json::from_slice(&output).map_err(|error| {
             ProviderError::validation(
@@ -77,6 +94,9 @@ impl Provider for WasmProvider {
                 "wasm_invalid_json_output",
                 error.to_string(),
             )
+            .with_provider_kind("wasm")
+            .with_source(source)
+            .with_phase("output-validation")
         })?;
         Ok(ProviderOutput::json(value))
     }

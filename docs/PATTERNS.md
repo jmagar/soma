@@ -1446,16 +1446,10 @@ Runs on version tags (`v*`) only:
 - Trivy vulnerability scan
 - MCP Registry manifest publish when credentials are configured
 
-### `.github/workflows/npm-publish.yml`
-Runs on version tags (`v*`) only:
-- Verify the tag matches `packages/soma-rmcp/package.json`
-- Skip if the exact npm version is already published
-- Run `npm pack --dry-run`
-- Publish `soma-rmcp` with npm provenance/trusted publishing support
-
 ### `.github/workflows/release.yml`
 Runs on version tags (`v*`):
 - Build release binaries for linux/amd64 and windows/amd64
+- Publish `soma-rmcp` to npm with provenance/trusted publishing support
 - Create GitHub Release with binary assets
 - Optionally commit Git LFS binary pointers back to `main`; audit this write-back before reusing it
 

@@ -16,7 +16,8 @@ use soma_service::{
 
 use super::{
     confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from,
-    provider_action_from_command, run, service_action_from_command, usage, Command, SetupCommand,
+    provider_action_from_command, run, service_action_from_command, usage, Command,
+    ProviderCommand, SetupCommand,
 };
 use soma_contracts::config::SomaConfig;
 
@@ -143,6 +144,46 @@ fn dynamic_provider_command_accepts_flat_flags_without_json() {
                 "units": "metric"
             })
         }
+    );
+}
+
+#[test]
+fn providers_validate_and_inspect_parse_as_management_commands() {
+    assert_eq!(
+        parse_args_from(["providers", "validate"]).unwrap().unwrap(),
+        Command::Providers(ProviderCommand::Validate)
+    );
+    assert_eq!(
+        parse_args_from(["providers", "inspect"]).unwrap().unwrap(),
+        Command::Providers(ProviderCommand::Inspect)
+    );
+}
+
+#[test]
+fn providers_test_accepts_optional_json_payload() {
+    assert_eq!(
+        parse_args_from(["providers", "test", "weather-current"])
+            .unwrap()
+            .unwrap(),
+        Command::Providers(ProviderCommand::Test {
+            action: "weather-current".to_owned(),
+            json: serde_json::json!({})
+        })
+    );
+    assert_eq!(
+        parse_args_from([
+            "providers",
+            "test",
+            "weather-current",
+            "--json",
+            "{\"city\":\"Paris\"}",
+        ])
+        .unwrap()
+        .unwrap(),
+        Command::Providers(ProviderCommand::Test {
+            action: "weather-current".to_owned(),
+            json: serde_json::json!({"city": "Paris"})
+        })
     );
 }
 
@@ -378,6 +419,10 @@ fn operational_commands_do_not_convert_to_service_actions() {
         service_action_from_command(&Command::Setup(SetupCommand::Check)),
         None
     );
+    assert_eq!(
+        service_action_from_command(&Command::Providers(ProviderCommand::Validate)),
+        None
+    );
 }
 
 #[tokio::test]
@@ -394,6 +439,7 @@ fn usage_mentions_current_cli_commands_and_loopback_default() {
         "soma help",
         "soma doctor",
         "soma setup plugin-hook",
+        "soma providers validate",
         "soma watch",
         "default 127.0.0.1",
     ] {
@@ -416,6 +462,10 @@ fn parser_rejects_unknown_and_malformed_flags() {
         &["watch", "--interval", "0"],
         &["setup", "check", "--no-repair"],
         &["setup", "plugin-hook", "--no-reapir"],
+        &["providers"],
+        &["providers", "validate", "--json"],
+        &["providers", "test"],
+        &["providers", "test", "weather-current", "--json"],
     ] {
         assert!(
             parse_args_from(args.iter().copied()).is_err(),
