@@ -270,8 +270,20 @@ impl ServerHandler for SomaRmcpServer {
             self.state.config.server_name.clone(),
             env!("CARGO_PKG_VERSION"),
         ))
+        .with_instructions(SERVER_INSTRUCTIONS)
     }
 }
+
+const SERVER_INSTRUCTIONS: &str = "\
+Soma is a batteries-included RMCP runtime for shipping provider-backed MCP servers. \
+It exposes one action-dispatched `soma` tool plus first-class MCP prompt and resource surfaces. \
+Use drop-in providers to add tools, prompts, and resources without rewriting transport, auth, \
+schema, paging, config, Docker, plugin, or release plumbing. A new server comes online by adding \
+provider files under providers/tools, providers/prompts, providers/resources, or another configured \
+provider source. Clients should discover `soma://schema/mcp-tool` before invoking actions, call \
+`status` or `help` to inspect available providers, and send JSON action arguments matching the \
+advertised schema. Responses are structured JSON; large payloads may be paged through Soma's \
+resource paging flow.";
 
 // ── resource definitions ──────────────────────────────────────────────────────
 

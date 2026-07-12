@@ -30,6 +30,38 @@ fn server_info_advertises_tools_resources_prompts() {
 #[test]
 fn server_info_includes_implementation_metadata() {
     let server = super::rmcp_server(loopback_state());
-    let _info = server.get_info();
-    // get_info() must not panic — capabilities and server metadata are always set
+    let info = server.get_info();
+
+    let name: &str = info.server_info.name.as_ref();
+    let version: &str = info.server_info.version.as_ref();
+    assert_eq!(name, "soma");
+    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+
+    let instructions = info
+        .instructions
+        .as_deref()
+        .expect("server info should include rich client-facing instructions");
+    for expected in [
+        "Soma",
+        "batteries-included RMCP runtime",
+        "drop-in providers",
+        "tools, prompts, and resources",
+        "one action-dispatched `soma` tool",
+    ] {
+        assert!(
+            instructions.contains(expected),
+            "instructions should mention {expected:?}; got {instructions}"
+        );
+    }
+}
+
+#[test]
+fn server_info_uses_configured_server_name() {
+    let mut state = loopback_state();
+    state.config.server_name = "custom-soma".into();
+    let server = super::rmcp_server(state);
+    let info = server.get_info();
+
+    let name: &str = info.server_info.name.as_ref();
+    assert_eq!(name, "custom-soma");
 }
