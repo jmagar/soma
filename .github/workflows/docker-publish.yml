@@ -154,7 +154,7 @@ jobs:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Run Trivy
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a0b350d16c55eb73629 # 0.31.0
+        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # 0.31.0
         with:
           # CUSTOMIZE: Replace with your image name.
           image-ref: ghcr.io/jmagar/soma:latest
