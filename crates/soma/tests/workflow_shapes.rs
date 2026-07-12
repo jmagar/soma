@@ -85,10 +85,35 @@ fn artifact_workflows_run_from_published_releases() {
             workflow.contains("workflow_dispatch:"),
             "artifact workflow must support manual reruns for existing tags"
         );
+        assert!(
+            workflow.contains("validate-release-tag:"),
+            "manual artifact reruns must validate the requested release tag before publishing"
+        );
+        assert!(
+            workflow.contains(r#"refs/tags/${tag}^{commit}"#)
+                && workflow.contains("git merge-base --is-ancestor")
+                && workflow.contains("cargo xtask check-version-sync"),
+            "artifact workflows must reject non-tag refs, tags outside main, and version drift"
+        );
     }
     assert!(
-        release.contains("tag_name: ${{ env.RELEASE_TAG }}"),
+        release.contains("tag_name: ${{ needs.validate-release-tag.outputs.release_tag }}"),
         "release artifact workflow must attach files to the existing release tag"
+    );
+    let lfs_commit = workflow_job_block(release, "lfs-commit");
+    assert!(
+        lfs_commit.contains("ref: main") && lfs_commit.contains("git merge --ff-only origin/main"),
+        "LFS binary commits must be made on top of current main, not from a detached release tag"
+    );
+    let npm = workflow_job_block(release, "npm");
+    assert!(
+        npm.contains("needs: [validate-release-tag, release]"),
+        "npm publish must wait until GitHub release artifacts have been created"
+    );
+    assert!(
+        release.contains("arch: linux-x86_64")
+            && release.contains("artifacts/${BIN}-linux-x86_64.tar.gz"),
+        "release assets must include the installer's linux-x86_64 naming convention"
     );
     assert!(
         docker.contains("distribution[\"ociImage\"] = image"),

@@ -49,6 +49,43 @@ fn fingerprint_changes_when_wasm_sidecar_manifest_changes() {
     assert_ne!(first, second);
 }
 
+#[test]
+fn fingerprint_ignores_wasm_binary_bytes_when_sidecar_manifest_exists() {
+    let temp = tempdir().expect("tempdir");
+    let wasm_path = temp.path().join("edge.wasm");
+    fs::write(&wasm_path, b"large placeholder v1").expect("write wasm");
+    fs::write(temp.path().join("edge.wasm.json"), manifest_bytes("edge"))
+        .expect("write sidecar manifest");
+    let source = FileProviderSource::new(temp.path());
+
+    let first = source.fingerprint().expect("first fingerprint");
+    fs::write(&wasm_path, b"large placeholder v2 with different bytes").expect("rewrite wasm");
+    let second = source.fingerprint().expect("second fingerprint");
+
+    assert_eq!(first, second);
+}
+
+#[test]
+fn fingerprint_changes_when_python_dependency_changes() {
+    let temp = tempdir().expect("tempdir");
+    let package = temp.path().join("helpers");
+    fs::create_dir(&package).expect("create helper package");
+    fs::write(package.join("__init__.py"), "").expect("write package init");
+    fs::write(package.join("schema.py"), "ACTION = 'first'\n").expect("write schema");
+    fs::write(
+        temp.path().join("entry.py"),
+        "from helpers.schema import ACTION\nPROVIDER = {'name': 'entry', 'kind': 'python'}\ndef tool():\n    return ACTION\n",
+    )
+    .expect("write provider entry");
+    let source = FileProviderSource::new(temp.path());
+
+    let first = source.fingerprint().expect("first fingerprint");
+    fs::write(package.join("schema.py"), "ACTION = 'second'\n").expect("rewrite schema");
+    let second = source.fingerprint().expect("second fingerprint");
+
+    assert_ne!(first, second);
+}
+
 fn manifest_bytes(name: &str) -> Vec<u8> {
     serde_json::to_vec(&json!({
         "schema_version": 1,

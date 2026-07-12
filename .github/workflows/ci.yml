@@ -300,7 +300,13 @@ jobs:
       - name: Install Rust and sccache
         uses: ./.github/actions/setup-rust-sccache
 
-      - name: Show Windows Rust CPU flags and sccache
+      - name: Disable sccache for native Windows cargo
+        shell: pwsh
+        run: |
+          "RUSTC_WRAPPER=" >> $env:GITHUB_ENV
+          "CARGO_BUILD_RUSTC_WRAPPER=" >> $env:GITHUB_ENV
+
+      - name: Show Windows Rust CPU flags
         shell: pwsh
         env:
           RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}

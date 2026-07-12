@@ -53,17 +53,7 @@ impl Provider for PythonProvider {
         let tool = self.tool(&call)?;
         let runtime = PythonRuntime::from_tool(&self.catalog, tool, &call)?;
         let source = self.path.display().to_string();
-        let mut payload = serde_json::to_value(call.execution_envelope()).map_err(|error| {
-            ProviderError::execution(&self.catalog.provider.name, "", error)
-                .with_provider_kind(self.catalog.provider.kind.as_str())
-                .with_source(source.clone())
-                .with_phase("input-serialization")
-        })?;
-        if let Some(object) = payload.as_object_mut() {
-            object.insert("mode".to_owned(), json!("call"));
-            object.insert("path".to_owned(), json!(self.path.clone()));
-        }
-        let input = serde_json::to_vec(&payload).map_err(|error| {
+        let input = python_execution_payload(&self.path, &call).map_err(|error| {
             ProviderError::execution(&self.catalog.provider.name, "", error)
                 .with_provider_kind(self.catalog.provider.kind.as_str())
                 .with_source(source.clone())
@@ -177,6 +167,18 @@ impl Provider for PythonProvider {
         })?;
         Ok(ProviderOutput::json(value))
     }
+}
+
+fn python_execution_payload(
+    path: &Path,
+    call: &ProviderCall,
+) -> Result<Vec<u8>, serde_json::Error> {
+    let mut payload = serde_json::to_value(call.execution_envelope())?;
+    if let Some(object) = payload.as_object_mut() {
+        object.insert("mode".to_owned(), json!("call"));
+        object.insert("path".to_owned(), json!(path.to_path_buf()));
+    }
+    serde_json::to_vec(&payload)
 }
 
 impl PythonProvider {
@@ -747,3 +749,7 @@ async def main():
 
 asyncio.run(main())
 "#;
+
+#[cfg(test)]
+#[path = "python_tests.rs"]
+mod tests;

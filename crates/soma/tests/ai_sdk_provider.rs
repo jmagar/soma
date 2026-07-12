@@ -1,6 +1,6 @@
 use std::{fs, process::Command, time::Duration};
 
-use serde_json::json;
+use serde_json::{json, Value};
 use soma_contracts::config::SomaConfig;
 use soma_service::{
     dynamic_provider_registry_from_dir, provider_registry::ProviderAuthMode,
@@ -40,7 +40,8 @@ export async function call(input) {
     ok: true,
     runtime: "typescript",
     action: input.action,
-    message: input.params.message
+    message: input.params.message,
+    envelope: input
   };
 }
 "#,
@@ -65,6 +66,12 @@ export async function call(input) {
     assert_eq!(output.value["runtime"], "typescript");
     assert_eq!(output.value["action"], "live_ts_exec");
     assert_eq!(output.value["message"], "hello");
+    assert_provider_envelope(
+        &output.value["envelope"],
+        "live-ai",
+        "live_ts_exec",
+        json!({"message": "hello"}),
+    );
     Ok(())
 }
 
@@ -205,6 +212,20 @@ fn service() -> anyhow::Result<SomaService> {
         api_key: "test".to_owned(),
     })?;
     Ok(SomaService::new(client))
+}
+
+fn assert_provider_envelope(envelope: &Value, provider: &str, action: &str, params: Value) {
+    assert_eq!(envelope["schema_version"], 1);
+    assert_eq!(envelope["provider"], provider);
+    assert_eq!(envelope["action"], action);
+    assert_eq!(envelope["params"], params);
+    assert_eq!(envelope["surface"], "mcp");
+    assert!(
+        envelope["snapshot_id"]
+            .as_str()
+            .is_some_and(|snapshot_id| snapshot_id.starts_with("sha256:")),
+        "snapshot_id should be the active provider snapshot fingerprint"
+    );
 }
 
 fn node_sidecar_available() -> bool {
