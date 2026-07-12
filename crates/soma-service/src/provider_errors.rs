@@ -10,6 +10,18 @@ pub struct ProviderError {
     pub message: Box<str>,
     pub retryable: bool,
     pub remediation: Box<str>,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    context: Option<Box<ProviderErrorContext>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, PartialEq, Eq)]
+struct ProviderErrorContext {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    phase: Option<Box<str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<Box<str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    provider_kind: Option<Box<str>>,
     #[serde(skip)]
     private_diagnostics: Option<Box<str>>,
 }
@@ -31,7 +43,7 @@ impl ProviderError {
             message: redact_public(&message.into()).into_boxed_str(),
             retryable: false,
             remediation: remediation.into().into_boxed_str(),
-            private_diagnostics: None,
+            context: None,
         }
     }
 
@@ -71,13 +83,34 @@ impl ProviderError {
         self
     }
 
+    pub fn with_phase(mut self, phase: impl Into<String>) -> Self {
+        self.context_mut().phase = Some(phase.into().into_boxed_str());
+        self
+    }
+
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        self.context_mut().source = Some(source.into().into_boxed_str());
+        self
+    }
+
+    pub fn with_provider_kind(mut self, provider_kind: impl Into<String>) -> Self {
+        self.context_mut().provider_kind = Some(provider_kind.into().into_boxed_str());
+        self
+    }
+
     pub fn with_private_diagnostics(mut self, diagnostics: impl Into<String>) -> Self {
-        self.private_diagnostics = Some(diagnostics.into().into_boxed_str());
+        self.context_mut().private_diagnostics = Some(diagnostics.into().into_boxed_str());
         self
     }
 
     pub fn log_code(&self) -> (&str, Option<&str>, &str) {
         (&self.provider, self.action.as_deref(), &self.code)
+    }
+
+    fn context_mut(&mut self) -> &mut ProviderErrorContext {
+        self.context
+            .get_or_insert_with(|| Box::new(ProviderErrorContext::default()))
+            .as_mut()
     }
 }
 

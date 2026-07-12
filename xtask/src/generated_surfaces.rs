@@ -172,6 +172,18 @@ fn render_provider_snapshot() -> Result<Value> {
     Ok(json!({
         "schema_version": 1,
         "provider_fingerprint": snapshot.fingerprint,
+        "provider_execution_abi": {
+            "schema_version": 1,
+            "request_fields": ["schema_version", "provider", "action", "params", "surface", "snapshot_id"],
+            "wasm_manifest_sources": ["<provider>.wasm.json", "soma.provider custom section"]
+        },
+        "operator_commands": {
+            "validate": "soma providers validate",
+            "inspect": "soma providers inspect",
+            "test": "soma providers test ACTION --json '{...}'",
+            "regenerate": "cargo xtask generate-provider-surfaces --write",
+            "check": "cargo xtask generate-provider-surfaces --check"
+        },
         "providers": snapshot.catalogs.iter().map(provider_summary).collect::<Vec<_>>(),
         "surfaces": {
             "mcp_actions": surface_actions(&snapshot.catalogs, Surface::Mcp),
@@ -260,6 +272,19 @@ fn render_provider_docs(snapshot: &Value) -> Result<String> {
         snapshot["provider_fingerprint"].as_str().unwrap_or("")
     ));
     out.push_str("- Palette surface: deferred until the Axon tauri-palette port lands.\n\n");
+    out.push_str("## Contract Gate\n\n");
+    out.push_str("- Validate locally with `soma providers validate`.\n");
+    out.push_str("- Inspect manifests and capability posture with `soma providers inspect`.\n");
+    out.push_str("- Smoke one action with `soma providers test ACTION --json '{...}'`.\n");
+    out.push_str(
+        "- Regenerate this artifact with `cargo xtask generate-provider-surfaces --write`.\n",
+    );
+    out.push_str(
+        "- CI/static checks should run `cargo xtask generate-provider-surfaces --check`.\n\n",
+    );
+    out.push_str("## Execution ABI\n\n");
+    out.push_str("Provider runtimes receive a versioned JSON request with `schema_version`, `provider`, `action`, `params`, `surface`, and `snapshot_id`.\n\n");
+    out.push_str("Wasm provider manifests may come from `<provider>.wasm.json` or the embedded `soma.provider` custom section.\n\n");
     out.push_str("## Providers\n\n");
     for provider in snapshot["providers"].as_array().into_iter().flatten() {
         out.push_str(&format!(

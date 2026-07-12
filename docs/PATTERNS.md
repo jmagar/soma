@@ -1446,23 +1446,23 @@ Runs on version tags (`v*`) only:
 - Trivy vulnerability scan
 - MCP Registry manifest publish when credentials are configured
 
-### `.github/workflows/npm-publish.yml`
-Runs on version tags (`v*`) only:
-- Verify the tag matches `packages/soma-rmcp/package.json`
-- Skip if the exact npm version is already published
-- Run `npm pack --dry-run`
-- Publish `soma-rmcp` with npm provenance/trusted publishing support
+### `.github/workflows/release-please.yml`
+Runs after CI succeeds on `main`, plus manual dispatch:
+- Opens or updates the release-please PR from Conventional Commits
+- Creates the version tag and GitHub Release when the release PR merges
+- Runs fixups on release PR branches to sync derived version files
 
 ### `.github/workflows/release.yml`
-Runs on version tags (`v*`):
+Runs when release-please publishes a GitHub Release, plus manual dispatch for an existing tag:
 - Build release binaries for linux/amd64 and windows/amd64
-- Create GitHub Release with binary assets
+- Publish `soma-rmcp` to npm with provenance/trusted publishing support
+- Attach binary assets to the existing GitHub Release
 - Optionally commit Git LFS binary pointers back to `main`; audit this write-back before reusing it
 
 ### Maintenance workflows
 
-- `auto-tag.yml`: after a successful push to `main`, plans changed release
-  components, waits for the matching CI run, and creates candidate version tags.
+- `release-please.yml`: after successful CI on `main`, manages release PRs,
+  changelog/version updates, release tags, and GitHub Releases.
 - `scheduled.yml`: weekly RUSTSEC advisory refresh, with manual full
   `cargo-deny` audit.
 - `check-no-mcp-drift.yml`: read-only scheduled/manual drift check for the

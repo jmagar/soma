@@ -34,6 +34,17 @@ pub enum ProviderSurface {
     Palette,
 }
 
+impl ProviderSurface {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Mcp => "mcp",
+            Self::Rest => "rest",
+            Self::Cli => "cli",
+            Self::Palette => "palette",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderAuthMode {
     LoopbackDev,
@@ -89,6 +100,33 @@ pub struct ProviderCall {
     pub destructive_confirmed: bool,
     pub limits: ProviderRequestLimits,
     pub snapshot_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderExecutionEnvelope {
+    pub schema_version: u32,
+    pub provider: String,
+    pub action: String,
+    pub params: Value,
+    pub surface: ProviderSurface,
+    pub snapshot_id: String,
+}
+
+impl ProviderCall {
+    pub fn execution_envelope(&self) -> ProviderExecutionEnvelope {
+        ProviderExecutionEnvelope {
+            schema_version: 1,
+            provider: self.provider.clone(),
+            action: self.action.clone(),
+            params: self.params.clone(),
+            surface: self.surface,
+            snapshot_id: self.snapshot_id.clone(),
+        }
+    }
+
+    pub fn execution_payload(&self) -> Result<Vec<u8>, serde_json::Error> {
+        serde_json::to_vec(&self.execution_envelope())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -148,6 +186,10 @@ impl RegistrySnapshot {
             .unwrap_or(false)
     }
 
+    pub fn provider_for_action(&self, action: &str) -> Option<&str> {
+        self.tool_entry(action).map(|entry| entry.provider.as_str())
+    }
+
     fn tool_entry(&self, action: &str) -> Option<&ToolEntry> {
         self.action_index.get(action)
     }
@@ -173,6 +215,7 @@ pub struct ProviderRegistry {
 struct RegistryState {
     providers: BTreeMap<String, Arc<dyn Provider>>,
     snapshot: Arc<RegistrySnapshot>,
+    file_fingerprint: Option<String>,
 }
 
 impl ProviderRegistry {
@@ -190,6 +233,7 @@ impl ProviderRegistry {
             state: Arc::new(RwLock::new(RegistryState {
                 providers,
                 snapshot,
+                file_fingerprint: None,
             })),
             capabilities,
             base_providers: Arc::new(Vec::new()),
@@ -202,6 +246,9 @@ impl ProviderRegistry {
         capabilities: CapabilityBroker,
         file_source: FileProviderSource,
     ) -> Result<Self, ProviderValidationError> {
+        let file_fingerprint = file_source.fingerprint().map_err(|error| {
+            ProviderValidationError::new("provider_file_load_failed", error.to_string())
+        })?;
         let dynamic_providers = file_source.load().map_err(|error| {
             ProviderValidationError::new("provider_file_load_failed", error.to_string())
         })?;
@@ -214,6 +261,7 @@ impl ProviderRegistry {
             state: Arc::new(RwLock::new(RegistryState {
                 providers,
                 snapshot,
+                file_fingerprint: Some(file_fingerprint),
             })),
             capabilities,
             base_providers,
@@ -233,6 +281,18 @@ impl ProviderRegistry {
         let Some(file_source) = &self.file_source else {
             return Ok(self.snapshot());
         };
+        let file_fingerprint = file_source.fingerprint().map_err(|error| {
+            ProviderValidationError::new("provider_file_load_failed", error.to_string())
+        })?;
+        {
+            let state = self
+                .state
+                .read()
+                .expect("provider registry lock should not be poisoned");
+            if state.file_fingerprint.as_deref() == Some(file_fingerprint.as_str()) {
+                return Ok(state.snapshot.clone());
+            }
+        }
         let dynamic_providers = file_source.load().map_err(|error| {
             ProviderValidationError::new("provider_file_load_failed", error.to_string())
         })?;
@@ -252,6 +312,7 @@ impl ProviderRegistry {
         let event = ProviderRefreshEvent::new(&previous, &snapshot);
         state.providers = providers;
         state.snapshot = snapshot.clone();
+        state.file_fingerprint = Some(file_fingerprint);
         event.log(file_source.root());
         Ok(snapshot)
     }
@@ -278,6 +339,7 @@ impl ProviderRegistry {
             .expect("provider registry lock should not be poisoned");
         state.providers = providers;
         state.snapshot = snapshot.clone();
+        state.file_fingerprint = None;
         Ok(snapshot)
     }
 

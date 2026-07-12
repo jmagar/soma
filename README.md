@@ -17,7 +17,55 @@ Provider manifests also carry MCP-native prompt, resource, task, and elicitation
 metadata for the registry contract. Scaffolding is the path for creating a new
 distributable repo with the same locked-in runtime.
 
-## Bring A Server Online
+**30-second path:** `npx -y soma-rmcp mcp` -> `soma status` -> call the
+`soma` MCP tool through `tools/call` with `{"action":"status"}`.
+
+**Status:** production runtime template. Write-capable provider actions are
+allowed only when the provider declares them and destructive actions are gated.
+
+**Not for:** an unauthenticated public gateway, a replacement for upstream
+service authorization, arbitrary untrusted code execution, or a multi-tenant
+security boundary by itself.
+
+## Contents
+
+- [Naming](#naming)
+- [Capabilities And Boundaries](#capabilities-and-boundaries)
+- [Install](#install)
+- [Quickstart](#quickstart)
+- [Client Configuration](#client-configuration)
+- [Runtime Surfaces](#runtime-surfaces)
+- [MCP Tool Reference](#mcp-tool-reference)
+- [CLI Reference](#cli-reference)
+- [Configuration](#configuration)
+- [Authentication](#authentication)
+- [Safety And Trust Model](#safety-and-trust-model)
+- [Architecture](#architecture)
+- [Distribution Contract](#distribution-contract)
+- [Development](#development)
+- [Verification](#verification)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [Related Servers](#related-servers)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Naming
+
+Soma is both the runtime product and the template source for generated RMCP
+servers. Generated projects replace these names during scaffold post-processing.
+
+| Surface | Soma value | Generated-project pattern |
+|---|---|---|
+| Repository | `jmagar/soma` | `<service>-rmcp` or a documented product exception |
+| Rust crate/package | `soma` | service-specific crate names |
+| Local binary | `soma` | usually `r<service>` or the product name |
+| Server binary | `soma-server` | usually `<service>-server` |
+| npm package | `soma-rmcp` | `<service>-rmcp` |
+| MCP tool | `soma` | usually `<service>` |
+| Env prefix | `SOMA_*` | generated service prefix |
+
+## Capabilities And Boundaries
 
 | Path | Use when | You author | Runtime supplies |
 |---|---|---|---|
@@ -39,6 +87,31 @@ distributable repo with the same locked-in runtime.
 - Shared validation, destructive-action confirmation, auth/scope enforcement,
   response limits, redaction, logging, metrics, generated OpenAPI, generated
   provider surface docs, plugin manifests, setup, doctor, and release tooling.
+
+Soma owns the runtime projection, validation, auth policy, packaging, generated
+metadata, and scaffold automation. Provider code owns service-specific behavior
+and credentials. Upstream services own their own authorization and data model.
+Soma deliberately refuses to make credentials part of tool-call input and does
+not turn provider manifests into an unrestricted remote execution boundary.
+
+## Install
+
+Use the npm launcher when an MCP client expects an `npx` command:
+
+```bash
+npx -y soma-rmcp mcp
+```
+
+Use Cargo while developing the repo:
+
+```bash
+cargo run --bin soma -- mcp
+cargo run --bin soma-server -- serve mcp
+```
+
+Release builds publish GitHub Release binaries, Docker/OCI metadata, the
+`soma-rmcp` npm launcher, MCP registry metadata, and plugin package files from
+the same release component.
 
 ## Product Profiles
 
@@ -378,7 +451,7 @@ HTTP routes in the server profile:
 
 REST is direct-route-only: there is no `/v1/soma` action envelope. MCP remains one `soma` tool with an `action` argument.
 
-## MCP Tool Actions
+## MCP Tool Reference
 
 The runtime exposes one compact MCP tool, `soma`, with an `action` argument.
 Built-in actions and dropped provider tools share that same dispatch path. This
@@ -406,6 +479,41 @@ Dropped provider tools are MCP-enabled by default. CLI and REST exposure are
 opt-in through each tool's `cli` and `rest` overlays. Provider prompts,
 resources, tasks, and elicitation forms are part of the provider manifest
 contract and registry index; they are not mirrored to CLI or REST by default.
+
+## CLI Reference
+
+The `soma` binary exposes operator commands and provider-backed actions through
+the same registry snapshot used by MCP:
+
+```bash
+soma greet --name Alice
+soma echo --message hello
+soma status
+soma help
+soma providers validate
+soma providers inspect
+soma providers test status
+soma doctor
+soma setup check
+soma package generate --check
+```
+
+Provider tools opt in to CLI exposure with a `cli` overlay. Dynamic CLI flags
+are derived from the provider input schema, so the generated provider catalogs
+remain the source of truth for current action shapes.
+
+## Safety And Trust Model
+
+MCP callers never provide API keys, OAuth secrets, bearer tokens, passwords, or
+other credentials in tool arguments. Credentials live in environment variables,
+config files, appdata, or the upstream provider runtime.
+
+Provider manifests are validated before dispatch. The registry enforces surface
+opt-ins, JSON Schema input validation, auth scope, declared host capabilities,
+destructive-action confirmation, response-size limits, and structured provider
+errors. Python, LangChain, LlamaIndex, and TypeScript provider files are trusted
+local code; WASM providers run through the sandboxed WASM provider path; OpenAPI
+and MCP providers delegate trust to their configured upstream service.
 
 ## Authentication
 
@@ -456,7 +564,7 @@ Samples:
 - [.env.example](.env.example) for secrets, URLs, and runtime env.
 - [config.soma.toml](config.soma.toml) for non-secret defaults.
 
-## Development Commands
+## Development
 
 ```bash
 # Build profiles
@@ -487,7 +595,7 @@ just validate-plugin
 `cargo xtask ci` runs the main local CI sequence. Optional tools such as
 `cargo-nextest`, `taplo`, and `cargo-audit` are used when installed.
 
-## MCP Client Configuration
+## Client Configuration
 
 Streamable HTTP:
 
@@ -540,6 +648,19 @@ Primary docs:
 - [plugins/soma/skills/soma/SKILL.md](plugins/soma/skills/soma/SKILL.md)
 - [plugins/soma/skills/scaffold-project/SKILL.md](plugins/soma/skills/scaffold-project/SKILL.md)
 
+## Distribution Contract
+
+The `soma` release component is defined in
+[release/components.toml](release/components.toml). Version-bearing artifacts
+must stay aligned across the Rust package, `Cargo.lock`, `server.json`, the npm
+package, generated OpenAPI metadata, OCI image identifiers, and the changelog.
+
+Plugin manifests stay versionless. Marketplace and plugin release identity is
+derived from git/package metadata, while `server.json` and generated provider
+surface docs describe the currently shipped runtime surface. Run
+`cargo xtask check-version-sync`, `cargo xtask generate-provider-surfaces --check`,
+and `cargo xtask check-docs` before publishing release metadata.
+
 ## Web UI
 
 The `web` feature serves the static export bundled by `soma-web`. Editable
@@ -558,7 +679,7 @@ pnpm -C apps/web validate
 Generated projects that do not need a human UI should use `local-adapter`,
 `server`, or a custom feature set without `web`.
 
-## Deployment Samples
+## Deployment
 
 The full server profile is designed for one deployable binary. The repository
 also includes Docker and Compose samples:
@@ -611,7 +732,36 @@ action metadata, MCP dispatch, CLI variants, service stubs, and test coverage.
 For public repositories, also review tracked docs, generated metadata, CI runner
 configuration, and secret-scanning allowlists before publishing.
 
-## Documentation Map
+## Troubleshooting
+
+- `soma doctor` checks local configuration, appdata, and connectivity.
+- `soma providers validate` confirms provider manifests and compiled schemas.
+- `soma providers inspect` shows provider surfaces, capability posture, and
+  generated action inventory.
+- Stdio mode keeps logs quiet so JSON-RPC is not corrupted; use HTTP mode or
+  file logs when investigating noisy startup failures.
+- If generated docs drift, run `cargo xtask generate-provider-surfaces --write`
+  and then re-run the `--check` command.
+
+## Related Servers
+
+- `unifi-rmcp / rustifi` - UniFi controller REST API bridge.
+- `tailscale-rmcp / rustscale` - Tailscale API bridge for devices, users, and tailnet operations.
+- `unraid-rmcp / unrust` - Unraid GraphQL bridge for NAS and server management.
+- `apprise-rmcp` - Apprise notification fan-out bridge for many delivery backends.
+- `gotify-rmcp` - Gotify push notification bridge for sends, messages, apps, and clients.
+- `arcane-rmcp` - Arcane Docker management bridge for containers and related resources.
+- `yarr-rmcp` - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
+- `ytdl-mcp` - Media download and metadata workflow server.
+- `synapse` - Local Synapse workflow server for scout and flux actions.
+- `cortex` - Syslog and homelab log aggregation MCP server.
+- `axon` - RAG, crawl, scrape, extract, and semantic search project.
+- `lab` - Homelab control plane and Labby gateway project.
+- `lumen` - Local semantic code search MCP server.
+- `nugs` - Project/package management helper for local agent workflows.
+- `agentcast` - Agent transcript and activity publishing project.
+
+## Documentation
 
 | Topic | Docs |
 |---|---|

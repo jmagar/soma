@@ -54,6 +54,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 | `check-openapi.py` | Python wrapper | `cargo xtask check-openapi`, `just openapi`, `just openapi-check`, CI | Delegates to xtask to generate/check `docs/generated/openapi.json` for the REST API surface. |
 | `generate-docs.py` | Python | `cargo xtask generate-docs`, `cargo xtask check-docs`, CI | Generates/checks volatile docs and metadata from the service-owned `ACTION_SPECS`, `ENV_KEY_SPECS`, and typed config defaults. |
 | `check-stale-claims.py` | Python | `cargo xtask check-stale-claims`, CI | Fails when known stale hardcoded Soma claims reappear. |
+| `check-readme-guide.py` | Python | `python3 scripts/check-readme-guide.py README.md` | Audits RMCP READMEs against `docs/RMCP_README_GUIDE.md` structural invariants before fleet alignment. |
 | `check-scaffold-intent-contract.py` | Python wrapper | `cargo xtask check-scaffold-intent-contract`, `just scaffold-contract-check`, CI | Delegates to xtask to validate the scaffold intent JSON schema and checked-in examples without third-party packages. |
 | `check-coupled-files.sh` | Bash wrapper | `cargo xtask check-coupled-files`, `just coupled-files-check`, CI | Delegates to xtask to warn when files that usually change together drift, such as script edits without `scripts/README.md` updates. |
 | `refresh-docs.sh` | Bash wrapper | `cargo xtask refresh-docs`, `just refresh-docs*` | Delegates to xtask to refresh ignored protocol, SDK, Claude Code, and mcporter references under `docs/references/`. |
@@ -294,6 +295,23 @@ Generates `docs/generated/openapi.json` for Soma REST API surface:
 
 The version comes from `Cargo.toml`. The REST action enum is derived from
 `crates/soma-contracts/src/actions.rs`, excluding MCP-only actions.
+
+### `check-readme-guide.py`
+
+```bash
+python3 scripts/check-readme-guide.py README.md
+python3 scripts/check-readme-guide.py /home/jmagar/workspace/gotify-rmcp/README.md
+```
+
+Audits one or more README files against the high-signal invariants in
+`docs/RMCP_README_GUIDE.md`: first-screen value prop, product boundary,
+installation/client paths, runtime surfaces, MCP/CLI reference, credential
+boundaries, generated-vs-curated docs ownership, distribution contracts, and
+verification sections, plus the short related-server family section.
+
+This is a fleet-alignment helper, not a full prose linter. It intentionally
+checks structure and obvious credential-in-arguments mistakes before a human
+does the final README pass.
 
 ### `generate-docs.py`
 

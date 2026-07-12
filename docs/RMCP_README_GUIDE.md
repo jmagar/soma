@@ -27,6 +27,41 @@ Soma was extracted from the current top-level READMEs for:
 `gotify-rmcp`, `arcane-rmcp`, `yarr-rmcp`, `ytdl-mcp`, `synapse`,
 `cortex`, `axon`, `lab`, `agentcast`, and `soma`.
 
+## Applicability
+
+Use this guide for Rust MCP/RMCP server repositories that expose an MCP server,
+CLI, and deployable binary. It is not a universal README template.
+
+Apply it directly to focused upstream-client servers such as `gotify-rmcp`,
+`tailscale-rmcp`, `unifi-rmcp`, `unraid-rmcp`, `apprise-rmcp`,
+`arcane-rmcp`, and similar repositories. For broader platform repos, generated
+provider repos, or multi-surface applications, apply the invariants rather than
+forcing every heading into place.
+
+Do not force this exact shape onto design systems, web apps, infra-only repos,
+Go/Python CLIs, docs-only repos, or homelab service runbooks. If a repo is not
+an RMCP server, use a README structure native to that product.
+
+## Exceptions
+
+Exceptions are expected when product identity is broader than `<service>-rmcp`
+or a repo ships multiple first-class surfaces. Document the exception near the
+first naming or surfaces table instead of hiding it.
+
+Examples:
+
+- `cortex` keeps the repo and CLI name because it is a log platform, not only an
+  MCP wrapper.
+- `axon` and `lab` are platform repos with REST, web, runtime, and local
+  service contracts that should not be flattened into a small upstream-client
+  README.
+- `yarr-rmcp` covers a family surface, so generated operation docs and product
+  boundary language matter more than a tiny action list.
+
+Even when a README needs an exception, keep these guide invariants: first safe
+CLI and MCP calls, credential boundaries, generated-doc ownership, destructive
+action gates, runtime-surface honesty, and distribution/version contracts.
+
 ## Source Patterns
 
 | Source README | Pattern to reuse |
@@ -45,6 +80,18 @@ Soma was extracted from the current top-level READMEs for:
 | `lab` | Treat topic docs and generated catalogs as authoritative; include a contents map and do not hand-maintain generated action/env inventories in the README. |
 | `agentcast` | Separate current implementation from target contract; document product boundaries and trust assumptions for untrusted MCP metadata. |
 | `soma` | Include scaffold profiles, generated action table, auth policies, adaptation checklist, docs map, and verification gates. |
+
+## Golden Example
+
+`gotify-rmcp` is the first focused upstream-client pilot for this guide. Use its
+root README as the minimal filled-in example when aligning the rest of the RMCP
+family: compact domain intro, explicit token model, install matrix, safe
+CLI/MCP calls, client configuration, curated-vs-generated docs split,
+destructive confirmation, and distribution contract.
+
+Do not treat the pilot as the only valid shape. It is a small Gotify bridge, so
+larger repos should preserve their own product boundaries while keeping the
+same operator experience goals.
 
 ## README Rules
 
@@ -139,6 +186,7 @@ service, arbitrary filesystem writer.]
 - [Verification](#verification)
 - [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
+- [Related Servers](#related-servers)
 - [Documentation](#documentation)
 - [License](#license)
 
@@ -698,6 +746,25 @@ versioning is derived from git/package metadata.
 | JSON-RPC parse errors in stdio | Logs printed to stdout | Send logs to stderr or lower stdio log level. |
 | Upstream calls fail | Bad URL, token, TLS, or network path | Run CLI status/health and inspect redacted config. |
 | Generated docs drift | Action/env/schema changed | Run the repo's docs/schema generation checks. |
+
+## Related Servers
+
+Keep this section short: one line per sibling server or adjacent project, and
+omit the current repo. Use product names rather than implementation trivia.
+
+- `unifi-rmcp` / `rustifi` - UniFi controller REST API bridge.
+- `tailscale-rmcp` / `rustscale` - Tailscale API bridge for devices, users, and tailnet operations.
+- `unraid-rmcp` / `unrust` - Unraid GraphQL bridge for NAS and server management.
+- `apprise-rmcp` - Apprise notification fan-out bridge for many delivery backends.
+- `gotify-rmcp` - Gotify push notification bridge for sends, messages, apps, and clients.
+- `arcane-rmcp` - Arcane Docker management bridge for containers and related resources.
+- `yarr-rmcp` - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
+- `ytdl-mcp` - Media download and metadata workflow server.
+- `synapse` - Local Synapse workflow server for scout and flux actions.
+- `cortex` - Syslog and homelab log aggregation MCP server.
+- `axon` - RAG, crawl, scrape, extract, and semantic search project.
+- `lab` - Homelab control plane and Labby gateway project.
+- `soma` - RMCP scaffold/runtime template for new provider-backed servers.
 
 ## Documentation
 

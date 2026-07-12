@@ -14,13 +14,14 @@
 //! ```
 
 use anyhow::{anyhow, Result};
+use serde_json::{json, Value};
 use soma_contracts::{
     actions::{ActionSpec, SomaAction},
     config::SomaConfig,
 };
 use soma_service::{
-    dynamic_provider_registry, ProviderAuthMode, ProviderCall, ProviderPrincipal,
-    ProviderRequestLimits, ProviderSurface, SomaClient, SomaService,
+    dynamic_provider_registry, ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry,
+    ProviderRequestLimits, ProviderSurface, RegistrySnapshot, SomaClient, SomaService,
 };
 use std::io::{BufRead, IsTerminal, Write};
 
@@ -45,6 +46,9 @@ pub const USAGE: &str = "Usage:
   soma setup check               Check plugin setup without mutating appdata
   soma setup repair              Create missing appdata/env setup files
   soma setup plugin-hook [--no-repair]  Plugin hook JSON contract
+  soma providers validate        Validate provider manifests and compiled schemas
+  soma providers inspect         Show provider manifests, surfaces, and capability posture
+  soma providers test ACTION [--json JSON]  Dispatch one provider action through the registry
   soma package generate [--write|--check]  Refresh generated provider docs, skills, and plugin metadata
 
   soma --help                    Show this help
@@ -93,12 +97,20 @@ pub enum Command {
     },
     Provider {
         command: String,
-        json: serde_json::Value,
+        json: Value,
     },
+    Providers(ProviderCommand),
     PackageGenerate {
         write: bool,
     },
     Setup(SetupCommand),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProviderCommand {
+    Validate,
+    Inspect,
+    Test { action: String, json: Value },
 }
 
 /// Parse CLI arguments from `std::env::args()`.
@@ -191,6 +203,7 @@ where
                 }),
                 _ => None,
             },
+            "providers" => Some(parse_providers_command(rest)?),
             other => Some(parse_provider_command(other, rest)?),
         },
     };
@@ -211,6 +224,13 @@ pub async fn run(cmd: Command, cfg: &SomaConfig) -> Result<()> {
         .refresh_file_providers()
         .map_err(|error| anyhow!(error.to_string()))?;
     let destructive_confirmed = confirm_command_if_destructive(&cmd, &registry)?;
+
+    if let Command::Providers(command) = &cmd {
+        let result =
+            run_provider_management_command(command, &registry, destructive_confirmed).await?;
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
 
     let result = match service_action_from_command(&cmd) {
         Some(action) => match registry
@@ -317,6 +337,8 @@ fn command_action_name(
 ) -> Result<Option<String>> {
     match cmd {
         Command::Provider { .. } => provider_action_from_command(cmd, registry).map(Some),
+        Command::Providers(ProviderCommand::Test { action, .. }) => Ok(Some(action.clone())),
+        Command::Providers(_) => Ok(None),
         _ => Ok(service_action_from_command(cmd).map(|action| action.name().to_owned())),
     }
 }
@@ -346,6 +368,7 @@ fn service_action_from_command(cmd: &Command) -> Option<SomaAction> {
         Command::Doctor { .. }
         | Command::Watch { .. }
         | Command::Provider { .. }
+        | Command::Providers(_)
         | Command::PackageGenerate { .. }
         | Command::Setup(_) => None,
     }
@@ -362,6 +385,136 @@ fn cli_params(action: &SomaAction) -> serde_json::Value {
         | SomaAction::Help
         | SomaAction::ElicitName
         | SomaAction::ScaffoldIntent => serde_json::json!({}),
+    }
+}
+
+async fn run_provider_management_command(
+    command: &ProviderCommand,
+    registry: &ProviderRegistry,
+    destructive_confirmed: bool,
+) -> Result<Value> {
+    match command {
+        ProviderCommand::Validate => Ok(provider_validation_summary(&registry.snapshot())),
+        ProviderCommand::Inspect => Ok(provider_inspection(&registry.snapshot())),
+        ProviderCommand::Test { action, json } => {
+            let provider = registry
+                .snapshot()
+                .provider_for_action(action)
+                .map(str::to_owned);
+            match registry
+                .dispatch(ProviderCall {
+                    provider: String::new(),
+                    action: action.clone(),
+                    params: json.clone(),
+                    principal: ProviderPrincipal::loopback_dev(),
+                    auth_mode: ProviderAuthMode::LoopbackDev,
+                    surface: ProviderSurface::Cli,
+                    destructive_confirmed,
+                    limits: ProviderRequestLimits::default(),
+                    snapshot_id: String::new(),
+                })
+                .await
+            {
+                Ok(output) => Ok(json!({
+                    "schema_version": 1,
+                    "ok": true,
+                    "action": action,
+                    "provider": provider,
+                    "result": output.value
+                })),
+                Err(error) => {
+                    eprintln!("{}", serde_json::to_string_pretty(&error)?);
+                    Err(anyhow!(error.message))
+                }
+            }
+        }
+    }
+}
+
+fn provider_validation_summary(snapshot: &RegistrySnapshot) -> Value {
+    let actions = snapshot.action_names();
+    json!({
+        "schema_version": 1,
+        "ok": true,
+        "provider_fingerprint": snapshot.fingerprint.clone(),
+        "provider_count": snapshot.catalogs.len(),
+        "action_count": actions.len(),
+        "compiled_validator_count": snapshot.compiled_validator_count,
+        "actions": actions
+    })
+}
+
+fn provider_inspection(snapshot: &RegistrySnapshot) -> Value {
+    let providers = snapshot
+        .catalogs
+        .iter()
+        .map(|catalog| {
+            let kind = catalog.provider.kind.as_str();
+            let tools = catalog
+                .tools
+                .iter()
+                .map(|tool| {
+                    json!({
+                        "name": tool.name.clone(),
+                        "description": tool.description.clone(),
+                        "scope": tool.scope.clone(),
+                        "destructive": tool.destructive,
+                        "requires_admin": tool.requires_admin,
+                        "surfaces": {
+                            "mcp": tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
+                            "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
+                            "cli": tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
+                            "palette": tool.palette.as_ref().map(|palette| palette.enabled).unwrap_or(true)
+                        },
+                        "limits": tool.limits.clone(),
+                        "env": tool.env.clone(),
+                    })
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "name": catalog.provider.name.clone(),
+                "kind": kind,
+                "title": catalog.provider.title.clone(),
+                "enabled": catalog.provider.enabled.unwrap_or(true),
+                "version": catalog.provider.version.clone(),
+                "source": catalog.provider.source.clone(),
+                "declared_capabilities": catalog.capabilities.clone(),
+                "runtime_security": provider_runtime_security(kind),
+                "tools": tools,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "schema_version": 1,
+        "provider_fingerprint": snapshot.fingerprint.clone(),
+        "compiled_validator_count": snapshot.compiled_validator_count,
+        "actions": snapshot.action_names(),
+        "providers": providers,
+    })
+}
+
+fn provider_runtime_security(kind: &str) -> Value {
+    match kind {
+        "wasm" => json!({
+            "runtime": "wasmtime",
+            "trust": "sandboxed",
+            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
+        }),
+        "ai-sdk" | "python" | "langchain" | "llamaindex" => json!({
+            "runtime": "sidecar-process",
+            "trust": "trusted-local-code",
+            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
+        }),
+        "openapi" | "mcp" => json!({
+            "runtime": "remote-or-upstream",
+            "trust": "upstream-service",
+            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
+        }),
+        _ => json!({
+            "runtime": "in-process",
+            "trust": "trusted-binary",
+            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
+        }),
     }
 }
 
@@ -383,6 +536,31 @@ fn parse_provider_command(command: &str, args: &[String]) -> Result<Command> {
             command: command.to_owned(),
             json: parse_provider_flags(command, args)?,
         }),
+    }
+}
+
+fn parse_providers_command(args: &[String]) -> Result<Command> {
+    match args {
+        [action] if action == "validate" => Ok(Command::Providers(ProviderCommand::Validate)),
+        [action] if action == "inspect" => Ok(Command::Providers(ProviderCommand::Inspect)),
+        [action, provider_action] if action == "test" => {
+            Ok(Command::Providers(ProviderCommand::Test {
+                action: provider_action.clone(),
+                json: json!({}),
+            }))
+        }
+        [action, provider_action, flag, payload] if action == "test" && flag == "--json" => {
+            Ok(Command::Providers(ProviderCommand::Test {
+                action: provider_action.clone(),
+                json: serde_json::from_str(payload).map_err(|error| {
+                    anyhow!("providers test {provider_action} --json must be valid JSON: {error}")
+                })?,
+            }))
+        }
+        [] => Err(anyhow!(
+            "providers requires validate, inspect, or test ACTION"
+        )),
+        [unexpected, ..] => Err(anyhow!("providers does not accept argument `{unexpected}`")),
     }
 }
 

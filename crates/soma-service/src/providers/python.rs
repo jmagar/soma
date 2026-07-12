@@ -52,13 +52,23 @@ impl Provider for PythonProvider {
     async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
         let tool = self.tool(&call)?;
         let runtime = PythonRuntime::from_tool(&self.catalog, tool, &call)?;
-        let input = serde_json::to_vec(&json!({
-            "mode": "call",
-            "path": self.path,
-            "action": call.action,
-            "params": call.params,
-        }))
-        .map_err(|error| ProviderError::execution(&self.catalog.provider.name, "", error))?;
+        let source = self.path.display().to_string();
+        let mut payload = serde_json::to_value(call.execution_envelope()).map_err(|error| {
+            ProviderError::execution(&self.catalog.provider.name, "", error)
+                .with_provider_kind(self.catalog.provider.kind.as_str())
+                .with_source(source.clone())
+                .with_phase("input-serialization")
+        })?;
+        if let Some(object) = payload.as_object_mut() {
+            object.insert("mode".to_owned(), json!("call"));
+            object.insert("path".to_owned(), json!(self.path.clone()));
+        }
+        let input = serde_json::to_vec(&payload).map_err(|error| {
+            ProviderError::execution(&self.catalog.provider.name, "", error)
+                .with_provider_kind(self.catalog.provider.kind.as_str())
+                .with_source(source.clone())
+                .with_phase("input-serialization")
+        })?;
 
         if input.len() > runtime.max_input_bytes {
             return Err(ProviderError::validation(
@@ -69,7 +79,10 @@ impl Provider for PythonProvider {
                     "Python provider input exceeds {} bytes",
                     runtime.max_input_bytes
                 ),
-            ));
+            )
+            .with_provider_kind(self.catalog.provider.kind.as_str())
+            .with_source(source)
+            .with_phase("input-validation"));
         }
 
         let started = TokioInstant::now();
@@ -91,14 +104,20 @@ impl Provider for PythonProvider {
                     Some(call.action.clone()),
                     format!("Python provider exceeded {}ms timeout", runtime.timeout_ms),
                     "Increase tool.limits.timeout_ms or fix the Python provider handler.",
-                ));
+                )
+                .with_provider_kind(self.catalog.provider.kind.as_str())
+                .with_source(source)
+                .with_phase("execution"));
             }
             Err(error) => {
                 return Err(ProviderError::execution(
                     &self.catalog.provider.name,
                     call.action.clone(),
                     error,
-                ));
+                )
+                .with_provider_kind(self.catalog.provider.kind.as_str())
+                .with_source(source)
+                .with_phase("execution"));
             }
         };
         let output = sidecar.output;
@@ -121,7 +140,10 @@ impl Provider for PythonProvider {
                 &call.action,
                 "python_output_too_large",
                 output_exceeded_message(stream, runtime.max_output_bytes),
-            ));
+            )
+            .with_provider_kind(self.catalog.provider.kind.as_str())
+            .with_source(source)
+            .with_phase("output-validation"));
         }
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -136,7 +158,10 @@ impl Provider for PythonProvider {
                 Some(call.action),
                 format!("Python provider failed: {}", redact_public(&stderr)),
                 "Fix the Python provider handler and retry.",
-            ));
+            )
+            .with_provider_kind(self.catalog.provider.kind.as_str())
+            .with_source(source)
+            .with_phase("execution"));
         }
 
         let value = serde_json::from_slice(&output.stdout).map_err(|error| {
@@ -146,6 +171,9 @@ impl Provider for PythonProvider {
                 "python_invalid_json_output",
                 error.to_string(),
             )
+            .with_provider_kind(self.catalog.provider.kind.as_str())
+            .with_source(source)
+            .with_phase("output-validation")
         })?;
         Ok(ProviderOutput::json(value))
     }

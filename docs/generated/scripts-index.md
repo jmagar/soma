@@ -16,6 +16,7 @@ Generated from script header comments.
 | `scripts/check-openapi.py` | Thin wrapper. Canonical implementation: cargo xtask check-openapi. |
 | `scripts/check-plugin-hook-contract.py` | Thin wrapper. Canonical implementation: cargo xtask check-plugin-hook-contract. |
 | `scripts/check-plugin-stdio-smoke.sh` | Thin wrapper. Canonical implementation: cargo xtask check-plugin-stdio-smoke. |
+| `scripts/check-readme-guide.py` | Audit RMCP README files against the structural guide invariants. |
 | `scripts/check-runtime-current.sh` | Thin wrapper. Canonical implementation: cargo xtask check-runtime-current. |
 | `scripts/check-scaffold-intent-contract.py` | Thin wrapper. Canonical implementation: cargo xtask check-scaffold-intent-contract. |
 | `scripts/check-schema-docs.py` | Thin wrapper. Canonical implementation: cargo xtask check-schema-docs. |

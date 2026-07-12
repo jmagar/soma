@@ -60,7 +60,7 @@
       "distribution": {
         "binary": "soma",
         "nodePackage": "soma-rmcp",
-        "ociImage": "ghcr.io/jmagar/soma:0.4.6",
+        "ociImage": "ghcr.io/jmagar/soma:0.4.7",
         "serverBinary": "soma-server"
       },
       "documentation": {

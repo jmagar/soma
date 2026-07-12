@@ -175,23 +175,47 @@ pub fn bump(root: &Path, component_id: &str, level: BumpLevel) -> Result<()> {
     }
     .to_string();
 
+    set_component_version(root, component, &next)
+}
+
+pub fn sync_release_please_version(root: &Path, component_id: &str) -> Result<()> {
+    let manifest = load_manifest(root)?;
+    let component = manifest
+        .components
+        .iter()
+        .find(|component| component.id == component_id)
+        .with_context(|| format!("unknown release component {component_id}"))?;
+    let content = std::fs::read_to_string(root.join(".release-please-manifest.json"))
+        .context("failed to read .release-please-manifest.json")?;
+    let value: serde_json::Value =
+        serde_json::from_str(&content).context("failed to parse .release-please-manifest.json")?;
+    let version = value
+        .get(".")
+        .and_then(serde_json::Value::as_str)
+        .context("missing root package version in .release-please-manifest.json")?;
+    Version::parse(version)
+        .with_context(|| format!("release-please version is not valid semver: {version}"))?;
+    set_component_version(root, component, version)
+}
+
+fn set_component_version(root: &Path, component: &Component, next: &str) -> Result<()> {
     for file in &component.version_files {
         let path = root.join(&file.path);
         let content = std::fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", file.path))?;
         let updated = match file.kind {
             VersionKind::CargoPackage => {
-                replace_cargo_package_version(&content, file.package.as_deref(), &next)?
+                replace_cargo_package_version(&content, file.package.as_deref(), next)?
             }
             VersionKind::CargoLockPackage => {
-                replace_cargo_lock_package_version(&content, file.package.as_deref(), &next)?
+                replace_cargo_lock_package_version(&content, file.package.as_deref(), next)?
             }
-            VersionKind::ChangelogHeading => ensure_changelog_heading(&content, &next),
+            VersionKind::ChangelogHeading => ensure_changelog_heading(&content, next),
             VersionKind::JsonVersion => {
-                replace_json_version(&content, file.json_pointer.as_deref(), &next)?
+                replace_json_version(&content, file.json_pointer.as_deref(), next)?
             }
             VersionKind::OciIdentifierVersion => {
-                replace_oci_identifier_version(&content, file.json_pointer.as_deref(), &next)?
+                replace_oci_identifier_version(&content, file.json_pointer.as_deref(), next)?
             }
             VersionKind::JsonNoVersion => content.clone(),
         };

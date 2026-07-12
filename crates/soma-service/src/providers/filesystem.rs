@@ -5,6 +5,7 @@ use std::{
 
 use async_trait::async_trait;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use soma_contracts::providers::{ProviderCatalog, ProviderKind};
 
 use crate::{
@@ -34,24 +35,8 @@ impl FileProviderSource {
     }
 
     pub fn load(&self) -> Result<Vec<std::sync::Arc<dyn Provider>>, FileProviderLoadError> {
-        if !self.root.exists() {
-            return Ok(Vec::new());
-        }
         let mut providers = Vec::new();
-        let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
-            path: self.root.clone(),
-            message: format!("failed to read provider directory: {source}"),
-        })?;
-
-        for entry in entries {
-            let entry = entry.map_err(|source| FileProviderLoadError {
-                path: self.root.clone(),
-                message: format!("failed to read provider directory entry: {source}"),
-            })?;
-            let path = entry.path();
-            if !path.is_file() || !is_provider_file(&path) {
-                continue;
-            }
+        for path in self.provider_paths()? {
             let catalog = load_catalog(&path)?;
             if catalog.provider.enabled == Some(false) {
                 continue;
@@ -59,6 +44,43 @@ impl FileProviderSource {
             providers.push(provider_for_catalog(path, catalog));
         }
         Ok(providers)
+    }
+
+    pub fn fingerprint(&self) -> Result<String, FileProviderLoadError> {
+        let mut hasher = Sha256::new();
+        for path in self.provider_paths()? {
+            fingerprint_file(&mut hasher, &self.root, &path)?;
+            if path.extension().and_then(|extension| extension.to_str()) == Some("wasm") {
+                let sidecar = wasm_sidecar_manifest_path(&path);
+                if sidecar.is_file() {
+                    fingerprint_file(&mut hasher, &self.root, &sidecar)?;
+                }
+            }
+        }
+        Ok(format!("{:x}", hasher.finalize()))
+    }
+
+    fn provider_paths(&self) -> Result<Vec<PathBuf>, FileProviderLoadError> {
+        if !self.root.exists() {
+            return Ok(Vec::new());
+        }
+        let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
+            path: self.root.clone(),
+            message: format!("failed to read provider directory: {source}"),
+        })?;
+        let mut paths = Vec::new();
+        for entry in entries {
+            let entry = entry.map_err(|source| FileProviderLoadError {
+                path: self.root.clone(),
+                message: format!("failed to read provider directory entry: {source}"),
+            })?;
+            let path = entry.path();
+            if path.is_file() && is_provider_file(&path) && !is_wasm_sidecar_manifest(&path) {
+                paths.push(path);
+            }
+        }
+        paths.sort();
+        Ok(paths)
     }
 }
 
@@ -140,6 +162,35 @@ fn is_provider_file(path: &Path) -> bool {
         path.extension().and_then(|extension| extension.to_str()),
         Some("json" | "ts" | "wasm" | "py")
     )
+}
+
+fn is_wasm_sidecar_manifest(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with(".wasm.json"))
+}
+
+fn fingerprint_file(
+    hasher: &mut Sha256,
+    root: &Path,
+    path: &Path,
+) -> Result<(), FileProviderLoadError> {
+    let bytes = fs::read(path).map_err(|source| FileProviderLoadError {
+        path: path.to_path_buf(),
+        message: format!("failed to read provider file for fingerprint: {source}"),
+    })?;
+    let label = path
+        .strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string();
+    hasher.update(label.as_bytes());
+    hasher.update([0]);
+    hasher.update(bytes.len().to_le_bytes());
+    hasher.update([0]);
+    hasher.update(bytes);
+    hasher.update([0xff]);
+    Ok(())
 }
 
 fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
@@ -224,6 +275,20 @@ fn extract_ts_manifest(text: &str) -> Option<&str> {
 }
 
 fn load_wasm_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
+    let sidecar_path = wasm_sidecar_manifest_path(path);
+    if sidecar_path.is_file() {
+        return serde_json::from_slice(&fs::read(&sidecar_path).map_err(|source| {
+            FileProviderLoadError {
+                path: sidecar_path.clone(),
+                message: format!("failed to read WASM provider sidecar manifest: {source}"),
+            }
+        })?)
+        .map_err(|source| FileProviderLoadError {
+            path: sidecar_path,
+            message: format!("invalid WASM provider sidecar manifest JSON: {source}"),
+        });
+    }
+
     let bytes = fs::read(path).map_err(|source| FileProviderLoadError {
         path: path.to_path_buf(),
         message: format!("failed to read WASM provider: {source}"),
@@ -237,6 +302,15 @@ fn load_wasm_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadErr
         path: path.to_path_buf(),
         message: format!("invalid WASM provider manifest JSON: {source}"),
     })
+}
+
+fn wasm_sidecar_manifest_path(path: &Path) -> PathBuf {
+    path.with_file_name(format!(
+        "{}.json",
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default()
+    ))
 }
 
 fn wasm_custom_section<'a>(bytes: &'a [u8], wanted_name: &str) -> Option<&'a [u8]> {
@@ -345,3 +419,7 @@ fn required_extension_for_kind(kind: ProviderKind) -> Option<&'static str> {
         ProviderKind::StaticRust | ProviderKind::Openapi | ProviderKind::Mcp => None,
     }
 }
+
+#[cfg(test)]
+#[path = "filesystem_tests.rs"]
+mod tests;
