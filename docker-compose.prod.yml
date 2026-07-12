@@ -46,7 +46,7 @@ services:
     ports:
       - "${SOMA_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
-      - ${HOME}/.example:/data
+      - ${HOME}/.soma:/data
     cap_drop:
       - ALL
     security_opt:

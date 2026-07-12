@@ -26,6 +26,9 @@ async fn main() -> Result<()> {
     }
 
     let stdio_mode = matches!(args.as_slice(), [c] if c == "mcp");
+    // Load ~/.soma/.env (or SOMA_HOME/.env) for local CLI/plugin runs before
+    // any command loads typed config. Explicit process env still wins.
+    soma::config::load_dotenv();
     runtime::init_logging(stdio_mode, false);
 
     if stdio_mode {

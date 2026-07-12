@@ -6,6 +6,21 @@ use super::*;
 // separate processes).
 use serial_test::serial;
 
+#[test]
+#[serial]
+fn default_data_dir_honors_soma_home_override() {
+    let previous = std::env::var_os("SOMA_HOME");
+    std::env::set_var("SOMA_HOME", "/tmp/soma-home-override");
+
+    let dir = default_data_dir().expect("SOMA_HOME override should resolve");
+
+    assert_eq!(dir, std::path::PathBuf::from("/tmp/soma-home-override"));
+    match previous {
+        Some(value) => std::env::set_var("SOMA_HOME", value),
+        None => std::env::remove_var("SOMA_HOME"),
+    }
+}
+
 // ── McpConfig::is_loopback edge cases ─────────────────────────────────────────
 
 fn mcp_with_host(host: &str) -> McpConfig {

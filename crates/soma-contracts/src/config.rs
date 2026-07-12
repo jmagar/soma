@@ -207,9 +207,12 @@ impl Default for AuthConfig {
 /// | Container     | `/data` (bind-mounted from host)     |
 /// | Bare-metal    | `~/.soma` (user home dir)        |
 ///
-/// CUSTOMIZE: Replace `.example` with your service name (e.g. `.unraid`, `.gotify`).
-///           The name should match the docker-compose.yml volume mount source.
+/// The name should match the docker-compose.yml volume mount source.
 pub fn default_data_dir() -> anyhow::Result<std::path::PathBuf> {
+    if let Some(path) = std::env::var_os("SOMA_HOME") {
+        return Ok(std::path::PathBuf::from(path));
+    }
+
     // Running inside a Docker container — /data is always the mount point.
     // Detection uses /.dockerenv (created by the Docker runtime) or an explicit
     // RUNNING_IN_CONTAINER env var (useful for testing or systemd-nspawn).
