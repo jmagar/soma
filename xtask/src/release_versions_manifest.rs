@@ -68,7 +68,9 @@ fn validate_version_file(component: &Component, field: &str, file: &VersionFile)
                 );
             }
         }
-        VersionKind::JsonVersion | VersionKind::OciIdentifierVersion => {
+        VersionKind::JsonVersion
+        | VersionKind::OciIdentifierVersion
+        | VersionKind::NpmIdentifierVersion => {
             if file.package.is_some() {
                 bail!(
                     "{} {field} {} {:?} must not set package",

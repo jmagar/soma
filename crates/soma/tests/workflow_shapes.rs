@@ -116,7 +116,7 @@ fn artifact_workflows_run_from_published_releases() {
         "release assets must include the installer's linux-x86_64 naming convention"
     );
     assert!(
-        docker.contains("distribution[\"ociImage\"] = image"),
-        "Docker/MCP registry workflow must rewrite the nested publisher OCI image"
+        docker.contains("distribution[\"npm\"] = f\"{package_name}@{version}\""),
+        "Docker/MCP registry workflow must rewrite the nested publisher npm package specifier"
     );
 }

@@ -209,7 +209,12 @@ jobs:
           publisher = data.get("_meta", {}).get("io.modelcontextprotocol.registry/publisher-provided", {})
           distribution = publisher.get("distribution")
           if isinstance(distribution, dict):
-              distribution["ociImage"] = image
+              package_name = distribution.get("nodePackage") or "soma-rmcp"
+              existing_npm = distribution.get("npm")
+              if isinstance(existing_npm, str) and "@" in existing_npm:
+                  package_name = existing_npm.rsplit("@", 1)[0]
+              distribution["npm"] = f"{package_name}@{version}"
+              distribution.pop("ociImage", None)
 
           path.write_text(json.dumps(data, indent=2) + "\n")
           PY
