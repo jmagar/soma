@@ -20,6 +20,11 @@ fn manifest_models_single_soma_component() {
         .version_files
         .iter()
         .any(|file| file.kind == VersionKind::JsonNoVersion));
+    assert!(component.version_files.iter().any(|file| {
+        file.kind == VersionKind::JsonVersion
+            && file.path == PathBuf::from("server.json")
+            && file.json_pointer.as_deref() == Some("/packages/1/version")
+    }));
 }
 
 #[test]

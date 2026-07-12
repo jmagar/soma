@@ -278,7 +278,7 @@ const SERVER_INSTRUCTIONS: &str = "\
 Soma is a batteries-included RMCP runtime for shipping provider-backed MCP servers. \
 It exposes one action-dispatched `soma` tool plus first-class MCP prompt and resource surfaces. \
 Repository: https://github.com/jmagar/soma. Node package: soma-rmcp. Binary: soma. \
-Config home: ~/.soma or SOMA_HOME. License: MIT. Author: Jacob Magar. \
+Config home: ~/.soma or SOMA_HOME. License: MIT. Author: dinglebear.ai. \
 Use drop-in providers to add tools, prompts, and resources without rewriting transport, auth, \
 schema, paging, config, Docker, plugin, or release plumbing. A new server comes online by adding \
 provider files under providers/tools, providers/prompts, providers/resources, or another configured \

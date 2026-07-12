@@ -24,6 +24,7 @@ version_files = [
   { kind = "cargo_lock_package", path = "Cargo.lock", package = "soma" },
   { kind = "json_version", path = "server.json", json_pointer = "/version" },
   { kind = "json_version", path = "server.json", json_pointer = "/packages/0/version" },
+  { kind = "json_version", path = "server.json", json_pointer = "/packages/1/version" },
   { kind = "json_version", path = "packages/soma-rmcp/package.json", json_pointer = "/version" },
   { kind = "oci_identifier_version", path = "server.json", json_pointer = "/packages/0/identifier" },
   { kind = "json_version", path = "docs/generated/openapi.json", json_pointer = "/info/version" },

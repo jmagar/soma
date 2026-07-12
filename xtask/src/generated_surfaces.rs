@@ -700,8 +700,7 @@ fn render_claude_marketplace() -> Value {
         "name": "soma",
         "description": "Generated marketplace catalog for Soma plugins.",
         "owner": {
-            "name": "Jacob Magar",
-            "email": "jmagar@users.noreply.github.com"
+            "name": "dinglebear.ai"
         },
         "plugins": [{
             "name": "soma",

@@ -2,7 +2,7 @@
   "name": "soma",
   "description": "Soma connects Claude Code to a batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
   "author": {
-    "name": "Jacob Magar"
+    "name": "dinglebear.ai"
   },
   "repository": "https://github.com/jmagar/soma",
   "license": "MIT",

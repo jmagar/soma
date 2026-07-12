@@ -438,7 +438,7 @@ fn render_openapi(root: &Path) -> Result<Value> {
         "info": {
             "title": "Soma MCP REST API",
             "version": version,
-            "description": "Generated OpenAPI schema for soma's direct REST surface. CUSTOMIZE: rename Soma identifiers and action schemas when adapting. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted."
+            "description": "Generated OpenAPI schema for Soma's direct REST surface. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted."
         },
         "servers": [{"url": format!("http://localhost:{port}"),"description":"Default local development server"}],
         "tags": [

@@ -1,66 +1,76 @@
-<!-- CUSTOMIZE: server.json — MCP Registry manifest for publishing your server.
-     See docs/MCP-REGISTRY-PUBLISH-GUIDE.md for step-by-step publishing instructions.
-
-     Field reference:
-       $schema        — Always use this exact URL for 2025-12-11 schema validation.
-       name           — CUSTOMIZE: Reverse-DNS namespace: "yourdomain.com/your-service-mcp".
-                        Use the domain you own (DNS-based identity proof required to publish).
-                        The tv.tootie/ prefix belongs to this project's author.
-       title          — CUSTOMIZE: Human-readable display name shown in MCP registry UIs.
-       description    — CUSTOMIZE: One-sentence description of what the server does.
-       repository.url — CUSTOMIZE: Your GitHub (or GitLab) repo URL.
-       repository.source — Leave as "github" (or change to "gitlab").
-       version        — CUSTOMIZE: Semantic version. Automated by release.yml on tags.
-       packages       — List of distribution packages. OCI (Docker) is the standard format.
-         registryType — "oci" for container images. Other options: "npm", "pypi".
-         identifier   — CUSTOMIZE: Full OCI image ref with version tag.
-                        Pattern: ghcr.io/<org>/<repo>:<version>
-         version      — CUSTOMIZE: Must match the top-level version field.
-         environmentVariables — All env vars the container needs. List every required var.
-           name        — Exact env var name (used by registry UIs to generate setup forms).
-           description — CUSTOMIZE: User-visible description shown in the registry UI.
-           isRequired  — true: server fails to start without it. false: optional feature.
-           isSecret    — true: registry UI masks the value (API keys, tokens, passwords).
-       remotes        — CUSTOMIZE: Where users connect to a hosted instance of this server.
-                        Remove this block if you don't run a public hosted instance.
-         type         — "streamable-http" is the modern MCP transport (preferred over SSE).
-         url          — CUSTOMIZE: Replace with your actual hosted /mcp endpoint URL.
--->
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "description": "Soma is a batteries-included RMCP runtime for drop-in tools, prompts, resources, and provider-backed agent capabilities.",
-  "name": "tv.tootie/soma",
+  "description": "Drop-in RMCP runtime for provider-backed MCP tools, prompts, resources, and agent capabilities.",
+  "name": "dinglebear.ai/soma",
   "packages": [
     {
       "environmentVariables": [
         {
-          "description": "CUSTOMIZE: Replace with your service's base URL description. Example: 'Base URL of your Soma runtime, e.g. https://api.example.com/v1'.",
-          "isRequired": true,
+          "description": "Optional deployed platform API or upstream API base URL used by the SomaClient compatibility layer. Leave unset for local provider/runtime mode.",
+          "isRequired": false,
           "isSecret": false,
           "name": "SOMA_API_URL"
         },
         {
-          "description": "CUSTOMIZE: Replace with your service's API key description. Example: 'API key for authenticating to the Soma runtime.'",
-          "isRequired": true,
+          "description": "Optional bearer token or upstream API key for provider-backed calls that use SomaClient. Keep secret.",
+          "isRequired": false,
           "isSecret": true,
           "name": "SOMA_API_KEY"
         },
         {
-          "description": "Bearer token for MCP endpoint authentication. All /mcp requests must include: Authorization: Bearer <token>. Generate with: openssl rand -hex 32.",
+          "description": "Optional static bearer token required when exposing the HTTP MCP transport in bearer-auth mode.",
           "isRequired": false,
           "isSecret": true,
           "name": "SOMA_MCP_TOKEN"
+        },
+        {
+          "description": "Optional runtime data directory. Defaults to ~/.soma on bare metal and /data in containers.",
+          "isRequired": false,
+          "isSecret": false,
+          "name": "SOMA_HOME"
         }
       ],
       "identifier": "ghcr.io/jmagar/soma:0.4.6",
       "registryType": "oci",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:40060/mcp"
+      },
       "version": "0.4.6"
-    }
-  ],
-  "remotes": [
+    },
     {
-      "type": "streamable-http",
-      "url": "https://example.yourdomain.com/mcp"
+      "environmentVariables": [
+        {
+          "description": "Optional absolute path to the installed soma binary. When unset, the npm launcher runs soma from PATH.",
+          "isRequired": false,
+          "isSecret": false,
+          "name": "SOMA_BIN"
+        },
+        {
+          "description": "Optional runtime data directory. Defaults to ~/.soma.",
+          "isRequired": false,
+          "isSecret": false,
+          "name": "SOMA_HOME"
+        },
+        {
+          "description": "Optional deployed platform API or upstream API base URL used by the SomaClient compatibility layer. Leave unset for local provider/runtime mode.",
+          "isRequired": false,
+          "isSecret": false,
+          "name": "SOMA_API_URL"
+        },
+        {
+          "description": "Optional bearer token or upstream API key for provider-backed calls that use SomaClient. Keep secret.",
+          "isRequired": false,
+          "isSecret": true,
+          "name": "SOMA_API_KEY"
+        }
+      ],
+      "identifier": "soma-rmcp",
+      "registryType": "npm",
+      "transport": {
+        "type": "stdio"
+      },
+      "version": "0.4.6"
     }
   ],
   "repository": {
@@ -68,5 +78,6 @@
     "url": "https://github.com/jmagar/soma"
   },
   "title": "Soma",
-  "version": "0.4.6"
+  "version": "0.4.6",
+  "websiteUrl": "https://github.com/jmagar/soma"
 }

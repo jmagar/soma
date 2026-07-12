@@ -3,8 +3,7 @@
   "description": "Generated marketplace catalog for Soma plugins.",
   "name": "soma",
   "owner": {
-    "email": "jmagar@users.noreply.github.com",
-    "name": "Jacob Magar"
+    "name": "dinglebear.ai"
   },
   "plugins": [
     {

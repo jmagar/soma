@@ -27,7 +27,7 @@ and historical session notes. Pick the right layer before editing.
 | Run Soma quickly | `QUICKSTART.md` |
 | Understand the architecture | `ARCHITECTURE.md`, then `PATTERNS.md` |
 | Generate a new server | `SCAFFOLD.md`, `CARGO_GENERATE.md`, `contracts/scaffold-intent.schema.json` |
-| Write a generated server README | `SOMA_README_GUIDE.md`, then `PATTERNS.md` |
+| Write or refresh an RMCP server README | `RMCP_README_GUIDE.md`, then `PATTERNS.md` |
 | Add or change actions | `MCP_SCHEMA.md`, `API.md`, `AGENTS-FIRST.md`, `PATTERNS.md` |
 | Operate CI or releases | `CI.md`, `LINUX-RUNNER.md`, `WINDOWS-RUNNER.md`, `XTASKS.md` |
 | Package plugins | `PLUGINS.md`, `contracts/plugin-stdio-adapter.md` |
@@ -45,7 +45,7 @@ code, contracts, and workflows without becoming session logs.
 | Configuration and security | `CONFIG.md`, `ENV.md`, `AUTH.md`, `OBSERVABILITY.md` |
 | Local development | `RUST.md`, `JUSTFILE.md`, `XTASKS.md`, `PRE-COMMIT.md`, `TESTING.md`, `MCPORTER.md`, `SCRIPTS.md` |
 | Delivery | `CI.md`, `LINUX-RUNNER.md`, `WINDOWS-RUNNER.md`, `DOCKER.md`, `SYSTEMD.md`, `DEPLOYMENT.md` |
-| Scaffold generation | `SCAFFOLD.md`, `CARGO_GENERATE.md`, `SOMA_README_GUIDE.md` |
+| Scaffold generation | `SCAFFOLD.md`, `CARGO_GENERATE.md`, `RMCP_README_GUIDE.md` |
 | Documentation system | `DOCS.md`, `CLAUDE.md`, this index |
 
 ## Durable Records

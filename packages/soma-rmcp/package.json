@@ -2,6 +2,10 @@
   "bin": {
     "soma": "bin/soma-rmcp.js"
   },
+  "author": {
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
+  },
   "description": "Node launcher package for the Soma RMCP runtime.",
   "engines": {
     "node": ">=18"

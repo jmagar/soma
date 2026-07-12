@@ -12,7 +12,7 @@ using the `server.json` manifest at the repo root.
 
 ## Prerequisites
 
-- You own the domain used in the `name` field (e.g. `tv.tootie` in `tv.tootie/soma-mcp`)
+- You own the domain used in the `name` field (e.g. `dinglebear.ai` in `dinglebear.ai/soma`)
 - Your Docker image is published to a container registry (e.g. `ghcr.io`)
 - Your GitHub repo is public
 
@@ -28,7 +28,7 @@ Edit `server.json` in the repo root. Every field marked `CUSTOMIZE:` must be rep
 | `title` | Human-readable display name, e.g. "My Service MCP" |
 | `description` | One sentence about what your server does |
 | `repository.url` | Your GitHub repo URL |
-| `packages[0].identifier` | Your full OCI image ref: `ghcr.io/org/repo:version` |
+| `packages[].identifier` | Your package identifiers, for example `ghcr.io/org/repo:version` and `soma-rmcp` |
 | `environmentVariables[].name` | Your service's actual env var names |
 | `environmentVariables[].description` | User-visible descriptions for registry UI |
 | `remotes[0].url` | Your hosted `/mcp` endpoint (or remove `remotes` if not hosting publicly) |
@@ -99,7 +99,7 @@ The relevant workflow snippet:
     VERSION="${GITHUB_REF_NAME#v}"
     jq --arg v "$VERSION" \
        --arg img "ghcr.io/jmagar/soma-mcp:${VERSION}" \
-       '.version = $v | .packages[0].identifier = $img | .packages[0].version = $v' \
+       '.version = $v | (.packages[] | select(.registryType == "oci").identifier) = $img | (.packages[].version) = $v' \
        server.json > server.tmp && mv server.tmp server.json
 
 - name: Publish to MCP registry
@@ -138,8 +138,8 @@ the MCP registry.
 ### "Name not in your namespace"
 
 You must authenticate for the domain or GitHub user that prefixes your server name.
-If your `name` is `tv.tootie/soma-mcp`, you must authenticate with DNS for
-`tv.tootie`. If your `name` is `github.com/jmagar/soma-mcp`, use GitHub OAuth.
+If your `name` is `dinglebear.ai/soma`, you must authenticate with DNS for
+`dinglebear.ai`. If your `name` is `github.com/jmagar/soma`, use GitHub OAuth.
 
 ### "Invalid schema"
 

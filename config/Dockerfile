@@ -123,8 +123,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40060/health || exit 1
 
 # MCP registry label — used by Claude Code plugin discovery.
-# CUSTOMIZE: Replace with your registry path: "tv.tootie/yourservice-mcp"
-LABEL io.modelcontextprotocol.server.name="tv.tootie/soma"
+LABEL io.modelcontextprotocol.server.name="dinglebear.ai/soma"
 
 # Entrypoint handles permission setup and privilege drop.
 # CMD is the default argument passed to entrypoint.sh.

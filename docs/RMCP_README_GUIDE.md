@@ -1,5 +1,5 @@
 ---
-title: "Soma README Guide"
+title: "RMCP README Guide"
 doc_type: "guide"
 status: "active"
 owner: "soma"
@@ -15,7 +15,7 @@ upstream_refs:
 last_reviewed: "2026-07-11"
 ---
 
-# Soma README Guide
+# RMCP README Guide
 
 Use this when creating or refreshing a top-level `README.md` for a Rust MCP
 server built with the `rmcp` crate. The root README should be the public entry
@@ -50,21 +50,51 @@ Soma was extracted from the current top-level READMEs for:
 
 - The first screen should answer: what this server does, what it connects to,
   which MCP tool(s) it exposes, and how to run it.
+- Include a 30-second value prop before detailed reference material: the
+  upstream/local capability, the agent-facing outcome, the tool name, and the
+  fastest safe command.
 - State the product boundary. A good "Not for" section prevents misuse better
   than a long feature list.
+- Prefer "capabilities and boundaries" language over generic feature lists:
+  name what the repo owns, what it delegates to the upstream service, and what
+  it deliberately refuses to do.
 - Show installation and first successful call before exhaustive reference.
+- Include one CLI call and one MCP call that are safe, read-only, and expected
+  to work for a correctly configured install.
 - Keep action tables complete enough for a human scan; move detailed generated
   schemas to `docs/MCP_SCHEMA.md` or another generated contract.
+- Make the README curated, not generated. Generated action, env, route, schema,
+  or provider catalogs are source of truth in their own docs and should not be
+  hand-maintained in the README.
 - Document config, auth, and safety gates in the README even when deeper docs
   exist.
 - Keep credentials in config/env. Do not show examples that pass API keys or
   tokens in MCP tool arguments.
 - For large or generated surfaces, explain how discovery works and where the
   authoritative generated catalogs live.
+- Document distribution/version contracts when the repo ships npm launcher
+  packages, GitHub Release binaries, Docker images, MCP registry metadata,
+  plugin manifests, or release-please metadata.
+- Mark maturity honestly: production, experimental, live-tested, read-only,
+  destructive-capable, generated surface, or scaffold/runtime template.
 - Always include verification commands that prove the binary, transport, and
   tool call path work.
 
-## Soma README Shape
+## README Experience Goals
+
+Treat the README as the first product surface. A good RMCP README should let a
+new operator decide these things without opening the code:
+
+1. Should I use this repo for my task?
+2. Which install path fits my MCP client or deployment?
+3. What is the first safe thing I can run?
+4. Where do credentials live, and what must never be passed by a caller?
+5. Which docs are curated and which docs are generated source of truth?
+
+The first screen should be dense but humane. Avoid making users scroll past a
+long architecture tour before they know the command that proves the server works.
+
+## RMCP README Shape
 
 Copy the section below into the generated project's root `README.md`, then
 replace bracketed placeholders and delete optional sections that do not apply.
@@ -81,6 +111,13 @@ replace bracketed placeholders and delete optional sections that do not apply.
 it, and the single agent-facing outcome. Name the MCP tool(s), CLI binary, and
 main transport in this paragraph.]
 
+**30-second path:** [Install/run command] -> [safe CLI command] -> [safe MCP
+tool call]. Keep this to one line or one compact sentence.
+
+**Status:** [production | beta | experimental | scaffold/runtime template].
+[Read-only | write-capable | destructive actions gated]. [Live-tested against
+upstream | fixture-only | generated provider surface].
+
 **Not for:** [Name the most tempting misuse cases. Examples: generic REST
 gateway, scheduler, multi-tenant security boundary, replacement for upstream
 service, arbitrary filesystem writer.]
@@ -89,6 +126,7 @@ service, arbitrary filesystem writer.]
 
 - [Install](#install)
 - [Quickstart](#quickstart)
+- [Client Configuration](#client-configuration)
 - [Runtime Surfaces](#runtime-surfaces)
 - [MCP Tool Reference](#mcp-tool-reference)
 - [CLI Reference](#cli-reference)
@@ -96,9 +134,13 @@ service, arbitrary filesystem writer.]
 - [Authentication](#authentication)
 - [Safety And Trust Model](#safety-and-trust-model)
 - [Architecture](#architecture)
+- [Distribution Contract](#distribution-contract)
 - [Development](#development)
 - [Verification](#verification)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
 - [Documentation](#documentation)
+- [License](#license)
 
 ## Naming
 
@@ -117,7 +159,7 @@ If this repo is an exception, state why:
 > [Example: The repo and CLI remain `cortex` because the product is broader
 > than an MCP server; only the npm launcher uses `cortex-rmcp`.]
 
-## What It Does
+## Capabilities And Boundaries
 
 [Two to five bullets that describe actual user-visible capabilities.]
 
@@ -127,7 +169,22 @@ If this repo is an exception, state why:
 - [Resources, prompts, MCP Apps, or other MCP primitives, if any.]
 - [Operational status/doctor/setup capability.]
 
+| This repo owns | Upstream owns | Explicitly out of scope |
+|---|---|---|
+| [MCP/CLI/REST projection, validation, auth policy, response shaping.] | [Source data, durable business state, upstream auth model.] | [Misuse cases from `Not for` plus anything callers often assume incorrectly.] |
+
 ## Install
+
+Use this matrix before detailed install subsections so readers can pick a path
+quickly.
+
+| Path | Command | Best for | Notes |
+|---|---|---|---|
+| npm / npx | `npx -y [package-name] mcp` | Local MCP clients and quick trials. | Downloads or locates `[binary-name]`. |
+| Release installer | `curl -fsSL .../scripts/install.sh \| bash` | Host installs without Node. | Installs to `~/.local/bin` by default. |
+| Docker / Compose | `docker compose up -d` | Shared HTTP MCP/API deployments. | Requires explicit auth before non-loopback exposure. |
+| Build from source | `cargo build --release` | Development and audits. | Uses the checked-out branch. |
+| Plugin | `claude plugin install ...` | Client-specific packaged setup. | State whether it bundles MCP config, skills, hooks, or binaries. |
 
 ### npm / npx
 
@@ -235,6 +292,56 @@ curl -s -X POST http://127.0.0.1:[port]/mcp \
     }
   }' | jq .
 ```
+
+## Client Configuration
+
+Show the client paths the repo actually supports. Delete clients that do not
+apply.
+
+### Claude Code
+
+```json
+{
+  "mcpServers": {
+    "[tool-name]": {
+      "command": "npx",
+      "args": ["-y", "[package-name]", "mcp"]
+    }
+  }
+}
+```
+
+If the repo ships a plugin, prefer the plugin path:
+
+```bash
+claude plugin install [path-or-marketplace-ref]
+```
+
+### Codex / Labby Gateway
+
+State whether this server is normally registered through the Labby gateway, run
+directly as stdio, or exposed as Streamable HTTP.
+
+```toml
+[mcp_servers.[tool-name]]
+command = "npx"
+args = ["-y", "[package-name]", "mcp"]
+```
+
+### Generic MCP JSON
+
+```json
+{
+  "command": "[binary-name]",
+  "args": ["mcp"],
+  "env": {
+    "[PREFIX]_URL": "https://example.com"
+  }
+}
+```
+
+Do not put API keys, passwords, OAuth secrets, SSH keys, or upstream bearer
+tokens in MCP tool arguments. Use env/config or client secret storage.
 
 ## Runtime Surfaces
 
@@ -468,6 +575,32 @@ The thin-shim rule is strict:
 No business logic, destructive gates, credential handling, path safety, response
 normalization, or upstream defaults belong in MCP/CLI/REST shims.
 
+## Distribution Contract
+
+Delete rows that do not apply. Keep this section when more than one artifact or
+manifest carries a version, binary name, package name, install command, or MCP
+server identity.
+
+| Artifact | File(s) | Must align with |
+|---|---|---|
+| Rust crate/binary | `Cargo.toml`, `Cargo.lock`, release assets | Git tag, binary names, install scripts, Docker entrypoint. |
+| npm launcher | `packages/[package-name]/package.json`, `bin/*`, `lib/platform.js`, `scripts/install.js` | GitHub Release tag, release asset names, README install examples. |
+| GitHub Releases | `.github/workflows/release.yml`, `scripts/install.sh`, `scripts/install.ps1` | Package versions, checksums, platform matrix, public installer commands. |
+| Docker / OCI | `Dockerfile`, compose files, image labels | Binary names, exposed ports, healthcheck endpoint, registry metadata. |
+| MCP registry | `server.json`, package metadata marker | Server name, package identifier, version, transport, env vars. |
+| Plugins | `plugins/*`, `.claude-plugin/*`, `.agents/*`, skills | Runtime command, setup hooks, bundled binary policy, marketplace naming. |
+| Generated docs | `docs/MCP_SCHEMA.md`, `docs/ENV.md`, `docs/generated/*` | Current action/env/schema/provider metadata. |
+
+State the release invariant explicitly. Examples:
+
+- npm package version, `server.json.version`, and GitHub Release tag must match.
+- Release assets must use the names expected by both npm `platform.js` and
+  `scripts/install.sh`.
+- Plugin manifests do not carry hand-written semver when marketplace identity is
+  derived from git/package metadata.
+- README install commands must use canonical repository names, not GitHub rename
+  redirects.
+
 ## Development
 
 ```bash
@@ -585,7 +718,33 @@ If generated catalogs are authoritative, say that clearly:
 > Do not hand-maintain action, env, route, or schema inventories in this README.
 > The generated docs above are the source of truth for the current branch.
 
+## README Alignment Checklist
+
+Use this before claiming a README is aligned with this guide:
+
+- First screen names the upstream/local capability, MCP tool(s), binary, and
+  fastest safe command.
+- Product boundary is explicit, including "Not for" or equivalent language.
+- Install matrix covers every supported distribution path and deletes unsupported
+  paths.
+- Quickstart includes one safe CLI call and one safe MCP call.
+- Client config examples match the actual supported launch paths.
+- Runtime surfaces table does not advertise REST, web, plugins, prompts,
+  resources, or MCP Apps that are not shipped.
+- MCP tool reference is complete enough to scan, with generated schema docs
+  linked for exhaustive details.
+- Config and auth sections explain where secrets live and forbid credentials in
+  tool arguments.
+- Safety/trust model covers destructive actions and service-specific risky
+  inputs.
+- Architecture section preserves the thin-shim rule across MCP, CLI, REST, and
+  web surfaces.
+- Distribution contract lists all version-bearing artifacts and their alignment
+  invariants.
+- Verification section proves every shipped surface, not just `cargo test`.
+- Documentation section clearly separates curated README content from generated
+  source-of-truth docs.
+
 ## License
 
 MIT
-

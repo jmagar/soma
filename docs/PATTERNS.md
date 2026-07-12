@@ -1612,19 +1612,23 @@ Or via GitHub OAuth:
 ```json
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "tv.tootie/soma-mcp",
-  "title": "Soma MCP",
+  "name": "dinglebear.ai/soma",
+  "title": "Soma",
   "description": "One-line description of what the server does.",
   "repository": {
-    "url": "https://github.com/jmagar/soma-mcp",
+    "url": "https://github.com/jmagar/soma",
     "source": "github"
   },
   "version": "0.1.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/soma-mcp:0.1.0",
+      "identifier": "ghcr.io/jmagar/soma:0.1.0",
       "version": "0.1.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:40060/mcp"
+      },
       "environmentVariables": [
         {
           "name": "SOMA_API_URL",
@@ -1645,6 +1649,14 @@ Or via GitHub OAuth:
           "isSecret": true
         }
       ]
+    },
+    {
+      "registryType": "npm",
+      "identifier": "soma-rmcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ],
   "remotes": [
@@ -1671,7 +1683,7 @@ The `release.yml` workflow updates `server.json` version automatically on tag:
 
 ### Name namespace
 
-The `name` field uses reverse-DNS format: `tv.tootie/<service>-mcp`. Verify you
+The `name` field uses reverse-DNS format: `dinglebear.ai/<service>`. Verify you
 own the domain before publishing to the official registry.
 
 ---
@@ -1708,7 +1720,7 @@ plugins/
     "displayName": "Soma MCP",
     "shortDescription": "Query and manage Soma runtime",
     "longDescription": "Full description of what this MCP server does, what data it exposes, and what operations it supports.",
-    "developerName": "Jacob Magar",
+    "developerName": "dinglebear.ai",
     "category": "Infrastructure",
     "capabilities": ["Read"],
     "websiteURL": "https://github.com/jmagar/soma-mcp",
@@ -1720,9 +1732,8 @@ plugins/
     "brandColor": "#6366F1"
   },
   "author": {
-    "name": "Jacob Magar",
-    "email": "jmagar@users.noreply.github.com",
-    "url": "https://github.com/jmagar"
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
   }
 }
 ```

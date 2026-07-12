@@ -51,6 +51,7 @@ fn server_info_includes_implementation_metadata() {
         "Node package: soma-rmcp",
         "Binary: soma",
         "Config home: ~/.soma or SOMA_HOME",
+        "Author: dinglebear.ai",
     ] {
         assert!(
             instructions.contains(expected),
