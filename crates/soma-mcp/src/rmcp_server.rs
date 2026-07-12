@@ -13,9 +13,9 @@ use std::{borrow::Cow, sync::Arc, time::Instant};
 use rmcp::{
     model::{
         CallToolRequestParams, CallToolResult, ContentBlock, GetPromptRequestParams,
-        GetPromptResult, Implementation, ListPromptsResult, ListResourcesResult, ListToolsResult,
-        PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResult, Resource,
-        ResourceContents, ServerCapabilities, ServerInfo, Tool,
+        GetPromptResult, Implementation, ListPromptsResult, ListResourceTemplatesResult,
+        ListResourcesResult, ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams,
+        ReadResourceResult, Resource, ResourceContents, ServerCapabilities, ServerInfo, Tool,
     },
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
@@ -195,6 +195,22 @@ impl ServerHandler for SomaRmcpServer {
         }
         Ok(ListResourcesResult {
             resources,
+            ..Default::default()
+        })
+    }
+
+    async fn list_resource_templates(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        context: RequestContext<RoleServer>,
+    ) -> Result<ListResourceTemplatesResult, ErrorData> {
+        require_auth_context(&self.state, &context)?;
+        let mut resource_templates = Vec::new();
+        if self.state.config.conformance_fixtures {
+            resource_templates.extend(conformance::resource_templates());
+        }
+        Ok(ListResourceTemplatesResult {
+            resource_templates,
             ..Default::default()
         })
     }

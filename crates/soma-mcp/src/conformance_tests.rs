@@ -59,14 +59,23 @@ fn mixed_content_fixture_serializes_text_image_and_resource() {
 
 #[test]
 fn resource_template_fixture_reflects_substituted_id() {
-    let result = read_resource("test://soma/123/data").expect("fixture should exist");
+    let result = read_resource("test://template/123/data").expect("fixture should exist");
     let value = serde_json::to_value(result).expect("resource should serialize");
 
-    assert_eq!(value["contents"][0]["uri"], "test://soma/123/data");
-    assert!(value["contents"][0]["text"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("123"));
+    assert_eq!(value["contents"][0]["uri"], "test://template/123/data");
+    let text = value["contents"][0]["text"].as_str().unwrap_or_default();
+    assert!(text.contains(r#""id":"123""#));
+    assert!(text.contains(r#""templateTest":true"#));
+}
+
+#[test]
+fn resource_templates_advertise_substitutable_fixture_uri() {
+    let templates = resource_templates();
+    let value = serde_json::to_value(&templates[0]).expect("template should serialize");
+
+    assert_eq!(value["uriTemplate"], "test://template/{id}/data");
+    assert_eq!(value["name"], "template data by id");
+    assert_eq!(value["mimeType"], "application/json");
 }
 
 #[test]

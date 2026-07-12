@@ -10,7 +10,7 @@ use std::{borrow::Cow, sync::Arc};
 use rmcp::model::{
     AudioContent, CallToolResult, ContentBlock, GetPromptRequestParams, GetPromptResult,
     ImageContent, Prompt, PromptArgument, PromptMessage, ReadResourceResult, Resource,
-    ResourceContents, Role, Tool,
+    ResourceContents, ResourceTemplate, Role, Tool,
 };
 use serde_json::{json, Map, Value};
 
@@ -110,6 +110,14 @@ pub(super) fn resources() -> Vec<Resource> {
     ]
 }
 
+pub(super) fn resource_templates() -> Vec<ResourceTemplate> {
+    vec![
+        ResourceTemplate::new("test://template/{id}/data", "template data by id")
+            .with_description("MCP conformance templated JSON resource fixture")
+            .with_mime_type("application/json"),
+    ]
+}
+
 pub(super) fn read_resource(uri: &str) -> Option<ReadResourceResult> {
     let contents = match uri {
         "test://static-text" => vec![ResourceContents::text(
@@ -121,9 +129,9 @@ pub(super) fn read_resource(uri: &str) -> Option<ReadResourceResult> {
             vec![ResourceContents::blob(PNG_1X1_RED, "test://static-binary")
                 .with_mime_type("image/png")]
         }
-        "test://soma/123/data" => vec![ResourceContents::text(
-            r#"{"id":"123","somaTest":true,"data":"Data for ID: 123"}"#,
-            "test://soma/123/data",
+        "test://template/123/data" => vec![ResourceContents::text(
+            r#"{"id":"123","templateTest":true,"data":"Data for ID: 123"}"#,
+            "test://template/123/data",
         )
         .with_mime_type("application/json")],
         _ => return None,
