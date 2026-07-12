@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper. Canonical implementation: cargo xtask check-openapi."""
+"""Thin wrapper. Canonical implementation: cargo xtask check-openapi."""
 
 from __future__ import annotations
 

@@ -9,12 +9,12 @@
 > See [docs/RUST.md](RUST.md) for the full system setup including the expected
 > `~/.cargo/config.toml`, the mold linker rationale, and Windows cross-compilation.
 
-## 1. Run the stub template
+## 1. Run Soma
 
 ```bash
-git clone https://github.com/jmagar/rmcp-template
-cd rmcp-template
-cargo run --bin example-server -- serve
+git clone https://github.com/jmagar/soma
+cd soma
+cargo run --bin soma-server -- serve
 ```
 
 The server starts on `http://localhost:40060`. In another terminal:
@@ -28,7 +28,7 @@ curl http://localhost:40060/health
 curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"greet","name":"Alice"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"soma","arguments":{"action":"greet","name":"Alice"}}}'
 
 # List available tools
 curl -s -X POST http://localhost:40060/mcp \
@@ -74,7 +74,7 @@ openssl rand -hex 32
 Start with auth:
 
 ```bash
-RTEMPLATE_MCP_TOKEN=a3f2c1... cargo run --bin example-server -- serve
+SOMA_MCP_TOKEN=a3f2c1... cargo run --bin soma-server -- serve
 ```
 
 Now all `/mcp` calls require `Authorization: Bearer a3f2c1...`:
@@ -84,7 +84,7 @@ curl -s -X POST http://localhost:40060/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer a3f2c1..." \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"status"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"soma","arguments":{"action":"status"}}}'
 ```
 
 ## 6. Connect Claude Desktop
@@ -94,8 +94,8 @@ Add to your Claude Desktop MCP config (`~/Library/Application Support/Claude/cla
 ```json
 {
   "mcpServers": {
-    "example": {
-      "command": "/path/to/rmcp-template/target/debug/example",
+    "soma": {
+      "command": "/path/to/soma/target/debug/soma",
       "args": ["mcp"],
       "env": { "RUST_LOG": "warn" }
     }
@@ -108,7 +108,7 @@ Or use Streamable HTTP (server must be running):
 ```json
 {
   "mcpServers": {
-    "example": {
+    "soma": {
       "url": "http://localhost:40060/mcp"
     }
   }
@@ -117,21 +117,21 @@ Or use Streamable HTTP (server must be running):
 
 ## Next steps
 
-- Read the [README](../README.md) for the step-by-step guide to adapting this template for your own API.
+- Read the [README](../README.md) for the step-by-step guide to adapting Soma for your own API.
 - Use [docs/SCAFFOLD.md](SCAFFOLD.md) for the one-command scaffold plan/apply/verify workflow.
 - Read [CLAUDE.md](../CLAUDE.md) for the thin-shim rule and how to add actions.
-- For OAuth setup, set `RTEMPLATE_MCP_AUTH_MODE=oauth` and the `RTEMPLATE_MCP_GOOGLE_*` env vars — see the env var table in the README.
+- For OAuth setup, set `SOMA_MCP_AUTH_MODE=oauth` and the `SOMA_MCP_GOOGLE_*` env vars — see the env var table in the README.
 
-## Checklist for adapting this template
+## Checklist for adapting Soma
 
-Use this when creating a real service from rmcp-template:
+Use this when creating a real service from soma:
 
-- [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
-- [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only — no logic)
-- [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (ALL logic here)
-- [ ] Add native actions to `crates/rtemplate-service/src/actions.rs` and keep MCP/CLI/REST shims registry-driven
+- [ ] Replace every occurrence of `soma`/`Example`/`EXAMPLE` with your service name
+- [ ] Implement API client in `crates/soma-service/src/soma.rs` (transport only — no logic)
+- [ ] Add service methods to `crates/soma-service/src/app.rs` (ALL logic here)
+- [ ] Add native actions to `crates/soma-service/src/actions.rs` and keep MCP/CLI/REST shims registry-driven
 - [ ] Regenerate schema docs and OpenAPI after changing the service registry
-- [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific config fields
+- [ ] Update `crates/soma-contracts/src/config.rs` with service-specific config fields
 - [ ] Add elicitation to destructive actions (or `confirm=true` flag fallback)
 - [ ] Set port in `config.toml`, `docker-compose.yml`, and Dockerfile `EXPOSE`
 - [ ] Implement central auth policy resolution in library code
@@ -142,8 +142,8 @@ Use this when creating a real service from rmcp-template:
 - [ ] Configure taplo (`taplo.toml`)
 - [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
 - [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
-- [ ] Write tests in `*_tests.rs` sidecars + `crates/rmcp-template/tests/` integration tests
-- [ ] Write `crates/rmcp-template/tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Write tests in `*_tests.rs` sidecars + `crates/soma/tests/` integration tests
+- [ ] Write `crates/soma/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
@@ -154,7 +154,7 @@ Use this when creating a real service from rmcp-template:
 - [ ] Add `.worktreeinclude` at the repo root with `.env` and `config.toml`
 - [ ] Run `cargo check` — must compile clean, zero warnings
 - [ ] Run `cargo nextest run` — all tests pass
-- [ ] Run `./crates/rmcp-template/tests/mcporter/test-mcp.sh` against a live server instance
+- [ ] Run `./crates/soma/tests/mcporter/test-mcp.sh` against a live server instance
 
 For new projects, replace the manual rename checklist with:
 

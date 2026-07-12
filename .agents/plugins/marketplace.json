@@ -1,20 +1,60 @@
 {
-  "name": "rmcp-template",
+  "description": "Soma RMCP runtime plugins by dinglebear.ai.",
+  "homepage": "https://soma.dinglebear.ai",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "rmcp",
+    "rust",
+    "agent-tools",
+    "ai-agents",
+    "provider-runtime",
+    "providers",
+    "developer-tools",
+    "automation",
+    "openapi",
+    "docker",
+    "cli",
+    "server-runtime",
+    "soma"
+  ],
+  "license": "MIT",
+  "name": "soma",
+  "owner": {
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
+  },
   "plugins": [
     {
       "category": "Infrastructure",
+      "description": "Batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
       "interface": {
-        "displayName": "Example MCP"
+        "brandColor": "#6366F1",
+        "composerIcon": "./plugins/soma/assets/icon.png",
+        "developerName": "dinglebear.ai",
+        "displayName": "Soma",
+        "logo": "./plugins/soma/assets/logo.svg",
+        "shortDescription": "Drop-in RMCP runtime."
       },
-      "name": "rtemplate",
+      "metadata": {
+        "binary": "soma",
+        "mcpServer": "server.json",
+        "nodePackage": "soma-rmcp",
+        "ociImage": "ghcr.io/jmagar/soma"
+      },
+      "name": "soma",
       "policy": {
         "authentication": "ON_INSTALL",
         "installation": "AVAILABLE"
       },
       "source": {
-        "path": "./plugins/rtemplate",
+        "path": "./plugins/soma",
         "source": "local"
       }
     }
-  ]
+  ],
+  "repository": "https://github.com/jmagar/soma",
+  "security_policy": "https://github.com/jmagar/soma/security/policy",
+  "support": "https://github.com/jmagar/soma/issues"
 }

@@ -1,10 +1,10 @@
 # Plugin Surfaces
 
-This template ships one service plugin package with three host-specific entrypoints:
+Soma ships one service plugin package with three host-specific entrypoints:
 
-- Claude Code: `plugins/rtemplate/.claude-plugin/plugin.json`
-- Codex: `plugins/rtemplate/.codex-plugin/plugin.json`
-- Gemini: `plugins/rtemplate/gemini-extension.json`
+- Claude Code: `plugins/soma/.claude-plugin/plugin.json`
+- Codex: `plugins/soma/.codex-plugin/plugin.json`
+- Gemini: `plugins/soma/gemini-extension.json`
 
 All three surfaces should describe the same MCP server and expose the same
 skills. Upstream-client servers should prefer a local stdio binary install for
@@ -12,7 +12,7 @@ plugin use. Application/platform servers may point plugins at the shared HTTP
 MCP endpoint when a central server deployment is the source of truth. The host
 manifests differ, but the service behavior should not.
 
-The shared descriptor is `plugins/rtemplate/plugin.surface.json`. Run
+The shared descriptor is `plugins/soma/plugin.surface.json`. Run
 `cargo xtask generate-docs` after editing it; the Claude, Codex, and Gemini
 manifests are generated from that descriptor plus `ENV_KEY_SPECS`.
 
@@ -25,7 +25,7 @@ for the exact manifest and adapter contract.
 ## Layout
 
 ```text
-plugins/rtemplate/
+plugins/soma/
   .claude-plugin/
     plugin.json          # Claude Code manifest
   .codex-plugin/
@@ -39,10 +39,10 @@ plugins/rtemplate/
     example/
       SKILL.md           # Shared action documentation
     scaffold-project/
-      SKILL.md           # Approval-first template adaptation handoff skill
+      SKILL.md           # Approval-first Soma adaptation handoff skill
 ```
 
-When adapting the template, rename `example`, `Example`, and `EXAMPLE` consistently across the package, then update host-specific display text and credentials.
+When adapting Soma, rename `example`, `Example`, and `EXAMPLE` consistently across the package, then update host-specific display text and credentials.
 
 ## Shared Contract
 
@@ -60,7 +60,7 @@ Keep the plugin manifests thin. Runtime setup belongs in the service binary, not
 
 ## Claude Code
 
-Claude Code uses `plugins/rtemplate/.claude-plugin/plugin.json`.
+Claude Code uses `plugins/soma/.claude-plugin/plugin.json`.
 
 Responsibilities:
 
@@ -69,7 +69,7 @@ Responsibilities:
 - defines `userConfig` settings exposed in Claude Code
 - marks sensitive values with `sensitive: true`
 
-Claude-specific lifecycle hooks live in `plugins/rtemplate/hooks/hooks.json`. The default hooks are:
+Claude-specific lifecycle hooks live in `plugins/soma/hooks/hooks.json`. The default hooks are:
 
 | Hook | Trigger | Command |
 | --- | --- | --- |
@@ -92,7 +92,7 @@ The hook command runs the binary already installed on `PATH`. It may map `CLAUDE
 
 ## Codex
 
-Codex uses `plugins/rtemplate/.codex-plugin/plugin.json`.
+Codex uses `plugins/soma/.codex-plugin/plugin.json`.
 
 Responsibilities:
 
@@ -116,11 +116,11 @@ Codex-specific fields to adapt:
 | `interface.defaultPrompt` | three realistic prompts |
 | `interface.brandColor` | service-appropriate hex color |
 
-See `plugins/rtemplate/.codex-plugin/README.md` for the full manifest field reference.
+See `plugins/soma/.codex-plugin/README.md` for the full manifest field reference.
 
 ## Gemini
 
-Gemini uses `plugins/rtemplate/gemini-extension.json`.
+Gemini uses `plugins/soma/gemini-extension.json`.
 
 Responsibilities:
 
@@ -133,7 +133,7 @@ Responsibilities:
 The Gemini manifest uses `settings.*` interpolation instead of Claude/Codex `user_config.*` interpolation:
 
 ```json
-"env": { "RTEMPLATE_API_URL": "${settings.rtemplate_api_url}" }
+"env": { "SOMA_API_URL": "${settings.soma_api_url}" }
 ```
 
 Sensitive Gemini settings use:
@@ -170,8 +170,8 @@ The validator checks:
 - Claude, Codex, and Gemini manifests are valid JSON
 - plugin manifests do not contain a `version` field
 - manifests point to the shared `.mcp.json`, hooks, and skills paths
-- shared MCP config launches `example mcp`
-- Gemini config launches `example mcp`
+- shared MCP config launches `soma mcp`
+- Gemini config launches `soma mcp`
 - HTTP MCP remains available as a documented fallback for remote/gateway deployments
 - hook config runs `<binary> setup plugin-hook` directly
 - every skill has `name:` and `description:` frontmatter
@@ -179,22 +179,22 @@ The validator checks:
 Use `PLUGIN_ROOT=plugins/<service>` when validating an adapted service package.
 
 For release checks, `just pre-release` includes this validator and the other
-template gates.
+Soma gates.
 
 ## Shared MCP Config
 
-Claude Code and Codex share `plugins/rtemplate/.mcp.json`:
+Claude Code and Codex share `plugins/soma/.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "example",
+      "command": "soma",
       "args": ["mcp"],
       "env": {
-        "RTEMPLATE_API_URL": "${user_config.rtemplate_api_url}",
-        "RTEMPLATE_API_KEY": "${user_config.rtemplate_api_key}",
+        "SOMA_API_URL": "${user_config.soma_api_url}",
+        "SOMA_API_KEY": "${user_config.soma_api_key}",
         "RUST_LOG": "warn"
       }
     }
@@ -206,34 +206,34 @@ Gemini carries equivalent MCP config directly in `gemini-extension.json` because
 
 ## Skills
 
-`plugins/rtemplate/skills/example/SKILL.md` is shared across Claude, Codex, and Gemini. Every skill follows the three-tier fallback pattern — agents try each tier in order and stop when one works:
+`plugins/soma/skills/soma/SKILL.md` is shared across Claude, Codex, and Gemini. Every skill follows the three-tier fallback pattern — agents try each tier in order and stop when one works:
 
 ```markdown
-# example — Claude Code Skill
+# soma — Claude Code Skill
 
-Use this skill whenever you need to query or manage the Example service.
+Use this skill whenever you need to query or manage the Soma runtime.
 
 ## Tier 1: MCP tool (preferred)
-Use when the example MCP server is configured in your agent.
+Use when the Soma MCP server is configured in your agent.
 
-example(action="things")
-example(action="thing", id="abc123")
-example(action="help")          # always available, no auth required
+soma(action="things")
+soma(action="thing", id="abc123")
+soma(action="help")          # always available, no auth required
 
 ## Tier 2: CLI binary
 Use when MCP is unavailable but the binary is installed in $PATH.
 
-example things [--json]
-example thing <id> [--json]
-example status
+soma things [--json]
+soma thing <id> [--json]
+soma status
 
-Env required: RTEMPLATE_API_URL, RTEMPLATE_API_KEY
+Env required: SOMA_API_URL, SOMA_API_KEY
 
 ## Tier 3: Direct API (last resort)
 Use when neither MCP nor CLI is available.
 
-curl -H "Authorization: Bearer $RTEMPLATE_API_KEY" \
-     "$RTEMPLATE_API_URL/things"
+curl -H "Authorization: Bearer $SOMA_API_KEY" \
+     "$SOMA_API_URL/things"
 
 ## Gotchas
 - [service-specific pitfalls go here]
@@ -290,29 +290,29 @@ Keep version and metadata synchronized across:
 | File | Fields |
 | --- | --- |
 | `Cargo.toml` | package `version`, homepage/repository when present |
-| `plugins/rtemplate/.claude-plugin/plugin.json` | identity, repository, user config; no `version` field |
-| `plugins/rtemplate/.codex-plugin/plugin.json` | identity, repository, interface metadata; no `version` field |
-| `plugins/rtemplate/gemini-extension.json` | identity, repository, settings |
+| `plugins/soma/.claude-plugin/plugin.json` | identity, repository, user config; no `version` field |
+| `plugins/soma/.codex-plugin/plugin.json` | identity, repository, interface metadata; no `version` field |
+| `plugins/soma/gemini-extension.json` | identity, repository, settings |
 | `server.json` | package version and registry metadata, when present |
 
-`Cargo.toml` is the canonical version source for this template. Use
-`cargo xtask bump-version template patch|minor|major` or
+`Cargo.toml` is the canonical version source for Soma. Use
+`cargo xtask bump-version soma patch|minor|major` or
 `scripts/bump-version.sh patch|minor|major` to update every file declared in
 `release/components.toml`, then use `cargo xtask check-version-sync` or
 `just pre-release` to verify that version-bearing files still agree. Plugin
 manifests should remain versionless.
 
-The template should not claim write capability unless the MCP server has real write actions. Read-only servers should use Codex `["Read"]` and avoid write-oriented sample prompts.
+Soma should not claim write capability unless the MCP server has real write actions. Read-only servers should use Codex `["Read"]` and avoid write-oriented sample prompts.
 
 ## Adaptation Checklist
 
-When creating a real server from the template:
+When creating a real server from Soma:
 
 1. Rename `example`, `Example`, and `EXAMPLE` across plugin files.
 2. Update all three manifests with the real repository, description, author, keywords, and capability claims.
 3. Keep credential names aligned across Claude `userConfig`, Codex shared `.mcp.json`, and Gemini `settings`.
-4. Replace upstream credential fields such as `rtemplate_api_url` and `rtemplate_api_key`.
-5. Update `apply_plugin_options()` in `crates/rtemplate-cli/src/setup.rs` to map service-specific plugin options into env vars.
+4. Replace upstream credential fields such as `soma_api_url` and `soma_api_key`.
+5. Update `apply_plugin_options()` in `crates/soma-cli/src/setup.rs` to map service-specific plugin options into env vars.
 6. Implement `<binary> setup plugin-hook`, `--no-repair`, `check`, and `repair`.
 7. Update shared skill docs for the actual action surface.
 8. Replace Codex `defaultPrompt` entries with realistic prompts.

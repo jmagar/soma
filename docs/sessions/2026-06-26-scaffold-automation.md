@@ -1,24 +1,24 @@
 ---
 date: 2026-06-26 23:35:39 EST
-repo: git@github.com:jmagar/template-rmcp.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 44e474631806b63502abc19e6f1dec1895071de6
 session id: 8dd2c014-bb7a-46f4-941d-3d4510a9f94d
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template
-beads: rmcp-template-v24, rmcp-template-t8l, rmcp-template-6il, rmcp-template-tk3, rmcp-template-c8a, rmcp-template-9a3
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma
+beads: soma-v24, soma-t8l, soma-6il, soma-tk3, soma-c8a, soma-9a3
 ---
 
 # Scaffold automation and README session
 
 ## User Request
 
-The session started with a request to make scaffolding a new project from the template more frictionless, then expanded into README public-readiness work, automation for adapting generated scaffolds, and verification that the new scaffold action-starter flow actually works.
+The session started with a request to make scaffolding a new project from Soma more frictionless, then expanded into README public-readiness work, automation for adapting generated scaffolds, and verification that the new scaffold action-starter flow actually works.
 
 ## Session Overview
 
-The template was repositioned as a selectable full-stack Rust scaffold rather than only an rmcp server template. The README was rewritten around the selectable surfaces: CLI, MCP, API, web, auth, observability, plugin packaging, deployment, and single-binary runtime.
+Soma was repositioned as a selectable full-stack Rust scaffold rather than only an rmcp server template. The README was rewritten around the selectable surfaces: CLI, MCP, API, web, auth, observability, plugin packaging, deployment, and single-binary runtime.
 
 Scaffold automation was moved into `cargo xtask scaffold`: plan/apply/verify support, profile-aware adaptation guidance, and action-starter artifact generation from an action manifest. A fresh temp-project smoke on `main` confirmed the action-starter workflow works.
 
@@ -35,9 +35,9 @@ Scaffold automation was moved into `cargo xtask scaffold`: plan/apply/verify sup
 ## Key Findings
 
 - The actionable user need behind "Adapting The Scaffold" was automation, not a longer checklist. That became `cargo xtask scaffold --adapt-plan` and `--write-action-starters`.
-- The template's public README needed to describe a selectable full-stack app scaffold, not a narrow rmcp-only template.
+- Soma's public README needed to describe a selectable full-stack app scaffold, not a narrow rmcp-only template.
 - `cargo xtask scaffold --write-action-starters` generated all expected starter files in a fresh generated project and emitted action-specific content for `list_things`.
-- The older Claude transcript found at `/home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl` was from a May binary-distribution conversation, so the current session reconstruction also used the visible Codex context and live git/beads evidence.
+- The older Claude transcript found at `/home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl` was from a May binary-distribution conversation, so the current session reconstruction also used the visible Codex context and live git/beads evidence.
 - During this save pass, unrelated local workflow changes appeared under `.github/workflows/` and `.github/actions/`; they were not staged or modified by this artifact workflow.
 
 ## Technical Decisions
@@ -59,10 +59,10 @@ Scaffold automation was moved into `cargo xtask scaffold`: plan/apply/verify sup
 | modified | `Cargo.lock` |  | Reflected xtask dependency changes for monitoring work | commit `7b7e1c1` |
 | modified | `README.md` |  | Rewrote scaffold positioning and documented scaffold adaptation/action-starter flows | commits `6f41e1c`, `07df9d7`, `5396247` |
 | modified | `cargo-generate.toml` |  | Supported frictionless scaffold generation defaults | commit `30a9032` |
-| modified | `crates/rmcp-template/Cargo.toml` |  | Supported scaffold workflow changes | commit `30a9032` |
-| modified | `crates/rmcp-template/src/lib.rs` |  | Supported scaffold workflow tests/helpers | commit `30a9032` |
-| modified | `crates/rmcp-template/tests/api_routes.rs` |  | Updated scaffold-related route coverage | commit `30a9032` |
-| modified | `crates/rmcp-template/tests/tool_dispatch.rs` |  | Updated scaffold-related tool coverage | commit `30a9032` |
+| modified | `crates/soma/Cargo.toml` |  | Supported scaffold workflow changes | commit `30a9032` |
+| modified | `crates/soma/src/lib.rs` |  | Supported scaffold workflow tests/helpers | commit `30a9032` |
+| modified | `crates/soma/tests/api_routes.rs` |  | Updated scaffold-related route coverage | commit `30a9032` |
+| modified | `crates/soma/tests/tool_dispatch.rs` |  | Updated scaffold-related tool coverage | commit `30a9032` |
 | modified | `docs/CARGO_GENERATE.md` |  | Updated cargo-generate guidance | commit `30a9032` |
 | modified | `docs/QUICKSTART.md` |  | Updated quickstart guidance | commit `30a9032` |
 | modified | `docs/SCAFFOLD.md` |  | Documented scaffold plan/apply/verify and action starter workflows | commits `30a9032`, `07df9d7`, `5396247` |
@@ -70,7 +70,7 @@ Scaffold automation was moved into `cargo xtask scaffold`: plan/apply/verify sup
 | created | `docs/references/mcp/schema/2025-11-25/schema.ts` |  | Pinned upstream MCP schema baseline | commit `7b7e1c1` |
 | created | `docs/sessions/2026-06-26-ci-workflows-no-mcp-cleanup.md` |  | Previous session log committed before this save pass | commit `44e4746` |
 | created | `docs/sessions/2026-06-26-scaffold-automation.md` |  | Current session log | this save-session artifact |
-| modified | `plugins/rtemplate/skills/scaffold-project/SKILL.md` |  | Updated scaffold skill guidance | commit `30a9032` |
+| modified | `plugins/soma/skills/scaffold-project/SKILL.md` |  | Updated scaffold skill guidance | commit `30a9032` |
 | modified | `xtask/Cargo.toml` |  | Added xtask dependencies for monitor/scaffold work | commit `7b7e1c1` |
 | modified | `xtask/README.md` |  | Documented scaffold commands | commits `30a9032`, `07df9d7`, `5396247` |
 | modified | `xtask/src/cargo_generate.rs` |  | Supported frictionless generation workflow | commit `30a9032` |
@@ -86,12 +86,12 @@ Scaffold automation was moved into `cargo xtask scaffold`: plan/apply/verify sup
 
 | bead | title | action(s) | final status | why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-v24` | Make rmcp-template scaffolding frictionless | worked and closed | closed | Tracks the main frictionless scaffold implementation. |
-| `rmcp-template-t8l` | Rewrite README for full-stack scaffold positioning | worked and closed | closed | Tracks the README rewrite requested for public-facing scaffold positioning. |
-| `rmcp-template-6il` | Add scaffold adaptation planner | worked and closed | closed | Tracks `cargo xtask scaffold --adapt-plan`. |
-| `rmcp-template-tk3` | Materialize scaffold action starter artifacts | worked and closed | closed | Tracks `cargo xtask scaffold --write-action-starters`. |
-| `rmcp-template-c8a` | Implement rmcp release monitor workflow and xtask issue body renderer | worked and closed | closed | Related follow-up CI/monitor work observed in recent bead interactions. |
-| `rmcp-template-9a3` | Extend rmcp monitor to watch MCP schema | worked and closed | closed | Tracks the rmcp monitor extension for schema and conformance drift. |
+| `soma-v24` | Make soma scaffolding frictionless | worked and closed | closed | Tracks the main frictionless scaffold implementation. |
+| `soma-t8l` | Rewrite README for full-stack scaffold positioning | worked and closed | closed | Tracks the README rewrite requested for public-facing scaffold positioning. |
+| `soma-6il` | Add scaffold adaptation planner | worked and closed | closed | Tracks `cargo xtask scaffold --adapt-plan`. |
+| `soma-tk3` | Materialize scaffold action starter artifacts | worked and closed | closed | Tracks `cargo xtask scaffold --write-action-starters`. |
+| `soma-c8a` | Implement rmcp release monitor workflow and xtask issue body renderer | worked and closed | closed | Related follow-up CI/monitor work observed in recent bead interactions. |
+| `soma-9a3` | Extend rmcp monitor to watch MCP schema | worked and closed | closed | Tracks the rmcp monitor extension for schema and conformance drift. |
 
 ## Repository Maintenance
 
@@ -105,7 +105,7 @@ Scaffold automation was moved into `cargo xtask scaffold`: plan/apply/verify sup
 
 ### Worktrees and branches
 
-`git worktree list --porcelain` showed two worktrees: `/home/jmagar/workspace/rmcp-template` on `main` and `/home/jmagar/workspace/_no_mcp_worktrees/rmcp-template` on `marketplace-no-mcp`. The side worktree was left untouched because project instructions explicitly protect `marketplace-no-mcp`.
+`git worktree list --porcelain` showed two worktrees: `/home/jmagar/workspace/soma` on `main` and `/home/jmagar/workspace/_no_mcp_worktrees/soma` on `marketplace-no-mcp`. The side worktree was left untouched because project instructions explicitly protect `marketplace-no-mcp`.
 
 `git branch -vv` showed only local `main` and `marketplace-no-mcp`, both tracking their matching remotes. `git branch -r -vv` showed only `origin/main` and `origin/marketplace-no-mcp`. No branch cleanup was attempted.
 
@@ -129,16 +129,16 @@ The session itself updated the user-facing README and scaffold docs. This save p
 
 | command | result |
 |---|---|
-| `git remote get-url origin` | Reported `git@github.com:jmagar/template-rmcp.git`. |
+| `git remote get-url origin` | Reported `git@github.com:jmagar/soma.git`. |
 | `git branch --show-current` | Reported `main`. |
 | `git rev-parse HEAD` | Reported `44e474631806b63502abc19e6f1dec1895071de6`. |
 | `git log --oneline --name-only -10` | Showed recent README, scaffold, rmcp-monitor, CI, no-MCP, and session-log commits. |
 | `bd list --all --sort updated --reverse --limit 100 --json` | Returned recent bead history; output was truncated by command output limit but included relevant closed work. |
-| `bd show rmcp-template-v24 --json` | Confirmed the main frictionless scaffold bead was closed. |
-| `bd show rmcp-template-t8l --json` | Confirmed the README rewrite bead was closed. |
-| `bd show rmcp-template-6il --json` | Confirmed the scaffold adaptation planner bead was closed. |
-| `bd show rmcp-template-tk3 --json` | Confirmed the action-starter artifact bead was closed. |
-| `bd show rmcp-template-9a3 --json` | Confirmed the rmcp monitor schema/conformance bead was closed. |
+| `bd show soma-v24 --json` | Confirmed the main frictionless scaffold bead was closed. |
+| `bd show soma-t8l --json` | Confirmed the README rewrite bead was closed. |
+| `bd show soma-6il --json` | Confirmed the scaffold adaptation planner bead was closed. |
+| `bd show soma-tk3 --json` | Confirmed the action-starter artifact bead was closed. |
+| `bd show soma-9a3 --json` | Confirmed the rmcp monitor schema/conformance bead was closed. |
 | `git worktree list --porcelain` | Showed `main` and protected `marketplace-no-mcp` worktrees. |
 | `gh pr view --json number,title,url` | Reported no pull requests for branch `main`. |
 | `cargo xtask scaffold --name startertest --category upstream-client --port auto --apply "$TMP" --no-cargo-check` | Generated `/tmp/tmp.WKbZTYfBwQ/startertest-mcp` and a scaffold report. |

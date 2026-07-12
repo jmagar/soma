@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "example": {
-      "url": "http://localhost:3000/mcp",
+    "soma": {
+      "url": "http://localhost:40060/mcp",
       "transport": "http"
     }
   }

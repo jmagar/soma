@@ -24,10 +24,20 @@ pub(super) fn contains_top_level_json_key(text: &str, key: &str) -> bool {
 }
 
 pub(super) fn size_limit(path: &Path) -> Option<usize> {
-    if path == Path::new("crates/rtemplate-auth/src/sqlite.rs") {
-        // Vendored auth storage logic is larger than template surface modules;
+    if path == Path::new("crates/soma-auth/src/sqlite.rs") {
+        // Vendored auth storage logic is larger than Soma surface modules;
         // keep it visible as a warning without blocking unrelated CI gates.
         return Some(700);
+    }
+    if path == Path::new("crates/soma-service/src/provider_registry.rs") {
+        // Provider registration and dispatch is intentionally centralized while
+        // the drop-in provider contract is settling. Keep it warning-visible.
+        return Some(400);
+    }
+    if path == Path::new("xtask/src/generated_surfaces.rs") {
+        // Generated surface docs, plugin metadata, and package catalogs are
+        // coupled by design; split once the generated contract stabilizes.
+        return Some(500);
     }
     if path == Path::new("xtask/src/rmcp_release_monitor.rs")
         || path == Path::new("xtask/src/scaffold.rs")

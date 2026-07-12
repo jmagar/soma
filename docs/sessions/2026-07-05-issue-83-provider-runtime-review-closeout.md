@@ -1,13 +1,13 @@
 # Issue 83 Provider Runtime Review Closeout
 
 Branch: `codex/issue-83-dynamic-provider-runtime`
-PR: https://github.com/jmagar/template-rmcp/pull/87
+PR: https://github.com/jmagar/soma/pull/87
 
 ## Scope
 
 - Implemented the first issue 83 dynamic provider runtime slice: manifest-backed registry, static Rust provider adapter, MCP/REST/CLI/palette/OpenAPI generated surfaces, capability enforcement, and provider contract checks.
 - Kept OpenAPIProvider, MCPProvider, WASM, and AI SDK execution behind explicit deferred tests until their isolation and security contracts are implemented.
-- Bumped the shipped template component to `0.4.5` because `origin/main` is already tagged `v0.4.4`.
+- Bumped the shipped Soma component to `0.4.5` because `origin/main` is already tagged `v0.4.4`.
 
 ## Review Follow-Up
 

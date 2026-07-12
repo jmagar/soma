@@ -1,10 +1,8 @@
 use anyhow::{bail, Context, Result};
-use rtemplate_contracts::config::ExampleConfig;
-use rtemplate_contracts::providers::ProviderCatalog;
-use rtemplate_service::{
-    dynamic_provider_registry, static_provider_registry, ExampleClient, ExampleService,
-};
 use serde_json::{json, Value};
+use soma_contracts::config::SomaConfig;
+use soma_contracts::providers::ProviderCatalog;
+use soma_service::{dynamic_provider_registry, static_provider_registry, SomaClient, SomaService};
 use std::{fs, path::Path};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,11 +136,11 @@ pub fn provider_surfaces(args: &[String]) -> Result<()> {
 }
 
 fn render_palette_manifest() -> Result<Value> {
-    let client = ExampleClient::new(&ExampleConfig {
+    let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
     })?;
-    let service = ExampleService::new(client);
+    let service = SomaService::new(client);
     let registry = static_provider_registry(service)?;
     let snapshot = registry.snapshot();
     Ok(json!({
@@ -164,11 +162,11 @@ fn render_palette_manifest() -> Result<Value> {
 
 fn render_provider_snapshot() -> Result<Value> {
     let provider_dir = provider_dir();
-    let client = ExampleClient::new(&ExampleConfig {
+    let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
     })?;
-    let service = ExampleService::new(client);
+    let service = SomaService::new(client);
     let registry = dynamic_provider_registry(service)?;
     let snapshot = registry.refresh_file_providers()?;
     Ok(json!({
@@ -184,7 +182,7 @@ fn render_provider_snapshot() -> Result<Value> {
             "plugin": "docs/generated/plugin.json",
             "codex_marketplace": ".agents/plugins/marketplace.json",
             "claude_marketplace": ".claude-plugin/marketplace.json",
-            "node_package": "packages/rtemplate-mcp/package.json",
+            "node_package": "packages/soma-rmcp/package.json",
             "provider_dir": provider_dir.display().to_string(),
             "provider_files": provider_files(&provider_dir)?,
             "generated_skills": generated_skill_paths(&snapshot.catalogs),
@@ -385,10 +383,10 @@ fn render_tool_reference(out: &mut String, tool: &Value) {
         schema_optional_args(&tool["input_schema"])
     ));
     out.push_str(&format!("- Output: `{}`\n", output_summary(tool)));
-    out.push_str(&format!("- MCP: `example(action=\"{name}\")`\n"));
+    out.push_str(&format!("- MCP: `soma(action=\"{name}\")`\n"));
     if tool["cli"].as_bool().unwrap_or(false) {
         out.push_str(&format!(
-            "- CLI: `rtemplate {}`\n",
+            "- CLI: `soma {}`\n",
             cli_usage(tool)
                 .unwrap_or_else(|| tool["cli_command"].as_str().unwrap_or(name).to_owned())
         ));
@@ -511,7 +509,7 @@ fn schema_output_summary(schema: &Value) -> String {
 fn cli_usage(tool: &Value) -> Option<String> {
     tool["cli_usage"]
         .as_str()
-        .map(|usage| usage.strip_prefix("example ").unwrap_or(usage).to_owned())
+        .map(|usage| usage.strip_prefix("soma ").unwrap_or(usage).to_owned())
 }
 
 fn cli_flags_summary(tool: &Value) -> Option<String> {
@@ -576,7 +574,7 @@ fn examples_summary(tool: &Value) -> Option<String> {
         .iter()
         .take(2)
         .map(|example| {
-            let name = example["name"].as_str().unwrap_or("example");
+            let name = example["name"].as_str().unwrap_or("soma");
             if let Some(args) = example["args"].as_object() {
                 let args = args
                     .keys()
@@ -614,22 +612,76 @@ fn render_primitive_section(out: &mut String, title: &str, items: &Value) {
 fn render_distribution_plugin(snapshot: &Value) -> Value {
     json!({
         "schema_version": 1,
-        "name": "rtemplate",
-        "description": "Generated distributable plugin surface for rmcp-template.",
+        "name": "soma",
+        "title": "Soma",
+        "description": "Generated distributable plugin surface for Soma.",
+        "publisher": {
+            "name": "dinglebear.ai",
+            "url": "https://dinglebear.ai"
+        },
+        "repository": "https://github.com/jmagar/soma",
+        "homepage": "https://soma.dinglebear.ai",
+        "website": "https://soma.dinglebear.ai",
+        "support": "https://github.com/jmagar/soma/issues",
+        "security_policy": "https://github.com/jmagar/soma/security/policy",
+        "license": "MIT",
+        "keywords": [
+            "mcp",
+            "mcp-server",
+            "model-context-protocol",
+            "rmcp",
+            "rust",
+            "agent-tools",
+            "ai-agents",
+            "provider-runtime",
+            "providers",
+            "developer-tools",
+            "automation",
+            "openapi",
+            "docker",
+            "cli",
+            "server-runtime",
+            "soma"
+        ],
         "provider_fingerprint": snapshot["provider_fingerprint"].clone(),
-        "plugin_root": "plugins/rtemplate",
+        "plugin_root": "plugins/soma",
+        "icons": {
+            "png": "plugins/soma/assets/icon.png",
+            "svg": "plugins/soma/assets/logo.svg"
+        },
+        "binaries": {
+            "cli": "soma",
+            "server": "soma-server"
+        },
+        "packages": {
+            "npm": "soma-rmcp",
+            "oci": "ghcr.io/jmagar/soma"
+        },
+        "runtime": {
+            "config_home": "~/.soma",
+            "container_data_dir": "/data",
+            "provider_dir_env": "SOMA_PROVIDER_DIR",
+            "default_provider_dir": "providers",
+            "default_http_endpoint": "http://127.0.0.1:40060/mcp",
+            "transports": ["stdio", "streamable-http"],
+            "auth_modes": ["loopback-dev", "bearer", "oauth", "trusted-gateway"]
+        },
         "codex": {
-            "plugin_json": "plugins/rtemplate/.codex-plugin/plugin.json",
+            "plugin_json": "plugins/soma/.codex-plugin/plugin.json",
             "marketplace": ".agents/plugins/marketplace.json"
         },
         "claude": {
-            "plugin_json": "plugins/rtemplate/.claude-plugin/plugin.json",
+            "plugin_json": "plugins/soma/.claude-plugin/plugin.json",
             "marketplace": ".claude-plugin/marketplace.json"
         },
-        "skills": "plugins/rtemplate/skills",
-        "node_package": "packages/rtemplate-mcp/package.json",
+        "skills": "plugins/soma/skills",
+        "node_package": "packages/soma-rmcp/package.json",
         "docs": "docs/generated/provider-surfaces.md",
-        "mcp_server": "server.json",
+        "mcp_server": {
+            "manifest": "server.json",
+            "name": "dinglebear.ai/soma",
+            "registry_schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+        },
         "provider_files": snapshot["surfaces"]["provider_files"].clone(),
         "surfaces": snapshot["surfaces"].clone(),
         "providers": snapshot["providers"].clone()
@@ -677,12 +729,41 @@ fn write_or_check_generated_skills(root: &Path, snapshot: &Value, mode: Mode) ->
 
 fn render_codex_marketplace() -> Value {
     json!({
-        "name": "rmcp-template",
+        "name": "soma",
+        "description": "Soma RMCP runtime plugins by dinglebear.ai.",
+        "owner": {
+            "name": "dinglebear.ai",
+            "url": "https://dinglebear.ai"
+        },
+        "homepage": "https://soma.dinglebear.ai",
+        "repository": "https://github.com/jmagar/soma",
+        "support": "https://github.com/jmagar/soma/issues",
+        "security_policy": "https://github.com/jmagar/soma/security/policy",
+        "license": "MIT",
+        "keywords": [
+            "mcp",
+            "mcp-server",
+            "model-context-protocol",
+            "rmcp",
+            "rust",
+            "agent-tools",
+            "ai-agents",
+            "provider-runtime",
+            "providers",
+            "developer-tools",
+            "automation",
+            "openapi",
+            "docker",
+            "cli",
+            "server-runtime",
+            "soma"
+        ],
         "plugins": [{
-            "name": "rtemplate",
+            "name": "soma",
+            "description": "Batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
             "source": {
                 "source": "local",
-                "path": "./plugins/rtemplate"
+                "path": "./plugins/soma"
             },
             "policy": {
                 "installation": "AVAILABLE",
@@ -690,7 +771,18 @@ fn render_codex_marketplace() -> Value {
             },
             "category": "Infrastructure",
             "interface": {
-                "displayName": "Example MCP"
+                "displayName": "Soma",
+                "shortDescription": "Drop-in RMCP runtime.",
+                "developerName": "dinglebear.ai",
+                "brandColor": "#6366F1",
+                "composerIcon": "./plugins/soma/assets/icon.png",
+                "logo": "./plugins/soma/assets/logo.svg"
+            },
+            "metadata": {
+                "mcpServer": "server.json",
+                "nodePackage": "soma-rmcp",
+                "ociImage": "ghcr.io/jmagar/soma",
+                "binary": "soma"
             }
         }]
     })
@@ -699,17 +791,28 @@ fn render_codex_marketplace() -> Value {
 fn render_claude_marketplace() -> Value {
     json!({
         "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
-        "name": "rmcp-template",
-        "description": "Generated marketplace catalog for rmcp-template plugins.",
+        "name": "soma",
+        "description": "Generated marketplace catalog for Soma plugins.",
         "owner": {
-            "name": "Jacob Magar",
-            "email": "jmagar@users.noreply.github.com"
+            "name": "dinglebear.ai",
+            "url": "https://dinglebear.ai"
         },
+        "homepage": "https://soma.dinglebear.ai",
+        "repository": "https://github.com/jmagar/soma",
+        "support": "https://github.com/jmagar/soma/issues",
+        "security_policy": "https://github.com/jmagar/soma/security/policy",
+        "license": "MIT",
         "plugins": [{
-            "name": "rtemplate",
-            "description": "Example MCP plugin generated from rmcp-template.",
-            "source": "./plugins/rtemplate",
-            "category": "infrastructure"
+            "name": "soma",
+            "description": "Soma RMCP runtime plugin for drop-in provider-backed tools, prompts, and resources.",
+            "source": "./plugins/soma",
+            "category": "infrastructure",
+            "metadata": {
+                "mcpServer": "server.json",
+                "nodePackage": "soma-rmcp",
+                "ociImage": "ghcr.io/jmagar/soma",
+                "binary": "soma"
+            }
         }]
     })
 }
@@ -778,7 +881,7 @@ fn cli_commands(catalogs: &[ProviderCatalog]) -> Vec<String> {
 }
 
 fn provider_dir() -> std::path::PathBuf {
-    std::env::var_os("RTEMPLATE_PROVIDER_DIR")
+    std::env::var_os("SOMA_PROVIDER_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("providers"))
 }
@@ -799,7 +902,7 @@ fn provider_files(provider_dir: &Path) -> Result<Vec<String>> {
         .filter(|path| {
             matches!(
                 path.extension().and_then(|extension| extension.to_str()),
-                Some("json" | "ts" | "wasm")
+                Some("json" | "ts" | "wasm" | "py")
             )
         })
         .filter_map(|path| {
@@ -874,6 +977,17 @@ mod tests {
         )
         .expect("wasm provider");
         fs::write(
+            providers.join("python_math.py"),
+            r#"
+PROVIDER = {"name": "python-math", "kind": "python"}
+
+def python_add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+"#,
+        )
+        .expect("python provider");
+        fs::write(
             providers.join("notes.mcp.json"),
             provider_manifest("notes-mcp", "mcp", "notes_search"),
         )
@@ -884,12 +998,18 @@ mod tests {
         )
         .expect("openapi provider");
 
-        std::env::set_var("RTEMPLATE_PROVIDER_DIR", &providers);
+        std::env::set_var("SOMA_PROVIDER_DIR", &providers);
         let snapshot = render_provider_snapshot().expect("snapshot");
-        std::env::remove_var("RTEMPLATE_PROVIDER_DIR");
+        std::env::remove_var("SOMA_PROVIDER_DIR");
         let plugin = render_distribution_plugin(&snapshot);
 
-        for action in ["weather_ts", "image_wasm", "notes_search", "github_issue"] {
+        for action in [
+            "weather_ts",
+            "image_wasm",
+            "python_add",
+            "notes_search",
+            "github_issue",
+        ] {
             assert!(
                 contains_string(&snapshot["surfaces"]["mcp_actions"], action),
                 "MCP actions should include {action}"
@@ -914,6 +1034,10 @@ mod tests {
         assert!(contains_string(
             &plugin["provider_files"],
             "providers/weather.tool.ts"
+        ));
+        assert!(contains_string(
+            &plugin["provider_files"],
+            "providers/python_math.py"
         ));
         assert!(contains_string(
             &plugin["provider_files"],
@@ -957,9 +1081,9 @@ mod tests {
         assert!(static_skill.contains("- CLI: `N/A` - do not call this action from CLI."));
         assert!(static_skill.contains("- REST: `N/A` - do not invent an HTTP route."));
         assert!(static_skill.contains("Generated by `cargo xtask generate-provider-surfaces`"));
-        assert!(static_skill.contains("rmcp-template built-in Rust actions"));
+        assert!(static_skill.contains("Soma built-in Rust actions"));
         assert!(static_skill.contains("MCP elicitation"));
-        assert!(static_skill.contains("- CLI: `rtemplate echo --message MSG`"));
+        assert!(static_skill.contains("- CLI: `soma echo --message MSG`"));
         assert!(static_skill.contains("- CLI flags: `--message MSG` required"));
         assert!(static_skill.contains("- Output: `EchoResult`"));
         assert!(static_skill.contains("- Output: `ScaffoldIntentReport`"));
@@ -1001,7 +1125,7 @@ mod tests {
 
     fn wasm_provider(manifest: &[u8]) -> Vec<u8> {
         let mut bytes = vec![0, b'a', b's', b'm', 1, 0, 0, 0];
-        let name = b"rtemplate.provider";
+        let name = b"soma.provider";
         let mut payload = Vec::new();
         write_leb(name.len() as u32, &mut payload);
         payload.extend_from_slice(name);

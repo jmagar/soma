@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compatibility wrapper. Canonical implementation: cargo xtask check-version-sync.
+# Thin wrapper. Canonical implementation: cargo xtask check-version-sync.
 set -euo pipefail
 
 PROJECT_DIR="${1:-.}"

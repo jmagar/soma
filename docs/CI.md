@@ -2,11 +2,11 @@
 title: "CI"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-06-27"
 ---
@@ -19,7 +19,7 @@ CI mirrors local quality gates so failures are reproducible before pushing.
 
 ```bash
 just verify
-just template-check
+just soma-check
 cargo xtask pre-release-check
 ```
 
@@ -47,7 +47,7 @@ security jobs. Branch protection should require the stable aggregate `CI Gate`
 status instead of individual path-skipped jobs.
 
 `changed-paths` emits these routing keys: `all`, `docs`, `workflow`, `rust`,
-`web`, `native`, `mcp`, `docker`, `toml`, `template`, `security`, `secrets`,
+`web`, `native`, `mcp`, `docker`, `toml`, `soma`, `security`, `secrets`,
 and `release`. The routing is intentionally conservative:
 
 - workflow changes (`.github/**`, `xtask/src/ci_paths.rs`,
@@ -88,13 +88,13 @@ Jobs:
 - `clippy`: `cargo clippy -- -D warnings`
 - `test`: builds the stdio binary, runs `cargo nextest run --profile ci`, and uploads the JUnit report
 - `frontend-assets`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm typecheck`, `pnpm build`
-- `build-linux`: native Linux release build, uploads `rtemplate-linux-x86_64`
-- `build-windows`: native Windows release build and test on steamy, uploads `rtemplate-windows-x86_64`
+- `build-linux`: native Linux release build, uploads `soma-linux-x86_64`
+- `build-windows`: native Windows release build and test on steamy, uploads `soma-windows-x86_64`
 - `mcp-smoke`: starts the HTTP MCP server and runs the mcporter smoke suite
 - `container-smoke`: validates compose files and builds the Docker image
 - `toml`: `taplo check`
 - `lefthook-speed`: keeps pre-commit hooks staged-only and fast
-- `template`: generated docs, plugin layout, scaffold, release-version, blob, coupled-file, and ASCII gates
+- `soma`: generated docs, plugin layout, scaffold, release-version, blob, coupled-file, and ASCII gates
 - `deny`: `cargo deny check`
 - `gitleaks`: secret scanning
 - `ci-gate`: single aggregate status for branch protection
@@ -161,6 +161,18 @@ Tag jobs:
 - Trivy vulnerability scan
 - MCP Registry manifest publish when credentials are configured
 
+### `.github/workflows/npm-publish.yml`
+
+Use for: publishing the `soma-rmcp` launcher package after a release tag exists.
+
+Do not use for: PR validation or manual metadata patching. npm package versions
+are immutable, so refreshed package metadata ships with the next release version.
+
+Runs only on `v*` tags. It verifies the tag matches
+`packages/soma-rmcp/package.json`, skips already-published versions for reruns,
+packs the package for inspection, and publishes with npm provenance/trusted
+publishing support.
+
 ### `.github/workflows/scheduled.yml`
 
 Use for: surfacing new RUSTSEC advisories after code has already merged, plus
@@ -224,7 +236,7 @@ retries = 2
 1. `cargo xtask patterns`
 2. plugin layout validation
 3. schema docs validation
-4. template feature smoke tests
+4. Soma feature smoke tests
 5. release version gate
 6. blob-size check
 7. ASCII hygiene
@@ -268,7 +280,7 @@ Large artifacts are blocked unless allowlisted in `scripts/blob-size-allowlist.t
 `release/components.toml` is the source of truth for release components, version-bearing files, tag prefixes, release workflows, and shipping paths. PR CI runs `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr`, using the merge-base of the PR branch so base-only changes do not force a false bump. Pushes to `main` run `.github/workflows/auto-tag.yml`, which consumes `cargo xtask release-plan --head HEAD --mode main --json`, waits for CI on the exact push SHA, and creates the candidate tag for changed components.
 
 Version tags (`v*`) trigger the release workflow, which builds release binaries
-and attaches them to the GitHub Release. This template still includes an
+and attaches them to the GitHub Release. Soma still includes an
 explicit Git LFS write-back job that commits binary pointers to `bin/` on
 `main` for plugin install compatibility. Treat that as an auditable release-only
 exception: disable it in derived repos that distribute solely through GitHub
@@ -278,13 +290,13 @@ write-back path.
 
 CI artifact naming convention:
 
-- `rtemplate-linux-x86_64`
-- `rtemplate-windows-x86_64`
+- `soma-linux-x86_64`
+- `soma-windows-x86_64`
 
 Release tarball naming convention:
 
-- `rtemplate-x86_64.tar.gz`
-- `rtemplate-windows-x86_64.tar.gz`
+- `soma-x86_64.tar.gz`
+- `soma-windows-x86_64.tar.gz`
 
 ## CHANGELOG.md
 

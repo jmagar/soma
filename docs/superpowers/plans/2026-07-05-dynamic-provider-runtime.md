@@ -4,14 +4,14 @@
 
 **Goal:** Implement the reviewed provider-registry slice of GitHub issue #83: static Rust actions and OpenAPI-backed tools feed one registry consumed by MCP, REST, CLI, OpenAPI, generated docs/plugin manifests, and a Palette manifest, with McpProvider, WASM, AI SDK, and full Palette shell split into explicit follow-up tasks.
 
-**Architecture:** Build contract/schema validation first, fold the native registry work from `rmcp-template-q3pg` into `StaticRustProvider`, then migrate public surfaces to immutable provider registry snapshots. OpenAPIProvider is the first dynamic provider. McpProvider, WASMProvider, AI SDK sidecar, and the Tauri Palette shell are separate follow-ups so untrusted execution lands only after auth, capability, budget, redaction, and generated-artifact contracts are proven.
+**Architecture:** Build contract/schema validation first, fold the native registry work from `soma-q3pg` into `StaticRustProvider`, then migrate public surfaces to immutable provider registry snapshots. OpenAPIProvider is the first dynamic provider. McpProvider, WASMProvider, AI SDK sidecar, and the Tauri Palette shell are separate follow-ups so untrusted execution lands only after auth, capability, budget, redaction, and generated-artifact contracts are proven.
 
-**Tech Stack:** Rust 2021 workspace, `rmcp = "2.1.0"` after `rmcp-template-u4rd`, serde/serde_json, `jsonschema`, Axum, clap-style CLI parsing, xtask generation checks, provider-generated Palette manifest for issue #86, Beads for tracking.
+**Tech Stack:** Rust 2021 workspace, `rmcp = "2.1.0"` after `soma-u4rd`, serde/serde_json, `jsonschema`, Axum, clap-style CLI parsing, xtask generation checks, provider-generated Palette manifest for issue #86, Beads for tracking.
 
 ## Global Constraints
 
 - Preserve the thin-shim rule: MCP/REST/CLI parse inputs, call service/provider code, and format outputs; no business logic moves into surface crates.
-- Do not restore public `POST /v1/example`.
+- Do not restore public `the retired REST action-envelope route`.
 - Keep one compact MCP action-dispatched tool for ordinary tools; expose prompts/resources/tasks/elicitation through separate provider catalog sections.
 - Do not implement roots, sampling, or logging-related MCP features.
 - `McpProvider` tools default to MCP + Palette only; REST and CLI exposure require explicit per-tool manifest opt-in.
@@ -32,19 +32,19 @@
 - `docs/specs/dynamic-provider-runtime.md`: architecture spec; add `McpProvider` to the registry diagram and mark StaticRustProvider as the proof path.
 - `docs/contracts/provider-manifest.schema.json`: canonical JSON Schema contract, including provider kind `mcp`.
 - `docs/contracts/examples/provider-manifests/*.json`: valid/invalid fixtures for provider families and security rules.
-- `crates/rtemplate-contracts/src/providers.rs`: manifest/catalog DTOs, overlays, `CapabilityGrant`, and validation errors; no execution types.
-- `crates/rtemplate-contracts/src/provider_validation.rs`: JSON Schema and semantic validation helpers.
-- `crates/rtemplate-service/src/provider_registry.rs`: provider trait, immutable `RegistrySnapshot`, dispatch, validate/status, fingerprints.
-- `crates/rtemplate-service/src/provider_errors.rs`: structured provider errors and log-safe redaction.
-- `crates/rtemplate-service/src/capabilities.rs`: typed capability broker and default-deny checks.
-- `crates/rtemplate-service/src/providers/static_rust.rs`: wraps built-in service actions.
-- `crates/rtemplate-service/src/providers/openapi.rs`: imports curated OpenAPI operations and executes bounded HTTP calls.
-- `crates/rtemplate-mcp/src/schemas.rs`, `tools.rs`, `rmcp_server.rs`: provider-backed MCP tool and primitives.
-- `crates/rtemplate-api/src/api.rs`, `crates/rmcp-template/src/routes.rs`: provider-backed direct REST routes.
-- `crates/rtemplate-cli/src/lib.rs`, `doctor.rs`, `setup.rs`: static infrastructure commands plus dynamic provider commands.
+- `crates/soma-contracts/src/providers.rs`: manifest/catalog DTOs, overlays, `CapabilityGrant`, and validation errors; no execution types.
+- `crates/soma-contracts/src/provider_validation.rs`: JSON Schema and semantic validation helpers.
+- `crates/soma-service/src/provider_registry.rs`: provider trait, immutable `RegistrySnapshot`, dispatch, validate/status, fingerprints.
+- `crates/soma-service/src/provider_errors.rs`: structured provider errors and log-safe redaction.
+- `crates/soma-service/src/capabilities.rs`: typed capability broker and default-deny checks.
+- `crates/soma-service/src/providers/static_rust.rs`: wraps built-in service actions.
+- `crates/soma-service/src/providers/openapi.rs`: imports curated OpenAPI operations and executes bounded HTTP calls.
+- `crates/soma-mcp/src/schemas.rs`, `tools.rs`, `rmcp_server.rs`: provider-backed MCP tool and primitives.
+- `crates/soma-api/src/api.rs`, `crates/soma/src/routes.rs`: provider-backed direct REST routes.
+- `crates/soma-cli/src/lib.rs`, `doctor.rs`, `setup.rs`: static infrastructure commands plus dynamic provider commands.
 - `xtask/src/provider_manifest.rs`, `xtask/src/generated_surfaces.rs`, `xtask/src/scripts_lane_d.rs`: validation, OpenAPI, docs, plugin, and Palette manifest generation.
 - `docs/generated/openapi.json`, `docs/generated/palette-manifest.json`: generated by explicit commands only.
-- `crates/rmcp-template/tests/provider_*.rs`: provider contract, registry, surfaces, OpenAPI provider, security, generated surfaces, and Palette manifest tests.
+- `crates/soma/tests/provider_*.rs`: provider contract, registry, surfaces, OpenAPI provider, security, generated surfaces, and Palette manifest tests.
 
 ---
 
@@ -56,7 +56,7 @@
 - Create: `docs/contracts/examples/provider-manifests/*.json`
 - Create: `xtask/src/provider_manifest.rs`
 - Modify: `xtask/src/main.rs`
-- Test: `crates/rmcp-template/tests/provider_contract.rs`
+- Test: `crates/soma/tests/provider_contract.rs`
 
 **Interfaces:**
 - Consumes: provider schema and issue #83 requirements.
@@ -64,12 +64,12 @@
 
 - [ ] **Step 1: Write failing real-validation tests**
 
-Add `crates/rmcp-template/tests/provider_contract.rs`:
+Add `crates/soma/tests/provider_contract.rs`:
 
 ```rust
 use std::{fs, path::Path};
 
-use rtemplate_contracts::provider_validation::validate_provider_manifest_value;
+use soma_contracts::provider_validation::validate_provider_manifest_value;
 
 fn fixture(name: &str) -> serde_json::Value {
     let path = Path::new("docs/contracts/examples/provider-manifests").join(name);
@@ -107,7 +107,7 @@ fn invalid_provider_manifest_fixtures_fail_with_named_codes() {
 }
 ```
 
-Run: `cargo test -p rmcp-template --test provider_contract`
+Run: `cargo test -p soma --test provider_contract`
 
 Expected: FAIL because validator and fixtures do not exist.
 
@@ -146,14 +146,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test provider_contract
+cargo test -p soma --test provider_contract
 cargo xtask check-provider-manifest-contract
 ```
 
 Commit:
 
 ```bash
-git add docs/specs/dynamic-provider-runtime.md docs/contracts/provider-manifest.schema.json docs/contracts/examples/provider-manifests xtask/src/provider_manifest.rs xtask/src/main.rs crates/rmcp-template/tests/provider_contract.rs
+git add docs/specs/dynamic-provider-runtime.md docs/contracts/provider-manifest.schema.json docs/contracts/examples/provider-manifests xtask/src/provider_manifest.rs xtask/src/main.rs crates/soma/tests/provider_contract.rs
 git commit -m "feat: validate provider manifest contract"
 ```
 
@@ -162,10 +162,10 @@ git commit -m "feat: validate provider manifest contract"
 ### Task 2: Manifest Types And Semantic Validation
 
 **Files:**
-- Create: `crates/rtemplate-contracts/src/providers.rs`
-- Create: `crates/rtemplate-contracts/src/provider_validation.rs`
-- Modify: `crates/rtemplate-contracts/src/lib.rs`
-- Test: `crates/rtemplate-contracts/src/provider_validation_tests.rs`
+- Create: `crates/soma-contracts/src/providers.rs`
+- Create: `crates/soma-contracts/src/provider_validation.rs`
+- Modify: `crates/soma-contracts/src/lib.rs`
+- Test: `crates/soma-contracts/src/provider_validation_tests.rs`
 
 **Interfaces:**
 - Consumes: schema v1 fixtures.
@@ -177,7 +177,7 @@ Create tests for MCP default exposure, duplicate tool names, duplicate REST path
 
 - [ ] **Step 2: Implement DTOs only**
 
-`rtemplate-contracts` may define manifest and normalized catalog data structures. It must not define executable provider instances, reload machinery, or dispatch types.
+`soma-contracts` may define manifest and normalized catalog data structures. It must not define executable provider instances, reload machinery, or dispatch types.
 
 - [ ] **Step 3: Implement validation**
 
@@ -189,14 +189,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rtemplate-contracts provider_validation
-cargo test -p rmcp-template --test provider_contract
+cargo test -p soma-contracts provider_validation
+cargo test -p soma --test provider_contract
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-contracts/src/providers.rs crates/rtemplate-contracts/src/provider_validation.rs crates/rtemplate-contracts/src/provider_validation_tests.rs crates/rtemplate-contracts/src/lib.rs
+git add crates/soma-contracts/src/providers.rs crates/soma-contracts/src/provider_validation.rs crates/soma-contracts/src/provider_validation_tests.rs crates/soma-contracts/src/lib.rs
 git commit -m "feat: add provider manifest validation"
 ```
 
@@ -205,12 +205,12 @@ git commit -m "feat: add provider manifest validation"
 ### Task 3: Registry Snapshot, Auth, Capabilities, Budgets, And Errors
 
 **Files:**
-- Create: `crates/rtemplate-service/src/provider_registry.rs`
-- Create: `crates/rtemplate-service/src/provider_errors.rs`
-- Create: `crates/rtemplate-service/src/capabilities.rs`
-- Modify: `crates/rtemplate-service/src/lib.rs`
-- Test: `crates/rmcp-template/tests/provider_registry.rs`
-- Test: `crates/rmcp-template/tests/provider_security.rs`
+- Create: `crates/soma-service/src/provider_registry.rs`
+- Create: `crates/soma-service/src/provider_errors.rs`
+- Create: `crates/soma-service/src/capabilities.rs`
+- Modify: `crates/soma-service/src/lib.rs`
+- Test: `crates/soma/tests/provider_registry.rs`
+- Test: `crates/soma/tests/provider_security.rs`
 
 **Interfaces:**
 - Consumes: provider manifest/catalog DTOs.
@@ -260,14 +260,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test provider_registry
-cargo test -p rmcp-template --test provider_security
+cargo test -p soma --test provider_registry
+cargo test -p soma --test provider_security
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-service/src/provider_registry.rs crates/rtemplate-service/src/provider_errors.rs crates/rtemplate-service/src/capabilities.rs crates/rtemplate-service/src/lib.rs crates/rmcp-template/tests/provider_registry.rs crates/rmcp-template/tests/provider_security.rs
+git add crates/soma-service/src/provider_registry.rs crates/soma-service/src/provider_errors.rs crates/soma-service/src/capabilities.rs crates/soma-service/src/lib.rs crates/soma/tests/provider_registry.rs crates/soma/tests/provider_security.rs
 git commit -m "feat: add provider registry core"
 ```
 
@@ -276,21 +276,21 @@ git commit -m "feat: add provider registry core"
 ### Task 4: StaticRustProvider And Native Registry Foundation
 
 **Files:**
-- Create: `crates/rtemplate-service/src/providers/static_rust.rs`
-- Modify: `crates/rtemplate-service/src/lib.rs`
-- Modify: `crates/rtemplate-service/src/app.rs`
-- Modify: `crates/rtemplate-contracts/src/actions.rs`
-- Test: `crates/rmcp-template/tests/provider_surfaces.rs`
-- Test: `crates/rmcp-template/tests/tool_dispatch.rs`
-- Test: `crates/rmcp-template/tests/architecture_boundaries.rs`
+- Create: `crates/soma-service/src/providers/static_rust.rs`
+- Modify: `crates/soma-service/src/lib.rs`
+- Modify: `crates/soma-service/src/app.rs`
+- Modify: `crates/soma-contracts/src/actions.rs`
+- Test: `crates/soma/tests/provider_surfaces.rs`
+- Test: `crates/soma/tests/tool_dispatch.rs`
+- Test: `crates/soma/tests/architecture_boundaries.rs`
 
 **Interfaces:**
-- Consumes: existing service methods and `rmcp-template-q3pg` native action registry decisions.
+- Consumes: existing service methods and `soma-q3pg` native action registry decisions.
 - Produces: `StaticRustProvider` with behavior equivalent to current static actions.
 
 - [ ] **Step 1: Fold in q3pg**
 
-Before adding a competing provider trait, complete or consciously incorporate `rmcp-template-q3pg`'s service-owned cached native registry. `StaticRustProvider` wraps that native registry.
+Before adding a competing provider trait, complete or consciously incorporate `soma-q3pg`'s service-owned cached native registry. `StaticRustProvider` wraps that native registry.
 
 - [ ] **Step 2: Write parity tests**
 
@@ -298,11 +298,11 @@ Compare action names, scopes, REST paths, CLI commands, MCP schema enum values, 
 
 - [ ] **Step 3: Add no-dual-registry architecture test**
 
-Fail if `rtemplate-mcp`, `rtemplate-api`, `rtemplate-cli`, or `xtask` reads `ACTION_SPECS` for behavior after this task. Compatibility metadata may exist only behind `StaticRustProvider`.
+Fail if `soma-mcp`, `soma-api`, `soma-cli`, or `xtask` reads `ACTION_SPECS` for behavior after this task. Compatibility metadata may exist only behind `StaticRustProvider`.
 
 - [ ] **Step 4: Implement static provider**
 
-Move any `execute_service_action`-style logic out of `rtemplate-contracts`. Keep business logic in service/app/provider execution, not surfaces.
+Move any `execute_service_action`-style logic out of `soma-contracts`. Keep business logic in service/app/provider execution, not surfaces.
 
 - [ ] **Step 5: Run verification and commit**
 
@@ -310,15 +310,15 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test provider_surfaces
-cargo test -p rmcp-template --test tool_dispatch
-cargo test -p rmcp-template --test architecture_boundaries
+cargo test -p soma --test provider_surfaces
+cargo test -p soma --test tool_dispatch
+cargo test -p soma --test architecture_boundaries
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-service/src/providers/static_rust.rs crates/rtemplate-service/src/lib.rs crates/rtemplate-service/src/app.rs crates/rtemplate-contracts/src/actions.rs crates/rmcp-template/tests/provider_surfaces.rs crates/rmcp-template/tests/tool_dispatch.rs crates/rmcp-template/tests/architecture_boundaries.rs
+git add crates/soma-service/src/providers/static_rust.rs crates/soma-service/src/lib.rs crates/soma-service/src/app.rs crates/soma-contracts/src/actions.rs crates/soma/tests/provider_surfaces.rs crates/soma/tests/tool_dispatch.rs crates/soma/tests/architecture_boundaries.rs
 git commit -m "feat: wrap built-in actions as static provider"
 ```
 
@@ -327,11 +327,11 @@ git commit -m "feat: wrap built-in actions as static provider"
 ### Task 5: Provider-Backed MCP Surface
 
 **Files:**
-- Modify: `crates/rtemplate-mcp/src/schemas.rs`
-- Modify: `crates/rtemplate-mcp/src/tools.rs`
-- Modify: `crates/rtemplate-mcp/src/rmcp_server.rs`
-- Test: `crates/rtemplate-mcp/src/schemas_tests.rs`
-- Test: `crates/rmcp-template/tests/tool_dispatch.rs`
+- Modify: `crates/soma-mcp/src/schemas.rs`
+- Modify: `crates/soma-mcp/src/tools.rs`
+- Modify: `crates/soma-mcp/src/rmcp_server.rs`
+- Test: `crates/soma-mcp/src/schemas_tests.rs`
+- Test: `crates/soma/tests/tool_dispatch.rs`
 
 **Interfaces:**
 - Consumes: `RegistrySnapshot` and `ProviderRegistry::dispatch`.
@@ -343,7 +343,7 @@ Assert the single action-dispatched tool derives ordinary action enum values fro
 
 - [ ] **Step 2: Route MCP through registry dispatch**
 
-`dispatch_example` parses action args, builds `ProviderCall` with `Surface::Mcp`, principal/scopes/auth mode/destructive confirmation, and calls `ProviderRegistry::dispatch`. Provider failures remain structured tool results.
+`dispatch_soma` parses action args, builds `ProviderCall` with `Surface::Mcp`, principal/scopes/auth mode/destructive confirmation, and calls `ProviderRegistry::dispatch`. Provider failures remain structured tool results.
 
 - [ ] **Step 3: Implement scoped primitives**
 
@@ -355,14 +355,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rtemplate-mcp --all-features
-cargo test -p rmcp-template --features test-support --test tool_dispatch
+cargo test -p soma-mcp --all-features
+cargo test -p soma --features test-support --test tool_dispatch
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-mcp/src/schemas.rs crates/rtemplate-mcp/src/tools.rs crates/rtemplate-mcp/src/rmcp_server.rs crates/rtemplate-mcp/src/schemas_tests.rs crates/rmcp-template/tests/tool_dispatch.rs
+git add crates/soma-mcp/src/schemas.rs crates/soma-mcp/src/tools.rs crates/soma-mcp/src/rmcp_server.rs crates/soma-mcp/src/schemas_tests.rs crates/soma/tests/tool_dispatch.rs
 git commit -m "feat: route MCP tools through provider registry"
 ```
 
@@ -371,19 +371,19 @@ git commit -m "feat: route MCP tools through provider registry"
 ### Task 6: Provider-Backed REST Routes And Unified OpenAPI
 
 **Files:**
-- Modify: `crates/rtemplate-api/src/api.rs`
-- Modify: `crates/rmcp-template/src/routes.rs`
+- Modify: `crates/soma-api/src/api.rs`
+- Modify: `crates/soma/src/routes.rs`
 - Modify: `xtask/src/scripts_lane_d.rs`
-- Test: `crates/rmcp-template/tests/api_routes.rs`
-- Test: `crates/rmcp-template/tests/openapi.rs`
+- Test: `crates/soma/tests/api_routes.rs`
+- Test: `crates/soma/tests/openapi.rs`
 
 **Interfaces:**
 - Consumes: registry tools with `rest.enabled=true`.
-- Produces: direct REST routes, cached `/openapi.json`, `openapi --check`, and no `/v1/example`.
+- Produces: direct REST routes, cached `/openapi.json`, `openapi --check`, and no `retired REST action-envelope route`.
 
 - [ ] **Step 1: Write route parity tests**
 
-Assert `POST /v1/greet`, `POST /v1/echo`, and `GET /v1/status` work through registry dispatch. Assert `POST /v1/example` returns 404. Assert duplicate route conflicts fail snapshot validation.
+Assert `POST /v1/greet`, `POST /v1/echo`, and `GET /v1/status` work through registry dispatch. Assert `the retired REST action-envelope route` returns 404. Assert duplicate route conflicts fail snapshot validation.
 
 - [ ] **Step 2: Implement provider-backed direct routes**
 
@@ -391,7 +391,7 @@ Mount direct Axum routes from registry metadata. The handler maps request data i
 
 - [ ] **Step 3: Move OpenAPI to snapshot cache**
 
-Generate OpenAPI from provider snapshot summaries, include `x-rtemplate.provider_fingerprint`, and cache serialized bytes in the active snapshot. Runtime `/openapi.json` returns cached bytes; check/write commands regenerate explicitly.
+Generate OpenAPI from provider snapshot summaries, include `x-soma.provider_fingerprint`, and cache serialized bytes in the active snapshot. Runtime `/openapi.json` returns cached bytes; check/write commands regenerate explicitly.
 
 - [ ] **Step 4: Run verification and commit**
 
@@ -399,15 +399,15 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test api_routes
-cargo test -p rmcp-template --test openapi
+cargo test -p soma --test api_routes
+cargo test -p soma --test openapi
 cargo xtask check-openapi-drift
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-api/src/api.rs crates/rmcp-template/src/routes.rs xtask/src/scripts_lane_d.rs crates/rmcp-template/tests/api_routes.rs crates/rmcp-template/tests/openapi.rs docs/generated/openapi.json
+git add crates/soma-api/src/api.rs crates/soma/src/routes.rs xtask/src/scripts_lane_d.rs crates/soma/tests/api_routes.rs crates/soma/tests/openapi.rs docs/generated/openapi.json
 git commit -m "feat: generate REST and OpenAPI from providers"
 ```
 
@@ -416,10 +416,10 @@ git commit -m "feat: generate REST and OpenAPI from providers"
 ### Task 7: Dynamic CLI Commands And Provider Operations
 
 **Files:**
-- Modify: `crates/rtemplate-cli/src/lib.rs`
-- Modify: `crates/rtemplate-cli/src/doctor.rs`
-- Modify: `crates/rtemplate-cli/src/setup.rs`
-- Test: `crates/rmcp-template/tests/cli_parse.rs`
+- Modify: `crates/soma-cli/src/lib.rs`
+- Modify: `crates/soma-cli/src/doctor.rs`
+- Modify: `crates/soma-cli/src/setup.rs`
+- Test: `crates/soma/tests/cli_parse.rs`
 
 **Interfaces:**
 - Consumes: registry tools with `cli.enabled=true`.
@@ -443,14 +443,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test cli_parse
-cargo test -p rmcp-template --features test-support
+cargo test -p soma --test cli_parse
+cargo test -p soma --features test-support
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-cli/src/lib.rs crates/rtemplate-cli/src/doctor.rs crates/rtemplate-cli/src/setup.rs crates/rmcp-template/tests/cli_parse.rs
+git add crates/soma-cli/src/lib.rs crates/soma-cli/src/doctor.rs crates/soma-cli/src/setup.rs crates/soma/tests/cli_parse.rs
 git commit -m "feat: add dynamic provider CLI commands"
 ```
 
@@ -459,9 +459,9 @@ git commit -m "feat: add dynamic provider CLI commands"
 ### Task 8: OpenAPIProvider
 
 **Files:**
-- Create: `crates/rtemplate-service/src/providers/openapi.rs`
-- Modify: `crates/rtemplate-service/src/lib.rs`
-- Test: `crates/rmcp-template/tests/openapi_provider.rs`
+- Create: `crates/soma-service/src/providers/openapi.rs`
+- Modify: `crates/soma-service/src/lib.rs`
+- Test: `crates/soma/tests/openapi_provider.rs`
 
 **Interfaces:**
 - Consumes: curated OpenAPI documents and typed network capability grants.
@@ -485,15 +485,15 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test openapi_provider
-cargo test -p rmcp-template --test provider_surfaces
-cargo test -p rmcp-template --test provider_security
+cargo test -p soma --test openapi_provider
+cargo test -p soma --test provider_surfaces
+cargo test -p soma --test provider_security
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-service/src/providers/openapi.rs crates/rtemplate-service/src/lib.rs crates/rmcp-template/tests/openapi_provider.rs
+git add crates/soma-service/src/providers/openapi.rs crates/soma-service/src/lib.rs crates/soma/tests/openapi_provider.rs
 git commit -m "feat: add OpenAPI provider"
 ```
 
@@ -502,12 +502,12 @@ git commit -m "feat: add OpenAPI provider"
 ### Task 9: McpProvider Follow-Up
 
 **Files:**
-- Create: `crates/rtemplate-service/src/providers/mcp.rs`
-- Modify: `crates/rtemplate-service/src/lib.rs`
-- Test: `crates/rmcp-template/tests/mcp_provider.rs`
+- Create: `crates/soma-service/src/providers/mcp.rs`
+- Modify: `crates/soma-service/src/lib.rs`
+- Test: `crates/soma/tests/mcp_provider.rs`
 
 **Interfaces:**
-- Consumes: upstream MCP server catalog after `rmcp-template-u4rd`.
+- Consumes: upstream MCP server catalog after `soma-u4rd`.
 - Produces: `McpProvider` with MCP + Palette default exposure only.
 
 - [ ] **Step 1: Write MCP provider tests**
@@ -524,15 +524,15 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test mcp_provider
-cargo test -p rmcp-template --test provider_surfaces
-cargo test -p rmcp-template --test provider_security
+cargo test -p soma --test mcp_provider
+cargo test -p soma --test provider_surfaces
+cargo test -p soma --test provider_security
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-service/src/providers/mcp.rs crates/rtemplate-service/src/lib.rs crates/rmcp-template/tests/mcp_provider.rs
+git add crates/soma-service/src/providers/mcp.rs crates/soma-service/src/lib.rs crates/soma/tests/mcp_provider.rs
 git commit -m "feat: add MCP provider"
 ```
 
@@ -541,9 +541,9 @@ git commit -m "feat: add MCP provider"
 ### Task 10: WASMProvider Follow-Up
 
 **Files:**
-- Create: `crates/rtemplate-service/src/providers/wasm.rs`
-- Modify: `crates/rtemplate-service/Cargo.toml`
-- Test: `crates/rmcp-template/tests/wasm_provider.rs`
+- Create: `crates/soma-service/src/providers/wasm.rs`
+- Modify: `crates/soma-service/Cargo.toml`
+- Test: `crates/soma/tests/wasm_provider.rs`
 
 **Interfaces:**
 - Consumes: WASM provider manifests.
@@ -563,14 +563,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test wasm_provider
-cargo test -p rmcp-template --test provider_security
+cargo test -p soma --test wasm_provider
+cargo test -p soma --test provider_security
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-service/src/providers/wasm.rs crates/rtemplate-service/Cargo.toml crates/rmcp-template/tests/wasm_provider.rs
+git add crates/soma-service/src/providers/wasm.rs crates/soma-service/Cargo.toml crates/soma/tests/wasm_provider.rs
 git commit -m "feat: add WASM provider"
 ```
 
@@ -579,10 +579,10 @@ git commit -m "feat: add WASM provider"
 ### Task 11: AI SDK Tool Provider Follow-Up
 
 **Files:**
-- Create: `crates/rtemplate-service/src/providers/ai_sdk.rs`
-- Create: `crates/rtemplate-service/src/providers/sidecar.rs`
-- Modify: `crates/rtemplate-service/Cargo.toml`
-- Test: `crates/rmcp-template/tests/ai_sdk_provider.rs`
+- Create: `crates/soma-service/src/providers/ai_sdk.rs`
+- Create: `crates/soma-service/src/providers/sidecar.rs`
+- Modify: `crates/soma-service/Cargo.toml`
+- Test: `crates/soma/tests/ai_sdk_provider.rs`
 
 **Interfaces:**
 - Consumes: `.tool.ts` provider manifests.
@@ -602,14 +602,14 @@ Run:
 
 ```bash
 cargo fmt --all --check
-cargo test -p rmcp-template --test ai_sdk_provider
-cargo test -p rmcp-template --test provider_security
+cargo test -p soma --test ai_sdk_provider
+cargo test -p soma --test provider_security
 ```
 
 Commit:
 
 ```bash
-git add crates/rtemplate-service/src/providers/ai_sdk.rs crates/rtemplate-service/src/providers/sidecar.rs crates/rtemplate-service/Cargo.toml crates/rmcp-template/tests/ai_sdk_provider.rs
+git add crates/soma-service/src/providers/ai_sdk.rs crates/soma-service/src/providers/sidecar.rs crates/soma-service/Cargo.toml crates/soma/tests/ai_sdk_provider.rs
 git commit -m "feat: add AI SDK provider"
 ```
 
@@ -624,8 +624,8 @@ git commit -m "feat: add AI SDK provider"
 - Modify: `CHANGELOG.md`
 - Modify: `CLAUDE.md`
 - Create: `docs/generated/palette-manifest.json`
-- Test: `crates/rmcp-template/tests/generated_surfaces.rs`
-- Test: `crates/rmcp-template/tests/palette_manifest.rs`
+- Test: `crates/soma/tests/generated_surfaces.rs`
+- Test: `crates/soma/tests/palette_manifest.rs`
 
 **Interfaces:**
 - Consumes: provider snapshot summaries and docs/plugin/ui overlays.
@@ -671,7 +671,7 @@ cargo xtask check-release-versions --base origin/main --head HEAD --mode pr
 Commit:
 
 ```bash
-git add xtask/src/generated_surfaces.rs xtask/src/scripts_lane_d.rs server.json CHANGELOG.md CLAUDE.md crates/rmcp-template/tests/generated_surfaces.rs crates/rmcp-template/tests/palette_manifest.rs docs/generated/openapi.json docs/generated/palette-manifest.json
+git add xtask/src/generated_surfaces.rs xtask/src/scripts_lane_d.rs server.json CHANGELOG.md CLAUDE.md crates/soma/tests/generated_surfaces.rs crates/soma/tests/palette_manifest.rs docs/generated/openapi.json docs/generated/palette-manifest.json
 git commit -m "feat: generate provider docs plugins and palette manifest"
 ```
 
@@ -683,7 +683,7 @@ git commit -m "feat: generate provider docs plugins and palette manifest"
 
 **Placeholder scan:** No placeholder tasks remain. High-risk work has either exact tests and commands or is split into explicit follow-up provider tasks.
 
-**Type consistency:** Types are consistently separated: `rtemplate-contracts` owns manifest/catalog DTOs; `rtemplate-service` owns `Provider`, `ProviderRegistry`, `RegistrySnapshot`, `ProviderCall`, `ProviderOutput`, `ProviderError`, and capability broker execution.
+**Type consistency:** Types are consistently separated: `soma-contracts` owns manifest/catalog DTOs; `soma-service` owns `Provider`, `ProviderRegistry`, `RegistrySnapshot`, `ProviderCall`, `ProviderOutput`, `ProviderError`, and capability broker execution.
 
 ## Execution Handoff
 

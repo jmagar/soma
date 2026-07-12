@@ -6,7 +6,7 @@ Draft specification for the provider-based runtime direction.
 
 ## Goal
 
-Turn the template into a batteries-included runtime shell where users focus on
+Turn Soma into a batteries-included runtime shell where users focus on
 creating and testing tools while the server supplies the repeated platform work:
 
 - MCP server with one compact action-dispatched service tool
@@ -24,7 +24,7 @@ for every new business capability.
 
 ## Non-Goals
 
-- Do not bring back a REST action envelope such as `POST /v1/example`.
+- Do not bring back a REST action envelope such as `the retired REST action-envelope route`.
 - Do not require users to hand-write large JSON manifests for the happy path.
 - Do not expose MCP-native prompts/resources/tasks/elicitation through REST or
   CLI by default.
@@ -42,6 +42,9 @@ ProviderRegistry
   OpenApiProvider
   McpProvider
   AiSdkToolProvider
+  PythonFunctionProvider
+  LangChainProvider
+  LlamaIndexProvider
   WasmProvider
 ```
 
@@ -108,7 +111,7 @@ fast custom logic and AI-native glue code.
 Minimal authoring should look like:
 
 ```ts
-import { defineTool } from "@rtemplate/tools";
+import { defineTool } from "@soma/tools";
 import { z } from "zod";
 
 export default defineTool({
@@ -122,6 +125,81 @@ export default defineTool({
 
 The provider infers the action name from `weather.tool.ts`, converts Zod schemas
 to JSON Schema, and exposes the action everywhere.
+
+### Python Function Provider
+
+Loads `.py` files through a Python sidecar. This is the lowest-friction Python
+path for users who already have functions and do not need a framework adapter.
+
+Minimal authoring should look like:
+
+```python
+PROVIDER = {"name": "math-tools", "kind": "python"}
+
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+
+async def echo(message: str) -> dict:
+    """Echo a message."""
+    return {"message": message}
+```
+
+When `TOOLS` is absent, the provider autodiscovers public functions defined by
+the module. Private names are ignored. Function signatures are converted into
+JSON Schema for common Python annotations such as `str`, `int`, `float`, `bool`,
+`dict`, `list`, and typed lists.
+
+Python provider files are trusted code, not inert configuration. Soma imports
+the module to derive the catalog, so top-level Python runs during provider
+refresh. The sidecar starts with a cleared environment and receives only
+declared provider/tool env values during tool execution. Catalog import does
+not receive provider env; provider code must read secrets inside tool functions
+instead of at module import time.
+
+### Python LangChain and LlamaIndex Providers
+
+Loads `.py` files through a Python sidecar. These providers are for reusing
+existing Python tool ecosystems rather than inventing a Soma-specific Python
+tool API.
+
+Minimal LangChain authoring should look like:
+
+```python
+from langchain_core.tools import tool
+
+PROVIDER = {"name": "weather-tools", "kind": "langchain"}
+
+@tool
+def get_weather(city: str) -> dict:
+    """Get weather for a city."""
+    return {"city": city, "celsius": 20}
+
+TOOLS = [get_weather]
+```
+
+Minimal LlamaIndex authoring should look like:
+
+```python
+from llama_index.core.tools import FunctionTool
+
+PROVIDER = {"name": "math-tools", "kind": "llamaindex"}
+
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+
+TOOLS = [FunctionTool.from_defaults(add, name="add")]
+```
+
+The provider imports the module, reads `PROVIDER` and `TOOLS`, converts
+LangChain/LlamaIndex tool metadata into provider tool schemas, and executes tool
+calls in a Python sidecar. `SOMA_PYTHON_COMMAND` may point at a virtualenv
+or `uv`/Python wrapper when the default `python3` is not the right interpreter.
+These provider files have the same trusted-code behavior as plain Python
+providers: module import happens during catalog refresh, while tool execution
+runs with only declared environment values. Framework tools should avoid
+constructing env-dependent clients at module import time.
 
 ### WASM Provider
 
@@ -224,7 +302,7 @@ All provider tools become dynamic subcommands:
 example weather --city Paris
 example qdrant-search --query "rmcp tracing"
 example summarize --text ./notes.md
-example help weather
+soma help weather
 ```
 
 The CLI derives flags and optional positionals from the provider schema and CLI
@@ -306,7 +384,7 @@ The generated OpenAPI should contain a registry fingerprint:
 
 ```json
 {
-  "x-rtemplate": {
+  "x-soma": {
     "provider_fingerprint": "sha256:...",
     "providers": []
   }
@@ -318,7 +396,7 @@ manifests, TypeScript tool metadata, server config affecting exposed actions,
 and runtime schema version.
 
 Client generation should be recipes and helper commands by default, not stale
-SDK packages checked into the template. Recommended TypeScript default:
+SDK packages checked into Soma. Recommended TypeScript default:
 
 ```bash
 npx openapi-typescript http://localhost:40060/openapi.json -o src/generated/api.d.ts
@@ -389,7 +467,8 @@ OpenAPI providers are generally safer than code providers because they can only
 call declared HTTP operations, but they still need auth, filtering, rate limits,
 and route curation.
 
-WASM and TypeScript providers must run under explicit capability policy.
+WASM, TypeScript, and Python providers must run under explicit capability
+policy.
 
 ## Reload and Staleness
 
@@ -423,17 +502,19 @@ Provider reload should report:
 4. Add unified OpenAPI generation and fingerprint checks.
 5. Add OpenAPI provider as the recommended default dynamic provider.
 6. Add TypeScript AI SDK sidecar provider.
-7. Add WASM provider.
-8. Add provider-driven Palette manifest and generic Palette shell.
-9. Add Aurora/shadcn UI generation.
-10. Add provider-driven `SKILL.md`, plugin, marketplace, and Gemini generation.
+7. Add Python LangChain and LlamaIndex sidecar providers.
+8. Add WASM provider.
+9. Add provider-driven Palette manifest and generic Palette shell.
+10. Add Aurora/shadcn UI generation.
+11. Add provider-driven `SKILL.md`, plugin, marketplace, and Gemini generation.
 
 ## Acceptance Principles
 
 - Adding a Rust-native action should not require edits to MCP, REST, CLI, Palette,
   OpenAPI, docs, or plugin surface files.
 - Adding an OpenAPI provider should not require a Rust rebuild.
-- Dropping in valid `.tool.ts` or `.wasm` providers should not require a Rust rebuild.
+- Dropping in valid `.tool.ts`, `.py`, or `.wasm` providers should not require a
+  Rust rebuild.
 - The happy path should infer names, routes, commands, schemas, docs, and UI from
   convention.
 - Advanced configuration should be additive and optional.

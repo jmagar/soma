@@ -8,7 +8,7 @@
 # The per-PR `audit` job in ci.yml still gates merges; this workflow is the
 # safety net that catches advisories filed against already-merged code.
 #
-# TEMPLATE: keep this file. Adjust the cron if 06:43 UTC Monday clashes with
+# CUSTOMIZE: keep this file. Adjust the cron if 06:43 UTC Monday clashes with
 # other scheduled load.
 # =============================================================================
 

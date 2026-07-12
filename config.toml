@@ -1,8 +1,7 @@
 # =============================================================================
-# config.toml — Non-secret configuration for the Example MCP server
+# config.toml — Non-secret configuration for the Soma MCP server
 #
-# TEMPLATE: Rename "example" sections and identifiers to match your service.
-#           Search-replace: example → myservice, EXAMPLE → MYSERVICE
+# Soma uses hard product identifiers. Do not add previous-name aliases.
 #
 # SPLIT PHILOSOPHY:
 #   Rule: if it's a secret or a URL, use an env var. If it's configuration,
@@ -13,56 +12,52 @@
 #   .env         → API URLs, API keys, tokens, OAuth credentials, passwords
 #
 # Environment variables ALWAYS take priority over values here.
-# Variable naming: EXAMPLE_MCP_* for server settings, EXAMPLE_API_* for upstream.
+# Variable naming: SOMA_MCP_* for server settings, SOMA_API_* for upstream.
 # =============================================================================
 
 # ── Upstream service ──────────────────────────────────────────────────────────
-# TEMPLATE: Rename this section to match your service (e.g. [myservice]).
-#           Map to ExampleConfig in src/config.rs.
-#
 #           Do NOT put real credentials here — use .env for that.
 #           These values are fine as comments showing the format; the real
-#           values come from EXAMPLE_API_URL / EXAMPLE_API_KEY env vars.
-[example]
-# api_url = "https://api.example.com/v1"   # overridden by EXAMPLE_API_URL
-# api_key = ""                              # overridden by EXAMPLE_API_KEY (use env var)
+#           values come from SOMA_API_URL / SOMA_API_KEY env vars.
+[soma]
+# api_url = "https://api.example.com/v1"   # overridden by SOMA_API_URL
+# api_key = ""                              # overridden by SOMA_API_KEY (use env var)
 
 # ── MCP HTTP server ───────────────────────────────────────────────────────────
-# TEMPLATE: Adjust port and bind address for your deployment.
-#           3000 avoids collision with syslog-mcp (3100) and common Node.js
-#           dev servers. Override with EXAMPLE_MCP_PORT env var.
+# Adjust port and bind address for your deployment. Override with
+# SOMA_MCP_PORT.
 [mcp]
 host = "0.0.0.0"            # bind to all interfaces; use 127.0.0.1 for local-only
-port = 40060                # EXAMPLE_MCP_PORT; also update Dockerfile EXPOSE and docker-compose.yml
-server_name = "template-rmcp" # advertised to MCP clients in tools/list response
+port = 40060                # SOMA_MCP_PORT; also update Dockerfile EXPOSE and docker-compose.yml
+server_name = "soma" # advertised to MCP clients in tools/list response
 
-# Static bearer token — ALWAYS set via EXAMPLE_MCP_TOKEN env var, not here.
+# Static bearer token — ALWAYS set via SOMA_MCP_TOKEN env var, not here.
 # api_token = ""
 
 # Disable auth entirely. Only safe when host=127.* (local dev only).
-# Prefer EXAMPLE_MCP_NO_AUTH=true env var over uncommenting this.
+# Prefer SOMA_MCP_NO_AUTH=true env var over uncommenting this.
 # no_auth = false
 
 # Extra Host header values allowed by the RMCP host-validation middleware.
 # Add your reverse-proxy or Docker service hostname here.
-# Comma-separated in env: EXAMPLE_MCP_ALLOWED_HOSTS=myservice.lan,myservice.example.com
+# Comma-separated in env: SOMA_MCP_ALLOWED_HOSTS=soma.lan,soma.example.com
 # allowed_hosts = ["myservice.example.com"]
 
 # Extra CORS origins allowed for browser-based clients.
-# Comma-separated in env: EXAMPLE_MCP_ALLOWED_ORIGINS=https://myservice.example.com
+# Comma-separated in env: SOMA_MCP_ALLOWED_ORIGINS=https://soma.example.com
 # allowed_origins = ["https://myservice.example.com"]
 
 # ── OAuth / JWT auth ──────────────────────────────────────────────────────────
-# TEMPLATE: All sensitive OAuth values (client_id, client_secret, public_url)
-#           MUST come from env vars — see .env.example.
+# All sensitive OAuth values (client_id, client_secret, public_url)
+# MUST come from env vars — see .env.example.
 #           These settings control the token lifecycle and rate limiting.
-#           Activate OAuth with: EXAMPLE_MCP_AUTH_MODE=oauth in .env
+#           Activate OAuth with: SOMA_MCP_AUTH_MODE=oauth in .env
 [mcp.auth]
-# mode = "bearer"           # bearer (default) or oauth; EXAMPLE_MCP_AUTH_MODE
-# public_url = ""           # EXAMPLE_MCP_PUBLIC_URL (required for oauth)
-# google_client_id = ""     # EXAMPLE_MCP_GOOGLE_CLIENT_ID (use env var)
-# google_client_secret = "" # EXAMPLE_MCP_GOOGLE_CLIENT_SECRET (use env var)
-admin_email = ""                       # EXAMPLE_MCP_AUTH_ADMIN_EMAIL
+# mode = "bearer"           # bearer (default) or oauth; SOMA_MCP_AUTH_MODE
+# public_url = ""           # SOMA_MCP_PUBLIC_URL (required for oauth)
+# google_client_id = ""     # SOMA_MCP_GOOGLE_CLIENT_ID (use env var)
+# google_client_secret = "" # SOMA_MCP_GOOGLE_CLIENT_SECRET (use env var)
+admin_email = ""                       # SOMA_MCP_AUTH_ADMIN_EMAIL
 allowed_emails = []                    # additional allowed emails beyond admin_email
 sqlite_path = "/data/auth.db"          # OAuth session storage; update for your data dir
 key_path = "/data/auth-jwt.pem"        # RS256 key for JWT signing; auto-generated on first run

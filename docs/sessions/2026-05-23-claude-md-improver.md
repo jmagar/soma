@@ -1,12 +1,12 @@
 ---
 date: 2026-05-23 17:29:05 EST
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: b6c3e83
 session id: f90a9ab1-07b2-44cf-bfc5-5391797f46d4
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/f90a9ab1-07b2-44cf-bfc5-5391797f46d4.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/f90a9ab1-07b2-44cf-bfc5-5391797f46d4.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma
 beads: none
 ---
 
@@ -16,7 +16,7 @@ Ran `/claude-md-management:claude-md-improver` to audit and improve CLAUDE.md fi
 
 ## Session Overview
 
-Audited all four CLAUDE.md files in the repo, scored them against the skill's quality rubric (average B+, 88/100), and applied three small corrections to the root `./CLAUDE.md`. Other three files (`docs/`, `plugins/rtemplate/`, `apps/web/`) needed no changes.
+Audited all four CLAUDE.md files in the repo, scored them against the skill's quality rubric (average B+, 88/100), and applied three small corrections to the root `./CLAUDE.md`. Other three files (`docs/`, `plugins/soma/`, `apps/web/`) needed no changes.
 
 ## Sequence of Events
 
@@ -34,7 +34,7 @@ Audited all four CLAUDE.md files in the repo, scored them against the skill's qu
 - Root `CLAUDE.md:42` heading "How to add an action (4-file checklist)" was outdated — list had grown to 8 steps.
 - Root `CLAUDE.md:64` said "AuthPolicy is an enum with three states" but the table below listed 4 variants.
 - Root `CLAUDE.md:155` warned `config.toml` still held `unraid-mcp` values; `grep -i unraid config.toml` returned no matches, so the gotcha is stale.
-- `docs/CLAUDE.md`, `plugins/rtemplate/CLAUDE.md`, and `apps/web/CLAUDE.md` are in good shape — concise, current, project-specific.
+- `docs/CLAUDE.md`, `plugins/soma/CLAUDE.md`, and `apps/web/CLAUDE.md` are in good shape — concise, current, project-specific.
 
 ## Technical Decisions
 
@@ -56,7 +56,7 @@ No bead activity observed. The CLAUDE.md improvements were small, in-session, an
 
 - **Plans**: `docs/plans/` is empty — no completed plans to move. No-op.
 - **Beads**: No bead state changes needed for this session; the work was a documentation cleanup with no tracker-worthy follow-ups.
-- **Worktrees and branches**: `git worktree list --porcelain` shows only the primary worktree at `~/workspace/rmcp-template`. `git branch -vv` shows only `main` tracking `origin/main` at `b6c3e83`. Nothing to prune.
+- **Worktrees and branches**: `git worktree list --porcelain` shows only the primary worktree at `~/workspace/soma`. `git branch -vv` shows only `main` tracking `origin/main` at `b6c3e83`. Nothing to prune.
 - **Stale docs**: The session itself was a stale-doc cleanup of the root `CLAUDE.md`. The three secondary CLAUDE.md files were spot-checked and left as-is. No other docs reviewed in this session.
 - **Skipped/blocked**: None.
 

@@ -2,18 +2,18 @@
 title: "Architecture Decision Records"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: true
 last_reviewed: "2026-05-26"
 ---
 
 # Architecture Decision Records
 
-This directory contains accepted architecture decisions for `rmcp-template` and
+This directory contains accepted architecture decisions for `soma` and
 the Rust MCP/server family that uses it.
 
 ADRs record decisions that should stay stable across implementation plans,

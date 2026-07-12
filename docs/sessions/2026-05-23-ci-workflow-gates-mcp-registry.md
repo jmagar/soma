@@ -1,13 +1,13 @@
 ---
 date: 2026-05-23 02:44:15 EDT
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 0085d88
 session id: 019e5357-c456-73d2-8a88-438090326886
 transcript: /home/jmagar/.codex/sessions/2026/05/23/rollout-2026-05-23T01-38-41-019e5357-c456-73d2-8a88-438090326886.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template
-beads: rmcp-template-490, rmcp-template-lei
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma
+beads: soma-490, soma-lei
 ---
 
 # CI Workflow Gates and MCP Registry Setup
@@ -18,25 +18,25 @@ The session started with: "Is there any other CI workflows that we can borrow fr
 
 ## Session Overview
 
-Added reusable CI/release workflow coverage to `rmcp-template`: actionlint, frontend artifact reuse, live MCP mcporter smoke, Compose/Docker smoke, version-sync gating, and MCP Registry publish support. Then moved the registry domain out of committed workflow YAML into a GitHub Actions repository variable.
+Added reusable CI/release workflow coverage to `soma`: actionlint, frontend artifact reuse, live MCP mcporter smoke, Compose/Docker smoke, version-sync gating, and MCP Registry publish support. Then moved the registry domain out of committed workflow YAML into a GitHub Actions repository variable.
 
 ## Sequence of Events
 
-1. Compared `.github/workflows` in `rmcp-template` with sibling repos `lab`, `axon_rust`, and `syslog-mcp`.
+1. Compared `.github/workflows` in `soma` with sibling repos `lab`, `axon_rust`, and `syslog-mcp`.
 2. Identified reusable workflow patterns and explicitly skipped the Codex plugin scanner when requested.
 3. Implemented CI additions in `.github/workflows/ci.yml`, release web artifact reuse in `.github/workflows/release.yml`, MCP Registry publishing in `.github/workflows/docker-publish.yml`, and `.github/actionlint.yaml`.
 4. Verified workflows locally and exercised the new MCP smoke path against `./target/debug/example` on port `40123`.
 5. Committed and pushed `8a5c0d5`, then changed the registry domain to use `vars.MCP_REGISTRY_DOMAIN`, set the repo variable to `tootie.tv`, committed and pushed `0085d88`.
 6. Checked live GitHub Actions runs; all push workflows failed before runner startup due to GitHub billing/spending-limit annotations.
-7. Searched `~/workspace` for MCP Registry key/domain usage and confirmed sibling repos use `tootie.tv` plus `MCP_PRIVATE_KEY`; `rmcp-template` has the variable but not the secret.
+7. Searched `~/workspace` for MCP Registry key/domain usage and confirmed sibling repos use `tootie.tv` plus `MCP_PRIVATE_KEY`; `soma` has the variable but not the secret.
 8. Created follow-up beads for the missing secret and GitHub Actions billing blocker.
 
 ## Key Findings
 
-- `rmcp-template` already had stronger equivalents for several sibling checks: CodeQL, gitleaks, cargo-deny, MSRV, Trivy, Dependabot auto-merge, and native Linux/Windows artifact builds.
+- `soma` already had stronger equivalents for several sibling checks: CodeQL, gitleaks, cargo-deny, MSRV, Trivy, Dependabot auto-merge, and native Linux/Windows artifact builds.
 - Sibling workflows consistently use DNS auth domain `tootie.tv` for MCP Registry publishing, for example `syslog-mcp/.github/workflows/docker-publish.yml`.
-- `jmagar/rmcp-template` now has repository variable `MCP_REGISTRY_DOMAIN=tootie.tv`, verified with `gh variable list -R jmagar/rmcp-template`.
-- `jmagar/rmcp-template` does not have a repository secret named `MCP_PRIVATE_KEY`; sibling repos such as `syslog-mcp`, `arcane-mcp`, `unifi-mcp`, `gotify-mcp`, `overseerr-mcp`, `swag-mcp`, and `axon_rust` do.
+- `jmagar/soma` now has repository variable `MCP_REGISTRY_DOMAIN=tootie.tv`, verified with `gh variable list -R jmagar/soma`.
+- `jmagar/soma` does not have a repository secret named `MCP_PRIVATE_KEY`; sibling repos such as `syslog-mcp`, `arcane-mcp`, `unifi-mcp`, `gotify-mcp`, `overseerr-mcp`, `swag-mcp`, and `axon_rust` do.
 - GitHub Actions failures on pushed commits were not workflow-step failures. Check-run annotations reported: "The job was not started because recent account payments have failed or your spending limit needs to be increased."
 
 ## Technical Decisions
@@ -45,7 +45,7 @@ Added reusable CI/release workflow coverage to `rmcp-template`: actionlint, fron
 - Put the MCP Registry publish job in `.github/workflows/docker-publish.yml` because `server.json` publishes an OCI package identifier, so registry publishing should run after the Docker image push succeeds.
 - Used `vars.MCP_REGISTRY_DOMAIN` instead of committing `tootie.tv`, preserving template neutrality while still allowing this repository to publish under the user's DNS identity.
 - Used port `40123` for the CI MCP smoke instead of `40060` after local verification found an installed `/usr/local/bin/example serve mcp` already listening on `40060`.
-- Added `.github/actionlint.yaml` for self-hosted runner labels `rmcp-template` and `steamy`, so the new actionlint job accepts this repository's Windows runner label set.
+- Added `.github/actionlint.yaml` for self-hosted runner labels `soma` and `steamy`, so the new actionlint job accepts this repository's Windows runner label set.
 
 ## Files Changed
 
@@ -61,16 +61,16 @@ Added reusable CI/release workflow coverage to `rmcp-template`: actionlint, fron
 
 | bead | title | action | final status | why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-490` | Add MCP_PRIVATE_KEY secret to rmcp-template | Created | open | Tracks the remaining MCP Registry publish prerequisite; `gh secret list -R jmagar/rmcp-template` did not show `MCP_PRIVATE_KEY`. |
-| `rmcp-template-lei` | Resolve GitHub Actions billing blocker for rmcp-template workflows | Created | open | Tracks the non-code blocker preventing all push workflows from starting. |
+| `soma-490` | Add MCP_PRIVATE_KEY secret to soma | Created | open | Tracks the remaining MCP Registry publish prerequisite; `gh secret list -R jmagar/soma` did not show `MCP_PRIVATE_KEY`. |
+| `soma-lei` | Resolve GitHub Actions billing blocker for soma workflows | Created | open | Tracks the non-code blocker preventing all push workflows from starting. |
 
 Notes: both `bd create` commands succeeded, but emitted `Warning: auto-export: git add failed: exit status 1`. `bd show` confirmed both beads exist.
 
 ## Repository Maintenance
 
 - Plans: `find docs/plans -maxdepth 2 -type f` returned no plan files, so no completed plan moves were available.
-- Beads: searched for existing CI/registry/secret/billing issues before creating `rmcp-template-490` and `rmcp-template-lei`; no direct duplicates for these current blockers were found.
-- Worktrees and branches: `git worktree list --porcelain` showed only `/home/jmagar/workspace/rmcp-template` on `main`; `git branch -vv` showed `main` even with `origin/main`; no cleanup was safe or needed.
+- Beads: searched for existing CI/registry/secret/billing issues before creating `soma-490` and `soma-lei`; no direct duplicates for these current blockers were found.
+- Worktrees and branches: `git worktree list --porcelain` showed only `/home/jmagar/workspace/soma` on `main`; `git branch -vv` showed `main` even with `origin/main`; no cleanup was safe or needed.
 - Stale docs: no repo docs were updated. The workflow comments now document `gh variable set MCP_REGISTRY_DOMAIN --body <domain>` in `.github/workflows/docker-publish.yml:31`.
 - Git state: after the workflow commits, `git status --short --branch` showed `## main...origin/main` before this session note was written.
 
@@ -91,18 +91,18 @@ Notes: both `bd create` commands succeeded, but emitted `Warning: auto-export: g
 - `bash scripts/check-version-sync.sh`: passed with all three version-bearing files at `v0.4.0`.
 - `docker compose --env-file .env.example -f docker-compose.prod.yml config --quiet` and `docker compose --env-file .env.example -f docker-compose.yml config --quiet`: passed.
 - `cargo build --locked --bin example`: passed locally.
-- `RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=40123 bash tests/mcporter/test-mcp.sh --timeout-ms 20000`: passed with `10` pass, `0` fail, `2` skip.
-- `gh variable set MCP_REGISTRY_DOMAIN --body tootie.tv -R jmagar/rmcp-template`: set the repository variable.
+- `SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_PORT=40123 bash tests/mcporter/test-mcp.sh --timeout-ms 20000`: passed with `10` pass, `0` fail, `2` skip.
+- `gh variable set MCP_REGISTRY_DOMAIN --body tootie.tv -R jmagar/soma`: set the repository variable.
 - `gh run list --branch main --limit 5 --json ...`: showed push workflow failures on `0085d88` and `8a5c0d5`.
-- `gh api repos/jmagar/rmcp-template/check-runs/.../annotations`: showed GitHub billing/spending-limit failure annotations.
+- `gh api repos/jmagar/soma/check-runs/.../annotations`: showed GitHub billing/spending-limit failure annotations.
 - `git pull --rebase && bd dolt push && git push && git status --short --branch`: pushed commits and Beads state.
 
 ## Errors Encountered
 
 - Local MCP smoke initially failed because port `40060` was already occupied by `/usr/local/bin/example serve mcp`. Resolution: run the new CI smoke on `40123`.
-- Local actionlint initially failed on custom self-hosted runner labels `rmcp-template` and `steamy`. Resolution: add `.github/actionlint.yaml`.
+- Local actionlint initially failed on custom self-hosted runner labels `soma` and `steamy`. Resolution: add `.github/actionlint.yaml`.
 - Local actionlint also reported shellcheck `SC2035` for `sha256sum *`. Resolution: changed the release workflow to `sha256sum ./*`.
-- GitHub Actions runs failed before job steps due to billing/spending-limit status, not due to workflow content. Follow-up bead: `rmcp-template-lei`.
+- GitHub Actions runs failed before job steps due to billing/spending-limit status, not due to workflow content. Follow-up bead: `soma-lei`.
 - `bd create` emitted `Warning: auto-export: git add failed: exit status 1`; `bd show` confirmed both created issues exist.
 
 ## Behavior Changes
@@ -126,14 +126,14 @@ Notes: both `bd create` commands succeeded, but emitted `Warning: auto-export: g
 | `docker compose --env-file .env.example -f docker-compose.yml config --quiet` | Valid dev compose config | No output, exit 0 | pass |
 | `cargo build --locked --bin example` | Debug binary builds | Finished dev profile | pass |
 | `tests/mcporter/test-mcp.sh --timeout-ms 20000` on port `40123` | MCP smoke passes | `PASS 10`, `FAIL 0`, `SKIP 2` | pass |
-| `gh variable list -R jmagar/rmcp-template` | Domain stored as repo variable | `MCP_REGISTRY_DOMAIN tootie.tv` | pass |
-| `gh secret list -R jmagar/rmcp-template` | Show required publish secret | Did not show `MCP_PRIVATE_KEY` | blocked |
+| `gh variable list -R jmagar/soma` | Domain stored as repo variable | `MCP_REGISTRY_DOMAIN tootie.tv` | pass |
+| `gh secret list -R jmagar/soma` | Show required publish secret | Did not show `MCP_PRIVATE_KEY` | blocked |
 | GitHub Actions push workflows | Jobs start and produce logs | Jobs failed before startup due to billing/spending-limit annotation | blocked |
 
 ## Risks and Rollback
 
 - Workflow action versions still include some semver tags inherited from earlier files (`actions/checkout@v6`, Docker actions by major version). This session did not convert every existing action use to commit SHAs.
-- MCP Registry publishing will skip if `MCP_PRIVATE_KEY` is unset, but a tag release will not actually register until `rmcp-template-490` is resolved.
+- MCP Registry publishing will skip if `MCP_PRIVATE_KEY` is unset, but a tag release will not actually register until `soma-490` is resolved.
 - Rollback path: revert commits `0085d88` and `8a5c0d5`, then remove repo variable `MCP_REGISTRY_DOMAIN` if desired.
 
 ## Decisions Not Taken
@@ -148,7 +148,7 @@ Notes: both `bd create` commands succeeded, but emitted `Warning: auto-export: g
 - `../lab/.github/workflows/ci.yml` and `../lab/.github/workflows/release.yml` for frontend artifact and release-smoke patterns.
 - `../axon_rust/.github/workflows/compose-smoke.yml` and `../axon_rust/.github/workflows/ci.yml` for compose/image smoke and MCP smoke patterns.
 - `../syslog-mcp/.github/workflows/docker-publish.yml` for MCP Registry publish steps.
-- GitHub Actions runs for `8a5c0d5` and `0085d88` in `jmagar/rmcp-template`.
+- GitHub Actions runs for `8a5c0d5` and `0085d88` in `jmagar/soma`.
 
 ## Open Questions
 
@@ -157,7 +157,7 @@ Notes: both `bd create` commands succeeded, but emitted `Warning: auto-export: g
 
 ## Next Steps
 
-1. Resolve `rmcp-template-lei`: fix GitHub Actions billing or spending limit, then rerun the failed workflows for `0085d88`.
-2. Resolve `rmcp-template-490`: set `MCP_PRIVATE_KEY` on `jmagar/rmcp-template` using the existing registry DNS key.
+1. Resolve `soma-lei`: fix GitHub Actions billing or spending limit, then rerun the failed workflows for `0085d88`.
+2. Resolve `soma-490`: set `MCP_PRIVATE_KEY` on `jmagar/soma` using the existing registry DNS key.
 3. After billing and secret setup, push a harmless commit or rerun workflows to verify CI, MSRV, CodeQL, Docker Publish, and tag-time registry publish behavior.
 4. Optional hardening: pin remaining unpinned major-version actions in `docker-publish.yml` and `release.yml` to commit SHAs.

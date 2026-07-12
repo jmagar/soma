@@ -2,49 +2,49 @@
 title: "systemd Deployment"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-05-15"
 ---
 
 # systemd
 
-The template supports user-level systemd deployments when a unit named `rtemplate-mcp.service` is installed by the derived service.
+Soma supports user-level systemd deployments when a unit named `soma-mcp.service` is installed by the derived service.
 
 ## Install the binary
 
 ```bash
-cargo build --release --bin example-server --features full
-install -m 755 target/release/example-server ~/.local/bin/example-server
+cargo build --release --bin soma-server --features full
+install -m 755 target/release/soma-server ~/.local/bin/soma-server
 ```
 
 Or use the install script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/rtemplate-mcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/soma-mcp/main/install.sh | bash
 ```
 
 The binary installs to `~/.local/bin/`. Verify it's in `$PATH`:
 
 ```bash
-example --version
-example doctor
+soma --version
+soma doctor
 ```
 
 ## Unit file pattern
 
 ```ini
 [Unit]
-Description=example MCP server
+Description=Soma MCP server
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/example-server serve mcp
+ExecStart=%h/.local/bin/soma-server serve mcp
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=%h/.example/.env
@@ -54,7 +54,7 @@ WantedBy=default.target
 ```
 
 Key points:
-- Use `EnvironmentFile` pointing at `~/.example/.env` — never hardcode tokens in unit files.
+- Use `EnvironmentFile` pointing at `~/.soma/.env` — never hardcode tokens in unit files.
 - `%h` expands to the user home directory.
 - `serve mcp` is the canonical Streamable HTTP mode (see `docs/DEPLOYMENT.md`).
 
@@ -62,8 +62,8 @@ Key points:
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user restart rtemplate-mcp.service
-systemctl --user status rtemplate-mcp.service
+systemctl --user restart soma-mcp.service
+systemctl --user status soma-mcp.service
 ```
 
 ## Runtime verification
@@ -75,7 +75,7 @@ systemctl --user status rtemplate-mcp.service
 - optional `--expected-binary`
 
 ```bash
-scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/example-server
+scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/soma-server
 just runtime-current
 ```
 
@@ -86,18 +86,18 @@ If hashes differ, install the new binary and restart the unit.
 With systemd, logs go to the journal:
 
 ```bash
-journalctl --user -u rtemplate-mcp.service -f
-journalctl --user -u rtemplate-mcp.service --since "1h ago"
+journalctl --user -u soma-mcp.service -f
+journalctl --user -u soma-mcp.service --since "1h ago"
 ```
 
-The binary also writes structured JSON logs to `~/.example/logs/example.log` regardless of deployment mode (see `docs/OBSERVABILITY.md`).
+The binary also writes structured JSON logs to `~/.soma/logs/example.log` regardless of deployment mode (see `docs/OBSERVABILITY.md`).
 
 ## Doctor pre-flight
 
-Run `example doctor` before starting the unit to validate the environment:
+Run `soma doctor` before starting the unit to validate the environment:
 
 ```bash
-example doctor
+soma doctor
 ```
 
 Exit code 0 = ready to start. Exit code 1 = one or more issues found.

@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans or work-it to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a safe, reusable testing pattern for Rust MCP servers that are REST API clients, starting in `rmcp-template`.
+**Goal:** Add a safe, reusable testing pattern for Rust MCP servers that are REST API clients, starting in `soma`.
 
 **Decision:** Use three evidence tiers:
 
-1. **Static-spec evidence:** `xtask` audits schema docs, OpenAPI docs, action surfaces, plugin contracts, and template invariants without starting a server.
+1. **Static-spec evidence:** `xtask` audits schema docs, OpenAPI docs, action surfaces, plugin contracts, and Soma invariants without starting a server.
 2. **Contract-real evidence:** derived servers test REST-client behavior against local mock upstreams and schema fixtures. These tests prove request construction, parsing, error mapping, and safety gates against a contract; they do not prove live upstream health.
 3. **Production-real evidence:** optional live smoke through `mcporter`, restricted to explicit read-only allowlists. This is never the default path.
 
@@ -19,7 +19,7 @@
 ### File Structure
 
 - Modify `xtask/src/main.rs`: add `contract-audit` command that orchestrates existing static/spec checks.
-- Modify `Justfile`: add `contract-audit` recipe and include it in template checks where appropriate.
+- Modify `Justfile`: add `contract-audit` recipe and include it in Soma checks where appropriate.
 - Modify `README.md`: document the command and family testing policy.
 - Modify `docs/TESTING.md`: document static-spec, contract-real, and production-real evidence tiers.
 - Modify `docs/PATTERNS.md`: add the reusable REST-client contract testing pattern.
@@ -41,14 +41,14 @@ check-test-siblings
 scripts/check-schema-docs.py --check
 scripts/check-openapi.py --check
 scripts/check-scaffold-intent-contract.py
-scripts/test-template-features.sh
+scripts/test-soma-features.sh
 ```
 
 It must stream subprocess output and fail with the command name that failed. It must not contact live upstream services.
 
 - [ ] **Step 2: Add Justfile recipe**
 
-Add `just contract-audit` as the human-friendly wrapper. Include it in `template-check` only if that keeps existing checks equivalent or clearer.
+Add `just contract-audit` as the human-friendly wrapper. Include it in `soma-check` only if that keeps existing checks equivalent or clearer.
 
 - [ ] **Step 3: Update help text**
 

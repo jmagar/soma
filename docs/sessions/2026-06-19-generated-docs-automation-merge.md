@@ -1,20 +1,20 @@
 ---
 date: 2026-06-19 02:11:47 EST
-repo: git@github.com:jmagar/rtemplate-mcp.git
+repo: git@github.com:jmagar/soma-mcp.git
 branch: main
 head: 185b0fd1d0c3443850dc85853843be27ef8ad43c
 session id: 8dd2c014-bb7a-46f4-941d-3d4510a9f94d
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template 185b0fd [main]
-beads: rmcp-template-chl, rmcp-template-hi8, rmcp-template-lo4
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma 185b0fd [main]
+beads: soma-chl, soma-hi8, soma-lo4
 ---
 
 # Generated docs automation merge
 
 ## User Request
 
-Review the rmcp-template docs to find additional hand-maintained surfaces that could be generated, implement those suggestions, then merge the completed work into `main` without losing any work. The final request was to save the session to markdown.
+Review the soma docs to find additional hand-maintained surfaces that could be generated, implement those suggestions, then merge the completed work into `main` without losing any work. The final request was to save the session to markdown.
 
 ## Session Overview
 
@@ -32,7 +32,7 @@ The session added generator-backed docs and metadata for volatile template surfa
 ## Key Findings
 
 - `scripts/generate-docs.py:14` centralizes generation from Rust/action/config/plugin metadata into env docs, plugin manifests, web action metadata, and generated tables.
-- `crates/rtemplate-contracts/src/actions.rs:169` now carries action metadata, REST method/path, and CLI metadata in `ActionSpec`.
+- `crates/soma-contracts/src/actions.rs:169` now carries action metadata, REST method/path, and CLI metadata in `ActionSpec`.
 - `scripts/check-stale-claims.py:12` guards against stale `localhost:3100`, stale `default_mcp_port() -> 40000`, and plugin manifest `version` fields.
 - `xtask/src/main.rs:61` exposes `generate-docs`, `check-docs`, and `check-stale-claims`; `xtask/src/main.rs:201` includes these in `contract-audit`.
 - The injected Claude transcript exists, but its tail covers an older SWAG/binary-server brainstorming session, not the Codex implementation and merge. Current session facts were therefore taken from git, Beads, command output, and the active conversation.
@@ -40,7 +40,7 @@ The session added generator-backed docs and metadata for volatile template surfa
 ## Technical Decisions
 
 - Kept `ACTION_SPECS` as the canonical source for action names, transport availability, REST route metadata, CLI metadata, docs tables, and generated web action data.
-- Generated plugin manifests from `plugins/rtemplate/plugin.surface.json` so Claude, Codex, Gemini, and `.mcp.json` stay aligned without manifest version fields.
+- Generated plugin manifests from `plugins/soma/plugin.surface.json` so Claude, Codex, Gemini, and `.mcp.json` stay aligned without manifest version fields.
 - Added a stale-claim scanner instead of relying on ad hoc searches; after merge, excluded `.worktrees/` and `.full-review/` so historical artifacts do not fail current-source checks.
 - Preserved the detached work before integration by naming and pushing `codex/generated-docs-automation`; this avoided losing work while resolving conflicts on `main`.
 - Aborted `git pull --rebase` after it tried to replay the feature commit and recreate resolved conflicts; pushed the validated merge commit instead.
@@ -59,33 +59,33 @@ The session added generator-backed docs and metadata for volatile template surfa
 | modified | `apps/web/README.md` | - | Updated local port references | `a20d9de` |
 | modified | `apps/web/components/api/action-card.tsx` | - | Updated web API examples/port | `a20d9de` |
 | created | `apps/web/lib/generated-actions.ts` | - | Generated web action metadata | `a20d9de` |
-| modified | `apps/web/lib/template.test.ts` | - | Updated generated action/web tests | `a20d9de` |
-| modified | `apps/web/lib/template.ts` | - | Import generated actions instead of hand-maintained list | `a20d9de` |
+| modified | `apps/web/lib/soma.test.ts` | - | Updated generated action/web tests | `a20d9de` |
+| modified | `apps/web/lib/soma.ts` | - | Import generated actions instead of hand-maintained list | `a20d9de` |
 | modified | `apps/web/package.json` | - | Removed misplaced pnpm overrides | `a20d9de` |
 | created | `apps/web/pnpm-workspace.yaml` | - | Added pnpm workspace config for overrides | `a20d9de` |
-| modified | `config.example.toml` | - | Generated config example from config source | `a20d9de` |
-| modified | `crates/rmcp-template/tests/api_routes.rs` | - | Added REST route/action metadata coverage and merge fix | `185b0fd` |
-| modified | `crates/rtemplate-api/src/api.rs` | - | Shared service error handling and restored greet default body behavior | `185b0fd` |
-| modified | `crates/rtemplate-cli/Cargo.toml` | - | Added test dependency support | `a20d9de` |
-| modified | `crates/rtemplate-cli/src/cli_tests.rs` | - | CLI action metadata fixture and shared dispatch tests | `185b0fd` |
-| modified | `crates/rtemplate-cli/src/lib.rs` | - | CLI dispatch metadata integration from newer main | `185b0fd` |
-| modified | `crates/rtemplate-contracts/Cargo.toml` | - | Dependency update for contract metadata work | `a20d9de` |
-| modified | `crates/rtemplate-contracts/src/actions.rs` | - | Added REST route metadata, CLI metadata, and validation integration | `185b0fd` |
-| modified | `crates/rtemplate-contracts/src/actions_tests.rs` | - | Tests for action metadata and validation classification | `185b0fd` |
-| modified | `crates/rtemplate-contracts/src/config.rs` | - | Fixed default MCP port to 40060 | `a20d9de` |
-| modified | `crates/rtemplate-contracts/src/env_registry.rs` | - | Expanded env registry for generated docs/settings | `a20d9de` |
-| created | `crates/rtemplate-contracts/src/errors.rs` | - | Shared service/tool error taxonomy from newer main conflict resolution | `185b0fd` |
-| modified | `crates/rtemplate-contracts/src/lib.rs` | - | Exported shared errors module | `185b0fd` |
-| modified | `crates/rtemplate-mcp/src/rmcp_server.rs` | - | Routed MCP errors through shared service error taxonomy | `185b0fd` |
-| modified | `crates/rtemplate-mcp/src/rmcp_server_tests.rs` | - | Updated tests for shared MCP error payloads and auth feature gate | `185b0fd` |
-| modified | `crates/rtemplate-service/src/lib.rs` | - | Added service error classification adapter | `185b0fd` |
-| modified | `crates/rtemplate-web/assets/source/README.md` | - | Synced bundled web source | `a20d9de` |
-| modified | `crates/rtemplate-web/assets/source/components/api/action-card.tsx` | - | Synced bundled web source | `a20d9de` |
-| created | `crates/rtemplate-web/assets/source/lib/generated-actions.ts` | - | Synced generated web actions into bundled source | `a20d9de` |
-| modified | `crates/rtemplate-web/assets/source/lib/template.test.ts` | - | Synced bundled web source tests | `a20d9de` |
-| modified | `crates/rtemplate-web/assets/source/lib/template.ts` | - | Synced bundled generated-action import | `a20d9de` |
-| modified | `crates/rtemplate-web/assets/source/package.json` | - | Synced pnpm override cleanup | `a20d9de` |
-| created | `crates/rtemplate-web/assets/source/pnpm-workspace.yaml` | - | Synced pnpm workspace config | `a20d9de` |
+| modified | `config.soma.toml` | - | Generated config example from config source | `a20d9de` |
+| modified | `crates/soma/tests/api_routes.rs` | - | Added REST route/action metadata coverage and merge fix | `185b0fd` |
+| modified | `crates/soma-api/src/api.rs` | - | Shared service error handling and restored greet default body behavior | `185b0fd` |
+| modified | `crates/soma-cli/Cargo.toml` | - | Added test dependency support | `a20d9de` |
+| modified | `crates/soma-cli/src/cli_tests.rs` | - | CLI action metadata fixture and shared dispatch tests | `185b0fd` |
+| modified | `crates/soma-cli/src/lib.rs` | - | CLI dispatch metadata integration from newer main | `185b0fd` |
+| modified | `crates/soma-contracts/Cargo.toml` | - | Dependency update for contract metadata work | `a20d9de` |
+| modified | `crates/soma-contracts/src/actions.rs` | - | Added REST route metadata, CLI metadata, and validation integration | `185b0fd` |
+| modified | `crates/soma-contracts/src/actions_tests.rs` | - | Tests for action metadata and validation classification | `185b0fd` |
+| modified | `crates/soma-contracts/src/config.rs` | - | Fixed default MCP port to 40060 | `a20d9de` |
+| modified | `crates/soma-contracts/src/env_registry.rs` | - | Expanded env registry for generated docs/settings | `a20d9de` |
+| created | `crates/soma-contracts/src/errors.rs` | - | Shared service/tool error taxonomy from newer main conflict resolution | `185b0fd` |
+| modified | `crates/soma-contracts/src/lib.rs` | - | Exported shared errors module | `185b0fd` |
+| modified | `crates/soma-mcp/src/rmcp_server.rs` | - | Routed MCP errors through shared service error taxonomy | `185b0fd` |
+| modified | `crates/soma-mcp/src/rmcp_server_tests.rs` | - | Updated tests for shared MCP error payloads and auth feature gate | `185b0fd` |
+| modified | `crates/soma-service/src/lib.rs` | - | Added service error classification adapter | `185b0fd` |
+| modified | `crates/soma-web/assets/source/README.md` | - | Synced bundled web source | `a20d9de` |
+| modified | `crates/soma-web/assets/source/components/api/action-card.tsx` | - | Synced bundled web source | `a20d9de` |
+| created | `crates/soma-web/assets/source/lib/generated-actions.ts` | - | Synced generated web actions into bundled source | `a20d9de` |
+| modified | `crates/soma-web/assets/source/lib/soma.test.ts` | - | Synced bundled web source tests | `a20d9de` |
+| modified | `crates/soma-web/assets/source/lib/soma.ts` | - | Synced bundled generated-action import | `a20d9de` |
+| modified | `crates/soma-web/assets/source/package.json` | - | Synced pnpm override cleanup | `a20d9de` |
+| created | `crates/soma-web/assets/source/pnpm-workspace.yaml` | - | Synced pnpm workspace config | `a20d9de` |
 | modified | `docs/DOCS.md` | - | Documented generated docs surfaces | `a20d9de` |
 | modified | `docs/ENV.md` | - | Generated env reference | `a20d9de` |
 | modified | `docs/MCP_SCHEMA.md` | - | Generated schema description alignment | `a20d9de` |
@@ -99,12 +99,12 @@ The session added generator-backed docs and metadata for volatile template surfa
 | created | `docs/generated/plugin-settings.md` | - | Generated plugin settings docs | `a20d9de` |
 | created | `docs/generated/scripts-index.md` | - | Generated scripts index | `a20d9de` |
 | modified | `docs/specs/scaffold-intent-handoff.md` | - | Updated scaffold port examples | `a20d9de` |
-| modified | `plugins/rtemplate/.claude-plugin/plugin.json` | - | Generated Claude plugin manifest | `a20d9de` |
-| modified | `plugins/rtemplate/.codex-plugin/plugin.json` | - | Generated Codex plugin manifest | `a20d9de` |
-| modified | `plugins/rtemplate/gemini-extension.json` | - | Generated Gemini extension manifest | `a20d9de` |
-| created | `plugins/rtemplate/plugin.surface.json` | - | Canonical plugin surface descriptor | `a20d9de` |
-| modified | `plugins/rtemplate/skills/rtemplate/SKILL.md` | - | Generated skill action table and port cleanup | `a20d9de` |
-| modified | `plugins/rtemplate/skills/scaffold-project/SKILL.md` | - | Updated scaffold port example | `a20d9de` |
+| modified | `plugins/soma/.claude-plugin/plugin.json` | - | Generated Claude plugin manifest | `a20d9de` |
+| modified | `plugins/soma/.codex-plugin/plugin.json` | - | Generated Codex plugin manifest | `a20d9de` |
+| modified | `plugins/soma/gemini-extension.json` | - | Generated Gemini extension manifest | `a20d9de` |
+| created | `plugins/soma/plugin.surface.json` | - | Canonical plugin surface descriptor | `a20d9de` |
+| modified | `plugins/soma/skills/soma/SKILL.md` | - | Generated skill action table and port cleanup | `a20d9de` |
+| modified | `plugins/soma/skills/scaffold-project/SKILL.md` | - | Updated scaffold port example | `a20d9de` |
 | modified | `scripts/README.md` | - | Documented generator and stale-claim scripts | `a20d9de` |
 | modified | `scripts/check-openapi.py` | - | Derived REST route checks from action metadata | `a20d9de` |
 | modified | `scripts/check-schema-docs.py` | - | Derived schema docs from action descriptions | `a20d9de` |
@@ -118,9 +118,9 @@ The session added generator-backed docs and metadata for volatile template surfa
 
 | bead | title | actions | final status | why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-chl` | Generate volatile docs and metadata from canonical specs | Created, claimed, implemented, closed | closed | Tracked the first generated-docs automation pass. |
-| `rmcp-template-hi8` | Generate remaining plugin and action documentation surfaces | Created, implemented, closed | closed | Tracked the six follow-on generator suggestions. |
-| `rmcp-template-lo4` | Merge generated-docs automation into main | Created, claimed, closed | closed | Tracked preservation, merge, validation, and push to `main`. |
+| `soma-chl` | Generate volatile docs and metadata from canonical specs | Created, claimed, implemented, closed | closed | Tracked the first generated-docs automation pass. |
+| `soma-hi8` | Generate remaining plugin and action documentation surfaces | Created, implemented, closed | closed | Tracked the six follow-on generator suggestions. |
+| `soma-lo4` | Merge generated-docs automation into main | Created, claimed, closed | closed | Tracked preservation, merge, validation, and push to `main`. |
 
 ## Repository Maintenance
 
@@ -130,7 +130,7 @@ The session added generator-backed docs and metadata for volatile template surfa
 
 ### Beads
 
-Relevant beads were read with `bd show`; `rmcp-template-chl`, `rmcp-template-hi8`, and `rmcp-template-lo4` were all observed closed with reasons matching the implemented and merged work. `bd dolt pull` and `bd dolt push` both succeeded during merge closeout.
+Relevant beads were read with `bd show`; `soma-chl`, `soma-hi8`, and `soma-lo4` were all observed closed with reasons matching the implemented and merged work. `bd dolt pull` and `bd dolt push` both succeeded during merge closeout.
 
 ### Worktrees and branches
 
@@ -158,7 +158,7 @@ Ignored local artifacts remain present, including `.beads/`, `.env`, `.full-revi
 | command | result |
 |---|---|
 | `git switch -c codex/generated-docs-automation` | Named the detached worktree branch before committing. |
-| `git add -A && git commit -m "feat(docs): generate template docs and plugin surfaces"` | Created preservation commit `a20d9de`. |
+| `git add -A && git commit -m "feat(docs): generate Soma docs and plugin surfaces"` | Created preservation commit `a20d9de`. |
 | `git push -u origin codex/generated-docs-automation` | Pushed backup branch. |
 | `git merge --no-ff codex/generated-docs-automation -m "Merge generated docs automation"` | Started merge into `main`; conflicts required manual resolution. |
 | `cargo xtask check-docs && cargo xtask check-stale-claims` | Verified generated docs and stale-claim guard after fixing scanner exclusions. |
@@ -168,22 +168,22 @@ Ignored local artifacts remain present, including `.beads/`, `.env`, `.full-revi
 | `bash scripts/validate-plugin-layout.sh` | Passed 47 plugin layout checks. |
 | `cargo xtask check-web-source-sync` | Verified bundled web source matched `apps/web`. |
 | `pnpm --dir apps/web install --frozen-lockfile && pnpm --dir apps/web test` | Web install/test passed; pnpm still warned that `sharp` build scripts were ignored. |
-| `cargo test -p rtemplate-contracts -p rtemplate-service -p rtemplate-api -p rtemplate-cli -p rtemplate-mcp` | Touched-crate tests passed after fixes. |
-| `cargo test -p rtemplate-mcp --features auth` | Auth-feature MCP tests passed. |
-| `cargo clippy -p rtemplate-contracts -p rtemplate-service -p rtemplate-api -p rtemplate-cli -p rtemplate-mcp --all-targets -- -D warnings` | Touched-crate clippy passed after visibility fix. |
-| `cargo test -p rmcp-template && cargo clippy -p rmcp-template --all-targets -- -D warnings` | Root integration tests and clippy passed after restoring `/v1/greet` empty-body behavior. |
+| `cargo test -p soma-contracts -p soma-service -p soma-api -p soma-cli -p soma-mcp` | Touched-crate tests passed after fixes. |
+| `cargo test -p soma-mcp --features auth` | Auth-feature MCP tests passed. |
+| `cargo clippy -p soma-contracts -p soma-service -p soma-api -p soma-cli -p soma-mcp --all-targets -- -D warnings` | Touched-crate clippy passed after visibility fix. |
+| `cargo test -p soma && cargo clippy -p soma --all-targets -- -D warnings` | Root integration tests and clippy passed after restoring `/v1/greet` empty-body behavior. |
 | `git push origin main` | Pushed merge commit `185b0fd` to `origin/main`. |
 
 ## Errors Encountered
 
 - `bd status --short` failed because `bd status` has no `--short` flag. Continued with supported Beads commands.
-- A placeholder `bd update rmcp-template-??? --claim` failed due shell glob expansion. Claimed the real bead `rmcp-template-lo4`.
-- First `git merge` into `main` conflicted in `crates/rtemplate-cli/src/cli_tests.rs`, `crates/rtemplate-contracts/src/actions.rs`, and `crates/rtemplate-contracts/src/actions_tests.rs`. Resolved by retaining newer main error-contract behavior plus generated action metadata.
+- A placeholder `bd update soma-??? --claim` failed due shell glob expansion. Claimed the real bead `soma-lo4`.
+- First `git merge` into `main` conflicted in `crates/soma-cli/src/cli_tests.rs`, `crates/soma-contracts/src/actions.rs`, and `crates/soma-contracts/src/actions_tests.rs`. Resolved by retaining newer main error-contract behavior plus generated action metadata.
 - `cargo xtask check-stale-claims` initially scanned `.worktrees/` and `.full-review/`, finding historical stale ports. Fixed by excluding those historical artifact directories.
-- `cargo test -p rtemplate-cli` failed because a test-local `ActionSpec` was missing the new `cli` field. Added `cli: None`.
-- `cargo test -p rtemplate-mcp` failed because tests imported removed private helper functions. Updated tests to use shared `classify_service_error(...).to_mcp_payload(...)`.
+- `cargo test -p soma-cli` failed because a test-local `ActionSpec` was missing the new `cli` field. Added `cli: None`.
+- `cargo test -p soma-mcp` failed because tests imported removed private helper functions. Updated tests to use shared `classify_service_error(...).to_mcp_payload(...)`.
 - Clippy failed on private `AuthContext` in public API handler signatures. Made the non-auth shim public.
-- `cargo test -p rmcp-template` caught a `/v1/greet` empty-body regression. Restored `#[serde(default)]` on `GreetRequest.name`.
+- `cargo test -p soma` caught a `/v1/greet` empty-body regression. Restored `#[serde(default)]` on `GreetRequest.name`.
 - `git pull --rebase origin main` tried to replay `a20d9de` and recreate resolved conflicts. Aborted the rebase and pushed the already-validated merge commit.
 
 ## Behavior Changes (Before/After)
@@ -192,9 +192,9 @@ Ignored local artifacts remain present, including `.beads/`, `.env`, `.full-revi
 |---|---|---|
 | Docs and examples | Env docs, plugin settings, scripts index, and action tables could drift by hand. | Generated from canonical specs and checked in CI/release gates. |
 | Action metadata | REST route and CLI details lived partly in separate shims/docs. | `ACTION_SPECS` carries REST and CLI metadata used by checks and docs. |
-| Plugin manifests | Claude/Codex/Gemini manifests were hand-maintained. | Manifests are generated from `plugins/rtemplate/plugin.surface.json` and remain versionless. |
+| Plugin manifests | Claude/Codex/Gemini manifests were hand-maintained. | Manifests are generated from `plugins/soma/plugin.surface.json` and remain versionless. |
 | Stale claims | Old ports and manifest-version drift relied on manual review. | `cargo xtask check-stale-claims` fails on known stale claims in current source. |
-| Web action data | `apps/web/lib/template.ts` carried hand-maintained actions. | Web imports generated `apps/web/lib/generated-actions.ts`. |
+| Web action data | `apps/web/lib/soma.ts` carried hand-maintained actions. | Web imports generated `apps/web/lib/generated-actions.ts`. |
 | pnpm config | `apps/web/package.json` carried pnpm override config that v10 ignored. | Overrides live in `apps/web/pnpm-workspace.yaml`. |
 
 ## Verification Evidence
@@ -210,11 +210,11 @@ Ignored local artifacts remain present, including `.beads/`, `.env`, `.full-revi
 | `cargo xtask check-web-source-sync` | Bundled web source matches | Passed | pass |
 | `pnpm --dir apps/web install --frozen-lockfile` | Lockfile install succeeds | Passed with `sharp` ignored-build warning | pass |
 | `pnpm --dir apps/web test` | Web tests pass | 2 files, 12 tests passed | pass |
-| `cargo test -p rtemplate-contracts -p rtemplate-service -p rtemplate-api -p rtemplate-cli -p rtemplate-mcp` | Touched crate tests pass | Passed | pass |
-| `cargo test -p rtemplate-mcp --features auth` | Auth feature tests pass | 40 tests passed | pass |
-| `cargo clippy -p rtemplate-contracts -p rtemplate-service -p rtemplate-api -p rtemplate-cli -p rtemplate-mcp --all-targets -- -D warnings` | No warnings | Passed after visibility fix | pass |
-| `cargo test -p rmcp-template` | Root integration tests pass | Passed after greet default fix | pass |
-| `cargo clippy -p rmcp-template --all-targets -- -D warnings` | Root clippy passes | Passed | pass |
+| `cargo test -p soma-contracts -p soma-service -p soma-api -p soma-cli -p soma-mcp` | Touched crate tests pass | Passed | pass |
+| `cargo test -p soma-mcp --features auth` | Auth feature tests pass | 40 tests passed | pass |
+| `cargo clippy -p soma-contracts -p soma-service -p soma-api -p soma-cli -p soma-mcp --all-targets -- -D warnings` | No warnings | Passed after visibility fix | pass |
+| `cargo test -p soma` | Root integration tests pass | Passed after greet default fix | pass |
+| `cargo clippy -p soma --all-targets -- -D warnings` | Root clippy passes | Passed | pass |
 | `git rev-parse main origin/main` | Same SHA | Both `185b0fd1d0c3443850dc85853843be27ef8ad43c` | pass |
 
 ## Risks and Rollback
@@ -229,9 +229,9 @@ The generator touches many docs and manifest surfaces, so the main risk is broad
 
 ## References
 
-- Beads: `rmcp-template-chl`, `rmcp-template-hi8`, `rmcp-template-lo4`.
-- Commits: `a20d9de` (`feat(docs): generate template docs and plugin surfaces`), `185b0fd` (`Merge generated docs automation`).
-- Transcript path observed by skill context: `/home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl`.
+- Beads: `soma-chl`, `soma-hi8`, `soma-lo4`.
+- Commits: `a20d9de` (`feat(docs): generate Soma docs and plugin surfaces`), `185b0fd` (`Merge generated docs automation`).
+- Transcript path observed by skill context: `/home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl`.
 
 ## Open Questions
 

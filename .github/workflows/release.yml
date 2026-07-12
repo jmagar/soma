@@ -1,11 +1,11 @@
 # =============================================================================
 # .github/workflows/release.yml — Build release binaries and GitHub Release
 #
-# TEMPLATE substitutions required:
+# CUSTOMIZATION NOTES:
 #   BINARY_NAME  → your binary name from Cargo.toml [[bin]] (e.g. "myservice")
 #   REPO_NAME    → your GitHub repo name (e.g. "myservice-mcp")
 #
-# Replace every occurrence of "example" in this file with your binary name.
+# Customize binary-name references in this file if you fork Soma.
 #
 # Triggers: push of v* tags (e.g. v1.2.3)
 #
@@ -16,7 +16,7 @@
 #   4. The commit in step 2 updates the LFS pointer so plugin install.sh
 #      can `git lfs pull` the binary without building from source
 #
-# TEMPLATE: After creating your first real release, update install.sh to
+# CUSTOMIZE: After creating your first real release, update install.sh to
 #           reference the correct GitHub release download URL pattern.
 # =============================================================================
 
@@ -27,9 +27,9 @@ on:
     tags: ["v*"]
 
 env:
-  # TEMPLATE: Replace "rtemplate" with your binary name.
-  BINARY_NAME: rtemplate
-  SERVER_BINARY_NAME: rtemplate-server
+  # CUSTOMIZE: Replace "soma" with your binary name.
+  BINARY_NAME: soma
+  SERVER_BINARY_NAME: soma-server
   CARGO_INCREMENTAL: "0"
   # Release builds use sccache, while still overriding the repo's dev-only
   # scripts/cargo-rustc-wrapper so it cannot auto-sync binaries into ./bin before
@@ -110,7 +110,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64-x86-64
 
-      # TEMPLATE: If you need OpenSSL, add it here:
+      # CUSTOMIZE: If you need OpenSSL, add it here:
       #   sudo apt-get install -y libssl-dev
       - name: Install build dependencies
         run: |
@@ -122,7 +122,7 @@ jobs:
         with:
           path: |
             target
-          # TEMPLATE: Change "rmcp-template" to your repo name.
+          # CUSTOMIZE: Change "soma" to your repo name.
           key: ${{ github.repository }}-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ github.repository }}-release-${{ matrix.target }}-
 
@@ -138,22 +138,22 @@ jobs:
       - name: Prepare binary artifact
         run: |
           mkdir -p package artifacts
-          # TEMPLATE: Replace "example" with your binary name.
-          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }} \
-             package/${{ env.BINARY_NAME }}${{ matrix.ext }}
-          chmod +x package/${{ env.BINARY_NAME }}${{ matrix.ext }}
-          tar -C package -czf artifacts/${{ env.BINARY_NAME }}-${{ matrix.arch }}.tar.gz \
-            ${{ env.BINARY_NAME }}${{ matrix.ext }}
+          # CUSTOMIZE: Replace the binary name if you fork Soma.
+          cp target/${{ matrix.target }}/release/${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }} \
+             package/${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }}
+          chmod +x package/${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }}
+          tar -C package -czf artifacts/${{ env.SERVER_BINARY_NAME }}-${{ matrix.arch }}.tar.gz \
+            ${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.BINARY_NAME }}-${{ matrix.arch }}
+          name: ${{ env.SERVER_BINARY_NAME }}-${{ matrix.arch }}
           path: artifacts/
 
   # ── Commit binaries to bin/ via Git LFS ──────────────────────────────────────
   #
-  # SECURITY TEMPLATE NOTE: This job pushes directly to `main` from a
+  # SECURITY NOTE: This job pushes directly to `main` from a
   # tag-triggered workflow using GITHUB_TOKEN. This bypasses branch protection
   # if your repo has it enabled. Options:
   #   1. Disable this job if you distribute binaries via Release assets only.
@@ -237,6 +237,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          # TEMPLATE: Update release notes format if you have a CHANGELOG.
+          # CUSTOMIZE: Update release notes format if you have a CHANGELOG.
           generate_release_notes: true
           files: artifacts/*

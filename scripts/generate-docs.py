@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate volatile docs and metadata from canonical template specs."""
+"""Generate volatile docs and metadata from canonical Soma specs."""
 
 from __future__ import annotations
 
@@ -12,22 +12,22 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ACTION_RS = ROOT / "crates/rtemplate-service/src/actions.rs"
-CONFIG_RS = ROOT / "crates/rtemplate-contracts/src/config.rs"
-ENV_REGISTRY_RS = ROOT / "crates/rtemplate-contracts/src/env_registry.rs"
+ACTION_RS = ROOT / "crates/soma-contracts/src/actions.rs"
+CONFIG_RS = ROOT / "crates/soma-contracts/src/config.rs"
+ENV_REGISTRY_RS = ROOT / "crates/soma-contracts/src/env_registry.rs"
 ENV_DOC = ROOT / "docs/ENV.md"
 ENV_EXAMPLE = ROOT / ".env.example"
-CONFIG_EXAMPLE = ROOT / "config.example.toml"
+CONFIG_EXAMPLE = ROOT / "config.soma.toml"
 WEB_ACTIONS = ROOT / "apps/web/lib/generated-actions.ts"
 PLUGIN_SETTINGS_DOC = ROOT / "docs/generated/plugin-settings.md"
 SCRIPTS_INDEX_DOC = ROOT / "docs/generated/scripts-index.md"
-PLUGIN_SURFACE = ROOT / "plugins/rtemplate/plugin.surface.json"
-PLUGIN_CLAUDE_JSON = ROOT / "plugins/rtemplate/.claude-plugin/plugin.json"
-PLUGIN_CODEX_JSON = ROOT / "plugins/rtemplate/.codex-plugin/plugin.json"
-PLUGIN_GEMINI_JSON = ROOT / "plugins/rtemplate/gemini-extension.json"
+PLUGIN_SURFACE = ROOT / "plugins/soma/plugin.surface.json"
+PLUGIN_CLAUDE_JSON = ROOT / "plugins/soma/.claude-plugin/plugin.json"
+PLUGIN_CODEX_JSON = ROOT / "plugins/soma/.codex-plugin/plugin.json"
+PLUGIN_GEMINI_JSON = ROOT / "plugins/soma/gemini-extension.json"
 README = ROOT / "README.md"
 CLAUDE = ROOT / "CLAUDE.md"
-SKILL = ROOT / "plugins/rtemplate/skills/rtemplate/SKILL.md"
+SKILL = ROOT / "plugins/soma/skills/soma/SKILL.md"
 
 
 @dataclass(frozen=True)
@@ -138,11 +138,11 @@ def parse_actions() -> list[Action]:
         if scope_raw == "None":
             scope = None
         elif scope_raw == "Some(READ_SCOPE)":
-            scope = "example:read"
+            scope = "soma:read"
         elif scope_raw == "Some(WRITE_SCOPE)":
-            scope = "example:write"
+            scope = "soma:write"
         else:
-            scope = "example:__deny__"
+            scope = "soma:__deny__"
         param_key = params_expr.group(1).strip().removeprefix("&")
         actions.append(
             Action(
@@ -280,34 +280,34 @@ def default_int(fn_name: str) -> int:
 
 def env_purpose(spec: EnvSpec) -> str:
     purposes = {
-        "RTEMPLATE_API_URL": "Deployed platform API or upstream API base URL used by `ExampleClient`. Empty selects offline template stub mode.",
-        "RTEMPLATE_API_KEY": "Bearer token or upstream API key. Keep secret. Required when the deployed API requires auth.",
-        "RTEMPLATE_MCP_TOKEN": "Static bearer token. Required for bearer-only mounted HTTP.",
-        "RTEMPLATE_SERVER_URL": "Optional remote/platform HTTP server URL used by plugin setup and health checks.",
-        "RTEMPLATE_MCP_AUTH_MODE": "`bearer` or `oauth`.",
-        "RTEMPLATE_MCP_NO_AUTH": "Disable local auth for loopback development only.",
-        "RTEMPLATE_NOAUTH": "Trusted-gateway no-auth mode for non-loopback deployments where an upstream proxy enforces auth.",
-        "RTEMPLATE_MCP_PUBLIC_URL": "Public URL used for OAuth metadata endpoints.",
-        "RTEMPLATE_MCP_GOOGLE_CLIENT_ID": "Google OAuth client ID.",
-        "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET": "Google OAuth client secret.",
-        "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL": "Initial/admin email allowed by the OAuth flow.",
-        "RTEMPLATE_MCP_HOST": "Bind host for HTTP transport. Set `0.0.0.0` only with bearer, OAuth, or trusted-gateway auth configured.",
-        "RTEMPLATE_MCP_PORT": "Bind port for HTTP transport.",
-        "RTEMPLATE_MCP_SERVER_NAME": "MCP server name advertised to clients.",
-        "RTEMPLATE_MCP_ALLOWED_HOSTS": "Extra accepted Host header values, comma-separated.",
-        "RTEMPLATE_MCP_ALLOWED_ORIGINS": "Extra CORS origins, comma-separated.",
+        "SOMA_API_URL": "Deployed platform API or upstream API base URL used by `SomaClient`. Empty selects offline stub mode.",
+        "SOMA_API_KEY": "Bearer token or upstream API key. Keep secret. Required when the deployed API requires auth.",
+        "SOMA_MCP_TOKEN": "Static bearer token. Required for bearer-only mounted HTTP.",
+        "SOMA_SERVER_URL": "Optional remote/platform HTTP server URL used by plugin setup and health checks.",
+        "SOMA_MCP_AUTH_MODE": "`bearer` or `oauth`.",
+        "SOMA_MCP_NO_AUTH": "Disable local auth for loopback development only.",
+        "SOMA_NOAUTH": "Trusted-gateway no-auth mode for non-loopback deployments where an upstream proxy enforces auth.",
+        "SOMA_MCP_PUBLIC_URL": "Public URL used for OAuth metadata endpoints.",
+        "SOMA_MCP_GOOGLE_CLIENT_ID": "Google OAuth client ID.",
+        "SOMA_MCP_GOOGLE_CLIENT_SECRET": "Google OAuth client secret.",
+        "SOMA_MCP_AUTH_ADMIN_EMAIL": "Initial/admin email allowed by the OAuth flow.",
+        "SOMA_MCP_HOST": "Bind host for HTTP transport. Set `0.0.0.0` only with bearer, OAuth, or trusted-gateway auth configured.",
+        "SOMA_MCP_PORT": "Bind port for HTTP transport.",
+        "SOMA_MCP_SERVER_NAME": "MCP server name advertised to clients.",
+        "SOMA_MCP_ALLOWED_HOSTS": "Extra accepted Host header values, comma-separated.",
+        "SOMA_MCP_ALLOWED_ORIGINS": "Extra CORS origins, comma-separated.",
     }
-    return purposes.get(spec.key, "TEMPLATE: document this environment variable.")
+    return purposes.get(spec.key, "CUSTOMIZE: document this environment variable.")
 
 
 def env_default(spec: EnvSpec, host: str, port: int) -> str:
     defaults = {
-        "RTEMPLATE_MCP_HOST": f"`{host}`",
-        "RTEMPLATE_MCP_PORT": f"`{port}`",
-        "RTEMPLATE_MCP_AUTH_MODE": "`bearer`",
-        "RTEMPLATE_MCP_NO_AUTH": "`false`",
-        "RTEMPLATE_NOAUTH": "`false`",
-        "RTEMPLATE_MCP_SERVER_NAME": f"`{default_string('default_server_name')}`",
+        "SOMA_MCP_HOST": f"`{host}`",
+        "SOMA_MCP_PORT": f"`{port}`",
+        "SOMA_MCP_AUTH_MODE": "`bearer`",
+        "SOMA_MCP_NO_AUTH": "`false`",
+        "SOMA_NOAUTH": "`false`",
+        "SOMA_MCP_SERVER_NAME": f"`{default_string('default_server_name')}`",
     }
     return defaults.get(spec.key, "unset")
 
@@ -321,15 +321,15 @@ def render_env_doc() -> str:
         'title: "Environment Variables"',
         'doc_type: "guide"',
         'status: "active"',
-        'owner: "rmcp-template"',
+        'owner: "soma"',
         "audience:",
         '  - "contributors"',
         '  - "agents"',
-        'scope: "template"',
+        'scope: "soma"',
         "source_of_truth: false",
         "upstream_refs:",
-        '  - "crates/rtemplate-contracts/src/env_registry.rs"',
-        '  - "crates/rtemplate-contracts/src/config.rs"',
+        '  - "crates/soma-contracts/src/env_registry.rs"',
+        '  - "crates/soma-contracts/src/config.rs"',
         'last_reviewed: "2026-06-19"',
         "---",
         "",
@@ -389,22 +389,22 @@ def render_env_doc() -> str:
 
 def placeholder_for(spec: EnvSpec) -> str:
     placeholders = {
-        "RTEMPLATE_API_URL": "https://api.example.com/v1",
-        "RTEMPLATE_API_KEY": "your-api-key-here",
-        "RTEMPLATE_MCP_TOKEN": "",
-        "RTEMPLATE_SERVER_URL": "http://localhost:40060",
-        "RTEMPLATE_MCP_AUTH_MODE": "bearer",
-        "RTEMPLATE_MCP_NO_AUTH": "false",
-        "RTEMPLATE_NOAUTH": "false",
-        "RTEMPLATE_MCP_PUBLIC_URL": "https://example.yourdomain.com",
-        "RTEMPLATE_MCP_GOOGLE_CLIENT_ID": "123456789-abcdefg.apps.googleusercontent.com",
-        "RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET": "GOCSPX-your-secret-here",
-        "RTEMPLATE_MCP_AUTH_ADMIN_EMAIL": "admin@example.com",
-        "RTEMPLATE_MCP_HOST": default_string("default_mcp_host"),
-        "RTEMPLATE_MCP_PORT": str(default_int("default_mcp_port")),
-        "RTEMPLATE_MCP_SERVER_NAME": default_string("default_server_name"),
-        "RTEMPLATE_MCP_ALLOWED_HOSTS": "example.yourdomain.com",
-        "RTEMPLATE_MCP_ALLOWED_ORIGINS": "https://claude.ai",
+        "SOMA_API_URL": "https://api.example.com/v1",
+        "SOMA_API_KEY": "your-api-key-here",
+        "SOMA_MCP_TOKEN": "",
+        "SOMA_SERVER_URL": "http://localhost:40060",
+        "SOMA_MCP_AUTH_MODE": "bearer",
+        "SOMA_MCP_NO_AUTH": "false",
+        "SOMA_NOAUTH": "false",
+        "SOMA_MCP_PUBLIC_URL": "https://example.yourdomain.com",
+        "SOMA_MCP_GOOGLE_CLIENT_ID": "123456789-abcdefg.apps.googleusercontent.com",
+        "SOMA_MCP_GOOGLE_CLIENT_SECRET": "GOCSPX-your-secret-here",
+        "SOMA_MCP_AUTH_ADMIN_EMAIL": "admin@example.com",
+        "SOMA_MCP_HOST": default_string("default_mcp_host"),
+        "SOMA_MCP_PORT": str(default_int("default_mcp_port")),
+        "SOMA_MCP_SERVER_NAME": default_string("default_server_name"),
+        "SOMA_MCP_ALLOWED_HOSTS": "example.yourdomain.com",
+        "SOMA_MCP_ALLOWED_ORIGINS": "https://claude.ai",
     }
     return placeholders.get(spec.key, "")
 
@@ -413,9 +413,9 @@ def render_env_example() -> str:
     specs = parse_env_specs()
     lines = [
         "# =============================================================================",
-        "# .env.example - generated secrets and URLs template",
+        "# .env.example - generated secrets and URLs sample",
         "#",
-        "# TEMPLATE: Rename RTEMPLATE_* throughout to your service's prefix.",
+        "# CUSTOMIZE: Rename SOMA_* throughout to your service's prefix.",
         "# Secrets and URLs go here; non-secret defaults belong in config.toml.",
         "# Regenerate with: cargo xtask generate-docs",
         "# =============================================================================",
@@ -438,8 +438,8 @@ def render_env_example() -> str:
                 continue
             emitted.add(spec.key)
             value = placeholder_for(spec)
-            prefix = "" if spec.key in {"RTEMPLATE_API_URL", "RTEMPLATE_API_KEY"} else "# "
-            if spec.secret and spec.key not in {"RTEMPLATE_API_KEY"}:
+            prefix = "" if spec.key in {"SOMA_API_URL", "SOMA_API_KEY"} else "# "
+            if spec.secret and spec.key not in {"SOMA_API_KEY"}:
                 prefix = "# "
             lines.append(f"# {env_purpose(spec)}")
             lines.append(f"{prefix}{spec.key}={value}")
@@ -469,15 +469,15 @@ def render_config_example() -> str:
     sqlite_path = default_string("default_auth_sqlite_path")
     key_path = default_string("default_auth_key_path")
     return f"""# =============================================================================
-# config.example.toml - generated non-secret config template
+# config.soma.toml - generated non-secret config sample
 #
 # Copy to config.toml and adjust for your deployment.
 # Env vars override these values. Secrets and URLs belong in .env.
 # Regenerate with: cargo xtask generate-docs
 # =============================================================================
 
-[example]
-# Set RTEMPLATE_API_URL and RTEMPLATE_API_KEY in .env instead of committing them.
+[soma]
+# Set SOMA_API_URL and SOMA_API_KEY in .env instead of committing them.
 # api_url = "https://api.example.com/v1"
 # api_key = ""
 
@@ -490,7 +490,7 @@ trusted_gateway = false
 allowed_hosts = []
 allowed_origins = []
 
-# Set RTEMPLATE_MCP_TOKEN in .env instead of committing it.
+# Set SOMA_MCP_TOKEN in .env instead of committing it.
 # api_token = ""
 
 [mcp.auth]
@@ -591,7 +591,7 @@ def action_response(action: Action) -> dict[str, object]:
         "status": {"status": "ok", "note": "stub"},
         "help": {"actions": ["greet", "echo", "status", "help"]},
         "elicit_name": {"greeting": "Hello, Alice!", "target": "Alice", "elicited": True},
-        "scaffold_intent": {"kind": "rmcp_template_scaffold_intent", "schema_version": 1},
+        "scaffold_intent": {"kind": "soma_scaffold_intent", "schema_version": 1},
     }
     return examples.get(action.name, {})
 
@@ -630,7 +630,7 @@ def render_web_actions() -> str:
         )
     return (
         "// Generated by scripts/generate-docs.py. Do not edit by hand.\n"
-        "import type { ActionSpec } from \"./template\";\n\n"
+        "import type { ActionSpec } from \"./soma\";\n\n"
         f"export const ACTIONS = {ts_value(rendered).strip().removesuffix(',')} as const satisfies readonly ActionSpec[];\n"
     )
 
@@ -641,10 +641,6 @@ def load_plugin_surface() -> dict:
 
 def plugin_setting_key(plugin_option: str) -> str:
     raw = plugin_option.removeprefix("CLAUDE_PLUGIN_OPTION_").lower()
-    if raw == "rtemplate_api_url":
-        return "rtemplate_api_url"
-    if raw == "rtemplate_api_key":
-        return "rtemplate_api_key"
     if raw == "api_token":
         return "api_token"
     return raw
@@ -660,8 +656,8 @@ def plugin_setting_title(key: str) -> str:
         "google_client_id": "Google OAuth client ID",
         "google_client_secret": "Google OAuth client secret",
         "auth_admin_email": "OAuth admin email",
-        "rtemplate_api_url": "Service API URL",
-        "rtemplate_api_key": "Service API key",
+        "soma_api_url": "Service API URL",
+        "soma_api_key": "Service API key",
     }.get(key, key.replace("_", " ").title())
 
 
@@ -675,8 +671,8 @@ def plugin_setting_description(key: str, env_key: str) -> str:
         "google_client_id": "Google OAuth client ID used when auth_mode=oauth.",
         "google_client_secret": "Google OAuth client secret from the same Google Cloud Console credential.",
         "auth_admin_email": "Bootstrap allowed Google account for OAuth mode.",
-        "rtemplate_api_url": "TEMPLATE: Replace 'rtemplate_api_url' with your service's credential field name. Maps to RTEMPLATE_API_URL.",
-        "rtemplate_api_key": "TEMPLATE: Replace 'rtemplate_api_key' with your service's credential field name. Maps to RTEMPLATE_API_KEY.",
+        "soma_api_url": "Optional upstream API URL for dropped-in tools that use the bundled SomaClient compatibility layer. Maps to SOMA_API_URL.",
+        "soma_api_key": "Optional upstream API key for dropped-in tools that use the bundled SomaClient compatibility layer. Maps to SOMA_API_KEY.",
     }
     return descriptions.get(key, f"Maps to {env_key}.")
 
@@ -718,7 +714,7 @@ def render_claude_plugin_json() -> str:
         "use_docker": {
             "type": "boolean",
             "title": "Deploy with Docker",
-            "description": "TEMPLATE: Keep this. True uses docker compose; false uses a systemd user service.",
+            "description": "True uses docker compose; false uses a systemd user service.",
             "required": True,
             "default": False,
         }
@@ -737,6 +733,7 @@ def render_claude_plugin_json() -> str:
             "name": surface["name"],
             "description": surface["claudeDescription"],
             "author": {"name": surface["author"]["name"]},
+            "homepage": surface["homepage"],
             "repository": surface["repository"],
             "license": surface["license"],
             "keywords": surface["keywords"],
@@ -755,7 +752,7 @@ def render_codex_plugin_json() -> str:
     interface["logo"] = "./assets/logo.svg"
     return json_file(
         {
-            "name": surface["packageName"],
+            "name": surface["name"],
             "description": surface["codexDescription"],
             "homepage": surface["homepage"],
             "repository": surface["repository"],
@@ -782,9 +779,10 @@ def render_gemini_extension_json() -> str:
         )
     return json_file(
         {
-            "name": surface["packageName"],
+            "name": surface["name"],
             "description": surface["geminiDescription"],
             "author": surface["author"]["name"],
+            "homepage": surface["homepage"],
             "repository": surface["repository"],
             "license": surface["license"],
             "keywords": surface["keywords"],
@@ -801,7 +799,7 @@ def render_plugin_settings_doc() -> str:
     lines = [
         "# Plugin Settings",
         "",
-        "Generated from `crates/rtemplate-contracts/src/env_registry.rs`.",
+        "Generated from `crates/soma-contracts/src/env_registry.rs`.",
         "",
         "| Plugin option env | Runtime env | Secret | TOML destination |",
         "|---|---|---:|---|",
@@ -827,14 +825,14 @@ def params_summary(action: Action) -> str:
 
 def cli_command(action: Action) -> str:
     commands = {
-        "greet": "rtemplate greet [--name N]",
-        "echo": "rtemplate echo --message <msg>",
-        "status": "rtemplate status",
-        "help": "rtemplate --help",
+        "greet": "soma greet [--name N]",
+        "echo": "soma echo --message <msg>",
+        "status": "soma status",
+        "help": "soma --help",
     }
     if action.transport != "Any":
         return "_MCP-only_"
-    return commands.get(action.name, f"rtemplate {action.name.replace('_', '-')}")
+    return commands.get(action.name, f"soma {action.name.replace('_', '-')}")
 
 
 def action_table_markdown() -> str:
@@ -877,7 +875,7 @@ def parity_table_markdown() -> str:
         )
         notes = "MCP-only; requires elicitation-capable client" if action.transport != "Any" else ""
         lines.append(
-            f"| `{methods.get(action.name, 'service.' + action.name + '()')}` | `example(action=\"{action.name}\")` | `{cli_command(action)}` | {route} | {notes} |"
+            f"| `{methods.get(action.name, 'service.' + action.name + '()')}` | `soma(action=\"{action.name}\")` | `{cli_command(action)}` | {route} | {notes} |"
         )
     return "\n".join(lines)
 
@@ -920,7 +918,7 @@ def render_readme() -> str:
         text,
         "README_ACTION_TABLE",
         action_table_markdown(),
-        "The single `example` tool dispatches on the `action` parameter:",
+        "The single `soma` tool dispatches on the `action` parameter:",
     )
     return text
 
@@ -941,7 +939,7 @@ def render_skill() -> str:
         text,
         "SKILL_ACTION_TABLE",
         skill_action_table(),
-        "A single MCP tool, `mcp__example__example`, dispatches on a required `action` argument:",
+        "A single MCP tool, `mcp__soma__soma`, dispatches on a required `action` argument:",
     )
 
 
@@ -960,7 +958,7 @@ def script_summary(path: Path) -> str:
             summary = stripped.lstrip("#").strip()
             if summary and not set(summary) <= {"="}:
                 return summary
-    return "TEMPLATE: add a header comment describing this script."
+    return "CUSTOMIZE: add a header comment describing this script."
 
 
 def render_scripts_index() -> str:

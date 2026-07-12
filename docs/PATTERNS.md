@@ -2,7 +2,7 @@
 
 Canonical reference for all patterns used across the Rust MCP server family:
 `lab`, `axon_rust` (Axon), `syslog-mcp`, `rustify` (Gotify), `rustifi` (UniFi),
-`apprise-mcp`, `rustscale` (Tailscale), `rmcp-template` (this repo), and
+`apprise-mcp`, `rustscale` (Tailscale), `soma` (this repo), and
 `unrust` (Unraid).
 
 Every server in the family MUST follow these patterns. Deviation requires an explicit
@@ -28,7 +28,7 @@ than a thin client over an upstream API.
 Allowed exceptions:
 
 - MCP-only protocol interactions, such as elicitation, may omit CLI when there is no
-  equivalent non-interactive command. `scaffold_intent` is the template's explicit
+  equivalent non-interactive command. `scaffold_intent` is Soma's explicit
   example: it combines MCP elicitation with plugin skill handoff, which has no true
   CLI equivalent inside the user's agent/editor permission model. Document the reason
   in the action metadata/docs.
@@ -41,17 +41,17 @@ Allowed exceptions:
 
 ```
 crates/
-  rmcp-template/        ← thin binary/facade package, routes, integration tests
-  rtemplate-service/    ← upstream client + ExampleService business layer
-  rtemplate-contracts/  ← action metadata, config, DTOs, token limits
-  rtemplate-api/        ← REST API handlers
-  rtemplate-mcp/        ← MCP schemas, tools, prompts, transport
-  rtemplate-cli/        ← CLI parser, doctor/setup/watch commands
-  rtemplate-runtime/    ← AppState, auth policy, shared runtime wiring
-  rtemplate-web/        ← static web asset serving and source bundle helpers
+  soma/        ← thin binary/facade package, routes, integration tests
+  soma-service/    ← upstream client + SomaService business layer
+  soma-contracts/  ← action metadata, config, DTOs, token limits
+  soma-api/        ← REST API handlers
+  soma-mcp/        ← MCP schemas, tools, prompts, transport
+  soma-cli/        ← CLI parser, doctor/setup/watch commands
+  soma-runtime/    ← AppState, auth policy, shared runtime wiring
+  soma-web/        ← static web asset serving and source bundle helpers
 
 Rule: keep business logic out of transports, but DO NOT force all logic into one giant file.
-The service layer may be split across multiple focused modules under `crates/rtemplate-service/src/`; what matters
+The service layer may be split across multiple focused modules under `crates/soma-service/src/`; what matters
 is that transports stay thin and all domain logic lives in the service layer.
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or
@@ -99,7 +99,7 @@ src/
   ├── app/                    ← ALL business logic lives here; never in shims
   │   ├── errors.rs           ← domain error types + shared Result<T> alias
   │   ├── common.rs           ← shared validation helpers, pagination, cursors
-  │   ├── read.rs             ← read/query use-cases (impl ExampleService block)
+  │   ├── read.rs             ← read/query use-cases (impl SomaService block)
   │   ├── write.rs            ← create/update/delete use-cases
   │   ├── auth.rs             ← service-level auth helpers (token exchange, refresh)
   │   └── ...                 ← add focused modules as the domain grows
@@ -141,7 +141,7 @@ src/
   /.well-known/   ← OAuth discovery (when auth_mode=oauth)
 ```
 
-All four surfaces share one `AppState` (same `Arc<ExampleService>`, same auth layer).
+All four surfaces share one `AppState` (same `Arc<SomaService>`, same auth layer).
 The axum router nests them as separate sub-routers:
 
 ```rust
@@ -179,14 +179,14 @@ No validation, no defaults, no business logic in handlers — same as `mcp/tools
 
 ```rust
 #[derive(Clone)]
-pub struct ExampleService {
-    client: ExampleClient,
+pub struct SomaService {
+    client: SomaClient,
     // optional: destructive gate flag, cache, etc.
     allow_destructive: bool,
 }
 
-impl ExampleService {
-    pub fn new(client: ExampleClient, allow_destructive: bool) -> Self { ... }
+impl SomaService {
+    pub fn new(client: SomaClient, allow_destructive: bool) -> Self { ... }
 
     // Destructive gate — lives HERE, not in tools.rs or cli.rs
     fn destructive_gate(&self, confirm: bool) -> Result<()> {
@@ -209,7 +209,7 @@ The service is where you add:
 - Input validation and defaults
 - Business rules (e.g. "don't allow deletes without confirm")
 - Cross-cutting concerns (logging, metrics, caching)
-- Error enrichment ("couldn't connect to X: check RTEMPLATE_URL")
+- Error enrichment ("couldn't connect to X: check SOMA_URL")
 
 ---
 
@@ -217,15 +217,15 @@ The service is where you add:
 
 ```rust
 #[derive(Clone)]
-pub struct ExampleClient {
+pub struct SomaClient {
     client: reqwest::Client,
     base_url: String,
     api_key: String,
 }
 
-impl ExampleClient {
-    pub fn new(cfg: &ExampleConfig) -> Result<Self> {
-        if cfg.url.is_empty() { anyhow::bail!("RTEMPLATE_URL is not set"); }
+impl SomaClient {
+    pub fn new(cfg: &SomaConfig) -> Result<Self> {
+        if cfg.url.is_empty() { anyhow::bail!("SOMA_URL is not set"); }
         let client = reqwest::ClientBuilder::new()
             .danger_accept_invalid_certs(cfg.skip_tls_verify)
             .build()?;
@@ -278,7 +278,7 @@ site = "default"
 [mcp]
 host = "0.0.0.0"
 port = 3000
-server_name = "rtemplate-mcp"
+server_name = "soma-mcp"
 
 [mcp.auth]
 mode = "bearer"           # or "oauth"
@@ -294,15 +294,15 @@ auth_code_ttl_secs = 300
 
 ```bash
 # .env — secrets and URLs ONLY
-RTEMPLATE_API_URL=https://example.internal/api
-RTEMPLATE_API_KEY=your_api_key_here
+SOMA_API_URL=https://example.internal/api
+SOMA_API_KEY=your_api_key_here
 
 # MCP auth
-RTEMPLATE_MCP_TOKEN=your_bearer_token_here
+SOMA_MCP_TOKEN=your_bearer_token_here
 
 # OAuth (only when auth_mode=oauth in config.toml)
-# RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
-# RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
+# SOMA_MCP_GOOGLE_CLIENT_ID=...
+# SOMA_MCP_GOOGLE_CLIENT_SECRET=...
 
 # Docker runtime
 PUID=1000
@@ -326,11 +326,11 @@ impl Config {
         }
 
         // 2. Env overrides (secrets + any setting the user wants to override)
-        env_str("RTEMPLATE_MCP_HOST", &mut config.mcp.host);
-        env_parse("RTEMPLATE_MCP_PORT", &mut config.mcp.port)?;
-        env_opt_str("RTEMPLATE_MCP_TOKEN", &mut config.mcp.api_token);
-        env_str("RTEMPLATE_API_URL", &mut config.example.url);
-        env_str("RTEMPLATE_API_KEY", &mut config.example.api_key);
+        env_str("SOMA_MCP_HOST", &mut config.mcp.host);
+        env_parse("SOMA_MCP_PORT", &mut config.mcp.port)?;
+        env_opt_str("SOMA_MCP_TOKEN", &mut config.mcp.api_token);
+        env_str("SOMA_API_URL", &mut config.soma.url);
+        env_str("SOMA_API_KEY", &mut config.soma.api_key);
         // ...
         Ok(config)
     }
@@ -361,10 +361,10 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
         let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
-            .env_prefix("RTEMPLATE_MCP")
-            .session_cookie_name("example_mcp_session")
-            .scopes_supported(vec!["example:read".into(), "example:write".into()])
-            .default_scope("example:read")
+            .env_prefix("SOMA_MCP")
+            .session_cookie_name("soma_mcp_session")
+            .scopes_supported(vec!["soma:read".into(), "soma:write".into()])
+            .default_scope("soma:read")
             .resource_path("/mcp")
             .enable_dynamic_registration(true)
             .build_from_sources(vec![])  // reads from env vars
@@ -392,7 +392,7 @@ pub fn build_auth_layer(
             AuthLayer::new()
                 .with_static_token(static_token)
                 .with_auth_state(auth_state.clone())
-                .with_static_token_scopes(vec!["example:read".into()])
+                .with_static_token_scopes(vec!["soma:read".into()])
                 .with_resource_url(resource_url)
                 .with_allow_session_cookie(false),
         ),
@@ -415,7 +415,7 @@ When `auth_state: Some(_)`, the OAuth router is automatically mounted:
 Both transports build the same `AppState` and serve the same `ServerHandler`:
 
 ```rust
-// HTTP mode (default: `example-server` or `example-server serve`)
+// HTTP mode (default: `soma-server` or `soma-server serve`)
 async fn serve_mcp() -> Result<()> {
     let config = Config::load()?;
     let state = build_state(config).await?;
@@ -426,7 +426,7 @@ async fn serve_mcp() -> Result<()> {
         .with_graceful_shutdown(shutdown_signal()).await?;
 }
 
-// stdio mode (`example mcp` — for Claude Code local use)
+// stdio mode (`soma mcp` — for Claude Code local use)
 async fn serve_stdio_mcp() -> Result<()> {
     let config = Config::load()?;
     let state = build_state(config).await?;
@@ -450,7 +450,7 @@ async fn serve_stdio_mcp() -> Result<()> {
 pub struct AppState {
     pub config: McpConfig,                  // MCP server config (host, port, auth settings)
     pub auth_policy: AuthPolicy,            // LoopbackDev | TrustedGatewayUnscoped | Mounted
-    pub service: ExampleService,            // The service layer — everything routes through here
+    pub service: SomaService,            // The service layer — everything routes through here
     pub response_pages: ResponsePageStore,  // Cached oversized MCP responses for continuation calls
 }
 ```
@@ -469,7 +469,7 @@ sub-functions. This is the canonical pattern across all servers:
 // mcp/tools.rs
 pub(super) async fn execute_tool(state: &AppState, name: &str, args: Value) -> anyhow::Result<Value> {
     match name {
-        "example" => dispatch(state, args).await,
+        "soma" => dispatch(state, args).await,
         _ => Err(anyhow::anyhow!("unknown tool: {name}")),
     }
 }
@@ -507,8 +507,8 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
 
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
-        "name": "example",
-        "description": "Query and manage Example service. Use action=help for documentation.",
+        "name": "soma",
+        "description": "Query and manage Soma runtime. Use action=help for documentation.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -525,9 +525,9 @@ pub(super) fn tool_definitions() -> Vec<Value> {
 ### Scope enforcement (mcp/rmcp_server.rs)
 
 ```rust
-const READ_SCOPE:  &str = "example:read";
-const WRITE_SCOPE: &str = "example:write";
-const DENY_SCOPE:  &str = "example:__deny__";  // sentinel — never granted
+const READ_SCOPE:  &str = "soma:read";
+const WRITE_SCOPE: &str = "soma:write";
+const DENY_SCOPE:  &str = "soma:__deny__";  // sentinel — never granted
 
 fn required_scope_for(action: &str) -> Option<&'static str> {
     required_scope_for_action(action)
@@ -541,7 +541,7 @@ fn required_scope_for(action: &str) -> Option<&'static str> {
 Every server exposes its tool JSON schema as a readable resource:
 
 ```rust
-const SCHEMA_RESOURCE_URI: &str = "example://schema/mcp-tool";
+const SCHEMA_RESOURCE_URI: &str = "soma://schema/mcp-tool";
 
 async fn read_resource(&self, request: ReadResourceRequestParams, ...) -> Result<ReadResourceResult> {
     if request.uri != SCHEMA_RESOURCE_URI {
@@ -576,7 +576,7 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> anyhow::Result<GetP
     match request.name.as_str() {
         "quick_start" => Ok(GetPromptResult::new(vec![
             PromptMessage::new_text(PromptMessageRole::User,
-                "Use the example tool with action=status, then action=things to get an overview.")
+                "Use the soma tool with action=status, then action=things to get an overview.")
         ]).with_description("Get an overview")),
         other => Err(anyhow::anyhow!("unknown prompt: {other}")),
     }
@@ -589,7 +589,7 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> anyhow::Result<GetP
 
 ```rust
 // cli.rs (binary module, not lib — uses `servicename::` not `crate::`)
-use example_mcp::app::ExampleService;
+use soma::app::SomaService;
 
 pub enum CliCommand {
     Things,
@@ -609,13 +609,13 @@ impl CliCommand {
             ["things"]          => Self::Things,
             ["thing", id, ..]   => Self::Thing { id: id.to_string() },
             ["delete", id, ..]  => Self::DeleteThing { id: id.to_string(), confirm },
-            other => bail!("unknown command: {}\n\nRun `example --help`", other.join(" ")),
+            other => bail!("unknown command: {}\n\nRun `soma --help`", other.join(" ")),
         };
         Ok((cmd, json))
     }
 }
 
-pub async fn run(service: &ExampleService, cmd: CliCommand, json: bool) -> Result<()> {
+pub async fn run(service: &SomaService, cmd: CliCommand, json: bool) -> Result<()> {
     let (label, data) = match cmd {
         CliCommand::Things            => ("things",        service.list_things().await?),
         CliCommand::Thing { ref id }  => ("thing",         service.get_thing(id).await?),
@@ -636,8 +636,8 @@ testing private functions without making them `pub`.
 
 ```rust
 // src/app.rs
-pub struct ExampleService { ... }
-impl ExampleService { ... }
+pub struct SomaService { ... }
+impl SomaService { ... }
 
 #[cfg(test)]
 #[path = "app_tests.rs"]
@@ -648,28 +648,28 @@ use super::*;  // access to private items
 
 #[test]
 fn destructive_gate_blocks_without_confirm() {
-    let svc = ExampleService::new(stub_client(), false);
+    let svc = SomaService::new(stub_client(), false);
     let err = svc.destructive_gate(false).unwrap_err();
     assert!(err.to_string().contains("confirm=true"));
 }
 
 #[test]
 fn destructive_gate_allows_with_confirm() {
-    let svc = ExampleService::new(stub_client(), false);
+    let svc = SomaService::new(stub_client(), false);
     assert!(svc.destructive_gate(true).is_ok());
 }
 ```
 
-Integration tests in `tests/` use the public API via `use example_mcp::testing::*`:
+Integration tests in `tests/` use the public API via `use soma::testing::*`:
 
 ```rust
 // tests/tool_dispatch.rs
-use example_mcp::testing::loopback_state;
+use soma::testing::loopback_state;
 
 #[tokio::test]
 async fn help_returns_help_key() {
     let state = loopback_state();
-    let result = execute_tool(&state, "example", json!({"action": "help"})).await.unwrap();
+    let result = execute_tool(&state, "soma", json!({"action": "help"})).await.unwrap();
     assert!(result.get("help").is_some());
     assert!(!result["help"].as_str().unwrap().is_empty());
 }
@@ -689,13 +689,13 @@ pub mod testing {
         }
     }
 
-    fn stub_service() -> ExampleService {
-        let client = ExampleClient::new(&ExampleConfig {
+    fn stub_service() -> SomaService {
+        let client = SomaClient::new(&SomaConfig {
             url: "http://localhost:1".into(),  // unreachable — never called in unit tests
             api_key: "test".into(),
             ..Default::default()
         }).expect("stub client should build");
-        ExampleService::new(client, false)
+        SomaService::new(client, false)
     }
 }
 ```
@@ -725,7 +725,7 @@ Adding an explicit version creates drift and requires manual bumping on every re
 
 ```json
 {
-  "name": "example",
+  "name": "soma",
   "userConfig": {
     "server_url":    { "type": "string",  "title": "MCP server URL",    "default": "http://localhost:40060", "required": true },
     "api_token":     { "type": "string",  "title": "API token",          "sensitive": true },
@@ -735,8 +735,8 @@ Adding an explicit version creates drift and requires manual bumping on every re
     "google_client_id":     { "type": "string", "title": "Google client ID",     "sensitive": true },
     "google_client_secret": { "type": "string", "title": "Google client secret", "sensitive": true },
     "auth_admin_email":     { "type": "string", "title": "OAuth admin email" },
-    "rtemplate_api_url": { "type": "string", "title": "Example API URL", "sensitive": true, "required": true },
-    "rtemplate_api_key": { "type": "string", "title": "Example API key", "sensitive": true, "required": true }
+    "soma_api_url": { "type": "string", "title": "Soma API URL", "sensitive": true, "required": true },
+    "soma_api_key": { "type": "string", "title": "Soma API key", "sensitive": true, "required": true }
   },
   "mcpServers": "./plugins/<service>/.mcp.json",
   "hooks": "./plugins/<service>/hooks/hooks.json",
@@ -771,7 +771,7 @@ Adding an explicit version creates drift and requires manual bumping on every re
 
 ### plugin-hook responsibilities
 
-The hook now calls `<binary> setup plugin-hook` directly (no `plugin-setup.sh` wrapper). The binary's `apply_plugin_options()` (in `crates/rtemplate-cli/src/setup.rs`), invoked before `Config::load()`, does what the script used to:
+The hook now calls `<binary> setup plugin-hook` directly (no `plugin-setup.sh` wrapper). The binary's `apply_plugin_options()` (in `crates/soma-cli/src/setup.rs`), invoked before `Config::load()`, does what the script used to:
 
 1. Read `CLAUDE_PLUGIN_OPTION_*` env vars (set by plugin runtime from userConfig)
 2. Reject (skip) unsafe newline/CR-bearing option values
@@ -797,15 +797,15 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package rmcp-template --bin example-server
+    cargo build --release --locked --package soma --bin soma-server
 
 # Build real binary
 COPY config/ config/
 COPY entrypoint.sh entrypoint.sh
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package rmcp-template --bin example-server --features full && \
-    cp target/release/example-server /usr/local/bin/example-server
+    cargo build --release --locked --package soma --bin soma-server --features full && \
+    cp target/release/soma-server /usr/local/bin/soma-server
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates curl gosu && rm -rf /var/lib/apt/lists/*
@@ -829,21 +829,21 @@ CMD ["serve", "mcp"]
 
 ```yaml
 services:
-  rtemplate-mcp:
-    image: ghcr.io/jmagar/rtemplate-mcp:${VERSION:-latest}
+  soma-mcp:
+    image: ghcr.io/jmagar/soma-mcp:${VERSION:-latest}
     build:
       context: .
       dockerfile: config/Dockerfile
-    container_name: rtemplate-mcp
+    container_name: soma-mcp
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
     env_file:
       - path: .env
         required: false
     ports:
-      - "${RTEMPLATE_MCP_HOST_PORT:-40060}:40060/tcp"
+      - "${SOMA_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
-      - ${RTEMPLATE_DATA_VOLUME:-rtemplate-mcp-data}:/data
+      - ${SOMA_DATA_VOLUME:-soma-mcp-data}:/data
     networks:
       - mcp
     healthcheck:
@@ -859,11 +859,11 @@ services:
           cpus: '0.5'
 
 volumes:
-  rtemplate-mcp-data:
+  soma-mcp-data:
 
 networks:
   mcp:
-    name: ${DOCKER_NETWORK:-rtemplate-mcp}
+    name: ${DOCKER_NETWORK:-soma-mcp}
     external: true
 ```
 
@@ -879,10 +879,10 @@ networks:
 
 ```bash
 #!/usr/bin/env bash
-# One-line install: curl -fsSL https://raw.githubusercontent.com/jmagar/rtemplate-mcp/main/install.sh | bash
+# One-line install: curl -fsSL https://raw.githubusercontent.com/jmagar/soma-mcp/main/install.sh | bash
 set -euo pipefail
 
-REPO="jmagar/rtemplate-mcp"
+REPO="jmagar/soma-mcp"
 BINARY="example"
 INSTALL_DIR="${HOME}/.local/bin"
 
@@ -904,9 +904,9 @@ chmod +x "${INSTALL_DIR}/${BINARY}"
 if [[ ! -f .env ]]; then
   cat > .env << 'ENV'
 # Required — set these before running
-RTEMPLATE_API_URL=https://your-service.internal/api
-RTEMPLATE_API_KEY=your_api_key_here
-RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)
+SOMA_API_URL=https://your-service.internal/api
+SOMA_API_KEY=your_api_key_here
+SOMA_MCP_TOKEN=$(openssl rand -hex 32)
 # Docker
 PUID=1000
 PGID=1000
@@ -929,7 +929,7 @@ echo "  3. Or:  ${BINARY} mcp             (stdio mode for Claude Code)"
 
 ## 17. mcporter Integration Test Pattern
 
-Every server has `crates/rmcp-template/tests/mcporter/test-mcp.sh` and, when useful for named server workflows, `config/mcporter.json`. The live harness covers MCP tools and MCP resources; add prompt coverage when mcporter exposes first-class prompt testing.
+Every server has `crates/soma/tests/mcporter/test-mcp.sh` and, when useful for named server workflows, `config/mcporter.json`. The live harness covers MCP tools and MCP resources; add prompt coverage when mcporter exposes first-class prompt testing.
 
 ### Philosophy
 
@@ -980,11 +980,11 @@ assert node is not None and node != '' and node != [] and node != {}
 
 ### Resource validation
 
-MCP resources are public contract, not implementation detail. Test every stable resource URI exported by the server. The template validates `example://schema/mcp-tool` by asserting:
+MCP resources are public contract, not implementation detail. Test every stable resource URI exported by the server. Soma validates `soma://schema/mcp-tool` by asserting:
 
 - the resource URI resolves
 - the returned content parses as JSON
-- the tool name is `example`
+- the tool name is `soma`
 - `inputSchema.type` is `object`
 - `inputSchema.properties.action` exists
 
@@ -992,7 +992,7 @@ Prefer mcporter's resource command when available. Keep a JSON-RPC `resources/re
 
 ### Prompt validation
 
-When mcporter supports prompts directly, add a prompt suite beside tool/resource suites. Until then, prompt coverage should live in Rust tests for `crates/rtemplate-mcp/src/prompts.rs` and in plugin/skill docs that demonstrate the expected prompt workflow.
+When mcporter supports prompts directly, add a prompt suite beside tool/resource suites. Until then, prompt coverage should live in Rust tests for `crates/soma-mcp/src/prompts.rs` and in plugin/skill docs that demonstrate the expected prompt workflow.
 
 ### Non-destructive actions only
 
@@ -1011,30 +1011,30 @@ test tag/app (`APPRISE_TEST_TAG`, `GOTIFY_TEST_APP_ID`) gated by an env var.
 Every server has a skill covering three fallback tiers:
 
 ```markdown
-# example — Claude Code Skill
+# soma — Claude Code Skill
 
 Use this skill whenever... [trigger phrases]
 
 ## Tier 1: MCP tool (preferred)
-Use when the example MCP server is configured.
+Use when the Soma MCP server is configured.
 
-example(action="things")
-example(action="thing", id="abc123")
-example(action="help")          # always available
+soma(action="things")
+soma(action="thing", id="abc123")
+soma(action="help")          # always available
 
 ## Tier 2: CLI binary
 Use when MCP is unavailable but the binary is installed.
 
-example things [--json]
-example thing <id> [--json]
+soma things [--json]
+soma thing <id> [--json]
 
-Env required: RTEMPLATE_API_URL, RTEMPLATE_API_KEY
+Env required: SOMA_API_URL, SOMA_API_KEY
 
 ## Tier 3: Direct API (last resort)
 Use when neither MCP nor CLI is available.
 
-curl -H "Authorization: Bearer $RTEMPLATE_API_KEY" \
-     "$RTEMPLATE_API_URL/things"
+curl -H "Authorization: Bearer $SOMA_API_KEY" \
+     "$SOMA_API_URL/things"
 
 ## Gotchas
 - [service-specific pitfalls]
@@ -1054,37 +1054,37 @@ curl -H "Authorization: Bearer $RTEMPLATE_API_KEY" \
 | unifi-mcp (rustifi) | 7474 | `unifi` |
 | tailscale-mcp (rustscale) | 7575 | `tailscale` |
 | apprise-mcp | 8765 | `apprise` |
-| rmcp-template | 40060 | `example` |
+| soma | 40060 | `example` |
 
 ---
 
 ## 20. Checklist for New Servers
 
-Use this when creating a new server from rmcp-template:
+Use this when creating a new server from soma:
 
 - [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
-- [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only)
-- [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (all logic here)
-- [ ] Add tool actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs`
-- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs`
-- [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific config fields
+- [ ] Implement API client in `crates/soma-service/src/soma.rs` (transport only)
+- [ ] Add service methods to `crates/soma-service/src/app.rs` (all logic here)
+- [ ] Add tool actions to `crates/soma-contracts/src/actions.rs`, `crates/soma-mcp/src/tools.rs`, and `crates/soma-mcp/src/schemas.rs`
+- [ ] Add CLI commands to `crates/soma-cli/src/lib.rs`
+- [ ] Update `crates/soma-contracts/src/config.rs` with service-specific config fields
 - [ ] Set correct port in `config.toml` and `docker-compose.yml`
 - [ ] Update `EXPOSE` in `config/Dockerfile`
 - [ ] Update `plugin.json` userConfig for your service's credentials
-- [ ] Write tests in `*_tests.rs` sidecars + `crates/rmcp-template/tests/` integration tests
-- [ ] Write `crates/rmcp-template/tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Write tests in `*_tests.rs` sidecars + `crates/soma/tests/` integration tests
+- [ ] Write `crates/soma/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Update `install.sh` with correct binary/repo name
 - [ ] Run `cargo check` — must compile clean, zero warnings
 - [ ] Run `cargo nextest run` — all tests pass
-- [ ] Run `./crates/rmcp-template/tests/mcporter/test-mcp.sh` against a live server instance
+- [ ] Run `./crates/soma/tests/mcporter/test-mcp.sh` against a live server instance
 
 ---
 
 ## 21. Release Artifact Distribution
 
 Version tags build release binaries and attach them to the GitHub Release. The
-rmcp-template release workflow also has an explicit Git LFS write-back job for
+soma release workflow also has an explicit Git LFS write-back job for
 plugin install compatibility. Treat that as a release-only exception to audit or
 disable in derived repos. Local `dist` recipes are operator conveniences for
 preparing artifacts, not a separate CI write-back path.
@@ -1145,7 +1145,7 @@ async fn call_tool(&self, request: CallToolRequestParams, context: RequestContex
                     "kind": "mcp_tool_error",
                     "schema_version": 1,
                     "code": "cancelled",
-                    "tool": "example",
+                    "tool": "soma",
                     "action": action,
                     "message": "User cancelled the destructive action.",
                     "retryable": true,
@@ -1286,8 +1286,8 @@ if [ -f "${DATA_DIR}/.env" ]; then
 fi
 
 # Validate required env vars are set (fail fast)
-if [ -z "${RTEMPLATE_API_KEY:-}" ]; then
-    echo "ERROR: RTEMPLATE_API_KEY is not set" >&2
+if [ -z "${SOMA_API_KEY:-}" ]; then
+    echo "ERROR: SOMA_API_KEY is not set" >&2
     exit 1
 fi
 
@@ -1312,11 +1312,11 @@ configured, unless the operator explicitly opts out.
 
 Centralize this decision in library code, not the binary:
 
-- loopback bind with `RTEMPLATE_MCP_NO_AUTH=true` → `LoopbackDev`
-- non-loopback with `RTEMPLATE_NOAUTH=true` → `TrustedGatewayUnscoped`
+- loopback bind with `SOMA_MCP_NO_AUTH=true` → `LoopbackDev`
+- non-loopback with `SOMA_NOAUTH=true` → `TrustedGatewayUnscoped`
 - non-loopback with bearer token → mounted bearer auth
 - non-loopback with OAuth mode → mounted OAuth auth
-- non-loopback with `RTEMPLATE_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
+- non-loopback with `SOMA_MCP_NO_AUTH=true` but no gateway acknowledgment → startup error
 
 Called in `serve_mcp()` before binding the TCP listener.
 
@@ -1446,6 +1446,13 @@ Runs on version tags (`v*`) only:
 - Trivy vulnerability scan
 - MCP Registry manifest publish when credentials are configured
 
+### `.github/workflows/npm-publish.yml`
+Runs on version tags (`v*`) only:
+- Verify the tag matches `packages/soma-rmcp/package.json`
+- Skip if the exact npm version is already published
+- Run `npm pack --dry-run`
+- Publish `soma-rmcp` with npm provenance/trusted publishing support
+
 ### `.github/workflows/release.yml`
 Runs on version tags (`v*`):
 - Build release binaries for linux/amd64 and windows/amd64
@@ -1549,11 +1556,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Updated Checklist for New Servers
 
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
-- [ ] Implement API client in `crates/rtemplate-service/src/example.rs` (transport only)
-- [ ] Add service methods to `crates/rtemplate-service/src/app.rs` (ALL logic here)
-- [ ] Add actions to `crates/rtemplate-contracts/src/actions.rs`, `crates/rtemplate-mcp/src/tools.rs`, and `crates/rtemplate-mcp/src/schemas.rs` (thin shim ONLY)
-- [ ] Add CLI commands to `crates/rtemplate-cli/src/lib.rs` (thin shim ONLY)
-- [ ] Update `crates/rtemplate-contracts/src/config.rs` with service-specific fields
+- [ ] Implement API client in `crates/soma-service/src/soma.rs` (transport only)
+- [ ] Add service methods to `crates/soma-service/src/app.rs` (ALL logic here)
+- [ ] Add actions to `crates/soma-contracts/src/actions.rs`, `crates/soma-mcp/src/tools.rs`, and `crates/soma-mcp/src/schemas.rs` (thin shim ONLY)
+- [ ] Add CLI commands to `crates/soma-cli/src/lib.rs` (thin shim ONLY)
+- [ ] Update `crates/soma-contracts/src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
 - [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
 - [ ] Implement central auth policy resolution in library code
@@ -1564,8 +1571,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Configure taplo (`taplo.toml`)
 - [ ] Configure lefthook (`lefthook.yml`) — minimal hooks only
 - [ ] Write `.github/workflows/ci.yml`, `docker-publish.yml`, `release.yml`
-- [ ] Write tests in `*_tests.rs` sidecars + `crates/rmcp-template/tests/` integration tests
-- [ ] Write `crates/rmcp-template/tests/mcporter/test-mcp.sh` with semantic validation
+- [ ] Write tests in `*_tests.rs` sidecars + `crates/soma/tests/` integration tests
+- [ ] Write `crates/soma/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
 - [ ] Write `install.sh` matching the GitHub release tarball names
 - [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
@@ -1577,7 +1584,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Run `cargo check` — zero warnings
 - [ ] Run `cargo nextest run` — all pass
 - [ ] Run `taplo check` — all TOML valid
-- [ ] Run `./crates/rmcp-template/tests/mcporter/test-mcp.sh` against live server
+- [ ] Run `./crates/soma/tests/mcporter/test-mcp.sh` against live server
 
 ---
 
@@ -1612,39 +1619,51 @@ Or via GitHub OAuth:
 ```json
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "tv.tootie/rtemplate-mcp",
-  "title": "Example MCP",
+  "name": "dinglebear.ai/soma",
+  "title": "Soma",
   "description": "One-line description of what the server does.",
   "repository": {
-    "url": "https://github.com/jmagar/rtemplate-mcp",
+    "url": "https://github.com/jmagar/soma",
     "source": "github"
   },
   "version": "0.1.0",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/rtemplate-mcp:0.1.0",
+      "identifier": "ghcr.io/jmagar/soma:0.1.0",
       "version": "0.1.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:40060/mcp"
+      },
       "environmentVariables": [
         {
-          "name": "RTEMPLATE_API_URL",
-          "description": "Base URL of your Example service.",
+          "name": "SOMA_API_URL",
+          "description": "Base URL of your Soma runtime.",
           "isRequired": true,
           "isSecret": false
         },
         {
-          "name": "RTEMPLATE_API_KEY",
+          "name": "SOMA_API_KEY",
           "description": "API key for authentication.",
           "isRequired": true,
           "isSecret": true
         },
         {
-          "name": "RTEMPLATE_MCP_TOKEN",
+          "name": "SOMA_MCP_TOKEN",
           "description": "Bearer token for MCP endpoint auth.",
           "isRequired": false,
           "isSecret": true
         }
       ]
+    },
+    {
+      "registryType": "npm",
+      "identifier": "soma-rmcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ],
   "remotes": [
@@ -1664,14 +1683,14 @@ The `release.yml` workflow updates `server.json` version automatically on tag:
   run: |
     VERSION="${GITHUB_REF_NAME#v}"
     jq --arg v "$VERSION" \
-       --arg img "ghcr.io/jmagar/rtemplate-mcp:${VERSION}" \
+       --arg img "ghcr.io/jmagar/soma-mcp:${VERSION}" \
        '.version = $v | .packages[0].identifier = $img | .packages[0].version = $v' \
        server.json > server.tmp && mv server.tmp server.json
 ```
 
 ### Name namespace
 
-The `name` field uses reverse-DNS format: `tv.tootie/<service>-mcp`. Verify you
+The `name` field uses reverse-DNS format: `dinglebear.ai/<service>`. Verify you
 own the domain before publishing to the official registry.
 
 ---
@@ -1696,33 +1715,32 @@ plugins/
 
 ```json
 {
-  "name": "rtemplate-mcp",
-  "description": "Example service MCP server for Codex.",
-  "homepage": "https://github.com/jmagar/rtemplate-mcp",
-  "repository": "https://github.com/jmagar/rtemplate-mcp",
+  "name": "soma-mcp",
+  "description": "Soma runtime MCP server for Codex.",
+  "homepage": "https://github.com/jmagar/soma-mcp",
+  "repository": "https://github.com/jmagar/soma-mcp",
   "license": "MIT",
-  "keywords": ["example", "mcp", "homelab"],
+  "keywords": ["soma", "mcp", "homelab"],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Example MCP",
-    "shortDescription": "Query and manage Example service",
+    "displayName": "Soma MCP",
+    "shortDescription": "Query and manage Soma runtime",
     "longDescription": "Full description of what this MCP server does, what data it exposes, and what operations it supports.",
-    "developerName": "Jacob Magar",
+    "developerName": "dinglebear.ai",
     "category": "Infrastructure",
     "capabilities": ["Read"],
-    "websiteURL": "https://github.com/jmagar/rtemplate-mcp",
+    "websiteURL": "https://github.com/jmagar/soma-mcp",
     "defaultPrompt": [
-      "Check Example service status.",
+      "Check Soma runtime status.",
       "List all items in Example.",
       "Show Example health."
     ],
     "brandColor": "#6366F1"
   },
   "author": {
-    "name": "Jacob Magar",
-    "email": "jmagar@users.noreply.github.com",
-    "url": "https://github.com/jmagar"
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
   }
 }
 ```
@@ -1745,27 +1763,27 @@ Maintain a parity table in `CLAUDE.md`:
 
 | Service Method | MCP Action | CLI Command |
 |---|---|---|
-| `service.list_things()` | `example(action="things")` | `example things` |
-| `service.get_thing(id)` | `example(action="thing", id=...)` | `example thing <id>` |
-| `service.create_thing(name)` | `example(action="create_thing", name=...)` | `example create <name>` |
-| `service.delete_thing(id)` | `example(action="delete_thing", id=...)` | `example delete <id> [--confirm]` |
+| `service.list_things()` | `soma(action="things")` | `soma things` |
+| `service.get_thing(id)` | `soma(action="thing", id=...)` | `soma thing <id>` |
+| `service.create_thing(name)` | `soma(action="create_thing", name=...)` | `soma create <name>` |
+| `service.delete_thing(id)` | `soma(action="delete_thing", id=...)` | `soma delete <id> [--confirm]` |
 
 ### Common parity gaps to check
 
-- `help` action in MCP → `example --help` or `example help` in CLI
+- `help` action in MCP → `soma --help` or `soma help` in CLI
 - Resource listing in MCP → no CLI equivalent needed (resources are MCP-only)
 - Prompts in MCP → no CLI equivalent needed (prompts are MCP-only)
 - `health` action in MCP → `example health` in CLI
 - Actions with optional params → CLI needs `--flag` for each optional param
 
-### Template parity table (rmcp-template)
+### Soma parity table (soma)
 
 | Method | MCP | CLI |
 |---|---|---|
-| `service.greet(name)` | `example(action="greet", name="...")` | `example greet [--name N]` |
-| `service.echo(message)` | `example(action="echo", message="...")` | `example echo <message>` |
-| `service.status()` | `example(action="status")` | `example status` |
-| `service.help()` | `example(action="help")` | `example --help` |
+| `service.greet(name)` | `soma(action="greet", name="...")` | `soma greet [--name N]` |
+| `service.echo(message)` | `soma(action="echo", message="...")` | `soma echo <message>` |
+| `service.status()` | `soma(action="status")` | `soma status` |
+| `service.help()` | `soma(action="help")` | `soma --help` |
 
 ---
 
@@ -1795,7 +1813,7 @@ Adapted from the earlier `agentcast/scripts/refresh-docs.sh` pattern. The core m
 | rustifi | developer.ui.com, modelcontextprotocol.io | Art-of-WiFi/UniFi-API-client, mcp/rust-sdk |
 | rustscale | tailscale.com/api, modelcontextprotocol.io | tailscale/tailscale (filtered), mcp/rust-sdk |
 | apprise-mcp | github.com/caronc/apprise/wiki, modelcontextprotocol.io | caronc/apprise, caronc/apprise-api, mcp/rust-sdk |
-| rmcp-template | modelcontextprotocol.io, code.claude.com | mcp/rust-sdk, mcp/spec, mcp/registry, openclaw/mcporter |
+| soma | modelcontextprotocol.io, code.claude.com | mcp/rust-sdk, mcp/spec, mcp/registry, openclaw/mcporter |
 
 ### docs/references/ layout
 
@@ -1847,9 +1865,9 @@ docs/references/
 - `git` — for sparse clones
 - `sha256sum` — for change detection
 
-### Adding your service's docs (when adapting the template)
+### Adding your service's docs (when adapting Soma)
 
-In the xtask refresh-docs implementation, find the `TEMPLATE:` comment blocks and add:
+In the xtask refresh-docs implementation, find the `CUSTOMIZE:` comment blocks and add:
 
 ```bash
 # In the crawl_docs section:
@@ -1880,7 +1898,7 @@ Ok(CallToolResult::structured_error(json!({
     "kind": "mcp_tool_error",
     "schema_version": 1,
     "code": "container_not_found",
-    "tool": "example",
+    "tool": "soma",
     "action": "docker_logs",
     "field": "id",
     "bad_value": id,
@@ -1899,7 +1917,7 @@ Ok(CallToolResult::structured_error(json!({
     "kind": "mcp_tool_error",
     "schema_version": 1,
     "code": "execution_error",
-    "tool": "example",
+    "tool": "soma",
     "action": action,
     "message": reason,
     "retryable": true,
@@ -1923,16 +1941,16 @@ Every MCP error message must include:
 - **Missing required arg**: `"`id` is required for docker_logs — pass id=<container_id>"`
 - **Wrong type**: `"`tail` must be an integer, got \"fifty\""`
 - **Unknown action**: `"unknown action: \"florp\" — valid actions: array, disks, docker, ..., help"`
-- **API unreachable**: `"RTEMPLATE_URL unreachable: connection refused (http://localhost:8765) — is the service running?"`
-- **Auth failure**: `"API key rejected (RTEMPLATE_API_KEY) — check the key is valid and has not expired"`
+- **API unreachable**: `"SOMA_URL unreachable: connection refused (http://localhost:8765) — is the service running?"`
+- **Auth failure**: `"API key rejected (SOMA_API_KEY) — check the key is valid and has not expired"`
 
 ### CLI error messages
 
 CLI errors go to stderr, always include the failing command, and suggest the fix:
 
 ```
-Error: `example thing abc` — id must be numeric
-       Run `example things` to list valid IDs
+Error: `soma thing abc` — id must be numeric
+       Run `soma things` to list valid IDs
 ```
 
 ---
@@ -1971,7 +1989,7 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
             "has_more": true
         },
         "continuation": {
-            "tool": "example",
+            "tool": "soma",
             "arguments": {
                 "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
@@ -2028,7 +2046,7 @@ Every CLI command that outputs data MUST support `--json`. JSON output:
 - Is machine-readable without parsing
 - Matches the MCP response shape exactly
 - Goes to stdout (human-readable output goes to stderr)
-- Enables piping: `example things --json | jq '.items[].name'`
+- Enables piping: `soma things --json | jq '.items[].name'`
 
 ### Stable output shapes
 
@@ -2039,14 +2057,14 @@ renames are breaking changes. Every field returned must be documented.
 
 ```
 # Default: summary view (fits on screen)
-$ example things
+$ soma things
   ID   NAME               STATE    UPDATED
   42   my-thing           active   2m ago
   43   other-thing        idle     1h ago
 
 # Full detail: --verbose or specific action
-$ example thing 42
-$ example thing 42 --json
+$ soma thing 42
+$ soma thing 42 --json
 ```
 
 ---
@@ -2314,7 +2332,7 @@ pub async fn list_things(&self) -> Result<Value> {
         .timeout(Duration::from_secs(30))
         .send()
         .await
-        .context("upstream request failed — is RTEMPLATE_URL correct?")?
+        .context("upstream request failed — is SOMA_URL correct?")?
         .json::<Value>()
         .await
         .context("upstream returned invalid JSON")
@@ -2327,7 +2345,7 @@ pub async fn list_things(&self) -> Result<Value> {
             anyhow::anyhow!(
                 "upstream unreachable: {}\n\
                  Hint: run `example health` to check service status\n\
-                 Config: RTEMPLATE_URL={}",
+                 Config: SOMA_URL={}",
                 e, self.base_url
             )
         } else {
@@ -2349,7 +2367,7 @@ match state.service.list_things().await {
         result,
         &state.response_pages,
         response_page_request(request.arguments.as_ref())?,
-        "example",
+        "soma",
         Some("list_things"),
         request.arguments.as_ref(),
     ),
@@ -2357,7 +2375,7 @@ match state.service.list_things().await {
         "kind": "mcp_tool_error",
         "schema_version": 1,
         "code": "execution_error",
-        "tool": "example",
+        "tool": "soma",
         "action": "list_things",
         "message": format!("list_things failed: {error}"),
         "retryable": true,
@@ -2387,7 +2405,7 @@ Use `<binary> setup plugin-hook` directly as the hook command (no shell wrapper)
 
 ### plugin-hook env-mapping responsibilities
 
-`apply_plugin_options()` (`crates/rtemplate-cli/src/setup.rs`), run before `Config::load()` on the plugin-hook path, should only:
+`apply_plugin_options()` (`crates/soma-cli/src/setup.rs`), run before `Config::load()` on the plugin-hook path, should only:
 
 - reject (skip) unsafe newline/CR-bearing plugin option values
 - map `CLAUDE_PLUGIN_OPTION_*` values to runtime env vars
@@ -2517,14 +2535,14 @@ fi
 
 ## 46. Binary Commands — Canonical Mode Names
 
-Command names stay stable across binary profiles. The all-in-one template
+Command names stay stable across binary profiles. The all-in-one Soma
 binary exposes two server modes and a CLI; split-profile services expose the
 same command names on the binary where that mode applies.
 
 | Command | Mode | Description |
 |---|---|---|
 | `<service> mcp` | stdio MCP transport | For Claude Code `.claude/settings.json` stdio servers; output goes to stdout, logs to stderr |
-| `<service> serve` | Streamable HTTP MCP | For remote/Docker deployment; binds to `RTEMPLATE_MCP_HOST:RTEMPLATE_MCP_PORT` |
+| `<service> serve` | Streamable HTTP MCP | For remote/Docker deployment; binds to `SOMA_MCP_HOST:SOMA_MCP_PORT` |
 | `<service> [subcommand]` | CLI | Direct API access; all subcommands support `--json` |
 | `<service> doctor` | Pre-flight check | Validates environment and config before deployment (see §48) |
 | `<service> --help` | Help | Print usage |
@@ -2537,7 +2555,7 @@ same command names on the binary where that mode applies.
   "mcpServers": {
     "example": {
       "type": "stdio",
-      "command": "example",
+      "command": "soma",
       "args": ["mcp"]
     }
   }
@@ -2560,7 +2578,7 @@ INSTALL_DIR="${HOME}/.local/bin"
 mkdir -p "${INSTALL_DIR}"
 
 # Download and install
-BINARY_URL="https://github.com/jmagar/rtemplate-mcp/releases/latest/download/example-linux-amd64"
+BINARY_URL="https://github.com/jmagar/soma-mcp/releases/latest/download/example-linux-amd64"
 curl -fsSL "${BINARY_URL}" -o "${INSTALL_DIR}/example"
 chmod +x "${INSTALL_DIR}/example"
 
@@ -2571,8 +2589,8 @@ if ! echo "$PATH" | grep -q "${HOME}/.local/bin"; then
 fi
 
 echo "✓ example installed to ${INSTALL_DIR}/example"
-echo "  Run: example doctor    # validate environment"
-echo "  Run: example --version # verify install"
+echo "  Run: soma doctor    # validate environment"
+echo "  Run: soma --version # verify install"
 ```
 
 ### plugin-hook binary self-install
@@ -2592,22 +2610,22 @@ environment and reports what's missing before the user tries to start the server
 ### doctor output format
 
 ```
-$ example doctor
+$ soma doctor
 
-rtemplate-mcp v0.1.0 — environment check
+soma-mcp v0.1.0 — environment check
 
   Config
   ──────────────────────────────────────────────
-  ✓ Config file:       ~/.example/config.toml
-  ✓ Data directory:    ~/.example/ (writable)
-  ✓ Log directory:     ~/.example/logs/ (writable, 1.2 MB)
+  ✓ Config file:       ~/.soma/config.toml
+  ✓ Data directory:    ~/.soma/ (writable)
+  ✓ Log directory:     ~/.soma/logs/ (writable, 1.2 MB)
   ✓ Binary in PATH:    /home/user/.local/bin/example
 
   Service credentials
   ──────────────────────────────────────────────
-  ✓ RTEMPLATE_API_URL:   https://example.internal/api (set)
-  ✗ RTEMPLATE_API_KEY:   not set
-    → Set RTEMPLATE_API_KEY in ~/.example/.env or your environment
+  ✓ SOMA_API_URL:   https://example.internal/api (set)
+  ✗ SOMA_API_KEY:   not set
+    → Set SOMA_API_KEY in ~/.soma/.env or your environment
 
   Connectivity
   ──────────────────────────────────────────────
@@ -2615,11 +2633,11 @@ rtemplate-mcp v0.1.0 — environment check
 
   MCP server
   ──────────────────────────────────────────────
-  ✓ MCP port 40060:    available  # TEMPLATE: canonical rmcp-template port is 40060 (RTEMPLATE_MCP_PORT)
-  ✓ Auth mode:         no-auth (RTEMPLATE_NOAUTH=true)
+  ✓ MCP port 40060:    available  # CUSTOMIZE: canonical soma port is 40060 (SOMA_MCP_PORT)
+  ✓ Auth mode:         no-auth (SOMA_NOAUTH=true)
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1 issue found. Fix it before running: example-server serve
+  1 issue found. Fix it before running: soma-server serve
 
 ```
 
@@ -2638,12 +2656,12 @@ pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
     checks.push(check_binary_in_path("example"));
 
     // 2. Required env vars / config
-    checks.push(check_required_var("RTEMPLATE_API_URL", &config.example.url));
-    checks.push(check_required_var("RTEMPLATE_API_KEY", &config.example.api_key));
+    checks.push(check_required_var("SOMA_API_URL", &config.soma.url));
+    checks.push(check_required_var("SOMA_API_KEY", &config.soma.api_key));
 
     // 3. Connectivity (non-fatal if unreachable)
-    if !config.example.url.is_empty() {
-        checks.push(check_upstream(&config.example.url, &config.example.api_key).await);
+    if !config.soma.url.is_empty() {
+        checks.push(check_upstream(&config.soma.url, &config.soma.api_key).await);
     }
 
     // 4. MCP port availability
@@ -2681,8 +2699,8 @@ struct DoctorCheck {
 
 ```json
 [
-  {"category": "config", "name": "Config file", "ok": true, "value": "~/.example/config.toml"},
-  {"category": "credentials", "name": "RTEMPLATE_API_KEY", "ok": false, "hint": "Set RTEMPLATE_API_KEY in ~/.example/.env"},
+  {"category": "config", "name": "Config file", "ok": true, "value": "~/.soma/config.toml"},
+  {"category": "credentials", "name": "SOMA_API_KEY", "ok": false, "hint": "Set SOMA_API_KEY in ~/.soma/.env"},
   {"category": "connectivity", "name": "Upstream", "ok": true, "value": "200 OK", "latency_ms": 42}
 ]
 ```
@@ -2746,18 +2764,18 @@ preflight() {
         || echo "⚠  PATH: ~/.local/bin not in PATH — will print instructions"
 
     # 6. Required env vars (warn, don't fail — can be set post-install)
-    [[ -n "${RTEMPLATE_API_URL:-}" ]] \
-        && echo "✓ RTEMPLATE_API_URL: set" \
-        || echo "⚠  RTEMPLATE_API_URL: not set (required before running the server)"
-    [[ -n "${RTEMPLATE_API_KEY:-}" ]] \
-        && echo "✓ RTEMPLATE_API_KEY: set" \
-        || echo "⚠  RTEMPLATE_API_KEY: not set (required before running the server)"
+    [[ -n "${SOMA_API_URL:-}" ]] \
+        && echo "✓ SOMA_API_URL: set" \
+        || echo "⚠  SOMA_API_URL: not set (required before running the server)"
+    [[ -n "${SOMA_API_KEY:-}" ]] \
+        && echo "✓ SOMA_API_KEY: set" \
+        || echo "⚠  SOMA_API_KEY: not set (required before running the server)"
 
     # 7. Port availability (warn only)
-    # TEMPLATE: canonical rmcp-template port is 40060; update this default when adapting
-    local port="${RTEMPLATE_MCP_PORT:-40060}"
+    # CUSTOMIZE: canonical soma port is 40060; update this default when adapting
+    local port="${SOMA_MCP_PORT:-40060}"
     if ss -tlnp "sport = :${port}" 2>/dev/null | awk 'NR>1' | grep -q .; then
-        echo "⚠  Port ${port}: already in use (change RTEMPLATE_MCP_PORT if needed)"
+        echo "⚠  Port ${port}: already in use (change SOMA_MCP_PORT if needed)"
     else
         echo "✓ Port ${port}: available"
     fi
@@ -2829,9 +2847,9 @@ fi
 
 # ── 2. Required env vars ──────────────────────────────────────────────────────
 # Fail fast with a clear message rather than a cryptic runtime error.
-# TEMPLATE: Add your service's required vars here.
+# CUSTOMIZE: Add your service's required vars here.
 missing_vars=""
-for var in RTEMPLATE_API_URL RTEMPLATE_API_KEY; do
+for var in SOMA_API_URL SOMA_API_KEY; do
     eval "val=\${${var}:-}"
     if [ -z "${val}" ]; then
         missing_vars="${missing_vars} ${var}"
@@ -2871,8 +2889,8 @@ echo "[entrypoint] Data dir: ${DATA_DIR}"
 echo "[entrypoint] Binary:   ${BINARY}"
 echo "[entrypoint] User:     1000:1000"
 # Log non-secret config
-[ -n "${RTEMPLATE_MCP_PORT:-}" ] && echo "[entrypoint] MCP port: ${RTEMPLATE_MCP_PORT}"
-[ -n "${RTEMPLATE_MCP_HOST:-}" ] && echo "[entrypoint] MCP host: ${RTEMPLATE_MCP_HOST}"
+[ -n "${SOMA_MCP_PORT:-}" ] && echo "[entrypoint] MCP port: ${SOMA_MCP_PORT}"
+[ -n "${SOMA_MCP_HOST:-}" ] && echo "[entrypoint] MCP host: ${SOMA_MCP_HOST}"
 
 # ── 6. Signal handling ────────────────────────────────────────────────────────
 # Let gosu / the service handle SIGTERM cleanly.
@@ -2902,7 +2920,7 @@ tiers and keep their claims separate:
 
 | Tier | Command shape | Evidence claim |
 |---|---|---|
-| `static-spec` | `cargo xtask contract-audit` | Local schema docs, OpenAPI docs, action metadata, plugin contracts, sidecar tests, and template invariants are in sync. |
+| `static-spec` | `cargo xtask contract-audit` | Local schema docs, OpenAPI docs, action metadata, plugin contracts, sidecar tests, and Soma invariants are in sync. |
 | `contract-real` | `cargo nextest run` with local mocks | The service constructs the expected HTTP requests, parses fixtures, maps errors, and enforces safety gates against a local contract. |
 | `production-real` | explicit `mcporter` smoke | A deployed server can perform allowlisted read-only actions against a real upstream. |
 
@@ -3054,7 +3072,7 @@ pub fn router(state: AppState) -> Router {
 ## A2. REST API — Direct Routes Share Service Dispatch
 
 REST uses traditional typed routes while MCP keeps the compact `action` argument
-inside a single tool. Both surfaces still converge on the same `ExampleAction`
+inside a single tool. Both surfaces still converge on the same `SomaAction`
 and service dispatcher:
 - **One service method** serves MCP, REST, and CLI — no duplicated business logic
 - REST stays natural for humans, HTTP clients, OpenAPI, and generated SDKs
@@ -3068,7 +3086,7 @@ async fn v1_echo(
     Json(body): Json<EchoRequest>,
 ) -> impl IntoResponse {
     let params = serde_json::json!({ "message": body.message });
-    let result = match ExampleAction::from_rest("echo", &params) {
+    let result = match SomaAction::from_rest("echo", &params) {
         Ok(action) => {
             if let Some(response) = enforce_rest_scope(
                 &state,
@@ -3102,9 +3120,9 @@ async fn v1_echo(
 
 | Surface | Call pattern |
 |---|---|
-| MCP | `example(action="greet", name="Alice")` |
+| MCP | `soma(action="greet", name="Alice")` |
 | REST | `POST /v1/greet {"name":"Alice"}` |
-| CLI | `example greet --name Alice` |
+| CLI | `soma greet --name Alice` |
 
 All three call `state.service.greet(Some("Alice"))`.
 
@@ -3242,7 +3260,7 @@ GitHub: `https://github.com/jmagar/aurora-design-system`
 ```bash
 cd apps/web
 # 1. Add Aurora to components.json registries
-# Already configured if using the template — see apps/web/components.json
+# Already configured if using Soma — see apps/web/components.json
 
 # 2. Install Aurora token layer (required first)
 pnpm dlx shadcn@latest add https://aurora.tootie.tv/r/aurora-tokens.json
@@ -3332,17 +3350,17 @@ export default config;
 
 ## A5. Cargo.toml — Binary Profiles and Web Feature Gate
 
-The template has separate binary profiles: `example` for local CLI + stdio MCP
-and `example-server` for API + Web + HTTP MCP deployments. The full profile is
+Soma has separate binary profiles: `soma` for local CLI + stdio MCP
+and `soma-server` for API + Web + HTTP MCP deployments. The full profile is
 the default so existing `cargo build` workflows still build the complete
-template.
+runtime.
 
-For application/platform servers, the local `example` profile is an adapter to
-the deployed platform API. Set `RTEMPLATE_API_URL=https://service.example.com/`
-and optional `RTEMPLATE_API_KEY=<token>`; local CLI and stdio MCP actions forward
-to direct business routes such as `POST {RTEMPLATE_API_URL}/v1/echo` and
-`GET {RTEMPLATE_API_URL}/v1/status`. Leaving `RTEMPLATE_API_URL` empty keeps the
-offline template stub active for tests and first-run scaffolds.
+For application/platform servers, the local `soma` profile is an adapter to
+the deployed platform API. Set `SOMA_API_URL=https://service.example.com/`
+and optional `SOMA_API_KEY=<token>`; local CLI and stdio MCP actions forward
+to direct business routes such as `POST {SOMA_API_URL}/v1/echo` and
+`GET {SOMA_API_URL}/v1/status`. Leaving `SOMA_API_URL` empty keeps the
+offline stub active for tests and first-run scaffolds.
 
 ```toml
 [features]
@@ -3374,9 +3392,9 @@ pub fn web_assets_available() -> bool {
 
 Build without web UI:
 ```bash
-cargo build --bin rtemplate --no-default-features --features local-adapter
-cargo build --bin rtemplate-server --no-default-features --features server
-cargo build --bin rtemplate-server --features full
+cargo build --bin soma --no-default-features --features local-adapter
+cargo build --bin soma-server --no-default-features --features server
+cargo build --bin soma-server --features full
 ```
 
 ---

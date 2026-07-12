@@ -11,7 +11,7 @@ prefer CLI-only usage, or want skills to use their fallback paths.
 The branch is maintained by `cargo xtask apply-no-mcp-marketplace`. The
 transform removes local `mcp.json` / `.mcp.json` files and strips inline
 `mcpServers` objects from Claude, Codex, and Gemini plugin manifests. The
-current template plugin is stdio-first and does not ship bundled MCP
+current Soma plugin is stdio-first and does not ship bundled MCP
 registrations, so the transform is an identity operation until such files are
 introduced.
 

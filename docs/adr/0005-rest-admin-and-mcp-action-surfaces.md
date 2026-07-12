@@ -2,7 +2,7 @@
 title: "ADR 0005: Separate REST admin APIs from MCP action dispatch"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

@@ -1,4 +1,4 @@
-//! Lane D Rust migrations for Python scripts that still have compatibility
+//! Lane D Rust migrations for Python scripts that have
 //! wrappers in `scripts/`.
 //!
 //! Intended parent wiring:
@@ -8,7 +8,7 @@
 //! - `check_scaffold_intent_contract` maps to
 //!   `scripts/check-scaffold-intent-contract.py`
 //! - `check_cargo_generate` delegates to the existing xtask cargo-generate
-//!   implementation; the Python file is already only a compatibility wrapper.
+//!   implementation; the Python file is already only a thin wrapper.
 
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
@@ -436,11 +436,35 @@ fn render_openapi(root: &Path) -> Result<Value> {
     Ok(json!({
         "openapi": "3.1.0",
         "info": {
-            "title": "Example MCP REST API",
+            "title": "Soma MCP REST API",
             "version": version,
-            "description": "Generated OpenAPI schema for rmcp-template's direct REST surface. TEMPLATE: rename Example identifiers and action schemas when adapting. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses RTEMPLATE_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted."
+            "description": "Generated OpenAPI schema for Soma's direct REST surface. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
+            "contact": {
+                "name": "dinglebear.ai",
+                "url": "https://dinglebear.ai"
+            },
+            "license": {
+                "name": "MIT",
+                "url": "https://github.com/jmagar/soma/blob/main/LICENSE"
+            }
         },
-        "servers": [{"url": format!("http://localhost:{port}"),"description":"Default local development server"}],
+        "servers": [
+            {"url": format!("http://localhost:{port}"),"description":"Default local development server"},
+            {
+                "url": "https://{host}",
+                "description": "Reverse-proxied Soma deployment",
+                "variables": {
+                    "host": {
+                        "default": "soma.dinglebear.ai",
+                        "description": "Public Soma host configured with SOMA_MCP_PUBLIC_URL"
+                    }
+                }
+            }
+        ],
+        "externalDocs": {
+            "description": "Soma documentation",
+            "url": "https://github.com/jmagar/soma/tree/main/docs"
+        },
         "tags": [
             {"name":"health","description":"Unauthenticated runtime probes"},
             {"name":"capabilities","description":"REST route inventory"},
@@ -457,10 +481,50 @@ fn render_openapi(root: &Path) -> Result<Value> {
                 "InternalError":{"description":"Internal server error","content":{"application/json":{"schema":schema_ref("ErrorResponse")}}}
             }
         },
-        "x-template": {
+        "x-soma": {
+            "publisher": {
+                "name": "dinglebear.ai",
+                "url": "https://dinglebear.ai"
+            },
+            "homepage": "https://soma.dinglebear.ai",
+            "repository": "https://github.com/jmagar/soma",
+            "support": "https://github.com/jmagar/soma/issues",
+            "security_policy": "https://github.com/jmagar/soma/security/policy",
+            "keywords": [
+                "mcp",
+                "mcp-server",
+                "model-context-protocol",
+                "rmcp",
+                "rust",
+                "agent-tools",
+                "ai-agents",
+                "provider-runtime",
+                "providers",
+                "developer-tools",
+                "automation",
+                "openapi",
+                "docker",
+                "cli",
+                "server-runtime"
+            ],
             "source": "scripts/check-openapi.py",
-            "action_metadata": "crates/rtemplate-contracts/src/actions.rs",
+            "action_metadata": "crates/soma-contracts/src/actions.rs",
             "preferred_rest_style": "direct_routes",
+            "binary": "soma",
+            "server_binary": "soma-server",
+            "node_package": "soma-rmcp",
+            "oci_image": format!("ghcr.io/jmagar/soma:{version}"),
+            "mcp_registry": "server.json",
+            "provider_directory_env": "SOMA_PROVIDER_DIR",
+            "auth_modes": ["loopback-dev", "bearer", "oauth", "trusted-gateway"],
+            "transports": ["stdio", "streamable-http"],
+            "surfaces": ["mcp", "cli", "rest", "web", "docker", "plugins"],
+            "documentation": {
+                "quickstart": "docs/QUICKSTART.md",
+                "configuration": "docs/CONFIG.md",
+                "environment": "docs/ENV.md",
+                "provider_surfaces": "docs/generated/provider-surfaces.md"
+            },
             "rest_actions": action_names,
             "direct_rest_routes": direct_rest_routes,
             "action_costs": action_costs,
@@ -471,7 +535,7 @@ fn render_openapi(root: &Path) -> Result<Value> {
 
 fn openapi_schemas(action_names: Vec<String>) -> Value {
     json!({
-        "ActionName":{"type":"string","enum":action_names,"description":"REST-capable action names from crates/rtemplate-contracts/src/actions.rs."},
+        "ActionName":{"type":"string","enum":action_names,"description":"REST-capable action names from crates/soma-contracts/src/actions.rs."},
         "GreetRequest":{"type":"object","additionalProperties":false,"properties":{"name":{"type":"string","description":"Name to greet. Omit to greet the world."}}},
         "EchoRequest":{"type":"object","additionalProperties":false,"required":["message"],"properties":{"message":{"type":"string","minLength":1,"description":"Message to echo back. Must not be empty."}}},
         "ActionResponse":{"oneOf":[schema_ref("GreetResponse"),schema_ref("EchoResponse"),schema_ref("StatusResponse"),schema_ref("HelpResponse"),schema_ref("RestTruncationResponse")]},
@@ -562,11 +626,11 @@ fn validate_openapi(root: &Path, value: &Value) -> Result<Vec<String>> {
             ));
         }
     }
-    if value.pointer("/x-template/rest_actions") != Some(&json!(expected)) {
+    if value.pointer("/x-soma/rest_actions") != Some(&json!(expected)) {
         failures.push(format!(
-            "x-template rest_actions drifted: expected {expected:?}, got {}",
+            "x-soma rest_actions drifted: expected {expected:?}, got {}",
             value
-                .pointer("/x-template/rest_actions")
+                .pointer("/x-soma/rest_actions")
                 .unwrap_or(&Value::Null)
         ));
     }
@@ -575,8 +639,8 @@ fn validate_openapi(root: &Path, value: &Value) -> Result<Vec<String>> {
         .filter(|entry| entry.transport == "McpOnly")
         .map(|entry| entry.name.clone())
         .collect();
-    if value.pointer("/x-template/mcp_only_actions") != Some(&json!(expected_mcp_only)) {
-        failures.push("x-template mcp_only_actions drifted".to_owned());
+    if value.pointer("/x-soma/mcp_only_actions") != Some(&json!(expected_mcp_only)) {
+        failures.push("x-soma mcp_only_actions drifted".to_owned());
     }
     for action in entries
         .iter()
@@ -599,7 +663,7 @@ fn validate_openapi(root: &Path, value: &Value) -> Result<Vec<String>> {
         }
     }
     if value.pointer("/paths/~1v1~1example").is_some() {
-        failures.push("/v1/example must not be present; REST uses direct routes only".to_owned());
+        failures.push("/v1/soma must not be present; REST uses direct routes only".to_owned());
     }
     if value.pointer("/paths/~1v1~1capabilities/get/responses/200/content/application~1json/schema")
         != Some(&schema_ref("CapabilitiesResponse"))
@@ -622,7 +686,7 @@ fn render_schema_docs(root: &Path) -> Result<String> {
     let mut lines = vec![
         "# MCP Schema Contract".to_owned(),
         "".to_owned(),
-        "Generated from `crates/rtemplate-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.".to_owned(),
+        "Generated from `crates/soma-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.".to_owned(),
         "".to_owned(),
         "Run:".to_owned(),
         "".to_owned(),
@@ -635,8 +699,8 @@ fn render_schema_docs(root: &Path) -> Result<String> {
         "".to_owned(),
         "| Field | Value |".to_owned(),
         "|---|---|".to_owned(),
-        "| Tool name | `example` |".to_owned(),
-        "| Schema resource | `example://schema/mcp-tool` |".to_owned(),
+        "| Tool name | `soma` |".to_owned(),
+        "| Schema resource | `soma://schema/mcp-tool` |".to_owned(),
         "| Dispatch parameter | `action` |".to_owned(),
         "".to_owned(),
         "## Actions".to_owned(),
@@ -658,26 +722,26 @@ const SCHEMA_DOC_TAIL: &[&str] = &[
     "",
     "## Drift Rules",
     "",
-    "- `ACTION_SPECS` in `crates/rtemplate-contracts/src/actions.rs` is the canonical action and scope list.",
+    "- `ACTION_SPECS` in `crates/soma-contracts/src/actions.rs` is the canonical action and scope list.",
     "- Action cost is planner metadata. Use `cheap` for first-pass reads, `moderate` for bounded workflow setup, `expensive` for broad scans or long-running work, and `write` for mutating operations.",
-    "- `crates/rtemplate-mcp/src/schemas.rs` must derive its enum from `ACTION_SPECS`.",
+    "- `crates/soma-mcp/src/schemas.rs` must derive its enum from `ACTION_SPECS`.",
     "- The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.",
     "- `help` is intentionally public and must have no required scope.",
-    "- `crates/rtemplate-mcp/src/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.",
-    "- `crates/rtemplate-mcp/src/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.",
-    "- `crates/rtemplate-mcp/src/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.",
+    "- `crates/soma-mcp/src/tools.rs`, `README.md`, and `plugins/soma/skills/soma/SKILL.md` must mention every action.",
+    "- `crates/soma-mcp/src/rmcp_server.rs` owns stable resources and must keep `soma://schema/mcp-tool` wired to `tool_definitions()`.",
+    "- `crates/soma-mcp/src/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.",
     "",
     "## Resources",
     "",
     "| URI | Source | Contract |",
     "|---|---|---|",
-    "| `example://schema/mcp-tool` | `crates/rtemplate-mcp/src/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |",
+    "| `soma://schema/mcp-tool` | `crates/soma-mcp/src/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |",
     "",
     "## Prompts",
     "",
     "| Prompt | Source | Contract |",
     "|---|---|---|",
-    "| `quick_start` | `crates/rtemplate-mcp/src/prompts.rs` | Guides a client to call `status` and `greet`. |",
+    "| `quick_start` | `crates/soma-mcp/src/prompts.rs` | Guides a client to call `status` and `greet`. |",
     "",
     "## Input Validation",
     "",
@@ -706,8 +770,8 @@ fn check_schema_mentions(root: &Path, actions: &[ActionEntry]) -> Result<Vec<Str
     for (label, path) in [
         ("README.md", root.join("README.md")),
         (
-            "plugins/rtemplate/skills/rtemplate/SKILL.md",
-            root.join("plugins/rtemplate/skills/rtemplate/SKILL.md"),
+            "plugins/soma/skills/soma/SKILL.md",
+            root.join("plugins/soma/skills/soma/SKILL.md"),
         ),
     ] {
         let text = read(&path)?;
@@ -717,11 +781,10 @@ fn check_schema_mentions(root: &Path, actions: &[ActionEntry]) -> Result<Vec<Str
             }
         }
     }
-    let tools_text = read(root.join("crates/rtemplate-mcp/src/tools.rs"))?;
+    let tools_text = read(root.join("crates/soma-mcp/src/tools.rs"))?;
     if !tools_text.contains("ACTION_SPECS") || !tools_text.contains("build_help_text") {
         failures.push(
-            "crates/rtemplate-mcp/src/tools.rs HELP_TEXT must be derived from ACTION_SPECS"
-                .to_owned(),
+            "crates/soma-mcp/src/tools.rs HELP_TEXT must be derived from ACTION_SPECS".to_owned(),
         );
     }
     Ok(failures)
@@ -754,36 +817,34 @@ fn check_schema_scope(root: &Path, actions: &[ActionEntry]) -> Result<Vec<String
             ));
         }
     }
-    let schema_text = read(root.join("crates/rtemplate-mcp/src/schemas.rs"))?;
+    let schema_text = read(root.join("crates/soma-mcp/src/schemas.rs"))?;
     if !schema_text.contains("tool_definitions_for_catalogs")
         || !schema_text.contains("action_names(catalogs)")
     {
         failures.push(
-            "crates/rtemplate-mcp/src/schemas.rs must derive action enum from provider catalogs"
+            "crates/soma-mcp/src/schemas.rs must derive action enum from provider catalogs"
                 .to_owned(),
         );
     }
     if !schema_text.contains("\"additionalProperties\": false") {
         failures.push(
-            "crates/rtemplate-mcp/src/schemas.rs must reject unknown top-level properties"
-                .to_owned(),
+            "crates/soma-mcp/src/schemas.rs must reject unknown top-level properties".to_owned(),
         );
     }
     if !schema_text.contains("required_param_conditionals(catalogs)")
         || !schema_text.contains("\"then\": { \"required\": required }")
     {
-        failures.push("crates/rtemplate-mcp/src/schemas.rs must derive required action parameters from provider catalogs".to_owned());
+        failures.push("crates/soma-mcp/src/schemas.rs must derive required action parameters from provider catalogs".to_owned());
     }
-    let rmcp_server_text = read(root.join("crates/rtemplate-mcp/src/rmcp_server.rs"))?;
-    if !rmcp_server_text.contains("example://schema/mcp-tool")
+    let rmcp_server_text = read(root.join("crates/soma-mcp/src/rmcp_server.rs"))?;
+    if !rmcp_server_text.contains("soma://schema/mcp-tool")
         || !rmcp_server_text.contains("tool_definitions_for_state")
     {
-        failures.push("crates/rtemplate-mcp/src/rmcp_server.rs must expose the schema resource from the state-backed tool definitions".to_owned());
+        failures.push("crates/soma-mcp/src/rmcp_server.rs must expose the schema resource from the state-backed tool definitions".to_owned());
     }
-    let prompts_text = read(root.join("crates/rtemplate-mcp/src/prompts.rs"))?;
+    let prompts_text = read(root.join("crates/soma-mcp/src/prompts.rs"))?;
     if !prompts_text.contains("quick_start") {
-        failures
-            .push("crates/rtemplate-mcp/src/prompts.rs must expose quick_start prompt".to_owned());
+        failures.push("crates/soma-mcp/src/prompts.rs must expose quick_start prompt".to_owned());
     }
     Ok(failures)
 }
@@ -803,7 +864,7 @@ fn validate_scaffold_schema(path: &Path) -> Result<()> {
         schema
             .pointer("/properties/kind/const")
             .and_then(Value::as_str)
-            == Some("rmcp_template_scaffold_intent"),
+            == Some("soma_scaffold_intent"),
         format!("{}: kind const drifted", path.display()),
     )?;
     let expected_required = str_set(&[
@@ -893,7 +954,7 @@ fn validate_scaffold_payload(payload: &Value, source: &Path) -> Result<()> {
     require_keys(obj, source, "", &root_keys)?;
     require_no_extra(obj, source, "", &root_keys)?;
     require(
-        payload.get("kind").and_then(Value::as_str) == Some("rmcp_template_scaffold_intent"),
+        payload.get("kind").and_then(Value::as_str) == Some("soma_scaffold_intent"),
         format!("{}: invalid kind", source.display()),
     )?;
     require(
@@ -1196,7 +1257,7 @@ fn validate_policy(value: &Value, source: &Path) -> Result<()> {
 }
 
 fn action_entries(root: &Path) -> Result<Vec<ActionEntry>> {
-    let text = read(root.join("crates/rtemplate-contracts/src/actions.rs"))?;
+    let text = read(root.join("crates/soma-contracts/src/actions.rs"))?;
     Ok(parse_action_entries(&text))
 }
 
@@ -1217,12 +1278,9 @@ fn parse_action_entries(text: &str) -> Vec<ActionEntry> {
             let cost = enum_variant(entry, "cost", "ActionCost")?.to_lowercase();
             let (scope, doc_scope) = match scope_expr.trim() {
                 "None" => ("public".to_owned(), "public".to_owned()),
-                "Some(READ_SCOPE)" => ("example:read".to_owned(), "`example:read`".to_owned()),
-                "Some(WRITE_SCOPE)" => ("example:write".to_owned(), "`example:write`".to_owned()),
-                _ => (
-                    "example:__deny__".to_owned(),
-                    "`example:__deny__`".to_owned(),
-                ),
+                "Some(READ_SCOPE)" => ("soma:read".to_owned(), "`soma:read`".to_owned()),
+                "Some(WRITE_SCOPE)" => ("soma:write".to_owned(), "`soma:write`".to_owned()),
+                _ => ("soma:__deny__".to_owned(), "`soma:__deny__`".to_owned()),
             };
             Some(ActionEntry {
                 name,
@@ -1239,7 +1297,7 @@ fn parse_action_entries(text: &str) -> Vec<ActionEntry> {
 }
 
 fn action_spec_count(root: &Path) -> Result<usize> {
-    let text = read(root.join("crates/rtemplate-contracts/src/actions.rs"))?;
+    let text = read(root.join("crates/soma-contracts/src/actions.rs"))?;
     Ok(action_blocks(&text)
         .into_iter()
         .filter(|block| block.trim_start().starts_with("name:"))
@@ -1289,10 +1347,7 @@ fn enum_variant(entry: &str, field: &str, enum_name: &str) -> Option<String> {
 }
 
 fn package_version(root: &Path) -> Result<String> {
-    for manifest in [
-        root.join("crates/rmcp-template/Cargo.toml"),
-        root.join("Cargo.toml"),
-    ] {
+    for manifest in [root.join("crates/soma/Cargo.toml"), root.join("Cargo.toml")] {
         if !manifest.exists() {
             continue;
         }
@@ -1311,7 +1366,7 @@ fn package_version(root: &Path) -> Result<String> {
 }
 
 fn default_mcp_port(root: &Path) -> Result<u16> {
-    let text = read(root.join("crates/rtemplate-contracts/src/config.rs"))?;
+    let text = read(root.join("crates/soma-contracts/src/config.rs"))?;
     let Some(start) = text.find("fn default_mcp_port()") else {
         bail!("could not find default_mcp_port in config.rs");
     };
@@ -1649,7 +1704,7 @@ mod tests {
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0].name, "greet");
         assert_eq!(entries[0].description, "Return a greeting.");
-        assert_eq!(entries[0].scope, "example:read");
+        assert_eq!(entries[0].scope, "soma:read");
         assert_eq!(entries[0].rest_method.as_deref(), Some("POST"));
         assert_eq!(entries[0].rest_path.as_deref(), Some("/v1/greet"));
         assert_eq!(entries[1].transport, "McpOnly");

@@ -3,7 +3,7 @@
   "provider": {
     "name": "example-static",
     "kind": "static-rust",
-    "title": "Example Static Actions"
+    "title": "Soma Static Actions"
   },
   "tools": [
     {
@@ -14,7 +14,7 @@
         "additionalProperties": false,
         "properties": {}
       },
-      "scope": "example:read",
+      "scope": "soma:read",
       "rest": {
         "enabled": true,
         "method": "GET",

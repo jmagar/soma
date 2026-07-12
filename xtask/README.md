@@ -45,7 +45,7 @@ cargo xtask changed-paths \
 ```
 
 Outputs: `all`, `docs`, `workflow`, `rust`, `web`, `native`, `mcp`, `docker`,
-`toml`, `template`, `security`, `secrets`, and `release`. Workflow changes,
+`toml`, `soma`, `security`, `secrets`, and `release`. Workflow changes,
 manual dispatch, and empty changed-file sets enable every key so the gates fail
 safe.
 
@@ -68,7 +68,7 @@ just dist
 
 Respects `CARGO_TARGET_DIR` if set. After running, commit the updated `bin/` pointer and push to update LFS.
 
-**TEMPLATE**: Update `BINARY_NAME` in `xtask/src/main.rs` to match the `[[bin]] name` in your `Cargo.toml`.
+**CUSTOMIZE**: Update `BINARY_NAME` in `xtask/src/main.rs` to match the `[[bin]] name` in your `Cargo.toml`.
 
 ---
 
@@ -209,7 +209,7 @@ Smoke-test the installed stdio MCP binary used by plugin manifests.
 
 ```bash
 cargo xtask check-plugin-stdio-smoke
-BIN=rtemplate TIMEOUT_SECS=10 cargo xtask check-plugin-stdio-smoke
+BIN=soma TIMEOUT_SECS=10 cargo xtask check-plugin-stdio-smoke
 # compatibility wrapper:
 bash scripts/check-plugin-stdio-smoke.sh
 ```
@@ -221,7 +221,7 @@ and verifies the `id=2` response reports `structuredContent.status == "ok"`.
 
 ### `cargo xtask contract-audit`
 
-Run local static/spec checks without contacting live upstream services. This wraps the high-signal template contract checks used before release.
+Run local static/spec checks without contacting live upstream services. This wraps the high-signal Soma contract checks used before release.
 
 ```bash
 cargo xtask contract-audit
@@ -234,10 +234,10 @@ just contract-audit
 ### `cargo xtask cargo-generate`
 
 Smoke-test real `cargo-generate` output plus the Rust post-generation rewrite.
-The command stages a clean template copy, generates both a simple server and a
+The command stages a clean Soma scaffold copy, generates both a simple server and a
 hyphenated-package server, lets the native Rhai hook record selected values,
 runs `cargo xtask cargo-generate-post` against each generated project, checks
-plugin/repository metadata, verifies template-only files were removed, and runs
+plugin/repository metadata, verifies scaffold-only files were removed, and runs
 `cargo check --workspace --all-targets` inside each generated project.
 
 ```bash
@@ -250,7 +250,7 @@ generator.
 
 ### `cargo xtask scaffold`
 
-Plan, generate, or verify a new project from the template.
+Plan, generate, or verify a new project from Soma.
 
 ```bash
 cargo xtask scaffold --name myservice --category upstream-client --port auto --plan
@@ -281,7 +281,7 @@ from the generated project and removes that temporary file before returning.
 
 ### `cargo xtask sync-web-source`
 
-Copy editable `apps/web` source into `crates/rtemplate-web/assets/source`.
+Copy editable `apps/web` source into `crates/soma-web/assets/source`.
 Generated artifacts are excluded: `.next`, `node_modules`, `out`,
 `tsconfig.tsbuildinfo`, and `.DS_Store`.
 
@@ -293,7 +293,7 @@ cargo xtask sync-web-source
 
 ### `cargo xtask check-web-source-sync`
 
-Validate that the bundled source in `rtemplate-web` matches `apps/web`.
+Validate that the bundled source in `soma-web` matches `apps/web`.
 This runs inside `cargo xtask ci`, so generated projects do not accidentally
 receive stale Aurora frontend source.
 
@@ -327,13 +327,13 @@ just check-env
 Example output:
 
 ```
-[OK]      RTEMPLATE_MCP_TOKEN   — Static bearer token for MCP auth
-[MISSING] RTEMPLATE_API_KEY     — Upstream service API key (required)
+[OK]      SOMA_MCP_TOKEN   — Static bearer token for MCP auth
+[MISSING] SOMA_API_KEY     — Upstream service API key (required)
 
 Error: 1 required variable(s) missing. Copy .env.example to .env and fill in the values.
 ```
 
-**TEMPLATE**: Update `REQUIRED_VARS` and `OPTIONAL_VARS` in `xtask/src/main.rs` for your service. The template ships with no required variables (the stub works without credentials).
+**CUSTOMIZE**: Update `REQUIRED_VARS` and `OPTIONAL_VARS` in `xtask/src/main.rs` for your service. Soma ships with no required variables (the stub works without credentials).
 
 ---
 

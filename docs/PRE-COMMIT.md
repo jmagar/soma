@@ -2,11 +2,11 @@
 title: "Pre-commit Hooks"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-06-18"
 ---

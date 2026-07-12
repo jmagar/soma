@@ -2,7 +2,7 @@
 //!
 //! These functions are intentionally not wired into `main.rs` in this lane.
 //! The parent integration lane can expose them as xtask commands after checking
-//! command names and wrapper compatibility.
+//! command names and wrapper behavior.
 
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
@@ -14,8 +14,8 @@ use std::process::{Command, Stdio};
 
 const DEFAULT_MAX_BYTES: u64 = 500 * 1024;
 const DEFAULT_BLOB_ALLOWLIST: &str = "scripts/blob-size-allowlist.txt";
-const DEFAULT_RUNTIME_UNIT: &str = "rtemplate-mcp.service";
-const DEFAULT_RUNTIME_SERVICE: &str = "rtemplate-mcp";
+const DEFAULT_RUNTIME_UNIT: &str = "soma-mcp.service";
+const DEFAULT_RUNTIME_SERVICE: &str = "soma-mcp";
 const REQUIRED_PLUGIN_FIELDS: [&str; 5] = [
     "exit_policy",
     "ran_repair",
@@ -392,12 +392,12 @@ impl RuntimeOptions {
         Self {
             mode: RuntimeMode::Auto,
             pull: false,
-            unit: std::env::var("RTEMPLATE_MCP_SYSTEMD_UNIT")
+            unit: std::env::var("SOMA_MCP_SYSTEMD_UNIT")
                 .unwrap_or_else(|_| DEFAULT_RUNTIME_UNIT.to_owned()),
-            service: std::env::var("RTEMPLATE_MCP_DOCKER_SERVICE")
+            service: std::env::var("SOMA_MCP_DOCKER_SERVICE")
                 .unwrap_or_else(|_| DEFAULT_RUNTIME_SERVICE.to_owned()),
-            compose_dir: env_path("RTEMPLATE_MCP_COMPOSE_DIR").unwrap_or_else(current_dir),
-            expected_binary: env_path("RTEMPLATE_MCP_EXPECTED_BINARY"),
+            compose_dir: env_path("SOMA_MCP_COMPOSE_DIR").unwrap_or_else(current_dir),
+            expected_binary: env_path("SOMA_MCP_EXPECTED_BINARY"),
         }
     }
 
@@ -1213,20 +1213,20 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
             make_appdata: true,
         },
         PluginServer {
-            name: "example".to_owned(),
+            name: "soma".to_owned(),
             repo: root.clone(),
-            binary: "example".to_owned(),
+            binary: "soma".to_owned(),
             hook: None,
             plugin_root: None,
             check_plugin_layout: true,
             package_args: Vec::new(),
             setup_args: strings(["setup", "plugin-hook", "--no-repair"]),
             env: pairs([
-                ("RTEMPLATE_API_URL", "https://api.example.test"),
-                ("RTEMPLATE_API_KEY", "test-key"),
-                ("RTEMPLATE_MCP_TOKEN", "test-token"),
+                ("SOMA_API_URL", "https://api.example.test"),
+                ("SOMA_API_KEY", "test-key"),
+                ("SOMA_MCP_TOKEN", "test-token"),
             ]),
-            appdata_env: "RTEMPLATE_HOME".to_owned(),
+            appdata_env: "SOMA_HOME".to_owned(),
             make_appdata: true,
         },
         PluginServer {
@@ -1733,8 +1733,8 @@ fn write_reference_index(ref_dir: &Path) -> Result<()> {
     fs::write(
         ref_dir.join("INDEX.md"),
         format!(
-            "# Reference Index - rmcp-template\n\n\
-TEMPLATE: When you adapt this template, update this index to reflect your service's\n\
+            "# Reference Index - soma\n\n\
+CUSTOMIZE: When you adapt Soma, update this index to reflect your service's\n\
 reference material.\n\n\
 | Path | Contents | Source |\n\
 | --- | --- | --- |\n\
@@ -1757,7 +1757,7 @@ reference material.\n\n\
 - **server.json schema**: `mcp/repos/modelcontextprotocol-registry.xml`\n\
   JSON schema for MCP registry publishing (`server.json`).\n\n\
 - **mcporter**: `mcporter/repos/openclaw-mcporter.xml`\n\
-  Integration testing tool used by `crates/rmcp-template/tests/mcporter/test-mcp.sh`.\n\n\
+  Integration testing tool used by `crates/soma/tests/mcporter/test-mcp.sh`.\n\n\
 _Updated: {updated}_\n"
         ),
     )
@@ -1853,7 +1853,7 @@ fn ensure_changes_file(changes_file: &Path) -> Result<()> {
         changes_file,
         format!(
             "---\n\
-title: Reference Refresh Change Log - rmcp-template\n\
+title: Reference Refresh Change Log - soma\n\
 generated_by: cargo xtask refresh-docs\n\
 created_at: {timestamp}\n\
 ---\n\n\
@@ -2241,10 +2241,8 @@ debug = false
         assert_eq!(options.expected_binary, Some(PathBuf::from("/bin/echo")));
 
         assert_eq!(
-            parse_systemd_exec_path(
-                "{ path=/home/me/bin/rtemplate ; argv[]=/home/me/bin/rtemplate serve; }"
-            ),
-            Some(PathBuf::from("/home/me/bin/rtemplate"))
+            parse_systemd_exec_path("{ path=/home/me/bin/soma ; argv[]=/home/me/bin/soma serve; }"),
+            Some(PathBuf::from("/home/me/bin/soma"))
         );
     }
 

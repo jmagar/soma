@@ -2,11 +2,11 @@
 title: "Architecture"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -15,16 +15,16 @@ last_reviewed: "2026-05-15"
 
 # Architecture
 
-`rmcp-template` is a Rust template for MCP servers built on `rmcp`. The architecture is intentionally layered so transports stay thin and business logic stays testable.
+`soma` is a Rust product for MCP servers built on `rmcp`. The architecture is intentionally layered so transports stay thin and business logic stays testable.
 
 ## Layer diagram
 
 ```
-ExampleClient  (crates/rtemplate-service/src/example.rs) → HTTP/API transport ONLY — network calls, no logic
-ExampleService (crates/rtemplate-service/src/app.rs)     → ALL business logic, validation, enrichment
-MCP shim       (crates/rtemplate-mcp/src/tools.rs)       → parse JSON args → call service → return Value
-CLI shim       (crates/rtemplate-cli/src/lib.rs)         → parse argv → call service → print
-REST shim      (crates/rtemplate-api/src/api.rs)       → parse HTTP JSON → call service → return JSON
+SomaClient  (crates/soma-service/src/soma.rs) → HTTP/API transport ONLY — network calls, no logic
+SomaService (crates/soma-service/src/app.rs)     → ALL business logic, validation, enrichment
+MCP shim       (crates/soma-mcp/src/tools.rs)       → parse JSON args → call service → return Value
+CLI shim       (crates/soma-cli/src/lib.rs)         → parse argv → call service → print
+REST shim      (crates/soma-api/src/api.rs)       → parse HTTP JSON → call service → return JSON
 ```
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or `main.rs`, you are doing it wrong. Move it to `app.rs`.
@@ -33,35 +33,35 @@ REST shim      (crates/rtemplate-api/src/api.rs)       → parse HTTP JSON → c
 
 ```
 crates/
-  rmcp-template/        ← thin binary/facade package
+  soma/        ← thin binary/facade package
     src/main.rs         ← full server binary mode dispatch
-    src/bin/example.rs  ← local CLI + stdio MCP binary dispatch
+    src/bin/soma.rs  ← local CLI + stdio MCP binary dispatch
     src/routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
     src/lib.rs          ← public facade + test helpers (testing::*)
     tests/              ← integration tests and mcporter harness
-  rtemplate-service/    ← ExampleClient + ExampleService business layer
-  rtemplate-contracts/  ← action metadata, config, DTOs, token limits
-  rtemplate-api/        ← REST API handlers
-  rtemplate-mcp/        ← MCP schemas, tools, prompts, transport
-  rtemplate-cli/        ← CLI parser, doctor/setup/watch commands
-  rtemplate-runtime/    ← AppState, auth policy, shared runtime wiring
-  rtemplate-web/        ← static web asset serving and source bundle helpers
+  soma-service/    ← SomaClient + SomaService business layer
+  soma-contracts/  ← action metadata, config, DTOs, token limits
+  soma-api/        ← REST API handlers
+  soma-mcp/        ← MCP schemas, tools, prompts, transport
+  soma-cli/        ← CLI parser, doctor/setup/watch commands
+  soma-runtime/    ← AppState, auth policy, shared runtime wiring
+  soma-web/        ← static web asset serving and source bundle helpers
 ```
 
 ## Core files
 
 | File | Responsibility |
 |---|---|
-| `crates/rtemplate-service/src/example.rs` | Upstream/client transport stub. Replace with your service API client. |
-| `crates/rtemplate-service/src/app.rs` | Service layer. All business rules live here. |
-| `crates/rtemplate-contracts/src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
-| `crates/rtemplate-mcp/src/tools.rs` | MCP tool dispatch and elicitation-only actions. |
-| `crates/rtemplate-mcp/src/schemas.rs` | Tool input schema generated from action metadata. |
-| `crates/rtemplate-mcp/src/rmcp_server.rs` | `ServerHandler`, scope enforcement, tools/resources/prompts. |
-| `crates/rtemplate-runtime/src/server.rs` | Shared auth policy resolution and app state. |
-| `crates/rmcp-template/src/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
-| `crates/rtemplate-contracts/src/config.rs` | Environment/config loading and safe defaults. |
-| `crates/rmcp-template/src/main.rs` | Full server binary mode dispatch. |
+| `crates/soma-service/src/soma.rs` | Upstream/client transport stub. Replace with your service API client. |
+| `crates/soma-service/src/app.rs` | Service layer. All business rules live here. |
+| `crates/soma-contracts/src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
+| `crates/soma-mcp/src/tools.rs` | MCP tool dispatch and elicitation-only actions. |
+| `crates/soma-mcp/src/schemas.rs` | Tool input schema generated from action metadata. |
+| `crates/soma-mcp/src/rmcp_server.rs` | `ServerHandler`, scope enforcement, tools/resources/prompts. |
+| `crates/soma-runtime/src/server.rs` | Shared auth policy resolution and app state. |
+| `crates/soma/src/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
+| `crates/soma-contracts/src/config.rs` | Environment/config loading and safe defaults. |
+| `crates/soma/src/main.rs` | Full server binary mode dispatch. |
 
 ## AppState
 
@@ -70,7 +70,7 @@ crates/
 pub struct AppState {
     pub config: McpConfig,                  // MCP server config (host, port, auth settings)
     pub auth_policy: AuthPolicy,            // LoopbackDev | TrustedGatewayUnscoped | Mounted
-    pub service: ExampleService,            // The service layer — everything routes through here
+    pub service: SomaService,            // The service layer — everything routes through here
     pub response_pages: ResponsePageStore,  // Cached oversized MCP responses for continuation calls
 }
 ```
@@ -79,7 +79,7 @@ pub struct AppState {
 
 ## Binary and transport profiles
 
-The template supports two deployment shapes, chosen by server category:
+Soma supports two deployment shapes, chosen by server category:
 
 | Server kind | Default shape |
 |---|---|
@@ -115,7 +115,7 @@ Port 40060
 ```
 
 ```rust
-// crates/rmcp-template/src/routes.rs
+// crates/soma/src/routes.rs
 pub fn router(state: AppState) -> Router {
     let public = Router::new()
         .route("/health", get(health))
@@ -143,11 +143,11 @@ pub fn router(state: AppState) -> Router {
 
 ## CLI thin shim pattern
 
-`crates/rtemplate-cli/src/lib.rs` follows the same shim discipline as `crates/rtemplate-mcp/src/tools.rs`. The canonical shape:
+`crates/soma-cli/src/lib.rs` follows the same shim discipline as `crates/soma-mcp/src/tools.rs`. The canonical shape:
 
 ```rust
-// cli.rs — binary module (uses `example_mcp::` not `crate::`)
-use example_mcp::app::ExampleService;
+// cli.rs — binary module (uses `soma::` not `crate::`)
+use soma::app::SomaService;
 
 pub enum CliCommand {
     Things,
@@ -167,13 +167,13 @@ impl CliCommand {
             ["things"]         => Self::Things,
             ["thing", id, ..]  => Self::Thing { id: id.to_string() },
             ["delete", id, ..] => Self::DeleteThing { id: id.to_string(), confirm },
-            other => bail!("unknown command: {}\n\nRun `example --help`", other.join(" ")),
+            other => bail!("unknown command: {}\n\nRun `soma --help`", other.join(" ")),
         };
         Ok((cmd, json))
     }
 }
 
-pub async fn run(service: &ExampleService, cmd: CliCommand, json: bool) -> Result<()> {
+pub async fn run(service: &SomaService, cmd: CliCommand, json: bool) -> Result<()> {
     let (label, data) = match cmd {
         CliCommand::Things                            => ("things", service.list_things().await?),
         CliCommand::Thing { ref id }                  => ("thing",  service.get_thing(id).await?),
@@ -230,9 +230,9 @@ Zero validation, zero defaults, zero error message crafting in shims. All of tha
 ## Invariants
 
 - Shims do not contain business logic.
-- All action metadata starts in `crates/rtemplate-contracts/src/actions.rs`.
-- Read actions require `example:read`; write actions require `example:write`; `help` is public.
+- All action metadata starts in `crates/soma-contracts/src/actions.rs`.
+- Read actions require `soma:read`; write actions require `soma:write`; `help` is public.
 - Stdio is local trusted transport; HTTP is protected unless in loopback or explicit trusted-gateway mode.
-- Plugin setup is binary-owned: hook scripts delegate to `example setup plugin-hook`.
+- Plugin setup is binary-owned: hook scripts delegate to `soma setup plugin-hook`.
 
 See `docs/PATTERNS.md` §1, §7, §A1, §45 for full pattern details.

@@ -1,0 +1,50 @@
+{
+  "author": {
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
+  },
+  "bin": {
+    "soma": "bin/soma-rmcp.js",
+    "soma-rmcp": "bin/soma-rmcp.js"
+  },
+  "bugs": {
+    "url": "https://github.com/jmagar/soma/issues"
+  },
+  "description": "Node launcher package for the Soma RMCP runtime.",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "package.json"
+  ],
+  "homepage": "https://soma.dinglebear.ai",
+  "keywords": [
+    "ai-agents",
+    "agent-tools",
+    "automation",
+    "cli",
+    "developer-tools",
+    "docker",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "openapi",
+    "provider-runtime",
+    "providers",
+    "rmcp",
+    "rust",
+    "server-runtime",
+    "soma"
+  ],
+  "license": "MIT",
+  "mcpName": "dinglebear.ai/soma",
+  "name": "soma-rmcp",
+  "repository": {
+    "directory": "packages/soma-rmcp",
+    "type": "git",
+    "url": "git+https://github.com/jmagar/soma.git"
+  },
+  "version": "0.4.7"
+}

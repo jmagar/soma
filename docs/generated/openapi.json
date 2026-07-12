@@ -44,7 +44,7 @@
     },
     "schemas": {
       "ActionName": {
-        "description": "REST-capable action names from crates/rtemplate-contracts/src/actions.rs.",
+        "description": "REST-capable action names from crates/soma-contracts/src/actions.rs.",
         "enum": [
           "greet",
           "echo",
@@ -309,10 +309,22 @@
       }
     }
   },
+  "externalDocs": {
+    "description": "Soma documentation",
+    "url": "https://github.com/jmagar/soma/tree/main/docs"
+  },
   "info": {
-    "description": "Generated OpenAPI schema for rmcp-template's direct REST surface. TEMPLATE: rename Example identifiers and action schemas when adapting. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses RTEMPLATE_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
-    "title": "Example MCP REST API",
-    "version": "0.4.6"
+    "contact": {
+      "name": "dinglebear.ai",
+      "url": "https://dinglebear.ai"
+    },
+    "description": "Generated OpenAPI schema for Soma's direct REST surface. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/jmagar/soma/blob/main/LICENSE"
+    },
+    "title": "Soma MCP REST API",
+    "version": "0.4.7"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -622,6 +634,16 @@
     {
       "description": "Default local development server",
       "url": "http://localhost:40060"
+    },
+    {
+      "description": "Reverse-proxied Soma deployment",
+      "url": "https://{host}",
+      "variables": {
+        "host": {
+          "default": "soma.dinglebear.ai",
+          "description": "Public Soma host configured with SOMA_MCP_PUBLIC_URL"
+        }
+      }
     }
   ],
   "tags": [
@@ -638,7 +660,7 @@
       "name": "direct-rest"
     }
   ],
-  "x-template": {
+  "x-soma": {
     "action_costs": {
       "echo": "cheap",
       "elicit_name": "cheap",
@@ -647,7 +669,14 @@
       "scaffold_intent": "moderate",
       "status": "cheap"
     },
-    "action_metadata": "crates/rtemplate-contracts/src/actions.rs",
+    "action_metadata": "crates/soma-contracts/src/actions.rs",
+    "auth_modes": [
+      "loopback-dev",
+      "bearer",
+      "oauth",
+      "trusted-gateway"
+    ],
+    "binary": "soma",
     "direct_rest_routes": {
       "echo": {
         "method": "POST",
@@ -666,17 +695,65 @@
         "path": "/v1/status"
       }
     },
+    "documentation": {
+      "configuration": "docs/CONFIG.md",
+      "environment": "docs/ENV.md",
+      "provider_surfaces": "docs/generated/provider-surfaces.md",
+      "quickstart": "docs/QUICKSTART.md"
+    },
+    "homepage": "https://soma.dinglebear.ai",
+    "keywords": [
+      "mcp",
+      "mcp-server",
+      "model-context-protocol",
+      "rmcp",
+      "rust",
+      "agent-tools",
+      "ai-agents",
+      "provider-runtime",
+      "providers",
+      "developer-tools",
+      "automation",
+      "openapi",
+      "docker",
+      "cli",
+      "server-runtime"
+    ],
     "mcp_only_actions": [
       "elicit_name",
       "scaffold_intent"
     ],
+    "mcp_registry": "server.json",
+    "node_package": "soma-rmcp",
+    "oci_image": "ghcr.io/jmagar/soma:0.4.7",
     "preferred_rest_style": "direct_routes",
+    "provider_directory_env": "SOMA_PROVIDER_DIR",
+    "publisher": {
+      "name": "dinglebear.ai",
+      "url": "https://dinglebear.ai"
+    },
+    "repository": "https://github.com/jmagar/soma",
     "rest_actions": [
       "greet",
       "echo",
       "status",
       "help"
     ],
-    "source": "scripts/check-openapi.py"
+    "security_policy": "https://github.com/jmagar/soma/security/policy",
+    "server_binary": "soma-server",
+    "source": "scripts/check-openapi.py",
+    "support": "https://github.com/jmagar/soma/issues",
+    "surfaces": [
+      "mcp",
+      "cli",
+      "rest",
+      "web",
+      "docker",
+      "plugins"
+    ],
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ]
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper. Canonical implementation: cargo xtask check-scaffold-intent-contract."""
+"""Thin wrapper. Canonical implementation: cargo xtask check-scaffold-intent-contract."""
 
 from __future__ import annotations
 
