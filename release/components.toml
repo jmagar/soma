@@ -16,6 +16,7 @@ shipping_paths = [
   "server.json",
   "plugins/soma",
   "packages/soma-rmcp",
+  ".github/workflows/npm-publish.yml",
   "scripts/repair.sh",
 ]
 version_source = { kind = "cargo_package", path = "crates/soma/Cargo.toml", package = "soma" }

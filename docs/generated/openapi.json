@@ -324,7 +324,7 @@
       "url": "https://github.com/jmagar/soma/blob/main/LICENSE"
     },
     "title": "Soma MCP REST API",
-    "version": "0.4.6"
+    "version": "0.4.7"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -725,7 +725,7 @@
     ],
     "mcp_registry": "server.json",
     "node_package": "soma-rmcp",
-    "oci_image": "ghcr.io/jmagar/soma:0.4.6",
+    "oci_image": "ghcr.io/jmagar/soma:0.4.7",
     "preferred_rest_style": "direct_routes",
     "provider_directory_env": "SOMA_PROVIDER_DIR",
     "publisher": {

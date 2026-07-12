@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7]
+
+### Added
+
+- Added tag-time npm publishing for `soma-rmcp` with trusted publishing/provenance support.
+
+### Changed
+
+- Bumped Soma release metadata to `0.4.7` so refreshed npm discovery metadata can ship after the already-published `0.4.6`.
+
 ## [0.4.6]
 
 ### Added

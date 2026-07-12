@@ -1,14 +1,14 @@
 {
+  "author": {
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
+  },
   "bin": {
     "soma": "bin/soma-rmcp.js",
     "soma-rmcp": "bin/soma-rmcp.js"
   },
   "bugs": {
     "url": "https://github.com/jmagar/soma/issues"
-  },
-  "author": {
-    "name": "dinglebear.ai",
-    "url": "https://dinglebear.ai"
   },
   "description": "Node launcher package for the Soma RMCP runtime.",
   "engines": {
@@ -46,5 +46,5 @@
     "type": "git",
     "url": "git+https://github.com/jmagar/soma.git"
   },
-  "version": "0.4.6"
+  "version": "0.4.7"
 }

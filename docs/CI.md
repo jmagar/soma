@@ -161,6 +161,18 @@ Tag jobs:
 - Trivy vulnerability scan
 - MCP Registry manifest publish when credentials are configured
 
+### `.github/workflows/npm-publish.yml`
+
+Use for: publishing the `soma-rmcp` launcher package after a release tag exists.
+
+Do not use for: PR validation or manual metadata patching. npm package versions
+are immutable, so refreshed package metadata ships with the next release version.
+
+Runs only on `v*` tags. It verifies the tag matches
+`packages/soma-rmcp/package.json`, skips already-published versions for reruns,
+packs the package for inspection, and publishes with npm provenance/trusted
+publishing support.
+
 ### `.github/workflows/scheduled.yml`
 
 Use for: surfacing new RUSTSEC advisories after code has already merged, plus
