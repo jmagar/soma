@@ -1,4 +1,11 @@
-use std::{io, process::Output, process::Stdio, time::Duration};
+use std::{
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+    process::Output,
+    process::Stdio,
+    time::Duration,
+};
 
 use soma_contracts::providers::EnvRequirement;
 use tokio::{
@@ -43,7 +50,8 @@ pub(crate) async fn run_bounded_sidecar(
     timeout_ms: u64,
     max_output_bytes: usize,
 ) -> Result<BoundedOutput, SidecarError> {
-    let mut command = Command::new(command);
+    let resolved_command = resolve_sidecar_command(command);
+    let mut command = Command::new(resolved_command);
     command
         .args(args)
         .kill_on_drop(true)
@@ -104,17 +112,116 @@ pub(crate) async fn run_bounded_sidecar(
     })
 }
 
-#[cfg(windows)]
 fn apply_sidecar_base_env(command: &mut Command) {
-    for key in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"] {
-        if let Some(value) = std::env::var_os(key) {
-            command.env(key, value);
-        }
+    for (key, value) in sidecar_base_env() {
+        command.env(key, value);
     }
 }
 
+#[cfg(windows)]
+pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
+    let mut env = Vec::new();
+    for key in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(key) {
+            env.push((OsString::from(key), value));
+        }
+    }
+    env
+}
+
 #[cfg(not(windows))]
-fn apply_sidecar_base_env(_command: &mut Command) {}
+pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
+    let mut env = Vec::new();
+    for key in ["HOME", "TMPDIR", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(key) {
+            env.push((OsString::from(key), value));
+        }
+    }
+    env
+}
+
+pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
+    resolve_sidecar_command_with_env(
+        command,
+        std::env::var_os("PATH"),
+        std::env::var_os("PATHEXT"),
+    )
+}
+
+fn resolve_sidecar_command_with_env(
+    command: &str,
+    path_env: Option<OsString>,
+    pathext_env: Option<OsString>,
+) -> PathBuf {
+    let command_path = Path::new(command);
+    if command_path.components().count() > 1 || command_path.is_absolute() {
+        return command_path.to_path_buf();
+    }
+
+    let Some(path_env) = path_env else {
+        return command_path.to_path_buf();
+    };
+    for dir in std::env::split_paths(&path_env) {
+        if command_path.extension().is_some() {
+            let candidate = dir.join(command_path);
+            if candidate.is_file() {
+                return resolve_runtime_shim(command, candidate);
+            }
+            continue;
+        }
+        let direct_candidate = dir.join(command_path);
+        if direct_candidate.is_file() {
+            return resolve_runtime_shim(command, direct_candidate);
+        }
+        #[cfg(windows)]
+        for extension in windows_path_extensions(pathext_env.as_ref()) {
+            let candidate = dir.join(format!("{command}{extension}"));
+            if candidate.is_file() {
+                return resolve_runtime_shim(command, candidate);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = pathext_env;
+    command_path.to_path_buf()
+}
+
+fn resolve_runtime_shim(command: &str, candidate: PathBuf) -> PathBuf {
+    resolve_mise_shim(command, &candidate).unwrap_or(candidate)
+}
+
+fn resolve_mise_shim(command: &str, candidate: &Path) -> Option<PathBuf> {
+    let canonical = candidate.canonicalize().ok()?;
+    if canonical.file_stem()?.to_string_lossy() != "mise" {
+        return None;
+    }
+    let output = std::process::Command::new(&canonical)
+        .args(["which", command])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let resolved = PathBuf::from(String::from_utf8(output.stdout).ok()?.trim());
+    resolved.is_file().then_some(resolved)
+}
+
+#[cfg(windows)]
+fn windows_path_extensions(pathext_env: Option<&OsString>) -> Vec<String> {
+    pathext_env
+        .and_then(|value| value.to_str().map(ToOwned::to_owned))
+        .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned())
+        .split(';')
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| {
+            if extension.starts_with('.') {
+                extension.to_owned()
+            } else {
+                format!(".{extension}")
+            }
+        })
+        .collect()
+}
 
 pub(crate) fn output_exceeded_message(stream: &str, max_output_bytes: usize) -> String {
     format!("sidecar {stream} output exceeds {max_output_bytes} bytes")
@@ -182,3 +289,7 @@ where
         }
     }
 }
+
+#[cfg(test)]
+#[path = "sidecar_tests.rs"]
+mod tests;

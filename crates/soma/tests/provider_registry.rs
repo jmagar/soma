@@ -158,6 +158,19 @@ fn snapshot_indexes_are_deterministic_and_fingerprinted() {
     assert_eq!(snapshot.action_names(), vec!["alpha", "beta"]);
     assert!(snapshot.fingerprint.starts_with("sha256:"));
     assert_eq!(snapshot.compiled_validator_count, 2);
+
+    let validation = snapshot.validation_summary();
+    assert_eq!(validation["ok"], true);
+    assert_eq!(validation["provider_count"], 1);
+    assert_eq!(validation["action_count"], 2);
+    assert_eq!(validation["actions"], json!(["alpha", "beta"]));
+
+    let inspection = snapshot.inspection_report();
+    assert_eq!(inspection["providers"][0]["name"], "demo");
+    assert_eq!(
+        inspection["providers"][0]["runtime_security"]["runtime"],
+        "in-process"
+    );
 }
 
 #[test]

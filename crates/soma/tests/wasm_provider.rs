@@ -1,6 +1,6 @@
 use std::fs;
 
-use serde_json::json;
+use serde_json::{json, Value};
 use soma_contracts::config::SomaConfig;
 use soma_service::{
     dynamic_provider_registry_from_dir, provider_registry::ProviderAuthMode,
@@ -36,6 +36,37 @@ async fn wasm_provider_executes_hot_dropped_module() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn wasm_provider_receives_execution_envelope() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let providers = temp.path().join("providers");
+    fs::create_dir(&providers)?;
+    fs::write(providers.join("echo-envelope.wasm"), wasm_echo_provider()?)?;
+
+    let registry = dynamic_provider_registry_from_dir(service()?, &providers)?;
+    let output = registry
+        .dispatch(ProviderCall {
+            provider: String::new(),
+            action: "echo_wasm_envelope".to_owned(),
+            params: json!({"message": "hello"}),
+            principal: ProviderPrincipal::loopback_dev(),
+            auth_mode: ProviderAuthMode::LoopbackDev,
+            surface: ProviderSurface::Mcp,
+            destructive_confirmed: false,
+            limits: ProviderRequestLimits::default(),
+            snapshot_id: String::new(),
+        })
+        .await?;
+
+    assert_provider_envelope(
+        &output.value,
+        "echo-wasm",
+        "echo_wasm_envelope",
+        json!({"message": "hello"}),
+    );
+    Ok(())
+}
+
 fn wasm_provider() -> anyhow::Result<Vec<u8>> {
     let mut bytes = wat::parse_str(
         r#"
@@ -62,15 +93,45 @@ fn wasm_provider() -> anyhow::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+fn wasm_echo_provider() -> anyhow::Result<Vec<u8>> {
+    let mut bytes = wat::parse_str(
+        r#"
+(module
+  (memory (export "memory") 1)
+  (global $input_len (mut i32) (i32.const 0))
+  (func (export "soma_input_alloc") (param $len i32) (result i32)
+    (global.set $input_len (local.get $len))
+    (i32.const 1024))
+  (func (export "soma_input_ptr") (result i32)
+    (i32.const 1024))
+  (func (export "soma_call") (result i32)
+    (i32.const 0))
+  (func (export "soma_output_ptr") (result i32)
+    (i32.const 1024))
+  (func (export "soma_output_len") (result i32)
+    (global.get $input_len)))
+"#,
+    )?;
+    append_provider_manifest(
+        &mut bytes,
+        provider_manifest_for("echo-wasm", "echo_wasm_envelope").as_bytes(),
+    );
+    Ok(bytes)
+}
+
 fn provider_manifest() -> String {
+    provider_manifest_for("live-wasm", "live_wasm_exec")
+}
+
+fn provider_manifest_for(name: &str, action: &str) -> String {
     json!({
         "schema_version": 1,
         "provider": {
-            "name": "live-wasm",
+            "name": name,
             "kind": "wasm"
         },
         "tools": [{
-            "name": "live_wasm_exec",
+            "name": action,
             "description": "Execute a live WASM module.",
             "input_schema": {
                 "type": "object",
@@ -87,6 +148,20 @@ fn provider_manifest() -> String {
         }]
     })
     .to_string()
+}
+
+fn assert_provider_envelope(envelope: &Value, provider: &str, action: &str, params: Value) {
+    assert_eq!(envelope["schema_version"], 1);
+    assert_eq!(envelope["provider"], provider);
+    assert_eq!(envelope["action"], action);
+    assert_eq!(envelope["params"], params);
+    assert_eq!(envelope["surface"], "mcp");
+    assert!(
+        envelope["snapshot_id"]
+            .as_str()
+            .is_some_and(|snapshot_id| snapshot_id.starts_with("sha256:")),
+        "snapshot_id should be the active provider snapshot fingerprint"
+    );
 }
 
 fn append_provider_manifest(bytes: &mut Vec<u8>, manifest: &[u8]) {

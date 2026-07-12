@@ -105,7 +105,7 @@ async fn call_stdio(
             cmd.args(&runtime.args)
                 .env_clear()
                 .envs(runtime.env.iter().map(|(key, value)| (key, value)))
-                .stderr(Stdio::piped());
+                .stderr(Stdio::null());
             if let Some(cwd) = &runtime.cwd {
                 cmd.current_dir(cwd);
             }

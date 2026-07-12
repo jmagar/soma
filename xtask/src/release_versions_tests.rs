@@ -23,14 +23,14 @@ fn manifest_models_single_soma_component() {
     assert!(component.version_files.iter().any(|file| {
         file.kind == VersionKind::JsonVersion
             && file.path == "server.json"
-            && file.json_pointer.as_deref() == Some("/packages/1/version")
+            && file.json_pointer.as_deref() == Some("/packages/0/version")
     }));
     assert!(component.version_files.iter().any(|file| {
-        file.kind == VersionKind::OciIdentifierVersion
+        file.kind == VersionKind::NpmIdentifierVersion
             && file.path == "server.json"
             && file.json_pointer.as_deref()
                 == Some(
-                    "/_meta/io.modelcontextprotocol.registry~1publisher-provided/distribution/ociImage",
+                    "/_meta/io.modelcontextprotocol.registry~1publisher-provided/distribution/npm",
                 )
     }));
 }
@@ -96,6 +96,19 @@ fn oci_identifier_version_uses_tag_suffix() {
 }
 
 #[test]
+fn npm_identifier_version_uses_package_specifier_suffix() {
+    let content = r#"{"_meta":{"io.modelcontextprotocol.registry/publisher-provided":{"distribution":{"npm":"@scope/soma-rmcp@0.4.1"}}}}"#;
+    let pointer =
+        Some("/_meta/io.modelcontextprotocol.registry~1publisher-provided/distribution/npm");
+    assert_eq!(
+        read_npm_identifier_version(content, pointer).unwrap(),
+        "0.4.1"
+    );
+    let updated = replace_npm_identifier_version(content, pointer, "0.4.2").unwrap();
+    assert!(updated.contains("@scope/soma-rmcp@0.4.2"));
+}
+
+#[test]
 fn release_please_manifest_sync_updates_all_version_files() {
     let fixture = Fixture::new();
     fs::write(
@@ -109,7 +122,7 @@ fn release_please_manifest_sync_updates_all_version_files() {
 
     let server = fs::read_to_string(fixture.path("server.json")).unwrap();
     assert!(server.contains(r#""version": "0.4.2""#));
-    assert!(server.contains("ghcr.io/jmagar/soma:0.4.2"));
+    assert!(server.contains("soma-rmcp@0.4.2"));
     assert!(fs::read_to_string(fixture.path("crates/soma/Cargo.toml"))
         .unwrap()
         .contains(r#"version = "0.4.2""#));
@@ -123,7 +136,7 @@ fn parity_checks_registry_openapi_and_plugin_no_version() {
     let fixture = Fixture::new();
     fs::write(
         fixture.path("server.json"),
-        r#"{"version":"0.4.0","_meta":{"io.modelcontextprotocol.registry/publisher-provided":{"distribution":{"ociImage":"ghcr.io/jmagar/soma:0.4.1"}}},"packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"},{"identifier":"soma-rmcp","version":"0.4.1"}]}"#,
+        r#"{"version":"0.4.0","_meta":{"io.modelcontextprotocol.registry/publisher-provided":{"distribution":{"npm":"soma-rmcp@0.4.1","nodePackage":"soma-rmcp"}}},"packages":[{"identifier":"soma-rmcp","version":"0.4.1"}]}"#,
     )
     .unwrap();
     fs::write(
@@ -288,7 +301,7 @@ version = "0.4.1"
         );
         write(
             &self.path("server.json"),
-            r#"{"version":"0.4.1","_meta":{"io.modelcontextprotocol.registry/publisher-provided":{"distribution":{"ociImage":"ghcr.io/jmagar/soma:0.4.1"}}},"packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"},{"identifier":"soma-rmcp","version":"0.4.1"}]}"#,
+            r#"{"version":"0.4.1","_meta":{"io.modelcontextprotocol.registry/publisher-provided":{"distribution":{"npm":"soma-rmcp@0.4.1","nodePackage":"soma-rmcp"}}},"packages":[{"identifier":"soma-rmcp","version":"0.4.1"}]}"#,
         );
         write(
             &self.path("docs/generated/openapi.json"),
