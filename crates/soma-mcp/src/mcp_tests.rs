@@ -47,6 +47,10 @@ fn server_info_includes_implementation_metadata() {
         "drop-in providers",
         "tools, prompts, and resources",
         "one action-dispatched `soma` tool",
+        "Repository: https://github.com/jmagar/soma",
+        "Node package: soma-rmcp",
+        "Binary: soma",
+        "Config home: ~/.soma or SOMA_HOME",
     ] {
         assert!(
             instructions.contains(expected),
