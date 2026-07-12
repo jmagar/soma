@@ -3,8 +3,11 @@ name = "soma-web"
 version = "0.4.1"
 edition = "2021"
 rust-version = "1.96"
+authors.workspace = true
 description = "Embedded static web UI adapter for soma"
+homepage.workspace = true
 license = "MIT"
+repository.workspace = true
 publish = false
 
 [features]

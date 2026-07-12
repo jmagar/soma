@@ -10,8 +10,11 @@ name = "soma"
 version = "0.4.6"
 edition = "2021"
 rust-version = "1.96"
+authors.workspace = true
 description = "Batteries-included RMCP server runtime for drop-in provider capabilities"
+homepage.workspace = true
 license = "MIT"
+repository.workspace = true
 autobins = false
 
 [lib]

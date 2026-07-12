@@ -3,8 +3,11 @@ name = "soma-runtime"
 version = "0.4.1"
 edition = "2021"
 rust-version = "1.96"
+authors.workspace = true
 description = "Shared runtime state and auth policy for soma surfaces"
+homepage.workspace = true
 license = "MIT"
+repository.workspace = true
 publish = false
 
 [features]

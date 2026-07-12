@@ -23,6 +23,11 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+authors = ["dinglebear.ai <hello@dinglebear.ai>"]
+homepage = "https://github.com/jmagar/soma"
+repository = "https://github.com/jmagar/soma"
+
 # ── profiles ─────────────────────────────────────────────────────────────────
 # release-fast: release-grade binary (optimized, stripped) but with cheap LTO and
 # many codegen units so local iteration — `just sync-container`, container smoke
