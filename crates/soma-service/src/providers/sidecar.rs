@@ -43,16 +43,18 @@ pub(crate) async fn run_bounded_sidecar(
     timeout_ms: u64,
     max_output_bytes: usize,
 ) -> Result<BoundedOutput, SidecarError> {
-    let mut child = Command::new(command)
+    let mut command = Command::new(command);
+    command
         .args(args)
         .kill_on_drop(true)
         .env_clear()
-        .envs(env)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(SidecarError::Io)?;
+        .stderr(Stdio::piped());
+    apply_sidecar_base_env(&mut command);
+    command.envs(env);
+
+    let mut child = command.spawn().map_err(SidecarError::Io)?;
 
     let stdout = child
         .stdout
@@ -101,6 +103,18 @@ pub(crate) async fn run_bounded_sidecar(
         stderr_exceeded,
     })
 }
+
+#[cfg(windows)]
+fn apply_sidecar_base_env(command: &mut Command) {
+    for key in ["SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(key) {
+            command.env(key, value);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn apply_sidecar_base_env(_command: &mut Command) {}
 
 pub(crate) fn output_exceeded_message(stream: &str, max_output_bytes: usize) -> String {
     format!("sidecar {stream} output exceeds {max_output_bytes} bytes")

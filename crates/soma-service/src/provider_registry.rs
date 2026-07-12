@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
+    collections::{BTreeMap, HashMap},
     sync::{Arc, RwLock},
 };
 
@@ -18,6 +18,9 @@ use crate::{
     capabilities::CapabilityBroker, provider_errors::ProviderError,
     providers::filesystem::FileProviderSource,
 };
+
+mod refresh;
+use refresh::ProviderRefreshEvent;
 
 #[async_trait]
 pub trait Provider: Send + Sync {
@@ -386,105 +389,6 @@ impl ProviderRegistry {
         enforce_response_limit(&entry, &call, &output)?;
         Ok(output)
     }
-}
-
-struct ProviderRefreshEvent {
-    fingerprint: String,
-    added_actions: Vec<String>,
-    removed_actions: Vec<String>,
-    mcp_actions: Vec<String>,
-    cli_actions: Vec<String>,
-    rest_routes: Vec<String>,
-}
-
-impl ProviderRefreshEvent {
-    fn new(previous: &RegistrySnapshot, next: &RegistrySnapshot) -> Self {
-        let previous_actions = previous
-            .action_names()
-            .into_iter()
-            .map(str::to_owned)
-            .collect::<BTreeSet<_>>();
-        let next_actions = next
-            .action_names()
-            .into_iter()
-            .map(str::to_owned)
-            .collect::<BTreeSet<_>>();
-        Self {
-            fingerprint: next.fingerprint.clone(),
-            added_actions: next_actions
-                .difference(&previous_actions)
-                .cloned()
-                .collect(),
-            removed_actions: previous_actions
-                .difference(&next_actions)
-                .cloned()
-                .collect(),
-            mcp_actions: surface_actions(next, ProviderSurface::Mcp),
-            cli_actions: surface_actions(next, ProviderSurface::Cli),
-            rest_routes: rest_routes(next),
-        }
-    }
-
-    fn log(&self, provider_dir: &std::path::Path) {
-        tracing::info!(
-            provider_dir = %provider_dir.display(),
-            fingerprint = %self.fingerprint,
-            added_actions = ?self.added_actions,
-            removed_actions = ?self.removed_actions,
-            mcp_actions = ?self.mcp_actions,
-            cli_actions = ?self.cli_actions,
-            rest_routes = ?self.rest_routes,
-            "file providers refreshed; MCP, CLI, and API surfaces recomputed"
-        );
-    }
-}
-
-fn surface_actions(snapshot: &RegistrySnapshot, surface: ProviderSurface) -> Vec<String> {
-    let mut actions = snapshot
-        .action_index
-        .iter()
-        .filter_map(|(action, entry)| {
-            let allowed = match surface {
-                ProviderSurface::Mcp => entry
-                    .tool
-                    .mcp
-                    .as_ref()
-                    .map(|mcp| mcp.enabled)
-                    .unwrap_or(true),
-                ProviderSurface::Rest => entry
-                    .tool
-                    .rest
-                    .as_ref()
-                    .map(|rest| rest.enabled)
-                    .unwrap_or(false),
-                ProviderSurface::Cli => entry
-                    .tool
-                    .cli
-                    .as_ref()
-                    .map(|cli| cli.enabled)
-                    .unwrap_or(false),
-                ProviderSurface::Palette => entry
-                    .tool
-                    .palette
-                    .as_ref()
-                    .map(|palette| palette.enabled)
-                    .unwrap_or(true),
-            };
-            allowed.then(|| action.clone())
-        })
-        .collect::<Vec<_>>();
-    actions.sort();
-    actions
-}
-
-fn rest_routes(snapshot: &RegistrySnapshot) -> Vec<String> {
-    let mut routes = snapshot
-        .rest_index
-        .keys()
-        .map(|(method, path)| format!("{method} {path}"))
-        .collect::<Vec<_>>();
-    routes.sort();
-    routes
 }
 
 fn provider_map(
