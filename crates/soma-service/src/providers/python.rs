@@ -221,7 +221,8 @@ struct PythonRuntime {
 impl PythonRuntime {
     fn for_catalog() -> Self {
         Self {
-            command: std::env::var("SOMA_PYTHON_COMMAND").unwrap_or_else(|_| "python3".to_owned()),
+            command: std::env::var("SOMA_PYTHON_COMMAND")
+                .unwrap_or_else(|_| default_python_command().to_owned()),
             env: Vec::new(),
             timeout_ms: std::env::var("SOMA_PYTHON_CATALOG_TIMEOUT_MS")
                 .ok()
@@ -248,7 +249,7 @@ impl PythonRuntime {
             .and_then(Value::as_str)
             .map(str::to_owned)
             .or_else(|| std::env::var("SOMA_PYTHON_COMMAND").ok())
-            .unwrap_or_else(|| "python3".to_owned());
+            .unwrap_or_else(|| default_python_command().to_owned());
         let timeout_ms = tool
             .limits
             .as_ref()
@@ -273,6 +274,16 @@ impl PythonRuntime {
             max_output_bytes,
         })
     }
+}
+
+#[cfg(windows)]
+fn default_python_command() -> &'static str {
+    "python"
+}
+
+#[cfg(not(windows))]
+fn default_python_command() -> &'static str {
+    "python3"
 }
 
 fn run_catalog_sidecar(runtime: &PythonRuntime, input: &[u8]) -> Result<Vec<u8>, String> {

@@ -7,6 +7,15 @@ use crate::provider_registry::{
 use super::python_execution_payload;
 
 #[test]
+fn default_python_command_matches_platform_launcher() {
+    #[cfg(windows)]
+    assert_eq!(super::default_python_command(), "python");
+
+    #[cfg(not(windows))]
+    assert_eq!(super::default_python_command(), "python3");
+}
+
+#[test]
 fn python_sidecar_payload_preserves_execution_envelope_fields() {
     let call = ProviderCall {
         provider: "demo-python".to_owned(),
