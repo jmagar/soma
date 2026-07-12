@@ -325,6 +325,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { "target rustflags not set" }
           exit 0
 
+      - name: Configure Windows Python launcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $python = Get-Command python -ErrorAction SilentlyContinue
+          if (-not $python) {
+            $python = Get-Command py -ErrorAction SilentlyContinue
+          }
+          if (-not $python) {
+            throw "Python launcher not found on Windows runner"
+          }
+          "SOMA_PYTHON_COMMAND=$($python.Source)" >> $env:GITHUB_ENV
+          & $python.Source --version
+
       - name: cargo test
         shell: pwsh
         env:

@@ -136,12 +136,25 @@ pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
 
 #[cfg(windows)]
 pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
+    resolve_sidecar_command_with_env(
+        command,
+        std::env::var_os("PATH"),
+        std::env::var_os("PATHEXT"),
+    )
+}
+
+#[cfg(windows)]
+fn resolve_sidecar_command_with_env(
+    command: &str,
+    path_env: Option<OsString>,
+    pathext_env: Option<OsString>,
+) -> PathBuf {
     let command_path = Path::new(command);
     if command_path.components().count() > 1 || command_path.is_absolute() {
         return command_path.to_path_buf();
     }
 
-    let Some(path_env) = std::env::var_os("PATH") else {
+    let Some(path_env) = path_env else {
         return command_path.to_path_buf();
     };
     for dir in std::env::split_paths(&path_env) {
@@ -156,7 +169,7 @@ pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
         if direct_candidate.is_file() {
             return direct_candidate;
         }
-        for extension in windows_path_extensions() {
+        for extension in windows_path_extensions(pathext_env.as_ref()) {
             let candidate = dir.join(format!("{command}{extension}"));
             if candidate.is_file() {
                 return candidate;
@@ -172,9 +185,10 @@ pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-fn windows_path_extensions() -> Vec<String> {
-    std::env::var("PATHEXT")
-        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned())
+fn windows_path_extensions(pathext_env: Option<&OsString>) -> Vec<String> {
+    pathext_env
+        .and_then(|value| value.to_str().map(ToOwned::to_owned))
+        .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned())
         .split(';')
         .filter(|extension| !extension.is_empty())
         .map(|extension| {
@@ -253,3 +267,7 @@ where
         }
     }
 }
+
+#[cfg(all(test, windows))]
+#[path = "sidecar_tests.rs"]
+mod tests;
