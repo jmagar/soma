@@ -231,7 +231,7 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
 }
 
 fn provider_manifest(name: &str, kind: &str, action: &str) -> String {
-    json!({
+    let mut manifest = json!({
         "schema_version": 1,
         "provider": {
             "name": name,
@@ -256,8 +256,29 @@ fn provider_manifest(name: &str, kind: &str, action: &str) -> String {
                 "path": format!("/v1/providers/{action}")
             }
         }]
-    })
-    .to_string()
+    });
+    if kind == "ai-sdk" {
+        if let Some(command) = node_exec_path() {
+            manifest["tools"][0]["meta"] = json!({
+                "ai_sdk": {
+                    "command": command,
+                }
+            });
+        }
+    }
+    manifest.to_string()
+}
+
+fn node_exec_path() -> Option<String> {
+    let output = std::process::Command::new("node")
+        .args(["-p", "process.execPath"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let path = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+    (!path.is_empty()).then_some(path)
 }
 
 fn unused_loopback_port() -> anyhow::Result<u16> {

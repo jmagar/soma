@@ -1,7 +1,11 @@
-use std::{ffi::OsString, io, path::PathBuf, process::Output, process::Stdio, time::Duration};
-
-#[cfg(windows)]
-use std::path::Path;
+use std::{
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+    process::Output,
+    process::Stdio,
+    time::Duration,
+};
 
 use soma_contracts::providers::EnvRequirement;
 use tokio::{
@@ -108,15 +112,11 @@ pub(crate) async fn run_bounded_sidecar(
     })
 }
 
-#[cfg(windows)]
 fn apply_sidecar_base_env(command: &mut Command) {
     for (key, value) in sidecar_base_env() {
         command.env(key, value);
     }
 }
-
-#[cfg(not(windows))]
-fn apply_sidecar_base_env(_command: &mut Command) {}
 
 #[cfg(windows)]
 pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
@@ -131,10 +131,15 @@ pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
 
 #[cfg(not(windows))]
 pub(crate) fn sidecar_base_env() -> Vec<(OsString, OsString)> {
-    Vec::new()
+    let mut env = Vec::new();
+    for key in ["HOME", "TMPDIR", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(key) {
+            env.push((OsString::from(key), value));
+        }
+    }
+    env
 }
 
-#[cfg(windows)]
 pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
     resolve_sidecar_command_with_env(
         command,
@@ -143,7 +148,6 @@ pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
     )
 }
 
-#[cfg(windows)]
 fn resolve_sidecar_command_with_env(
     command: &str,
     path_env: Option<OsString>,
@@ -161,27 +165,45 @@ fn resolve_sidecar_command_with_env(
         if command_path.extension().is_some() {
             let candidate = dir.join(command_path);
             if candidate.is_file() {
-                return candidate;
+                return resolve_runtime_shim(command, candidate);
             }
             continue;
         }
         let direct_candidate = dir.join(command_path);
         if direct_candidate.is_file() {
-            return direct_candidate;
+            return resolve_runtime_shim(command, direct_candidate);
         }
+        #[cfg(windows)]
         for extension in windows_path_extensions(pathext_env.as_ref()) {
             let candidate = dir.join(format!("{command}{extension}"));
             if candidate.is_file() {
-                return candidate;
+                return resolve_runtime_shim(command, candidate);
             }
         }
     }
+    #[cfg(not(windows))]
+    let _ = pathext_env;
     command_path.to_path_buf()
 }
 
-#[cfg(not(windows))]
-pub(crate) fn resolve_sidecar_command(command: &str) -> PathBuf {
-    PathBuf::from(command)
+fn resolve_runtime_shim(command: &str, candidate: PathBuf) -> PathBuf {
+    resolve_mise_shim(command, &candidate).unwrap_or(candidate)
+}
+
+fn resolve_mise_shim(command: &str, candidate: &Path) -> Option<PathBuf> {
+    let canonical = candidate.canonicalize().ok()?;
+    if canonical.file_stem()?.to_string_lossy() != "mise" {
+        return None;
+    }
+    let output = std::process::Command::new(&canonical)
+        .args(["which", command])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let resolved = PathBuf::from(String::from_utf8(output.stdout).ok()?.trim());
+    resolved.is_file().then_some(resolved)
 }
 
 #[cfg(windows)]
@@ -268,6 +290,6 @@ where
     }
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
 #[path = "sidecar_tests.rs"]
 mod tests;

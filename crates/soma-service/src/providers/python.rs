@@ -54,7 +54,7 @@ impl Provider for PythonProvider {
         let tool = self.tool(&call)?;
         let runtime = PythonRuntime::from_tool(&self.catalog, tool, &call)?;
         let source = self.path.display().to_string();
-        let input = python_execution_payload(&self.path, &call).map_err(|error| {
+        let input = python_execution_payload(&self.path, &call, &runtime.env).map_err(|error| {
             ProviderError::execution(&self.catalog.provider.name, "", error)
                 .with_provider_kind(self.catalog.provider.kind.as_str())
                 .with_source(source.clone())
@@ -173,11 +173,14 @@ impl Provider for PythonProvider {
 fn python_execution_payload(
     path: &Path,
     call: &ProviderCall,
+    env: &[(String, String)],
 ) -> Result<Vec<u8>, serde_json::Error> {
     let mut payload = serde_json::to_value(call.execution_envelope())?;
     if let Some(object) = payload.as_object_mut() {
+        let env_keys: Vec<&str> = env.iter().map(|(key, _)| key.as_str()).collect();
         object.insert("mode".to_owned(), json!("call"));
         object.insert("path".to_owned(), json!(path.to_path_buf()));
+        object.insert("env_keys".to_owned(), json!(env_keys));
     }
     serde_json::to_vec(&payload)
 }
@@ -383,6 +386,7 @@ import dataclasses
 import importlib.util
 import inspect
 import json
+import os
 import re
 import sys
 import types
@@ -402,6 +406,13 @@ def load_module(path):
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def restrict_environment(allowed):
+    allowed = {str(key) for key in (allowed or [])}
+    for key in list(os.environ):
+        if key not in allowed:
+            del os.environ[key]
 
 
 def provider_config(module):
@@ -763,8 +774,10 @@ async def main():
     mode = payload.get("mode")
     with contextlib.redirect_stdout(sys.stderr):
         if mode == "catalog":
+            restrict_environment([])
             result = catalog(payload["path"])
         elif mode == "call":
+            restrict_environment(payload.get("env_keys") or [])
             result = await execute(payload["path"], payload["action"], payload.get("params") or {})
         else:
             raise RuntimeError(f"unknown Python bridge mode {mode!r}")
