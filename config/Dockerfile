@@ -106,6 +106,18 @@ RUN groupadd --gid 1000 soma && \
 # Default log level. Override with RUST_LOG env var in docker-compose or at runtime.
 ENV RUST_LOG=info
 
+ARG SOMA_VERSION=0.4.6
+LABEL org.opencontainers.image.title="Soma" \
+      org.opencontainers.image.description="Batteries-included RMCP runtime for drop-in provider-backed agent capabilities" \
+      org.opencontainers.image.url="https://github.com/jmagar/soma" \
+      org.opencontainers.image.source="https://github.com/jmagar/soma" \
+      org.opencontainers.image.documentation="https://github.com/jmagar/soma/tree/main/docs" \
+      org.opencontainers.image.vendor="dinglebear.ai" \
+      org.opencontainers.image.authors="dinglebear.ai" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${SOMA_VERSION}" \
+      io.modelcontextprotocol.server.name="dinglebear.ai/soma"
+
 # CUSTOMIZE: Add other default env vars your binary needs.
 # ENV SOMA_MCP_HOST=0.0.0.0
 # ENV SOMA_MCP_PORT=3000
@@ -121,9 +133,6 @@ EXPOSE 40060/tcp
 # CUSTOMIZE: Change port to match EXPOSE above.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40060/health || exit 1
-
-# MCP registry label — used by Claude Code plugin discovery.
-LABEL io.modelcontextprotocol.server.name="dinglebear.ai/soma"
 
 # Entrypoint handles permission setup and privilege drop.
 # CMD is the default argument passed to entrypoint.sh.

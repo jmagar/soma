@@ -1,6 +1,10 @@
 {
   "bin": {
-    "soma": "bin/soma-rmcp.js"
+    "soma": "bin/soma-rmcp.js",
+    "soma-rmcp": "bin/soma-rmcp.js"
+  },
+  "bugs": {
+    "url": "https://github.com/jmagar/soma/issues"
   },
   "author": {
     "name": "dinglebear.ai",
@@ -25,6 +29,7 @@
   "license": "MIT",
   "name": "soma-rmcp",
   "repository": {
+    "directory": "packages/soma-rmcp",
     "type": "git",
     "url": "git+https://github.com/jmagar/soma.git"
   },

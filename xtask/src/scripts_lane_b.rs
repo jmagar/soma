@@ -49,6 +49,11 @@ pub fn pre_release_check(args: &[String]) -> Result<()> {
         &["xtask", "check-openapi", "--check"],
     );
     runner.run(
+        "MCP registry manifest",
+        "cargo",
+        &["xtask", "check-mcp-registry"],
+    );
+    runner.run(
         "scaffold intent contract",
         "cargo",
         &["xtask", "check-scaffold-intent-contract"],
@@ -211,6 +216,12 @@ pub fn validate_plugin_layout(repo_root: &Path, plugin_root: Option<&Path>) -> R
     });
     checks.check_result("Codex plugin points to skills directory", || {
         json_field_eq(&layout.codex, "/skills", "./skills/")
+    });
+    checks.check_result("Codex plugin composer icon asset exists", || {
+        plugin_asset_exists(&plugin_root, &layout.codex, "/interface/composerIcon")
+    });
+    checks.check_result("Codex plugin logo asset exists", || {
+        plugin_asset_exists(&plugin_root, &layout.codex, "/interface/logo")
     });
 
     checks.check_result("Gemini extension manifest exists", || {
@@ -566,6 +577,17 @@ fn require_json_bool(value: &Value, pointer: &str, expected: bool) -> Result<()>
     } else {
         bail!("expected {pointer} to be {expected}, found {actual}")
     }
+}
+
+fn plugin_asset_exists(plugin_root: &Path, manifest: &Path, pointer: &str) -> Result<()> {
+    let value = read_json(manifest)?;
+    let asset = value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .with_context(|| format!("missing JSON asset path at {pointer}"))?;
+    let relative = asset.strip_prefix("./").unwrap_or(asset);
+    let path = plugin_root.join(relative);
+    file_exists(&path)
 }
 
 fn contains_json_key(value: &Value, key: &str) -> bool {

@@ -613,9 +613,39 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
     json!({
         "schema_version": 1,
         "name": "soma",
+        "title": "Soma",
         "description": "Generated distributable plugin surface for Soma.",
+        "publisher": {
+            "name": "dinglebear.ai",
+            "url": "https://dinglebear.ai"
+        },
+        "repository": "https://github.com/jmagar/soma",
+        "website": "https://github.com/jmagar/soma",
+        "license": "MIT",
+        "keywords": ["mcp", "model-context-protocol", "rmcp", "soma", "agent-tools"],
         "provider_fingerprint": snapshot["provider_fingerprint"].clone(),
         "plugin_root": "plugins/soma",
+        "icons": {
+            "png": "plugins/soma/assets/icon.png",
+            "svg": "plugins/soma/assets/logo.svg"
+        },
+        "binaries": {
+            "cli": "soma",
+            "server": "soma-server"
+        },
+        "packages": {
+            "npm": "soma-rmcp",
+            "oci": "ghcr.io/jmagar/soma"
+        },
+        "runtime": {
+            "config_home": "~/.soma",
+            "container_data_dir": "/data",
+            "provider_dir_env": "SOMA_PROVIDER_DIR",
+            "default_provider_dir": "providers",
+            "default_http_endpoint": "http://127.0.0.1:40060/mcp",
+            "transports": ["stdio", "streamable-http"],
+            "auth_modes": ["loopback-dev", "bearer", "oauth", "trusted-gateway"]
+        },
         "codex": {
             "plugin_json": "plugins/soma/.codex-plugin/plugin.json",
             "marketplace": ".agents/plugins/marketplace.json"
@@ -627,7 +657,11 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
         "skills": "plugins/soma/skills",
         "node_package": "packages/soma-rmcp/package.json",
         "docs": "docs/generated/provider-surfaces.md",
-        "mcp_server": "server.json",
+        "mcp_server": {
+            "manifest": "server.json",
+            "name": "dinglebear.ai/soma",
+            "registry_schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+        },
         "provider_files": snapshot["surfaces"]["provider_files"].clone(),
         "surfaces": snapshot["surfaces"].clone(),
         "providers": snapshot["providers"].clone()
@@ -676,8 +710,18 @@ fn write_or_check_generated_skills(root: &Path, snapshot: &Value, mode: Mode) ->
 fn render_codex_marketplace() -> Value {
     json!({
         "name": "soma",
+        "description": "Soma RMCP runtime plugins by dinglebear.ai.",
+        "owner": {
+            "name": "dinglebear.ai",
+            "url": "https://dinglebear.ai"
+        },
+        "homepage": "https://github.com/jmagar/soma",
+        "repository": "https://github.com/jmagar/soma",
+        "license": "MIT",
+        "keywords": ["mcp", "rmcp", "soma", "agent-tools"],
         "plugins": [{
             "name": "soma",
+            "description": "Batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
             "source": {
                 "source": "local",
                 "path": "./plugins/soma"
@@ -688,7 +732,18 @@ fn render_codex_marketplace() -> Value {
             },
             "category": "Infrastructure",
             "interface": {
-                "displayName": "Soma"
+                "displayName": "Soma",
+                "shortDescription": "Drop-in RMCP runtime.",
+                "developerName": "dinglebear.ai",
+                "brandColor": "#6366F1",
+                "composerIcon": "./plugins/soma/assets/icon.png",
+                "logo": "./plugins/soma/assets/logo.svg"
+            },
+            "metadata": {
+                "mcpServer": "server.json",
+                "nodePackage": "soma-rmcp",
+                "ociImage": "ghcr.io/jmagar/soma",
+                "binary": "soma"
             }
         }]
     })
@@ -700,13 +755,23 @@ fn render_claude_marketplace() -> Value {
         "name": "soma",
         "description": "Generated marketplace catalog for Soma plugins.",
         "owner": {
-            "name": "dinglebear.ai"
+            "name": "dinglebear.ai",
+            "url": "https://dinglebear.ai"
         },
+        "homepage": "https://github.com/jmagar/soma",
+        "repository": "https://github.com/jmagar/soma",
+        "license": "MIT",
         "plugins": [{
             "name": "soma",
-            "description": "Soma RMCP runtime plugin.",
+            "description": "Soma RMCP runtime plugin for drop-in provider-backed tools, prompts, and resources.",
             "source": "./plugins/soma",
-            "category": "infrastructure"
+            "category": "infrastructure",
+            "metadata": {
+                "mcpServer": "server.json",
+                "nodePackage": "soma-rmcp",
+                "ociImage": "ghcr.io/jmagar/soma",
+                "binary": "soma"
+            }
         }]
     })
 }

@@ -438,9 +438,33 @@ fn render_openapi(root: &Path) -> Result<Value> {
         "info": {
             "title": "Soma MCP REST API",
             "version": version,
-            "description": "Generated OpenAPI schema for Soma's direct REST surface. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted."
+            "description": "Generated OpenAPI schema for Soma's direct REST surface. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
+            "contact": {
+                "name": "dinglebear.ai",
+                "url": "https://dinglebear.ai"
+            },
+            "license": {
+                "name": "MIT",
+                "url": "https://github.com/jmagar/soma/blob/main/LICENSE"
+            }
         },
-        "servers": [{"url": format!("http://localhost:{port}"),"description":"Default local development server"}],
+        "servers": [
+            {"url": format!("http://localhost:{port}"),"description":"Default local development server"},
+            {
+                "url": "https://{host}",
+                "description": "Reverse-proxied Soma deployment",
+                "variables": {
+                    "host": {
+                        "default": "soma.example.com",
+                        "description": "Public Soma host configured with SOMA_MCP_PUBLIC_URL"
+                    }
+                }
+            }
+        ],
+        "externalDocs": {
+            "description": "Soma documentation",
+            "url": "https://github.com/jmagar/soma/tree/main/docs"
+        },
         "tags": [
             {"name":"health","description":"Unauthenticated runtime probes"},
             {"name":"capabilities","description":"REST route inventory"},
@@ -458,9 +482,29 @@ fn render_openapi(root: &Path) -> Result<Value> {
             }
         },
         "x-soma": {
+            "publisher": {
+                "name": "dinglebear.ai",
+                "url": "https://dinglebear.ai"
+            },
+            "repository": "https://github.com/jmagar/soma",
             "source": "scripts/check-openapi.py",
             "action_metadata": "crates/soma-contracts/src/actions.rs",
             "preferred_rest_style": "direct_routes",
+            "binary": "soma",
+            "server_binary": "soma-server",
+            "node_package": "soma-rmcp",
+            "oci_image": format!("ghcr.io/jmagar/soma:{version}"),
+            "mcp_registry": "server.json",
+            "provider_directory_env": "SOMA_PROVIDER_DIR",
+            "auth_modes": ["loopback-dev", "bearer", "oauth", "trusted-gateway"],
+            "transports": ["stdio", "streamable-http"],
+            "surfaces": ["mcp", "cli", "rest", "web", "docker", "plugins"],
+            "documentation": {
+                "quickstart": "docs/QUICKSTART.md",
+                "configuration": "docs/CONFIG.md",
+                "environment": "docs/ENV.md",
+                "provider_surfaces": "docs/generated/provider-surfaces.md"
+            },
             "rest_actions": action_names,
             "direct_rest_routes": direct_rest_routes,
             "action_costs": action_costs,

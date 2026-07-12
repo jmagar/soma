@@ -309,8 +309,20 @@
       }
     }
   },
+  "externalDocs": {
+    "description": "Soma documentation",
+    "url": "https://github.com/jmagar/soma/tree/main/docs"
+  },
   "info": {
+    "contact": {
+      "name": "dinglebear.ai",
+      "url": "https://dinglebear.ai"
+    },
     "description": "Generated OpenAPI schema for Soma's direct REST surface. Auth modes: loopback/trusted-gateway deployments may have no local auth; mounted bearer mode uses SOMA_MCP_TOKEN; OAuth mode uses bearer JWTs. REST actions require their action-specific scopes when auth is mounted.",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/jmagar/soma/blob/main/LICENSE"
+    },
     "title": "Soma MCP REST API",
     "version": "0.4.6"
   },
@@ -622,6 +634,16 @@
     {
       "description": "Default local development server",
       "url": "http://localhost:40060"
+    },
+    {
+      "description": "Reverse-proxied Soma deployment",
+      "url": "https://{host}",
+      "variables": {
+        "host": {
+          "default": "soma.example.com",
+          "description": "Public Soma host configured with SOMA_MCP_PUBLIC_URL"
+        }
+      }
     }
   ],
   "tags": [
@@ -648,6 +670,13 @@
       "status": "cheap"
     },
     "action_metadata": "crates/soma-contracts/src/actions.rs",
+    "auth_modes": [
+      "loopback-dev",
+      "bearer",
+      "oauth",
+      "trusted-gateway"
+    ],
+    "binary": "soma",
     "direct_rest_routes": {
       "echo": {
         "method": "POST",
@@ -666,17 +695,45 @@
         "path": "/v1/status"
       }
     },
+    "documentation": {
+      "configuration": "docs/CONFIG.md",
+      "environment": "docs/ENV.md",
+      "provider_surfaces": "docs/generated/provider-surfaces.md",
+      "quickstart": "docs/QUICKSTART.md"
+    },
     "mcp_only_actions": [
       "elicit_name",
       "scaffold_intent"
     ],
+    "mcp_registry": "server.json",
+    "node_package": "soma-rmcp",
+    "oci_image": "ghcr.io/jmagar/soma:0.4.6",
     "preferred_rest_style": "direct_routes",
+    "provider_directory_env": "SOMA_PROVIDER_DIR",
+    "publisher": {
+      "name": "dinglebear.ai",
+      "url": "https://dinglebear.ai"
+    },
+    "repository": "https://github.com/jmagar/soma",
     "rest_actions": [
       "greet",
       "echo",
       "status",
       "help"
     ],
-    "source": "scripts/check-openapi.py"
+    "server_binary": "soma-server",
+    "source": "scripts/check-openapi.py",
+    "surfaces": [
+      "mcp",
+      "cli",
+      "rest",
+      "web",
+      "docker",
+      "plugins"
+    ],
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ]
   }
 }

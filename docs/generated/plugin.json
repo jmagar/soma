@@ -1,4 +1,8 @@
 {
+  "binaries": {
+    "cli": "soma",
+    "server": "soma-server"
+  },
   "claude": {
     "marketplace": ".claude-plugin/marketplace.json",
     "plugin_json": "plugins/soma/.claude-plugin/plugin.json"
@@ -9,9 +13,29 @@
   },
   "description": "Generated distributable plugin surface for Soma.",
   "docs": "docs/generated/provider-surfaces.md",
-  "mcp_server": "server.json",
+  "icons": {
+    "png": "plugins/soma/assets/icon.png",
+    "svg": "plugins/soma/assets/logo.svg"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "rmcp",
+    "soma",
+    "agent-tools"
+  ],
+  "license": "MIT",
+  "mcp_server": {
+    "manifest": "server.json",
+    "name": "dinglebear.ai/soma",
+    "registry_schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+  },
   "name": "soma",
   "node_package": "packages/soma-rmcp/package.json",
+  "packages": {
+    "npm": "soma-rmcp",
+    "oci": "ghcr.io/jmagar/soma"
+  },
   "plugin_root": "plugins/soma",
   "provider_files": [],
   "provider_fingerprint": "sha256:3be19b2149cbe295823a623c7ec548fce543d0761d7909eb9f06d402666b756b",
@@ -398,6 +422,28 @@
       "when_to_use": "Use for Soma built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
     }
   ],
+  "publisher": {
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
+  },
+  "repository": "https://github.com/jmagar/soma",
+  "runtime": {
+    "auth_modes": [
+      "loopback-dev",
+      "bearer",
+      "oauth",
+      "trusted-gateway"
+    ],
+    "config_home": "~/.soma",
+    "container_data_dir": "/data",
+    "default_http_endpoint": "http://127.0.0.1:40060/mcp",
+    "default_provider_dir": "providers",
+    "provider_dir_env": "SOMA_PROVIDER_DIR",
+    "transports": [
+      "stdio",
+      "streamable-http"
+    ]
+  },
   "schema_version": 1,
   "skills": "plugins/soma/skills",
   "surfaces": {
@@ -438,5 +484,7 @@
       "POST /v1/echo",
       "POST /v1/greet"
     ]
-  }
+  },
+  "title": "Soma",
+  "website": "https://github.com/jmagar/soma"
 }

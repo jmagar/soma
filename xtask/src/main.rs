@@ -15,6 +15,7 @@
 //!   generate-docs Generate volatile docs and metadata from canonical specs
 //!   generate-provider-surfaces Generate provider docs and marketplace catalogs
 //!   check-docs    Validate generated docs and metadata are current
+//!   check-mcp-registry Validate server.json against the MCP registry schema
 //!   check-stale-claims Fail on stale hardcoded Soma claims
 //!   sync-web-source Copy apps/web into the bundled soma-web scaffold source
 //!   check-web-source-sync Validate bundled web source matches apps/web
@@ -48,6 +49,7 @@ mod cargo_generate;
 mod cargo_generate_post;
 mod ci_paths;
 mod generated_surfaces;
+mod mcp_registry;
 mod no_mcp;
 mod patterns;
 mod provider_manifest;
@@ -87,6 +89,7 @@ fn main() -> Result<()> {
         Some("generate-docs") => generate_docs(),
         Some("generate-provider-surfaces") => generated_surfaces::provider_surfaces(&args[1..]),
         Some("check-docs") => check_docs(),
+        Some("check-mcp-registry") => mcp_registry::check_cmd(workspace_root, &args[1..]),
         Some("check-stale-claims") => check_stale_claims(),
         Some("check-cargo-generate") => scripts_lane_d::check_cargo_generate(&args[1..]),
         Some("sync-web-source") => web_source::sync(),
@@ -258,41 +261,45 @@ fn cargo_generate(args: &[String]) -> Result<()> {
 /// the static contract surfaces that every derived server should keep current.
 fn contract_audit() -> Result<()> {
     println!("==> contract-audit: local static/spec checks only");
-    println!("==> [1/10] cargo xtask patterns");
+    println!("==> [1/12] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default()).context("patterns contract check failed")?;
 
-    println!("==> [2/10] cargo xtask check-test-siblings");
+    println!("==> [2/12] cargo xtask check-test-siblings");
     check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [3/10] cargo xtask check-docs");
+    println!("==> [3/12] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [4/10] cargo xtask check-stale-claims");
+    println!("==> [4/12] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [5/10] cargo xtask check-schema-docs --check");
+    println!("==> [5/12] cargo xtask check-schema-docs --check");
     scripts_lane_d::check_schema_docs(&["--check".to_owned()])
         .context("schema docs check failed")?;
 
-    println!("==> [6/10] cargo xtask check-openapi --check");
+    println!("==> [6/12] cargo xtask check-openapi --check");
     scripts_lane_d::check_openapi(&["--check".to_owned()]).context("OpenAPI docs check failed")?;
 
-    println!("==> [7/10] cargo xtask check-provider-manifest-contract");
+    println!("==> [7/12] cargo xtask check-mcp-registry");
+    mcp_registry::check_default(std::path::Path::new("."))
+        .context("MCP registry manifest check failed")?;
+
+    println!("==> [8/12] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [8/10] cargo xtask check-palette-manifest --check");
+    println!("==> [9/12] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [9/11] cargo xtask generate-provider-surfaces --check");
+    println!("==> [10/12] cargo xtask generate-provider-surfaces --check");
     generated_surfaces::provider_surfaces(&["--check".to_owned()])
         .context("provider surfaces check failed")?;
 
-    println!("==> [10/11] cargo xtask check-scaffold-intent-contract");
+    println!("==> [11/12] cargo xtask check-scaffold-intent-contract");
     scripts_lane_d::check_scaffold_intent_contract()
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [11/11] cargo xtask test-soma-features");
+    println!("==> [12/12] cargo xtask test-soma-features");
     scripts_lane_b::test_soma_features(std::path::Path::new("."))
         .context("Soma feature smoke failed")?;
 
@@ -358,13 +365,13 @@ fn dist() -> Result<()> {
 ///
 /// CUSTOMIZE: Add or remove steps to match your CI pipeline.
 fn ci() -> Result<()> {
-    println!("==> [1/12] cargo fmt --check");
+    println!("==> [1/13] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/12] cargo clippy");
+    println!("==> [2/13] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [3/12] cargo nextest run --profile ci");
+    println!("==> [3/13] cargo nextest run --profile ci");
     // Falls back to cargo test if nextest isn't installed.
     // CUSTOMIZE: Remove the fallback once nextest is in your CI environment.
     if command_exists("cargo-nextest") {
@@ -374,7 +381,7 @@ fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [4/12] taplo check");
+    println!("==> [4/13] taplo check");
     // CUSTOMIZE: Remove this step if you don't use taplo.
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
@@ -382,30 +389,34 @@ fn ci() -> Result<()> {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/12] cargo xtask patterns");
+    println!("==> [5/13] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [6/12] cargo xtask check-test-siblings");
+    println!("==> [6/13] cargo xtask check-test-siblings");
     check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [7/12] cargo xtask check-docs");
+    println!("==> [7/13] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [8/12] cargo xtask check-stale-claims");
+    println!("==> [8/13] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [9/12] cargo xtask check-provider-manifest-contract");
+    println!("==> [9/13] cargo xtask check-mcp-registry");
+    mcp_registry::check_default(std::path::Path::new("."))
+        .context("MCP registry manifest check failed")?;
+
+    println!("==> [10/13] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [10/12] cargo xtask check-palette-manifest --check");
+    println!("==> [11/13] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [11/12] cargo xtask check-web-source-sync");
+    println!("==> [12/13] cargo xtask check-web-source-sync");
     web_source::check().context("web source bundle drifted from apps/web")?;
 
-    println!("==> [12/12] cargo audit");
+    println!("==> [13/13] cargo audit");
     // CUSTOMIZE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
@@ -784,6 +795,7 @@ COMMANDS:
   cargo-generate-post   Internal generated-project rewrite command
   generate-docs         Generate volatile docs and metadata from canonical specs
   check-docs            Validate generated docs and metadata are current
+  check-mcp-registry    Validate server.json against docs/contracts/mcp-server.schema.json
   check-stale-claims    Fail on stale hardcoded Soma claims
   check-cargo-generate  Validate cargo-generate output
   sync-web-source       Copy apps/web into crates/soma-web/assets/source

@@ -590,6 +590,9 @@ jobs:
       - name: Check OpenAPI docs
         run: cargo xtask check-openapi --check
 
+      - name: Check MCP registry manifest
+        run: cargo xtask check-mcp-registry
+
       - name: Check provider manifest contract
         run: cargo xtask check-provider-manifest-contract
 

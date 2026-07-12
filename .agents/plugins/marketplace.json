@@ -1,10 +1,35 @@
 {
+  "description": "Soma RMCP runtime plugins by dinglebear.ai.",
+  "homepage": "https://github.com/jmagar/soma",
+  "keywords": [
+    "mcp",
+    "rmcp",
+    "soma",
+    "agent-tools"
+  ],
+  "license": "MIT",
   "name": "soma",
+  "owner": {
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
+  },
   "plugins": [
     {
       "category": "Infrastructure",
+      "description": "Batteries-included RMCP runtime for drop-in provider-backed tools, prompts, and resources.",
       "interface": {
-        "displayName": "Soma"
+        "brandColor": "#6366F1",
+        "composerIcon": "./plugins/soma/assets/icon.png",
+        "developerName": "dinglebear.ai",
+        "displayName": "Soma",
+        "logo": "./plugins/soma/assets/logo.svg",
+        "shortDescription": "Drop-in RMCP runtime."
+      },
+      "metadata": {
+        "binary": "soma",
+        "mcpServer": "server.json",
+        "nodePackage": "soma-rmcp",
+        "ociImage": "ghcr.io/jmagar/soma"
       },
       "name": "soma",
       "policy": {
@@ -16,5 +41,6 @@
         "source": "local"
       }
     }
-  ]
+  ],
+  "repository": "https://github.com/jmagar/soma"
 }

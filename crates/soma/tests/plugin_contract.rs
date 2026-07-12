@@ -78,6 +78,128 @@ fn plugin_manifests_share_identity_and_connection_settings() {
 }
 
 #[test]
+fn codex_plugin_icon_assets_exist() {
+    let codex = json("plugins/soma/.codex-plugin/plugin.json");
+    for pointer in ["/interface/composerIcon", "/interface/logo"] {
+        let asset = codex.pointer(pointer).and_then(Value::as_str).unwrap();
+        let relative = asset.strip_prefix("./").unwrap_or(asset);
+        assert!(
+            repo_path("plugins/soma").join(relative).is_file(),
+            "{pointer} should point at an existing plugin asset"
+        );
+    }
+}
+
+#[test]
+fn mcp_registry_manifest_advertises_rich_product_metadata() {
+    let manifest = json("server.json");
+    assert_eq!(manifest["name"], "dinglebear.ai/soma");
+    assert_eq!(manifest["title"], "Soma");
+    assert_eq!(
+        manifest["repository"]["url"],
+        "https://github.com/jmagar/soma"
+    );
+    assert_eq!(manifest["websiteUrl"], "https://github.com/jmagar/soma");
+    assert_eq!(manifest["_meta"]["ai.dinglebear.soma"]["binary"], "soma");
+    assert_eq!(
+        manifest["_meta"]["ai.dinglebear.soma"]["server_binary"],
+        "soma-server"
+    );
+    assert_eq!(
+        manifest["_meta"]["io.modelcontextprotocol.registry/publisher-provided"]["publisher"]
+            ["name"],
+        "dinglebear.ai"
+    );
+    assert!(
+        manifest["icons"].as_array().unwrap().len() >= 2,
+        "server.json should advertise PNG and SVG icons"
+    );
+
+    let packages = manifest["packages"].as_array().unwrap();
+    let oci = packages
+        .iter()
+        .find(|package| package["registryType"] == "oci")
+        .expect("missing OCI package metadata");
+    assert_eq!(oci["identifier"], "ghcr.io/jmagar/soma:0.4.6");
+    assert_eq!(oci["runtimeHint"], "docker");
+    assert_eq!(oci["transport"]["type"], "streamable-http");
+    assert_eq!(oci["transport"]["url"], "http://127.0.0.1:40060/mcp");
+
+    let npm = packages
+        .iter()
+        .find(|package| package["registryType"] == "npm")
+        .expect("missing npm package metadata");
+    assert_eq!(npm["identifier"], "soma-rmcp");
+    assert_eq!(npm["runtimeHint"], "npx");
+    assert_eq!(npm["transport"]["type"], "stdio");
+    assert!(npm["packageArguments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|arg| arg["value"] == "mcp"));
+
+    let oci_envs: Vec<&str> = oci["environmentVariables"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|env| env["name"].as_str())
+        .collect();
+    for name in [
+        "SOMA_HOME",
+        "DATA_DIR",
+        "SOMA_PROVIDER_DIR",
+        "SOMA_MCP_TOKEN",
+        "SOMA_MCP_AUTH_MODE",
+        "SOMA_MCP_PUBLIC_URL",
+        "SOMA_MCP_ALLOWED_HOSTS",
+        "SOMA_MCP_ALLOWED_ORIGINS",
+        "RUST_LOG",
+    ] {
+        assert!(oci_envs.contains(&name), "OCI metadata missing {name}");
+    }
+
+    assert_eq!(manifest["remotes"][0]["type"], "streamable-http");
+    assert_eq!(
+        manifest["remotes"][0]["variables"]["server_host"]["placeholder"],
+        "soma.example.com"
+    );
+}
+
+#[test]
+fn npm_launcher_package_has_distribution_metadata() {
+    let package = json("packages/soma-rmcp/package.json");
+    assert_eq!(package["name"], "soma-rmcp");
+    assert_eq!(package["author"]["name"], "dinglebear.ai");
+    assert_eq!(package["repository"]["directory"], "packages/soma-rmcp");
+    assert_eq!(
+        package["bugs"]["url"],
+        "https://github.com/jmagar/soma/issues"
+    );
+    assert_eq!(package["bin"]["soma"], "bin/soma-rmcp.js");
+    assert_eq!(package["bin"]["soma-rmcp"], "bin/soma-rmcp.js");
+}
+
+#[test]
+fn generated_openapi_carries_product_metadata() {
+    let openapi = json("docs/generated/openapi.json");
+    assert_eq!(openapi["info"]["contact"]["name"], "dinglebear.ai");
+    assert_eq!(openapi["info"]["license"]["name"], "MIT");
+    assert_eq!(
+        openapi["externalDocs"]["url"],
+        "https://github.com/jmagar/soma/tree/main/docs"
+    );
+    assert_eq!(openapi["x-soma"]["binary"], "soma");
+    assert_eq!(openapi["x-soma"]["node_package"], "soma-rmcp");
+    assert_eq!(openapi["x-soma"]["mcp_registry"], "server.json");
+    assert_eq!(openapi["x-soma"]["publisher"]["name"], "dinglebear.ai");
+    assert!(openapi["x-soma"]["auth_modes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|mode| mode == "oauth"));
+}
+
+#[test]
 fn claude_hooks_call_binary_setup_plugin_hook_directly() {
     let hooks = json("plugins/soma/hooks/hooks.json");
     for hook_name in ["SessionStart", "ConfigChange"] {

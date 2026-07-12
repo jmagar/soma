@@ -92,7 +92,7 @@ fn parity_checks_registry_openapi_and_plugin_no_version() {
     let fixture = Fixture::new();
     fs::write(
         fixture.path("server.json"),
-        r#"{"version":"0.4.0","packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"}]}"#,
+        r#"{"version":"0.4.0","packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"},{"identifier":"soma-rmcp","version":"0.4.1"}]}"#,
     )
     .unwrap();
     fs::write(
@@ -253,7 +253,7 @@ version = "0.4.1"
         write(&self.path("CHANGELOG.md"), "# Changelog\n\n## [0.4.1]\n");
         write(
             &self.path("server.json"),
-            r#"{"version":"0.4.1","packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"}]}"#,
+            r#"{"version":"0.4.1","packages":[{"identifier":"ghcr.io/jmagar/soma:0.4.1","version":"0.4.1"},{"identifier":"soma-rmcp","version":"0.4.1"}]}"#,
         );
         write(
             &self.path("docs/generated/openapi.json"),

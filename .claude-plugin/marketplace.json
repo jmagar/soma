@@ -1,16 +1,26 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "description": "Generated marketplace catalog for Soma plugins.",
+  "homepage": "https://github.com/jmagar/soma",
+  "license": "MIT",
   "name": "soma",
   "owner": {
-    "name": "dinglebear.ai"
+    "name": "dinglebear.ai",
+    "url": "https://dinglebear.ai"
   },
   "plugins": [
     {
       "category": "infrastructure",
-      "description": "Soma RMCP runtime plugin.",
+      "description": "Soma RMCP runtime plugin for drop-in provider-backed tools, prompts, and resources.",
+      "metadata": {
+        "binary": "soma",
+        "mcpServer": "server.json",
+        "nodePackage": "soma-rmcp",
+        "ociImage": "ghcr.io/jmagar/soma"
+      },
       "name": "soma",
       "source": "./plugins/soma"
     }
-  ]
+  ],
+  "repository": "https://github.com/jmagar/soma"
 }
