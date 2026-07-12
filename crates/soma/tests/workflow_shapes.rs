@@ -1,5 +1,9 @@
+fn normalize_workflow_newlines(workflow: &str) -> String {
+    workflow.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 fn workflow_job_block(workflow: &str, job_name: &str) -> String {
-    let workflow = workflow.replace("\r\n", "\n").replace('\r', "\n");
+    let workflow = normalize_workflow_newlines(workflow);
     let marker = format!("  {job_name}:");
     let start = workflow
         .lines()
@@ -74,9 +78,12 @@ fn release_please_uses_ci_gated_release_pr_flow() {
 
 #[test]
 fn artifact_workflows_run_from_published_releases() {
-    let release = include_str!("../../../.github/workflows/release.yml");
-    let docker = include_str!("../../../.github/workflows/docker-publish.yml");
-    for workflow in [release, docker] {
+    let release =
+        normalize_workflow_newlines(include_str!("../../../.github/workflows/release.yml"));
+    let docker = normalize_workflow_newlines(include_str!(
+        "../../../.github/workflows/docker-publish.yml"
+    ));
+    for workflow in [&release, &docker] {
         assert!(
             workflow.contains("release:\n    types: [published]"),
             "artifact workflow must trigger from release-please published releases"
@@ -100,12 +107,12 @@ fn artifact_workflows_run_from_published_releases() {
         release.contains("tag_name: ${{ needs.validate-release-tag.outputs.release_tag }}"),
         "release artifact workflow must attach files to the existing release tag"
     );
-    let lfs_commit = workflow_job_block(release, "lfs-commit");
+    let lfs_commit = workflow_job_block(&release, "lfs-commit");
     assert!(
         lfs_commit.contains("ref: main") && lfs_commit.contains("git merge --ff-only origin/main"),
         "LFS binary commits must be made on top of current main, not from a detached release tag"
     );
-    let npm = workflow_job_block(release, "npm");
+    let npm = workflow_job_block(&release, "npm");
     assert!(
         npm.contains("needs: [validate-release-tag, release]"),
         "npm publish must wait until GitHub release artifacts have been created"
