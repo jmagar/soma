@@ -1,4 +1,4 @@
-use std::{fs, time::Duration};
+use std::{fs, process::Command, time::Duration};
 
 use serde_json::json;
 use soma_contracts::config::SomaConfig;
@@ -11,6 +11,10 @@ use soma_service::{
 
 #[tokio::test]
 async fn ai_sdk_provider_executes_hot_dropped_typescript_handler() -> anyhow::Result<()> {
+    if !node_sidecar_available() {
+        return Ok(());
+    }
+
     let temp = tempfile::tempdir()?;
     let providers = temp.path().join("providers");
     fs::create_dir(&providers)?;
@@ -66,6 +70,10 @@ export async function call(input) {
 
 #[tokio::test]
 async fn ai_sdk_provider_passes_provider_level_environment() -> anyhow::Result<()> {
+    if !node_sidecar_available() {
+        return Ok(());
+    }
+
     let temp = tempfile::tempdir()?;
     let providers = temp.path().join("providers");
     fs::create_dir(&providers)?;
@@ -117,6 +125,10 @@ export async function call() {
 
 #[tokio::test]
 async fn ai_sdk_provider_kills_timed_out_process() -> anyhow::Result<()> {
+    if !node_sidecar_available() {
+        return Ok(());
+    }
+
     let temp = tempfile::tempdir()?;
     let providers = temp.path().join("providers");
     fs::create_dir(&providers)?;
@@ -193,4 +205,28 @@ fn service() -> anyhow::Result<SomaService> {
         api_key: "test".to_owned(),
     })?;
     Ok(SomaService::new(client))
+}
+
+fn node_sidecar_available() -> bool {
+    let output = Command::new("node")
+        .args([
+            "--input-type=module",
+            "--eval",
+            "import { readFileSync } from 'node:fs'; console.log(JSON.stringify({ok: true}));",
+        ])
+        .output();
+    match output {
+        Ok(output) if output.status.success() => true,
+        Ok(output) => {
+            eprintln!(
+                "skipping AI SDK provider smoke: node sidecar probe failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            false
+        }
+        Err(error) => {
+            eprintln!("skipping AI SDK provider smoke: node sidecar unavailable: {error}");
+            false
+        }
+    }
 }

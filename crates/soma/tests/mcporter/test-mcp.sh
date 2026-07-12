@@ -14,7 +14,7 @@
 #     greet(name="Alice")    → response MUST contain "Alice" in the greeting string
 #     echo(message="ping")   → response MUST echo back the exact string "ping"
 #     status()               → response MUST have a "status" key
-#     help()                 → response MUST have a "help" key with non-empty content
+#     help()                 → response MUST include a non-empty action catalog
 #     schema resource        → MUST be valid JSON schema with name="soma" and inputSchema
 #
 #   MCP elicitation actions (`elicit_name`, `scaffold_intent`) require a client
@@ -279,10 +279,22 @@ mcporter_call() {
 # Reads an MCP resource. Newer mcporter builds can exercise resources directly;
 # keep a JSON-RPC fallback so this harness remains compatible with older local
 # versions while still preferring mcporter when the command is available.
+mcporter_resource_read_supports_http() {
+  local help
+  help="$(mcporter resource read --help 2>/dev/null || true)"
+  [[ "${help}" == *"--http-url"* && "${help}" == *"--uri"* ]]
+}
+
+mcporter_resources_read_supports_http() {
+  local help
+  help="$(mcporter resources read --help 2>/dev/null || true)"
+  [[ "${help}" == *"--http-url"* && "${help}" == *"--uri"* ]]
+}
+
 mcporter_read_resource() {
   local resource_uri="${1:?resource URI required}"
 
-  if mcporter resource read --help >/dev/null 2>&1; then
+  if mcporter_resource_read_supports_http; then
     mcporter resource read \
       --http-url "${MCP_URL}" \
       --allow-http \
@@ -294,7 +306,7 @@ mcporter_read_resource() {
     return
   fi
 
-  if mcporter resources read --help >/dev/null 2>&1; then
+  if mcporter_resources_read_supports_http; then
     mcporter resources read \
       --http-url "${MCP_URL}" \
       --allow-http \
@@ -576,11 +588,11 @@ suite_core() {
   run_test "example help: returns help content" \
     "soma" '{"action":"help"}' ""
 
-  # Help should contain the action list — "greet" is always in Soma
-  # CUSTOMIZE: Replace "greet" with a keyword that must appear in your help text.
+  # Help should contain the action list — "greet" is always in Soma.
+  # CUSTOMIZE: Replace "greet" with an action that must appear in your help catalog.
   run_test_semantic "example help: mentions greet action" \
     "soma" '{"action":"help"}' \
-    "help" "greet" "contains"
+    "actions" "greet" "contains"
 }
 
 # ── suite_schema_resource ──────────────────────────────────────────────────────
@@ -660,9 +672,9 @@ except Exception as e:
   )" || schema_check="parse_error"
 
   if [[ "${schema_check}" == "ok" ]]; then
-    _pass "schema resource: valid JSON schema with name=example and inputSchema" "${elapsed_ms}"
+    _pass "schema resource: valid JSON schema with name=soma and inputSchema" "${elapsed_ms}"
   else
-    _fail "schema resource: valid JSON schema with name=example and inputSchema" \
+    _fail "schema resource: valid JSON schema with name=soma and inputSchema" \
       "${elapsed_ms}" "${schema_check}"
   fi
 }
