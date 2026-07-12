@@ -19,14 +19,27 @@
     "README.md",
     "package.json"
   ],
-  "homepage": "https://github.com/jmagar/soma",
+  "homepage": "https://soma.dinglebear.ai",
   "keywords": [
+    "ai-agents",
+    "agent-tools",
+    "automation",
+    "cli",
+    "developer-tools",
+    "docker",
     "mcp",
+    "mcp-server",
     "model-context-protocol",
+    "openapi",
+    "provider-runtime",
+    "providers",
     "rmcp",
+    "rust",
+    "server-runtime",
     "soma"
   ],
   "license": "MIT",
+  "mcpName": "dinglebear.ai/soma",
   "name": "soma-rmcp",
   "repository": {
     "directory": "packages/soma-rmcp",

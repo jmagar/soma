@@ -13,7 +13,10 @@ rust-version = "1.96"
 authors.workspace = true
 description = "Batteries-included RMCP server runtime for drop-in provider capabilities"
 homepage.workspace = true
+keywords = ["mcp", "rmcp", "agents", "runtime", "providers"]
+categories = ["command-line-utilities", "development-tools", "web-programming::http-server"]
 license = "MIT"
+readme = "../../README.md"
 repository.workspace = true
 autobins = false
 

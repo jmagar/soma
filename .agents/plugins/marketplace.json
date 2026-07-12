@@ -1,11 +1,23 @@
 {
   "description": "Soma RMCP runtime plugins by dinglebear.ai.",
-  "homepage": "https://github.com/jmagar/soma",
+  "homepage": "https://soma.dinglebear.ai",
   "keywords": [
     "mcp",
+    "mcp-server",
+    "model-context-protocol",
     "rmcp",
-    "soma",
-    "agent-tools"
+    "rust",
+    "agent-tools",
+    "ai-agents",
+    "provider-runtime",
+    "providers",
+    "developer-tools",
+    "automation",
+    "openapi",
+    "docker",
+    "cli",
+    "server-runtime",
+    "soma"
   ],
   "license": "MIT",
   "name": "soma",
@@ -42,5 +54,7 @@
       }
     }
   ],
-  "repository": "https://github.com/jmagar/soma"
+  "repository": "https://github.com/jmagar/soma",
+  "security_policy": "https://github.com/jmagar/soma/security/policy",
+  "support": "https://github.com/jmagar/soma/issues"
 }

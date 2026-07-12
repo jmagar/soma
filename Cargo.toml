@@ -25,7 +25,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["dinglebear.ai <hello@dinglebear.ai>"]
-homepage = "https://github.com/jmagar/soma"
+homepage = "https://soma.dinglebear.ai"
 repository = "https://github.com/jmagar/soma"
 
 # ── profiles ─────────────────────────────────────────────────────────────────

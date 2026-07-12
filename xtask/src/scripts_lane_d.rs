@@ -455,7 +455,7 @@ fn render_openapi(root: &Path) -> Result<Value> {
                 "description": "Reverse-proxied Soma deployment",
                 "variables": {
                     "host": {
-                        "default": "soma.example.com",
+                        "default": "soma.dinglebear.ai",
                         "description": "Public Soma host configured with SOMA_MCP_PUBLIC_URL"
                     }
                 }
@@ -486,7 +486,27 @@ fn render_openapi(root: &Path) -> Result<Value> {
                 "name": "dinglebear.ai",
                 "url": "https://dinglebear.ai"
             },
+            "homepage": "https://soma.dinglebear.ai",
             "repository": "https://github.com/jmagar/soma",
+            "support": "https://github.com/jmagar/soma/issues",
+            "security_policy": "https://github.com/jmagar/soma/security/policy",
+            "keywords": [
+                "mcp",
+                "mcp-server",
+                "model-context-protocol",
+                "rmcp",
+                "rust",
+                "agent-tools",
+                "ai-agents",
+                "provider-runtime",
+                "providers",
+                "developer-tools",
+                "automation",
+                "openapi",
+                "docker",
+                "cli",
+                "server-runtime"
+            ],
             "source": "scripts/check-openapi.py",
             "action_metadata": "crates/soma-contracts/src/actions.rs",
             "preferred_rest_style": "direct_routes",

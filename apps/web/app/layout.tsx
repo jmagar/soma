@@ -23,8 +23,50 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: `${WEB_APP_CONFIG.displayName} — ${WEB_APP_CONFIG.dashboardTitle}`,
+  metadataBase: new URL("https://soma.dinglebear.ai"),
+  title: `${WEB_APP_CONFIG.displayName} - ${WEB_APP_CONFIG.dashboardTitle}`,
   description: WEB_APP_CONFIG.description,
+  applicationName: WEB_APP_CONFIG.displayName,
+  authors: [{ name: "dinglebear.ai", url: "https://dinglebear.ai" }],
+  creator: "dinglebear.ai",
+  publisher: "dinglebear.ai",
+  category: "developer tools",
+  keywords: [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "rmcp",
+    "rust",
+    "agent-tools",
+    "ai-agents",
+    "provider-runtime",
+    "providers",
+    "developer-tools",
+    "automation",
+    "openapi",
+    "docker",
+    "cli",
+    "server-runtime",
+    "soma",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  icons: {
+    icon: "/icon.svg",
+  },
+  openGraph: {
+    title: `${WEB_APP_CONFIG.displayName} - ${WEB_APP_CONFIG.dashboardTitle}`,
+    description: WEB_APP_CONFIG.description,
+    url: "https://soma.dinglebear.ai",
+    siteName: WEB_APP_CONFIG.displayName,
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: `${WEB_APP_CONFIG.displayName} - ${WEB_APP_CONFIG.dashboardTitle}`,
+    description: WEB_APP_CONFIG.description,
+  },
 };
 
 export default function RootLayout({
@@ -57,7 +99,7 @@ export default function RootLayout({
               {WEB_APP_CONFIG.displayName}
             </span>
             <div className="flex gap-1">
-              <NavLink href="/">Dashboard</NavLink>
+              <NavLink href="/">Soma</NavLink>
               <NavLink href="/tools/">Tools</NavLink>
               <NavLink href="/api/">API</NavLink>
             </div>

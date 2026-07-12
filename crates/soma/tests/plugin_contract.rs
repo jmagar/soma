@@ -51,6 +51,19 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     assert!(claude["repository"].as_str().unwrap().ends_with("soma"));
     assert!(codex["repository"].as_str().unwrap().ends_with("soma"));
     assert!(gemini["repository"].as_str().unwrap().ends_with("soma"));
+    assert_eq!(claude["homepage"], "https://soma.dinglebear.ai");
+    assert_eq!(codex["homepage"], "https://soma.dinglebear.ai");
+    assert_eq!(gemini["homepage"], "https://soma.dinglebear.ai");
+    for manifest in [&claude, &codex, &gemini] {
+        assert!(
+            manifest["keywords"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|keyword| keyword == "provider-runtime"),
+            "plugin metadata should advertise provider-runtime discoverability"
+        );
+    }
 
     let user_config = claude["userConfig"].as_object().unwrap();
     for key in ["server_url", "api_token", "soma_api_url", "soma_api_key"] {
@@ -99,8 +112,25 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
         manifest["repository"]["url"],
         "https://github.com/jmagar/soma"
     );
-    assert_eq!(manifest["websiteUrl"], "https://github.com/jmagar/soma");
+    assert_eq!(manifest["repository"]["id"], "1238227299");
+    assert_eq!(manifest["websiteUrl"], "https://soma.dinglebear.ai");
     assert_eq!(manifest["_meta"]["ai.dinglebear.soma"]["binary"], "soma");
+    assert_eq!(
+        manifest["_meta"]["ai.dinglebear.soma"]["homepage"],
+        "https://soma.dinglebear.ai"
+    );
+    assert_eq!(
+        manifest["_meta"]["ai.dinglebear.soma"]["support_url"],
+        "https://github.com/jmagar/soma/issues"
+    );
+    assert!(
+        manifest["_meta"]["ai.dinglebear.soma"]["keywords"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|keyword| keyword == "provider-runtime"),
+        "server metadata should advertise provider-runtime discoverability"
+    );
     assert_eq!(
         manifest["_meta"]["ai.dinglebear.soma"]["server_binary"],
         "soma-server"
@@ -161,7 +191,7 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
     assert_eq!(manifest["remotes"][0]["type"], "streamable-http");
     assert_eq!(
         manifest["remotes"][0]["variables"]["server_host"]["placeholder"],
-        "soma.example.com"
+        "soma.dinglebear.ai"
     );
 }
 
@@ -169,6 +199,8 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
 fn npm_launcher_package_has_distribution_metadata() {
     let package = json("packages/soma-rmcp/package.json");
     assert_eq!(package["name"], "soma-rmcp");
+    assert_eq!(package["mcpName"], "dinglebear.ai/soma");
+    assert_eq!(package["homepage"], "https://soma.dinglebear.ai");
     assert_eq!(package["author"]["name"], "dinglebear.ai");
     assert_eq!(package["repository"]["directory"], "packages/soma-rmcp");
     assert_eq!(

@@ -4,9 +4,30 @@
   "serviceName": "soma",
   "binary": "soma",
   "repository": "https://github.com/jmagar/soma",
-  "homepage": "https://github.com/jmagar/soma",
+  "homepage": "https://soma.dinglebear.ai",
   "license": "MIT",
-  "keywords": ["mcp", "rmcp", "soma", "homelab"],
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "rmcp",
+    "rust",
+    "agent-tools",
+    "ai-agents",
+    "provider-runtime",
+    "providers",
+    "developer-tools",
+    "automation",
+    "openapi",
+    "docker",
+    "cli",
+    "server-runtime",
+    "soma"
+  ],
+  "icons": {
+    "png": "assets/icon.png",
+    "svg": "assets/logo.svg"
+  },
   "author": {
     "name": "dinglebear.ai",
     "url": "https://dinglebear.ai"

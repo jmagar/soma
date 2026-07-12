@@ -13,16 +13,28 @@
   },
   "description": "Generated distributable plugin surface for Soma.",
   "docs": "docs/generated/provider-surfaces.md",
+  "homepage": "https://soma.dinglebear.ai",
   "icons": {
     "png": "plugins/soma/assets/icon.png",
     "svg": "plugins/soma/assets/logo.svg"
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "rmcp",
-    "soma",
-    "agent-tools"
+    "rust",
+    "agent-tools",
+    "ai-agents",
+    "provider-runtime",
+    "providers",
+    "developer-tools",
+    "automation",
+    "openapi",
+    "docker",
+    "cli",
+    "server-runtime",
+    "soma"
   ],
   "license": "MIT",
   "mcp_server": {
@@ -445,7 +457,9 @@
     ]
   },
   "schema_version": 1,
+  "security_policy": "https://github.com/jmagar/soma/security/policy",
   "skills": "plugins/soma/skills",
+  "support": "https://github.com/jmagar/soma/issues",
   "surfaces": {
     "claude_marketplace": ".claude-plugin/marketplace.json",
     "cli_actions": [
@@ -486,5 +500,5 @@
     ]
   },
   "title": "Soma",
-  "website": "https://github.com/jmagar/soma"
+  "website": "https://soma.dinglebear.ai"
 }

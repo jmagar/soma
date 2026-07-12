@@ -2,9 +2,10 @@ import { ACTIONS } from "./generated-actions";
 
 export const WEB_APP_CONFIG = {
   serviceName: "soma",
-  displayName: "soma",
-  dashboardTitle: "Operator Dashboard",
-  description: "MCP server operator dashboard",
+  displayName: "Soma",
+  dashboardTitle: "Drop-in RMCP runtime",
+  description:
+    "Drop-in RMCP runtime for provider-backed MCP tools, prompts, resources, and agent capabilities.",
   apiBaseUrl: process.env.NEXT_PUBLIC_SOMA_API_BASE_URL ?? "",
   capabilitiesEndpoint: "/v1/capabilities",
   healthEndpoint: "/health",

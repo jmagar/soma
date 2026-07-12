@@ -640,7 +640,7 @@
       "url": "https://{host}",
       "variables": {
         "host": {
-          "default": "soma.example.com",
+          "default": "soma.dinglebear.ai",
           "description": "Public Soma host configured with SOMA_MCP_PUBLIC_URL"
         }
       }
@@ -701,6 +701,24 @@
       "provider_surfaces": "docs/generated/provider-surfaces.md",
       "quickstart": "docs/QUICKSTART.md"
     },
+    "homepage": "https://soma.dinglebear.ai",
+    "keywords": [
+      "mcp",
+      "mcp-server",
+      "model-context-protocol",
+      "rmcp",
+      "rust",
+      "agent-tools",
+      "ai-agents",
+      "provider-runtime",
+      "providers",
+      "developer-tools",
+      "automation",
+      "openapi",
+      "docker",
+      "cli",
+      "server-runtime"
+    ],
     "mcp_only_actions": [
       "elicit_name",
       "scaffold_intent"
@@ -721,8 +739,10 @@
       "status",
       "help"
     ],
+    "security_policy": "https://github.com/jmagar/soma/security/policy",
     "server_binary": "soma-server",
     "source": "scripts/check-openapi.py",
+    "support": "https://github.com/jmagar/soma/issues",
     "surfaces": [
       "mcp",
       "cli",

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "description": "Generated marketplace catalog for Soma plugins.",
-  "homepage": "https://github.com/jmagar/soma",
+  "homepage": "https://soma.dinglebear.ai",
   "license": "MIT",
   "name": "soma",
   "owner": {
@@ -22,5 +22,7 @@
       "source": "./plugins/soma"
     }
   ],
-  "repository": "https://github.com/jmagar/soma"
+  "repository": "https://github.com/jmagar/soma",
+  "security_policy": "https://github.com/jmagar/soma/security/policy",
+  "support": "https://github.com/jmagar/soma/issues"
 }

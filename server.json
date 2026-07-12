@@ -7,16 +7,37 @@
       "config_home": "~/.soma",
       "container_data_dir": "/data",
       "default_http_endpoint": "http://127.0.0.1:40060/mcp",
+      "default_remote_endpoint": "https://soma.dinglebear.ai/mcp",
       "default_provider_dir": "providers",
       "generated_docs": {
         "openapi": "docs/generated/openapi.json",
         "plugin": "docs/generated/plugin.json",
         "provider_surfaces": "docs/generated/provider-surfaces.md"
       },
+      "homepage": "https://soma.dinglebear.ai",
+      "keywords": [
+        "mcp",
+        "mcp-server",
+        "model-context-protocol",
+        "rmcp",
+        "rust",
+        "agent-tools",
+        "ai-agents",
+        "provider-runtime",
+        "providers",
+        "developer-tools",
+        "automation",
+        "openapi",
+        "docker",
+        "cli",
+        "server-runtime"
+      ],
       "node_package": "soma-rmcp",
       "provider_dir_env": "SOMA_PROVIDER_DIR",
       "repository": "https://github.com/jmagar/soma",
+      "security_policy": "https://github.com/jmagar/soma/security/policy",
       "server_binary": "soma-server",
+      "support_url": "https://github.com/jmagar/soma/issues",
       "surfaces": ["mcp", "cli", "rest", "web", "docker", "plugins"],
       "transports": ["stdio", "streamable-http"]
     },
@@ -31,7 +52,10 @@
         "configuration": "docs/CONFIG.md",
         "environment": "docs/ENV.md",
         "quickstart": "docs/QUICKSTART.md",
-        "readme": "README.md"
+        "readme": "README.md",
+        "security": "https://github.com/jmagar/soma/security/policy",
+        "support": "https://github.com/jmagar/soma/issues",
+        "website": "https://soma.dinglebear.ai"
       },
       "publisher": {
         "name": "dinglebear.ai",
@@ -128,11 +152,11 @@
           "name": "SOMA_NOAUTH"
         },
         {
-          "description": "Public URL used for OAuth issuer metadata and callbacks, for example https://soma.example.com.",
+          "description": "Public URL used for OAuth issuer metadata and callbacks, for example https://soma.dinglebear.ai.",
           "isRequired": false,
           "isSecret": false,
           "name": "SOMA_MCP_PUBLIC_URL",
-          "placeholder": "https://soma.example.com"
+          "placeholder": "https://soma.dinglebear.ai"
         },
         {
           "description": "Google OAuth client ID used when SOMA_MCP_AUTH_MODE=oauth.",
@@ -183,7 +207,7 @@
           "isRequired": false,
           "isSecret": false,
           "name": "SOMA_MCP_ALLOWED_HOSTS",
-          "placeholder": "soma.example.com"
+          "placeholder": "soma.dinglebear.ai"
         },
         {
           "description": "Additional CORS origins, comma-separated.",
@@ -311,16 +335,17 @@
         "server_host": {
           "description": "Hostname of a deployed Soma HTTP MCP endpoint.",
           "isRequired": true,
-          "placeholder": "soma.example.com"
+          "placeholder": "soma.dinglebear.ai"
         }
       }
     }
   ],
   "repository": {
+    "id": "1238227299",
     "source": "github",
     "url": "https://github.com/jmagar/soma"
   },
   "title": "Soma",
   "version": "0.4.6",
-  "websiteUrl": "https://github.com/jmagar/soma"
+  "websiteUrl": "https://soma.dinglebear.ai"
 }
