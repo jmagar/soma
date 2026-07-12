@@ -58,7 +58,7 @@ impl Provider for AiSdkProvider {
             .with_phase("input-validation"));
         }
 
-        let wrapper = SidecarWrapper::new(&self.path).map_err(|error| {
+        let wrapper = SidecarWrapper::new(&self.path, &runtime.env).map_err(|error| {
             ProviderError::execution(&self.catalog.provider.name, call.action.clone(), error)
                 .with_provider_kind("ai-sdk")
                 .with_source(source.clone())
@@ -224,15 +224,21 @@ struct SidecarWrapper {
 }
 
 impl SidecarWrapper {
-    fn new(provider_path: &std::path::Path) -> std::io::Result<Self> {
+    fn new(provider_path: &std::path::Path, env: &[(String, String)]) -> std::io::Result<Self> {
         let canonical = provider_path.canonicalize()?;
         let module_path = canonical.display().to_string();
+        let env_keys: Vec<&str> = env.iter().map(|(key, _)| key.as_str()).collect();
+        let env_keys_json = serde_json::to_string(&env_keys).unwrap_or_else(|_| "[]".to_owned());
         let source = format!(
             r#"
 import {{ readFileSync }} from "node:fs";
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const input = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{{}}");
+const allowedEnv = new Set({env_keys_json});
+for (const key of Object.keys(process.env)) {{
+  if (!allowedEnv.has(key)) delete process.env[key];
+}}
 let providerSource = readFileSync({module_path:?}, "utf8");
 providerSource = removeDefaultManifest(providerSource);
 const module = await import("data:text/javascript;base64," + Buffer.from(providerSource).toString("base64"));

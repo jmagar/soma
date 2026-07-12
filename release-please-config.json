@@ -7,7 +7,7 @@
   "bootstrap-sha": "2aa83fe7603016d7c6ca846a8b7c6dfb4a73a0d3",
   "label": "autorelease: pending,release-please",
   "release-label": "autorelease: tagged,release-please",
-  "pull-request-header": "This release PR is managed by release-please. CI adds a follow-up fixup commit for derived files such as Cargo.lock and server.json image references.",
+  "pull-request-header": "This release PR is managed by release-please. CI adds a follow-up fixup commit for derived files such as Cargo.lock and server.json registry metadata.",
   "pull-request-footer": "Merge this PR to let release-please create the tag and GitHub Release. Artifact workflows attach binaries, publish npm, build Docker, and publish the MCP registry manifest after the release is published.",
   "changelog-sections": [
     {
@@ -86,11 +86,6 @@
           "type": "json",
           "path": "server.json",
           "jsonpath": "$.packages[0].version"
-        },
-        {
-          "type": "json",
-          "path": "server.json",
-          "jsonpath": "$.packages[1].version"
         },
         {
           "type": "json",

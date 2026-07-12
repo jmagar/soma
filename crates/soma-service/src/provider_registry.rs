@@ -20,6 +20,7 @@ use crate::{
 };
 
 mod refresh;
+mod reports;
 use refresh::ProviderRefreshEvent;
 
 #[async_trait]

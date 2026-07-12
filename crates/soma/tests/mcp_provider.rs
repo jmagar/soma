@@ -169,7 +169,7 @@ async fn stdio_client_in(
             .env("SOMA_MCP_TOKEN", "")
             .env_remove("SOMA_PROVIDER_DIR");
     }))
-    .stderr(Stdio::piped())
+    .stderr(Stdio::null())
     .spawn()?;
     Ok(().serve(transport).await?)
 }

@@ -100,3 +100,7 @@ fn rest_routes(snapshot: &RegistrySnapshot) -> Vec<String> {
     routes.sort();
     routes
 }
+
+#[cfg(test)]
+#[path = "refresh_tests.rs"]
+mod tests;

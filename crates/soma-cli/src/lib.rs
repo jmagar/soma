@@ -21,7 +21,7 @@ use soma_contracts::{
 };
 use soma_service::{
     dynamic_provider_registry, ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry,
-    ProviderRequestLimits, ProviderSurface, RegistrySnapshot, SomaClient, SomaService,
+    ProviderRequestLimits, ProviderSurface, SomaClient, SomaService,
 };
 use std::io::{BufRead, IsTerminal, Write};
 
@@ -394,8 +394,8 @@ async fn run_provider_management_command(
     destructive_confirmed: bool,
 ) -> Result<Value> {
     match command {
-        ProviderCommand::Validate => Ok(provider_validation_summary(&registry.snapshot())),
-        ProviderCommand::Inspect => Ok(provider_inspection(&registry.snapshot())),
+        ProviderCommand::Validate => Ok(registry.snapshot().validation_summary()),
+        ProviderCommand::Inspect => Ok(registry.snapshot().inspection_report()),
         ProviderCommand::Test { action, json } => {
             let provider = registry
                 .snapshot()
@@ -428,93 +428,6 @@ async fn run_provider_management_command(
                 }
             }
         }
-    }
-}
-
-fn provider_validation_summary(snapshot: &RegistrySnapshot) -> Value {
-    let actions = snapshot.action_names();
-    json!({
-        "schema_version": 1,
-        "ok": true,
-        "provider_fingerprint": snapshot.fingerprint.clone(),
-        "provider_count": snapshot.catalogs.len(),
-        "action_count": actions.len(),
-        "compiled_validator_count": snapshot.compiled_validator_count,
-        "actions": actions
-    })
-}
-
-fn provider_inspection(snapshot: &RegistrySnapshot) -> Value {
-    let providers = snapshot
-        .catalogs
-        .iter()
-        .map(|catalog| {
-            let kind = catalog.provider.kind.as_str();
-            let tools = catalog
-                .tools
-                .iter()
-                .map(|tool| {
-                    json!({
-                        "name": tool.name.clone(),
-                        "description": tool.description.clone(),
-                        "scope": tool.scope.clone(),
-                        "destructive": tool.destructive,
-                        "requires_admin": tool.requires_admin,
-                        "surfaces": {
-                            "mcp": tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
-                            "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
-                            "cli": tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
-                            "palette": tool.palette.as_ref().map(|palette| palette.enabled).unwrap_or(true)
-                        },
-                        "limits": tool.limits.clone(),
-                        "env": tool.env.clone(),
-                    })
-                })
-                .collect::<Vec<_>>();
-            json!({
-                "name": catalog.provider.name.clone(),
-                "kind": kind,
-                "title": catalog.provider.title.clone(),
-                "enabled": catalog.provider.enabled.unwrap_or(true),
-                "version": catalog.provider.version.clone(),
-                "source": catalog.provider.source.clone(),
-                "declared_capabilities": catalog.capabilities.clone(),
-                "runtime_security": provider_runtime_security(kind),
-                "tools": tools,
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({
-        "schema_version": 1,
-        "provider_fingerprint": snapshot.fingerprint.clone(),
-        "compiled_validator_count": snapshot.compiled_validator_count,
-        "actions": snapshot.action_names(),
-        "providers": providers,
-    })
-}
-
-fn provider_runtime_security(kind: &str) -> Value {
-    match kind {
-        "wasm" => json!({
-            "runtime": "wasmtime",
-            "trust": "sandboxed",
-            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
-        }),
-        "ai-sdk" | "python" | "langchain" | "llamaindex" => json!({
-            "runtime": "sidecar-process",
-            "trust": "trusted-local-code",
-            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
-        }),
-        "openapi" | "mcp" => json!({
-            "runtime": "remote-or-upstream",
-            "trust": "upstream-service",
-            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
-        }),
-        _ => json!({
-            "runtime": "in-process",
-            "trust": "trusted-binary",
-            "capability_enforcement": "registry broker enforces declared host capabilities before dispatch"
-        }),
     }
 }
 

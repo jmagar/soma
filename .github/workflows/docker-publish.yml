@@ -38,8 +38,57 @@ env:
   MCP_REGISTRY_DOMAIN: ${{ vars.MCP_REGISTRY_DOMAIN }}
 
 jobs:
+  validate-release-tag:
+    name: Validate release tag
+    runs-on: [self-hosted, tootie, rmcp-template]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.validate.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${RELEASE_TAG}"
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Docker artifacts must be published from a semver tag like v1.2.3, got ${tag}" >&2
+            exit 1
+          fi
+          git fetch --force --tags origin main
+          tag_commit="$(git rev-parse -q --verify "refs/tags/${tag}^{commit}" || true)"
+          if [[ -z "${tag_commit}" ]]; then
+            echo "Release tag ${tag} does not exist as refs/tags/${tag}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${tag_commit}" origin/main; then
+            echo "Release tag ${tag} is not reachable from origin/main" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          cargo_version="$(sed -nE 's/^version = "([^"]+)"/\1/p' crates/soma/Cargo.toml | head -n 1)"
+          npm_version="$(python3 -c 'import json; print(json.load(open("packages/soma-rmcp/package.json"))["version"])')"
+          if [[ "${cargo_version}" != "${version}" ]]; then
+            echo "crates/soma/Cargo.toml version ${cargo_version} does not match ${tag}" >&2
+            exit 1
+          fi
+          if [[ "${npm_version}" != "${version}" ]]; then
+            echo "packages/soma-rmcp/package.json version ${npm_version} does not match ${tag}" >&2
+            exit 1
+          fi
+          cargo xtask check-version-sync
+          echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+
   docker:
     name: Build & Push Docker image
+    needs: validate-release-tag
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 60
     permissions:
@@ -49,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.1.0
@@ -92,7 +141,7 @@ jobs:
   # ── Trivy vulnerability scan ─────────────────────────────────────────────────
   trivy:
     name: Trivy Vulnerability Scan
-    needs: docker
+    needs: [validate-release-tag, docker]
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     permissions:
@@ -102,7 +151,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Run Trivy
         uses: aquasecurity/trivy-action@76071ef0d7ec797419534a0b350d16c55eb73629 # 0.31.0
@@ -122,8 +171,8 @@ jobs:
 
   registry:
     name: Publish MCP Registry Manifest
-    needs: docker
-    if: ${{ startsWith(github.event.release.tag_name || inputs.tag || github.ref_name, 'v') }}
+    needs: [validate-release-tag, docker]
+    if: ${{ startsWith(needs.validate-release-tag.outputs.release_tag, 'v') }}
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     permissions:
@@ -132,7 +181,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Install mcp-publisher
         run: |
@@ -160,7 +209,12 @@ jobs:
           publisher = data.get("_meta", {}).get("io.modelcontextprotocol.registry/publisher-provided", {})
           distribution = publisher.get("distribution")
           if isinstance(distribution, dict):
-              distribution["ociImage"] = image
+              package_name = distribution.get("nodePackage") or "soma-rmcp"
+              existing_npm = distribution.get("npm")
+              if isinstance(existing_npm, str) and "@" in existing_npm:
+                  package_name = existing_npm.rsplit("@", 1)[0]
+              distribution["npm"] = f"{package_name}@{version}"
+              distribution.pop("ociImage", None)
 
           path.write_text(json.dumps(data, indent=2) + "\n")
           PY

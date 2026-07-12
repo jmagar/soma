@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -48,16 +49,42 @@ impl FileProviderSource {
 
     pub fn fingerprint(&self) -> Result<String, FileProviderLoadError> {
         let mut hasher = Sha256::new();
-        for path in self.provider_paths()? {
+        for path in self.fingerprint_paths()? {
             fingerprint_file(&mut hasher, &self.root, &path)?;
-            if path.extension().and_then(|extension| extension.to_str()) == Some("wasm") {
-                let sidecar = wasm_sidecar_manifest_path(&path);
-                if sidecar.is_file() {
-                    fingerprint_file(&mut hasher, &self.root, &sidecar)?;
+        }
+        Ok(format!("{:x}", hasher.finalize()))
+    }
+
+    fn fingerprint_paths(&self) -> Result<Vec<PathBuf>, FileProviderLoadError> {
+        let provider_paths = self.provider_paths()?;
+        let mut paths = BTreeSet::new();
+        let mut has_python_provider = false;
+
+        for path in &provider_paths {
+            match path.extension().and_then(|extension| extension.to_str()) {
+                Some("wasm") => {
+                    let sidecar = wasm_sidecar_manifest_path(path);
+                    if sidecar.is_file() {
+                        paths.insert(sidecar);
+                    } else {
+                        paths.insert(path.clone());
+                    }
+                }
+                Some("py") => {
+                    has_python_provider = true;
+                    paths.insert(path.clone());
+                }
+                _ => {
+                    paths.insert(path.clone());
                 }
             }
         }
-        Ok(format!("{:x}", hasher.finalize()))
+
+        if has_python_provider {
+            collect_python_dependency_paths(&self.root, &mut paths)?;
+        }
+
+        Ok(paths.into_iter().collect())
     }
 
     fn provider_paths(&self) -> Result<Vec<PathBuf>, FileProviderLoadError> {
@@ -82,6 +109,70 @@ impl FileProviderSource {
         paths.sort();
         Ok(paths)
     }
+}
+
+fn collect_python_dependency_paths(
+    root: &Path,
+    paths: &mut BTreeSet<PathBuf>,
+) -> Result<(), FileProviderLoadError> {
+    if !root.exists() {
+        return Ok(());
+    }
+    collect_python_dependency_paths_inner(root, paths)
+}
+
+fn collect_python_dependency_paths_inner(
+    dir: &Path,
+    paths: &mut BTreeSet<PathBuf>,
+) -> Result<(), FileProviderLoadError> {
+    let entries = fs::read_dir(dir).map_err(|source| FileProviderLoadError {
+        path: dir.to_path_buf(),
+        message: format!("failed to read provider dependency directory: {source}"),
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|source| FileProviderLoadError {
+            path: dir.to_path_buf(),
+            message: format!("failed to read provider dependency directory entry: {source}"),
+        })?;
+        let path = entry.path();
+        if path.is_dir() {
+            if should_scan_dependency_dir(&path) {
+                collect_python_dependency_paths_inner(&path, paths)?;
+            }
+            continue;
+        }
+        if path.is_file() && is_python_dependency_file(&path) {
+            paths.insert(path);
+        }
+    }
+    Ok(())
+}
+
+fn should_scan_dependency_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    !matches!(
+        name,
+        "__pycache__"
+            | ".git"
+            | ".mypy_cache"
+            | ".pytest_cache"
+            | ".ruff_cache"
+            | ".venv"
+            | "venv"
+            | "node_modules"
+            | "target"
+            | "dist"
+            | "build"
+    )
+}
+
+fn is_python_dependency_file(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("py" | "pyi")
+    )
 }
 
 #[derive(Debug)]

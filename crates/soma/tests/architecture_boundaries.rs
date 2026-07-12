@@ -59,6 +59,16 @@ fn cli_shim_does_not_perform_transport_work() {
         !src.contains("reqwest"),
         "cli/lib.rs must not perform transport/HTTP work; it wires the service and dispatches only"
     );
+    for forbidden in [
+        "fn provider_validation_summary",
+        "fn provider_inspection",
+        "fn provider_runtime_security",
+    ] {
+        assert!(
+            !src.contains(forbidden),
+            "cli/lib.rs must not own provider report domain logic ({forbidden}); use soma-service"
+        );
+    }
 }
 
 #[test]

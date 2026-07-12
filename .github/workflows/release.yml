@@ -46,8 +46,57 @@ env:
   RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
 
 jobs:
+  validate-release-tag:
+    name: Validate release tag
+    runs-on: [self-hosted, tootie, rmcp-template]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      release_tag: ${{ steps.validate.outputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${RELEASE_TAG}"
+          if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release artifacts must be published from a semver tag like v1.2.3, got ${tag}" >&2
+            exit 1
+          fi
+          git fetch --force --tags origin main
+          tag_commit="$(git rev-parse -q --verify "refs/tags/${tag}^{commit}" || true)"
+          if [[ -z "${tag_commit}" ]]; then
+            echo "Release tag ${tag} does not exist as refs/tags/${tag}" >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "${tag_commit}" origin/main; then
+            echo "Release tag ${tag} is not reachable from origin/main" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          cargo_version="$(sed -nE 's/^version = "([^"]+)"/\1/p' crates/soma/Cargo.toml | head -n 1)"
+          npm_version="$(python3 -c 'import json; print(json.load(open("packages/soma-rmcp/package.json"))["version"])')"
+          if [[ "${cargo_version}" != "${version}" ]]; then
+            echo "crates/soma/Cargo.toml version ${cargo_version} does not match ${tag}" >&2
+            exit 1
+          fi
+          if [[ "${npm_version}" != "${version}" ]]; then
+            echo "packages/soma-rmcp/package.json version ${npm_version} does not match ${tag}" >&2
+            exit 1
+          fi
+          cargo xtask check-version-sync
+          echo "release_tag=${tag}" >> "$GITHUB_OUTPUT"
+
   frontend-assets:
     name: Frontend Assets
+    needs: validate-release-tag
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     defaults:
@@ -56,7 +105,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Set up Node
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -83,7 +132,7 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: [self-hosted, tootie, rmcp-template]
-    needs: frontend-assets
+    needs: [validate-release-tag, frontend-assets]
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -91,7 +140,7 @@ jobs:
         include:
           # linux/amd64 — most common deployment target
           - target: x86_64-unknown-linux-gnu
-            arch: x86_64
+            arch: linux-x86_64
             ext: ""
           # windows/amd64 — cross-compiled via MinGW
           - target: x86_64-pc-windows-gnu
@@ -101,7 +150,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Download web export
         uses: actions/download-artifact@v8
@@ -174,7 +223,7 @@ jobs:
   # in the Claude plugin install flow. Audit before enabling in production repos.
   lfs-commit:
     name: Commit binaries to bin/ (Git LFS)
-    needs: build
+    needs: [validate-release-tag, build]
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     permissions:
@@ -183,10 +232,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: main
+          fetch-depth: 0
           lfs: true
           # Use a deploy key or token with write access to push the commit.
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fast-forward main
+        run: |
+          git fetch --force --tags origin main
+          git merge --ff-only origin/main
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -202,7 +257,7 @@ jobs:
 
           # Each artifact dir is named <binary>-<arch> and contains one tarball.
           # merge-multiple flattens all artifact contents into artifacts/ directly.
-          tar -xz -C bin -f artifacts/${BIN}-x86_64.tar.gz
+          tar -xz -C bin -f artifacts/${BIN}-linux-x86_64.tar.gz
           mv bin/${BIN} bin/${BIN}-linux-amd64
 
           tar -xz -C bin -f artifacts/${BIN}-windows-x86_64.tar.gz
@@ -218,13 +273,17 @@ jobs:
       - name: Commit LFS binaries
         run: |
           git add bin/
-          git diff --staged --quiet || \
-            git commit -m "chore: release binaries ${{ github.ref_name }}"
-          git push origin HEAD:main
+          if git diff --staged --quiet; then
+            echo "No binary pointer changes to commit for ${{ needs.validate-release-tag.outputs.release_tag }}"
+          else
+            git commit -m "chore: release binaries ${{ needs.validate-release-tag.outputs.release_tag }}"
+            git push origin HEAD:main
+          fi
 
   # ── Publish npm launcher package ────────────────────────────────────────────
   npm:
     name: Publish soma-rmcp to npm
+    needs: [validate-release-tag, release]
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     permissions:
@@ -237,7 +296,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
           persist-credentials: false
 
       - name: Set up Node
@@ -281,7 +340,7 @@ jobs:
   # ── Create GitHub Release ─────────────────────────────────────────────────────
   release:
     name: Create GitHub Release
-    needs: [build, lfs-commit]
+    needs: [validate-release-tag, build, lfs-commit]
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     permissions:
@@ -290,7 +349,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -307,6 +366,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ needs.validate-release-tag.outputs.release_tag }}
           fail_on_unmatched_files: true
           files: artifacts/*
