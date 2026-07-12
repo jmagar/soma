@@ -320,11 +320,18 @@ fn rmcp_tool_from_json(value: Value) -> Result<Tool, ErrorData> {
         .and_then(Value::as_object)
         .cloned()
         .ok_or_else(|| ErrorData::internal_error("tool definition missing inputSchema", None))?;
-    Ok(Tool::new_with_raw(
+    let mut tool = Tool::new_with_raw(
         Cow::Owned(name.to_string()),
         description,
         Arc::new(input_schema),
-    ))
+    );
+    if let Some(output_schema) = value.get("outputSchema") {
+        let output_schema = output_schema.as_object().cloned().ok_or_else(|| {
+            ErrorData::internal_error("tool outputSchema must be an object", None)
+        })?;
+        tool = tool.with_raw_output_schema(Arc::new(output_schema));
+    }
+    Ok(tool)
 }
 
 fn tool_error_result(value: Value) -> Result<CallToolResult, ErrorData> {

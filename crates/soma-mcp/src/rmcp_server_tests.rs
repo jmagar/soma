@@ -6,7 +6,7 @@ use soma_contracts::{
 };
 use soma_service::classify_service_error;
 
-use super::{tool_error_result, unknown_tool_error};
+use super::{rmcp_tool_from_json, tool_error_result, unknown_tool_error};
 
 #[test]
 fn validation_errors_become_structured_tool_errors() {
@@ -114,4 +114,34 @@ fn execution_errors_do_not_expose_raw_error_text() {
         })
     );
     assert!(!payload.to_string().contains("secret-api-key"));
+}
+
+#[test]
+fn rmcp_tool_conversion_preserves_output_schema() {
+    let tool = rmcp_tool_from_json(json!({
+        "name": "soma",
+        "description": "Dispatch Soma actions.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": { "type": "string" }
+            },
+            "required": ["action"]
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "status": { "type": "string" }
+            }
+        }
+    }))
+    .expect("tool definition should convert");
+
+    let schema = tool
+        .output_schema
+        .as_ref()
+        .expect("outputSchema should be copied onto rmcp Tool");
+    assert_eq!(schema["type"], "object");
+    assert_eq!(schema["properties"]["status"]["type"], "string");
 }

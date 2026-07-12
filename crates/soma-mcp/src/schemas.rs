@@ -74,7 +74,8 @@ pub(super) fn tool_definitions_for_catalogs(catalogs: &[ProviderCatalog]) -> Vec
             "required": ["action"],
             "additionalProperties": false,
             "allOf": all_of
-        }
+        },
+        "outputSchema": structured_output_schema(catalogs)
     })]
 }
 
@@ -89,9 +90,32 @@ fn action_metadata(catalogs: &[ProviderCatalog]) -> Vec<Value> {
                 "description": tool.description,
                 "destructive": tool.destructive,
                 "requires_admin": tool.requires_admin,
+                "output_schema": tool.output_schema.clone().unwrap_or(Value::Null),
             })
         })
         .collect()
+}
+
+fn structured_output_schema(catalogs: &[ProviderCatalog]) -> Value {
+    let action_output_schemas = catalogs
+        .iter()
+        .flat_map(|catalog| catalog.tools.iter())
+        .filter_map(|tool| {
+            tool.output_schema.as_ref().map(|schema| {
+                json!({
+                    "action": tool.name,
+                    "outputSchema": schema,
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+
+    json!({
+        "type": "object",
+        "description": "Structured JSON object returned in CallToolResult.structuredContent. Exact fields vary by action; inspect x-soma-action-output-schemas and x-soma-action-metadata for per-action contracts.",
+        "additionalProperties": true,
+        "x-soma-action-output-schemas": action_output_schemas,
+    })
 }
 
 fn build_input_properties(catalogs: &[ProviderCatalog]) -> Map<String, Value> {

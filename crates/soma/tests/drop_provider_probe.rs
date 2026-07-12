@@ -23,10 +23,11 @@ async fn stdio_client_in(
     let (transport, _stderr) = TokioChildProcess::builder(Command::new(binary).configure(|cmd| {
         cmd.arg("mcp")
             .current_dir(cwd)
+            .env("HOME", cwd)
             .env("RUST_LOG", "warn")
-            .env_remove("SOMA_API_URL")
-            .env_remove("SOMA_API_KEY")
-            .env_remove("SOMA_MCP_TOKEN")
+            .env("SOMA_API_URL", "")
+            .env("SOMA_API_KEY", "")
+            .env("SOMA_MCP_TOKEN", "")
             .env_remove("SOMA_PROVIDER_DIR");
     }))
     .stderr(Stdio::piped())
@@ -191,9 +192,10 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
     let cli_output = Command::new(env!("CARGO_BIN_EXE_soma"))
         .arg("live_ts_probe")
         .current_dir(temp.path())
+        .env("HOME", temp.path())
         .env("SOMA_API_URL", "")
-        .env_remove("SOMA_API_KEY")
-        .env_remove("SOMA_MCP_TOKEN")
+        .env("SOMA_API_KEY", "")
+        .env("SOMA_MCP_TOKEN", "")
         .output()
         .await?;
     assert!(
@@ -267,8 +269,8 @@ impl HttpServerGuard {
             .env("SOMA_MCP_PORT", port.to_string())
             .env("SOMA_MCP_NO_AUTH", "true")
             .env("SOMA_API_URL", "")
-            .env_remove("SOMA_API_KEY")
-            .env_remove("SOMA_MCP_TOKEN")
+            .env("SOMA_API_KEY", "")
+            .env("SOMA_MCP_TOKEN", "")
             .env_remove("SOMA_PROVIDER_DIR")
             .stdout(Stdio::null())
             .stderr(Stdio::piped())

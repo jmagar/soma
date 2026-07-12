@@ -11,22 +11,29 @@ use tokio::{io::AsyncReadExt, process::Command};
 async fn stdio_client() -> anyhow::Result<(
     rmcp::service::RunningService<rmcp::RoleClient, ()>,
     Option<tokio::process::ChildStderr>,
+    tempfile::TempDir,
 )> {
     let binary = env!("CARGO_BIN_EXE_soma");
+    let temp = tempfile::tempdir()?;
     let (transport, stderr) = TokioChildProcess::builder(Command::new(binary).configure(|cmd| {
         cmd.arg("mcp")
+            .current_dir(temp.path())
+            .env("HOME", temp.path())
             .env("RUST_LOG", "warn")
-            .env_remove("SOMA_API_URL")
-            .env_remove("SOMA_API_KEY")
-            .env_remove("SOMA_MCP_TOKEN");
+            .env("SOMA_API_URL", "")
+            .env("SOMA_API_KEY", "")
+            .env("SOMA_MCP_TOKEN", "");
     }))
     .stderr(Stdio::piped())
     .spawn()?;
     let service = ().serve(transport).await?;
-    Ok((service, stderr))
+    Ok((service, stderr, temp))
 }
 
-fn text_content_json(result: &rmcp::model::CallToolResult) -> serde_json::Value {
+fn structured_result_json(result: &rmcp::model::CallToolResult) -> serde_json::Value {
+    if let Some(value) = result.structured_content.clone() {
+        return value;
+    }
     let value = serde_json::to_value(result).expect("tool result should serialize");
     let text = value["content"][0]["text"]
         .as_str()
@@ -36,11 +43,18 @@ fn text_content_json(result: &rmcp::model::CallToolResult) -> serde_json::Value 
 
 #[tokio::test]
 async fn stdio_child_process_lists_tools_and_calls_actions() {
-    let (service, stderr) = stdio_client().await.unwrap();
+    let (service, stderr, _temp) = stdio_client().await.unwrap();
 
     let tools = service.list_tools(Default::default()).await.unwrap();
     let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
     assert_eq!(names, vec!["soma"]);
+    assert_eq!(
+        tools.tools[0]
+            .output_schema
+            .as_ref()
+            .expect("soma should advertise structured output")["type"],
+        "object"
+    );
 
     let status = service
         .call_tool(
@@ -49,8 +63,8 @@ async fn stdio_child_process_lists_tools_and_calls_actions() {
         )
         .await
         .unwrap();
-    let status = text_content_json(&status);
-    assert_eq!(status["status"], "ok");
+    let status = structured_result_json(&status);
+    assert_eq!(status["status"], "ok", "status payload was {status}");
 
     let echo = service
         .call_tool(
@@ -63,7 +77,7 @@ async fn stdio_child_process_lists_tools_and_calls_actions() {
         )
         .await
         .unwrap();
-    let echo = text_content_json(&echo);
+    let echo = structured_result_json(&echo);
     assert_eq!(echo["echo"], "stdio works");
 
     service.cancel().await.unwrap();

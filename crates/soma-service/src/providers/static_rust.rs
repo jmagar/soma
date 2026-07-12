@@ -111,7 +111,7 @@ fn static_tool(spec: &soma_contracts::actions::ActionSpec) -> ProviderTool {
         description: spec.description.to_owned(),
         title: None,
         input_schema: action_input_schema(spec),
-        output_schema: None,
+        output_schema: Some(action_output_schema(spec)),
         scope: spec.required_scope.map(ToOwned::to_owned),
         destructive: spec.destructive,
         requires_admin: spec.requires_admin,
@@ -179,6 +179,104 @@ fn static_tool(spec: &soma_contracts::actions::ActionSpec) -> ProviderTool {
             } else {
                 Value::Null
             },
+        }),
+    }
+}
+
+fn action_output_schema(spec: &soma_contracts::actions::ActionSpec) -> Value {
+    match spec.name {
+        "greet" => json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["greeting", "target", "server"],
+            "properties": {
+                "greeting": { "type": "string" },
+                "target": { "type": "string" },
+                "server": { "type": "string" }
+            }
+        }),
+        "echo" => json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["echo"],
+            "properties": {
+                "echo": { "type": "string" }
+            }
+        }),
+        "status" => json!({
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["status"],
+            "properties": {
+                "status": { "type": "string" },
+                "note": { "type": "string" },
+                "warnings": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                }
+            }
+        }),
+        "elicit_name" => json!({
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "greeting": { "type": "string" },
+                "name": { "type": "string" },
+                "message": { "type": "string" },
+                "note": { "type": "string" },
+                "hint": { "type": "string" },
+                "fallback_greeting": { "type": "string" }
+            }
+        }),
+        "scaffold_intent" => json!({
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "kind": { "type": "string" },
+                "schema_version": { "type": "integer" },
+                "status": { "type": "string" },
+                "server_category": { "type": "string" },
+                "required_surfaces": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "project": { "type": "object" },
+                "upstream": { "type": "object" },
+                "runtime": { "type": "object" },
+                "mcp_primitives": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "handoff": { "type": "object" },
+                "policy": { "type": "object" }
+            }
+        }),
+        "help" => json!({
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["actions", "mcp_only_actions", "catalog", "preferred_rest_style", "usage", "examples"],
+            "properties": {
+                "actions": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "mcp_only_actions": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "catalog": {
+                    "type": "array",
+                    "items": { "type": "object" }
+                },
+                "preferred_rest_style": { "type": "string" },
+                "usage": { "type": "string" },
+                "examples": { "type": "object" }
+            }
+        }),
+        _ => json!({
+            "type": "object",
+            "description": format!("Structured result for {}.", spec.returns),
+            "additionalProperties": true
         }),
     }
 }

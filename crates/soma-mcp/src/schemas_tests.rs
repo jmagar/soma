@@ -1,6 +1,10 @@
-use soma_contracts::actions::{action_names, action_spec};
+use serde_json::json;
+use soma_contracts::{
+    actions::{action_names, action_spec},
+    providers::{ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool},
+};
 
-use super::tool_definitions;
+use super::{tool_definitions, tool_definitions_for_catalogs};
 
 #[test]
 fn schema_action_enum_comes_from_action_metadata() {
@@ -35,6 +39,7 @@ fn schema_advertises_action_costs_and_agent_guidance() {
         .as_array()
         .expect("first_pass should be an array")
         .contains(&serde_json::json!("status")));
+    assert_eq!(status["output_schema"]["type"], "object");
 }
 
 #[test]
@@ -101,4 +106,86 @@ fn schema_mcp_only_condition_is_derived_from_action_metadata() {
 fn schema_disallows_unknown_top_level_properties() {
     let tools = tool_definitions();
     assert_eq!(tools[0]["inputSchema"]["additionalProperties"], false);
+}
+
+#[test]
+fn schema_advertises_structured_output_contract() {
+    let tools = tool_definitions();
+    let output_schema = &tools[0]["outputSchema"];
+
+    assert_eq!(output_schema["type"], "object");
+    assert_eq!(output_schema["additionalProperties"], true);
+    assert!(output_schema["description"]
+        .as_str()
+        .expect("output schema should describe structured content")
+        .contains("structuredContent"));
+}
+
+#[test]
+fn schema_preserves_provider_action_output_schemas() {
+    let output_schema = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["forecast"],
+        "properties": {
+            "forecast": { "type": "string" }
+        }
+    });
+    let catalog = ProviderManifest {
+        schema_version: 1,
+        provider: ProviderIdentity {
+            name: "dynamic".to_owned(),
+            kind: ProviderKind::StaticRust,
+            title: None,
+            description: None,
+            homepage: None,
+            source: None,
+            version: None,
+            enabled: Some(true),
+        },
+        tools: vec![ProviderTool {
+            name: "weather".to_owned(),
+            description: "Fetch weather".to_owned(),
+            title: None,
+            input_schema: json!({
+                "type": "object",
+                "properties": { "city": { "type": "string" } }
+            }),
+            output_schema: Some(output_schema.clone()),
+            scope: Some("soma:read".to_owned()),
+            destructive: false,
+            requires_admin: false,
+            cost: Some("cheap".to_owned()),
+            env: Vec::new(),
+            limits: None,
+            mcp: None,
+            rest: None,
+            cli: None,
+            palette: None,
+            ui: None,
+            examples: Vec::new(),
+            meta: json!({}),
+        }],
+        prompts: Vec::new(),
+        resources: Vec::new(),
+        tasks: Vec::new(),
+        elicitation: Vec::new(),
+        env: Vec::new(),
+        capabilities: Default::default(),
+        docs: None,
+        plugin: None,
+        ui: None,
+        meta: json!({}),
+    };
+    let tools = tool_definitions_for_catalogs(&[catalog]);
+    let action_outputs = tools[0]["outputSchema"]["x-soma-action-output-schemas"]
+        .as_array()
+        .expect("aggregate output schema should include per-action schemas");
+    let metadata = tools[0]["x-soma-action-metadata"]
+        .as_array()
+        .expect("action metadata should be present");
+
+    assert_eq!(action_outputs[0]["action"], "weather");
+    assert_eq!(action_outputs[0]["outputSchema"], output_schema);
+    assert_eq!(metadata[0]["output_schema"], output_schema);
 }
