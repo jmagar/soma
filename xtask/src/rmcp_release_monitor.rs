@@ -885,7 +885,12 @@ fn scan_repo_impacts(root: &Path, terms: &BTreeSet<String>) -> Result<Vec<RepoIm
         if entry.file_type().is_dir() {
             continue;
         }
-        if !is_repo_scan_file(path) || is_skipped_repo_path(path) {
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if !is_repo_scan_file(path) || is_skipped_repo_path(&relative) {
             continue;
         }
         let text = match fs::read_to_string(path) {
@@ -901,11 +906,6 @@ fn scan_repo_impacts(root: &Path, terms: &BTreeSet<String>) -> Result<Vec<RepoIm
         if matched.is_empty() {
             continue;
         }
-        let relative = path
-            .strip_prefix(root)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .replace('\\', "/");
         impacts.push(RepoImpact {
             path: relative,
             identifiers: matched,
@@ -931,18 +931,21 @@ fn is_repo_scan_file(path: &Path) -> bool {
     )
 }
 
-fn is_skipped_repo_path(path: &Path) -> bool {
-    let text = path.to_string_lossy().replace('\\', "/");
+fn is_skipped_repo_path(text: &str) -> bool {
     [
-        "/.git/",
-        "/target/",
-        "/node_modules/",
-        "/dist/",
-        "/.next/",
-        "/docs/references/mcp/schema/",
+        ".git/",
+        "target/",
+        "node_modules/",
+        "dist/",
+        ".next/",
+        "docs/references/mcp/schema/",
     ]
     .iter()
-    .any(|needle| text.contains(needle))
+    .any(|needle| {
+        text == needle.trim_end_matches('/')
+            || text.starts_with(needle)
+            || text.contains(&format!("/{needle}"))
+    }) || text == "Cargo.lock"
         || text.ends_with("/Cargo.lock")
 }
 
