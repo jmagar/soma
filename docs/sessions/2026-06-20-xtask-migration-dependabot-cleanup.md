@@ -1,8 +1,8 @@
 # Session: xtask migration and Dependabot cleanup
 
 Date: 2026-06-20
-Repo: `/home/jmagar/workspace/rmcp-template`
-Remote: `git@github.com:jmagar/rtemplate-mcp.git`
+Repo: `/home/jmagar/workspace/soma`
+Remote: `git@github.com:jmagar/soma-mcp.git`
 Branch: `main`
 Session id: `8dd2c014-bb7a-46f4-941d-3d4510a9f94d`
 
@@ -46,7 +46,7 @@ GitHub Actions were not code-green at the end because workflow jobs were blocked
 GitHub reported four existing Dependabot vulnerabilities for `vite` in:
 
 - `apps/web/pnpm-lock.yaml`
-- `crates/rtemplate-web/assets/source/pnpm-lock.yaml`
+- `crates/soma-web/assets/source/pnpm-lock.yaml`
 
 Both high and moderate alerts were in the vulnerable range `>=8.0.0, <=8.0.15`. The fix pinned patched `vite` releases and synced the bundled web source. A later Dependabot API check returned zero open alerts.
 
@@ -80,7 +80,7 @@ One combined command initially ran `cargo deny check` from `apps/web`, where no 
 
 ## Beads
 
-Created, claimed, and closed `rmcp-template-6zz`:
+Created, claimed, and closed `soma-6zz`:
 
 - Title: `Address stale Dependabot PR CI failures`
 - Created: `2026-06-19T22:26:13Z`

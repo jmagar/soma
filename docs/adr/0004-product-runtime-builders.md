@@ -2,7 +2,7 @@
 title: "ADR 0004: Compose products through runtime builders"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

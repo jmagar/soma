@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Path-aware local pre-push checks for rmcp-template."""
+"""Path-aware local pre-push checks for soma."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def git_ref_exists(ref: str) -> bool:
 
 
 def resolve_base() -> str:
-    override = os.environ.get("RTEMPLATE_PRE_PUSH_BASE")
+    override = os.environ.get("SOMA_PRE_PUSH_BASE")
     if override:
         return override
     for candidate in ("@{upstream}", "origin/main"):
@@ -87,7 +87,7 @@ def command_plan(paths: list[str], categories: dict[str, bool], full: bool) -> l
         if command_exists("actionlint"):
             plan.append(("workflow-lint", "actionlint .github/workflows/*.yml"))
 
-    if categories["template"]:
+    if categories["soma"]:
         plan.extend(
             [
                 ("coupled-files", "cargo xtask check-coupled-files origin/main HEAD"),
@@ -112,7 +112,7 @@ def command_plan(paths: list[str], categories: dict[str, bool], full: bool) -> l
         plan.append(("release-versions", "cargo xtask check-release-versions --base origin/main --head HEAD --mode pr"))
 
     if full:
-        plan.append(("template-features", "cargo xtask test-template-features"))
+        plan.append(("soma-features", "cargo xtask test-soma-features"))
 
     return dedupe_plan(plan)
 
@@ -149,14 +149,14 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    full = truthy(os.environ.get("RTEMPLATE_FULL_PRE_PUSH"))
+    full = truthy(os.environ.get("SOMA_FULL_PRE_PUSH"))
     base = resolve_base()
     paths = changed_files(base)
     if paths is None:
         if not full:
             print(
                 "pre-push: could not determine changed files; running minimal checks only. "
-                "Set RTEMPLATE_FULL_PRE_PUSH=1 for full local validation.",
+                "Set SOMA_FULL_PRE_PUSH=1 for full local validation.",
                 file=sys.stderr,
             )
         paths = []

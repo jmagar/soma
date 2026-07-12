@@ -6,20 +6,20 @@ Keep MCP, CLI, REST, and web surfaces thin while letting new business actions li
 
 ## Recommended Shape
 
-Business logic should live in `crates/rtemplate-service`.
+Business logic should live in `crates/soma-service`.
 
 The stable flow should be:
 
 ```text
 MCP / CLI / REST / Web
   -> surface adapter
-  -> ExampleAction
-  -> rtemplate_service::dispatch_action(...)
-  -> ExampleService method
+  -> SomaAction
+  -> soma_service::dispatch_action(...)
+  -> SomaService method
   -> domain modules or standalone crates
 ```
 
-`ExampleService` in `crates/rtemplate-service/src/app.rs` should be the shared application facade. It can call local modules, upstream clients, repositories, or standalone crates such as auth, codemode, gateway, and traces. Surface crates should parse inputs, call the service, and format outputs.
+`SomaService` in `crates/soma-service/src/app.rs` should be the shared application facade. It can call local modules, upstream clients, repositories, or standalone crates such as auth, codemode, gateway, and traces. Surface crates should parse inputs, call the service, and format outputs.
 
 ## MCP Surface
 
@@ -42,14 +42,14 @@ GET  /v1/help
 Avoid:
 
 ```text
-POST /v1/example
+the retired REST action-envelope route
 ```
 
 Direct routes give better OpenAPI, clearer auth docs, easier client SDK generation, simpler HTTP debugging, and more natural integration for non-agent consumers.
 
 ## Action Contract
 
-Use `crates/rtemplate-contracts/src/actions.rs` as the canonical action contract:
+Use `crates/soma-contracts/src/actions.rs` as the canonical action contract:
 
 - action enum
 - transport availability
@@ -63,7 +63,7 @@ Adding a business action should require one canonical action definition and one 
 
 ## Automation Opportunities
 
-The template can make action additions less repetitive by generating or deriving:
+Soma can make action additions less repetitive by generating or deriving:
 
 - MCP tool schema entries from `ACTION_SPECS`
 - CLI parser coverage from `CliSpec`
@@ -71,13 +71,13 @@ The template can make action additions less repetitive by generating or deriving
 - OpenAPI route docs from the action contract
 - parity tests that fail when an action is missing from a surface
 
-Direct REST handlers may still stay explicit. That preserves typed request structs and clean OpenAPI while still routing through the same `ExampleAction` and `dispatch_action` path.
+Direct REST handlers may still stay explicit. That preserves typed request structs and clean OpenAPI while still routing through the same `SomaAction` and `dispatch_action` path.
 
 ## Suggested Long-Term Improvement
 
 Introduce a small action-definition macro or builder that declares each action once and generates:
 
-- `ExampleAction`
+- `SomaAction`
 - `ACTION_SPECS`
 - MCP argument parsing/schema
 - CLI parser metadata
@@ -89,8 +89,8 @@ Keep `execute_service_action` explicit:
 
 ```rust
 match action {
-    ExampleAction::Echo { message } => service.echo(message).await,
-    ExampleAction::Status => service.status().await,
+    SomaAction::Echo { message } => service.echo(message).await,
+    SomaAction::Status => service.status().await,
     // ...
 }
 ```

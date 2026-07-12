@@ -2,18 +2,18 @@
 title: "Philosophy"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-05-15"
 ---
 
 # Philosophy
 
-`rmcp-template` exists to make new MCP servers safe, boring, and easy for agents to operate.
+`soma` exists to make new MCP servers safe, boring, and easy for agents to operate.
 
 ## Boring by design
 
@@ -23,11 +23,11 @@ last_reviewed: "2026-05-15"
 - Clear layering between client, service, and transport shims.
 - Repeatable scripts and release gates.
 
-New servers from this template should be easy to understand, audit, and extend — not clever.
+New servers from Soma should be easy to understand, audit, and extend — not clever.
 
 ## Thin shims, rich service layer
 
-MCP, REST, and CLI code should parse inputs and delegate. Validation, transformation, and business decisions belong in `ExampleService`:
+MCP, REST, and CLI code should parse inputs and delegate. Validation, transformation, and business decisions belong in `SomaService`:
 
 ```
 MCP shim   → parse JSON args     → service.method()  → return Value
@@ -40,7 +40,7 @@ Zero business logic in shims. If you're writing validation in `mcp/tools.rs`, mo
 ## Secure defaults
 
 - `.env` is ignored and blocked from commits by `scripts/block-env-commits.sh`.
-- Non-loopback HTTP requires auth unless explicitly behind a trusted gateway (`RTEMPLATE_NOAUTH=true`).
+- Non-loopback HTTP requires auth unless explicitly behind a trusted gateway (`SOMA_NOAUTH=true`).
 - Secrets in plugin settings must be marked `sensitive: true`.
 - Plugin manifests do not carry version fields — marketplace versioning comes from git SHA/tags.
 - Never hard-code tokens in unit files or documentation.
@@ -78,7 +78,7 @@ Operators and agents should never have to guess what the server is doing.
 
 ## Surface parity
 
-Every business action reachable from MCP must also be reachable from the CLI. The service layer is called identically from both surfaces — no logic is duplicated, no behavior diverges. Because both shims call the same `ExampleService` methods, parity is automatic when the shims are complete.
+Every business action reachable from MCP must also be reachable from the CLI. The service layer is called identically from both surfaces — no logic is duplicated, no behavior diverges. Because both shims call the same `SomaService` methods, parity is automatic when the shims are complete.
 
 Allowed exceptions — documented in the parity table in `CLAUDE.md`:
 - MCP-only protocol interactions (elicitation, resources, prompts) have no CLI equivalent by design.

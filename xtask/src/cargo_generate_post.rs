@@ -141,12 +141,12 @@ fn ensure_unprocessed_template_root(root: &Path) -> Result<()> {
     for relative in [
         "Cargo.toml",
         ".cargo-generate-values.toml",
-        "crates/rmcp-template/Cargo.toml",
+        "crates/soma/Cargo.toml",
     ] {
         let path = root.join(relative);
         if !path.exists() {
             bail!(
-                "generated-root does not look like an unprocessed rmcp-template output; missing {}",
+                "generated-root does not look like an unprocessed soma output; missing {}",
                 path.display()
             );
         }
@@ -294,94 +294,69 @@ fn cargo_feature_array(features: &[String]) -> String {
 fn replacements(values: &Values) -> Vec<(String, String)> {
     vec![
         (
-            "https://github.com/your-org/rtemplate-mcp".into(),
+            "https://github.com/your-org/soma-mcp".into(),
             values.github_url.clone(),
         ),
         (
-            "https://github.com/jmagar/rmcp-template".into(),
+            "https://github.com/jmagar/soma".into(),
             values.github_url.clone(),
         ),
         (
-            "https://github.com/jmagar/rtemplate-mcp".into(),
+            "https://github.com/jmagar/soma-mcp".into(),
             values.github_url.clone(),
         ),
         (
-            "github.com:jmagar/rtemplate-mcp.git".into(),
+            "github.com:jmagar/soma-mcp.git".into(),
             values.github_ssh.clone(),
         ),
-        ("jmagar/rmcp-template".into(), values.github_slug.clone()),
-        ("jmagar/rtemplate-mcp".into(), values.github_slug.clone()),
+        ("jmagar/soma".into(), values.github_slug.clone()),
+        ("jmagar/soma-mcp".into(), values.github_slug.clone()),
         (
-            "\"name\": \"rtemplate-mcp\"".into(),
+            "\"name\": \"soma-mcp\"".into(),
             format!("\"name\": \"{}\"", values.crate_name),
         ),
-        ("rtemplate-server".into(), values.server_binary_name.clone()),
+        ("soma-server".into(), values.server_binary_name.clone()),
         (
             "default = [\"full\"]".into(),
             format!("default = [{}]", values.default_feature_array),
         ),
-        ("rmcp_template".into(), values.crate_name_snake.clone()),
+        ("soma".into(), values.crate_name_snake.clone()),
+        ("soma_mcp".into(), values.mcp_surface_crate_snake.clone()),
+        ("soma-mcp".into(), values.mcp_surface_crate.clone()),
+        ("soma_".into(), format!("{}_", values.crate_prefix_snake)),
+        ("soma-".into(), format!("{}-", values.crate_prefix)),
+        ("soma".into(), values.binary_name.clone()),
+        ("soma".into(), values.crate_name.clone()),
+        ("SOMA".into(), values.env_prefix.clone()),
         (
-            "rtemplate_mcp".into(),
-            values.mcp_surface_crate_snake.clone(),
-        ),
-        ("rtemplate-mcp".into(), values.mcp_surface_crate.clone()),
-        (
-            "rtemplate_".into(),
-            format!("{}_", values.crate_prefix_snake),
-        ),
-        ("rtemplate-".into(), format!("{}-", values.crate_prefix)),
-        ("rtemplate".into(), values.binary_name.clone()),
-        ("rmcp-template".into(), values.crate_name.clone()),
-        ("RTEMPLATE".into(), values.env_prefix.clone()),
-        (
-            "ExampleRmcpServer".into(),
+            "SomaRmcpServer".into(),
             format!("{}RmcpServer", values.type_prefix),
         ),
         (
-            "ExampleService".into(),
+            "SomaService".into(),
             format!("{}Service", values.type_prefix),
         ),
+        ("SomaClient".into(), format!("{}Client", values.type_prefix)),
+        ("SomaConfig".into(), format!("{}Config", values.type_prefix)),
+        ("SomaAction".into(), format!("{}Action", values.type_prefix)),
+        ("soma-server".into(), values.server_binary_name.clone()),
         (
-            "ExampleClient".into(),
-            format!("{}Client", values.type_prefix),
-        ),
-        (
-            "ExampleConfig".into(),
-            format!("{}Config", values.type_prefix),
-        ),
-        (
-            "ExampleAction".into(),
-            format!("{}Action", values.type_prefix),
-        ),
-        ("example-server".into(), values.server_binary_name.clone()),
-        (
-            "crates/rmcp-template/src/bin/example.rs".into(),
+            "crates/soma/src/bin/soma.rs".into(),
             format!(
                 "crates/{}/src/bin/{}.rs",
                 values.crate_name, values.binary_name
             ),
         ),
+        ("soma:read".into(), format!("{}:read", values.scope_prefix)),
         (
-            "example_mcp_session".into(),
-            format!("{}_mcp_session", values.service_slug),
-        ),
-        (
-            "example:read".into(),
-            format!("{}:read", values.scope_prefix),
-        ),
-        (
-            "example:write".into(),
+            "soma:write".into(),
             format!("{}:write", values.scope_prefix),
         ),
         (
-            "example:__deny__".into(),
+            "soma:__deny__".into(),
             format!("{}:__deny__", values.scope_prefix),
         ),
-        ("example_mcp".into(), format!("{}_mcp", values.service_slug)),
-        ("example-mcp".into(), format!("{}-mcp", values.service_slug)),
-        ("example".into(), values.service_slug.clone()),
-        ("Example".into(), values.type_prefix.clone()),
+        ("soma".into(), values.service_slug.clone()),
         ("40060".into(), values.default_port.clone()),
         ("40000".into(), values.default_port.clone()),
         ("MyService".into(), values.type_prefix.clone()),
@@ -432,11 +407,7 @@ fn rename_paths(root: &Path, values: &Values) -> Result<()> {
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let new_name = name
-            .replace("rtemplate-mcp", &values.mcp_surface_crate)
-            .replace("rtemplate", &values.crate_prefix)
-            .replace("rmcp-template", &values.crate_name)
-            .replace("example", &values.service_slug);
+        let new_name = rename_path_segment(path, values);
         if new_name != name {
             renames.push((path.to_path_buf(), path.with_file_name(new_name)));
         }
@@ -452,11 +423,45 @@ fn rename_paths(root: &Path, values: &Values) -> Result<()> {
     Ok(())
 }
 
+fn rename_path_segment(path: &Path, values: &Values) -> String {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return path.display().to_string();
+    };
+    match name {
+        "soma" if path_parent_name(path).is_some_and(|parent| parent == "plugins") => {
+            values.binary_name.clone()
+        }
+        "soma" if path_parent_name(path).is_some_and(|parent| parent == "skills") => {
+            values.binary_name.clone()
+        }
+        "soma" => values.crate_name.clone(),
+        "soma.rs" => format!("{}.rs", values.binary_name),
+        "soma-server" => values.server_binary_name.clone(),
+        "soma-rmcp" => values.crate_name.clone(),
+        "soma-rmcp.js" => format!("{}.js", values.crate_name),
+        "soma-mcp" => values.mcp_surface_crate.clone(),
+        "soma_mcp" => values.mcp_surface_crate_snake.clone(),
+        _ if name.starts_with("soma-") => {
+            format!("{}-{}", values.crate_prefix, &name["soma-".len()..])
+        }
+        _ if name.starts_with("soma_") => {
+            format!("{}_{}", values.crate_prefix_snake, &name["soma_".len()..])
+        }
+        _ => name.to_owned(),
+    }
+}
+
+fn path_parent_name(path: &Path) -> Option<&str> {
+    path.parent()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+}
+
 fn cleanup_template_files(root: &Path) -> Result<()> {
     for relative in [
         ".cargo-generate-values.toml",
         "cargo-generate.toml",
-        "template",
+        "scaffold",
         "docs/CARGO_GENERATE.md",
     ] {
         let path = root.join(relative);
@@ -567,6 +572,79 @@ fn should_rewrite(path: &Path) -> bool {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    fn test_values() -> Values {
+        Values {
+            crate_name: "myservice-mcp".to_owned(),
+            crate_name_snake: "myservice_mcp".to_owned(),
+            crate_prefix: "myservice".to_owned(),
+            crate_prefix_snake: "myservice".to_owned(),
+            binary_name: "myservice".to_owned(),
+            server_binary_name: "myservice-server".to_owned(),
+            service_slug: "myservice".to_owned(),
+            type_prefix: "MyService".to_owned(),
+            env_prefix: "MYSERVICE".to_owned(),
+            scope_prefix: "myservice".to_owned(),
+            default_port: "41234".to_owned(),
+            default_feature_array: "\"full\"".to_owned(),
+            github_slug: "jmagar/myservice-mcp".to_owned(),
+            github_url: "https://github.com/jmagar/myservice-mcp".to_owned(),
+            github_ssh: "github.com:jmagar/myservice-mcp.git".to_owned(),
+            mcp_surface_crate: "myservice-mcp-surface".to_owned(),
+            mcp_surface_crate_snake: "myservice_mcp_surface".to_owned(),
+        }
+    }
+
+    #[test]
+    fn rename_paths_maps_soma_root_crate_and_support_packages() {
+        let fixture = TempDir::new().unwrap();
+        fs::create_dir_all(fixture.path().join("crates/soma/src/bin")).unwrap();
+        fs::create_dir_all(fixture.path().join("crates/soma-api")).unwrap();
+        fs::create_dir_all(fixture.path().join("packages/soma-rmcp/bin")).unwrap();
+        fs::create_dir_all(fixture.path().join("plugins/soma/skills/soma")).unwrap();
+        fs::write(fixture.path().join("crates/soma/Cargo.toml"), "").unwrap();
+        fs::write(fixture.path().join("crates/soma/src/bin/soma.rs"), "").unwrap();
+        fs::write(fixture.path().join("crates/soma-api/Cargo.toml"), "").unwrap();
+        fs::write(fixture.path().join("packages/soma-rmcp/package.json"), "").unwrap();
+        fs::write(
+            fixture.path().join("packages/soma-rmcp/bin/soma-rmcp.js"),
+            "",
+        )
+        .unwrap();
+        fs::write(fixture.path().join("plugins/soma/.claude-plugin.json"), "").unwrap();
+        fs::write(fixture.path().join("plugins/soma/skills/soma/SKILL.md"), "").unwrap();
+
+        rename_paths(fixture.path(), &test_values()).unwrap();
+
+        assert!(fixture
+            .path()
+            .join("crates/myservice-mcp/Cargo.toml")
+            .exists());
+        assert!(fixture
+            .path()
+            .join("crates/myservice-mcp/src/bin/myservice.rs")
+            .exists());
+        assert!(fixture
+            .path()
+            .join("crates/myservice-api/Cargo.toml")
+            .exists());
+        assert!(fixture
+            .path()
+            .join("packages/myservice-mcp/package.json")
+            .exists());
+        assert!(fixture
+            .path()
+            .join("packages/myservice-mcp/bin/myservice-mcp.js")
+            .exists());
+        assert!(fixture
+            .path()
+            .join("plugins/myservice/.claude-plugin.json")
+            .exists());
+        assert!(fixture
+            .path()
+            .join("plugins/myservice/skills/myservice/SKILL.md")
+            .exists());
+    }
 
     #[test]
     fn agent_memory_symlinks_are_recreated_after_cargo_generate_skips_them() {

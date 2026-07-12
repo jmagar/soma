@@ -2,11 +2,11 @@
 title: "API Reference"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -15,7 +15,7 @@ last_reviewed: "2026-06-17"
 
 # API
 
-The server exposes HTTP endpoints alongside MCP when a scaffolded server uses the application/platform profile. All surfaces (MCP, REST, CLI) call the same `ExampleService` methods — no logic is duplicated.
+The server exposes HTTP endpoints alongside MCP when a scaffolded server uses the application/platform profile. All surfaces (MCP, REST, CLI) call the same `SomaService` methods — no logic is duplicated.
 
 Upstream-client MCP servers do not need a local REST mirror by default. They should ship MCP + CLI, and add REST/Web only when they own state, workflows, dashboards, or other non-MCP consumers. Application/platform servers should expose direct product REST routes, not MCP protocol-shaped action envelopes.
 
@@ -54,7 +54,7 @@ async fn v1_echo(
     auth: Option<Extension<AuthContext>>,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    match ExampleAction::from_rest("echo", &body) {
+    match SomaAction::from_rest("echo", &body) {
         Ok(action) => run_rest_action(state, auth.as_ref().map(|Extension(auth)| auth), action).await,
         Err(error) => rest_error_response(error, "echo"),
     }
@@ -65,9 +65,9 @@ async fn v1_echo(
 
 | Surface | Call pattern |
 |---|---|
-| MCP | `example(action="greet", name="Alice")` |
+| MCP | `soma(action="greet", name="Alice")` |
 | REST | `POST /v1/greet {"name":"Alice"}` |
-| CLI | `example greet --name Alice` |
+| CLI | `soma greet --name Alice` |
 
 All three call `state.service.greet(Some("Alice"))`.
 
@@ -81,7 +81,7 @@ All three call `state.service.greet(Some("Alice"))`.
 {"echo":"hello"}
 ```
 
-Responses are JSON values produced by `ExampleService` via `crates/rtemplate-contracts/src/actions.rs`.
+Responses are JSON values produced by `SomaService` via `crates/soma-contracts/src/actions.rs`.
 If a REST result exceeds the response cap, the route returns a valid JSON
 truncation envelope instead of raw truncated JSON.
 
@@ -117,7 +117,7 @@ fn mcp_response_page(serialized_bytes: usize, next_offset: usize) -> serde_json:
             "has_more": true
         },
         "continuation": {
-            "tool": "example",
+            "tool": "soma",
             "arguments": {
                 "_response_cursor": "rsp_...",
                 "_response_offset": next_offset,
@@ -138,7 +138,7 @@ Ok(CallToolResult::structured_error(json!({
     "kind": "mcp_tool_error",
     "schema_version": 1,
     "code": "validation_error",
-    "tool": "example",
+    "tool": "soma",
     "action": action,
     "message": reason,
     "retryable": true,
@@ -151,7 +151,7 @@ Validation errors return HTTP 400 with an `error` field. Never leak secrets in e
 Common error shapes:
 - Missing required arg: `` "`id` is required for docker_logs — pass id=<container_id>" ``
 - Unknown action: `"unknown action: \"florp\" — valid actions: greet, echo, status, help"`
-- API unreachable: `"RTEMPLATE_URL unreachable: connection refused — is the service running?"`
+- API unreachable: `"SOMA_URL unreachable: connection refused — is the service running?"`
 
 MCP protocol auth/scope failures include structured `data` with `kind:
 mcp_auth_error`, stable `code` values such as `missing_http_context`,

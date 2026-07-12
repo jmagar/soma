@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Tracked by beads epic `rmcp-template-b4q`.
+In progress. Tracked by beads epic `soma-b4q`.
 
 The upcoming MCP draft revision is dated 2026-07-28. It is not final until then,
 and the schema keeps changing. This document records the migration plan and which
@@ -96,14 +96,14 @@ Notes:
   suite, and tears down. It defaults to port 41060 to avoid colliding with a live
   server on the default 40060, pre-checks the port is free, and verifies our
   process is the one answering.
-- The recipe sets `RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true`. That advertises
+- The recipe sets `SOMA_MCP_CONFORMANCE_FIXTURES=true`. That advertises
   the upstream reference tools/resources/prompts only for the conformance
   process:
   - tools: `test_simple_text`, `test_image_content`, `test_audio_content`,
     `test_embedded_resource`, `test_multiple_content_types`,
     `test_error_handling`
   - resources: `test://static-text`, `test://static-binary`,
-    `test://template/123/data`
+    `test://soma/123/data`
   - prompts: `test_simple_prompt`, `test_prompt_with_arguments`,
     `test_prompt_with_embedded_resource`, `test_prompt_with_image`
 - Requires `npx` (Node.js).
@@ -119,7 +119,7 @@ Notes:
   sampling, and resource subscription scenarios.
 - Do not add roots, sampling, or logging support from the conformance suite.
   Those protocol areas are deprecated/removed in the draft track and stay
-  intentionally absent from this template.
+  intentionally absent from Soma.
 
 ## References
 

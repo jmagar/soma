@@ -1,12 +1,12 @@
 ---
 date: 2026-05-15 01:58:34 EST
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 379ef87
 agent: Claude (claude-sonnet-4-6)
 session_id: 191d2a6c-515e-46a7-b3a8-a50a9e26b84f
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/191d2a6c-515e-46a7-b3a8-a50a9e26b84f.jsonl
-working_directory: /home/jmagar/workspace/rmcp-template
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/191d2a6c-515e-46a7-b3a8-a50a9e26b84f.jsonl
+working_directory: /home/jmagar/workspace/soma
 ---
 
 ## User Request
@@ -31,7 +31,7 @@ Started with a read-only investigation of OpenAI/OpenAPI schema drift prevention
 10. Fixed `check-openapi.py`: dynamic MCP-only validation and dynamic requestBody examples
 11. Updated `scripts/README.md` with quick-map entries and reference sections for 5 missing scripts
 12. Updated `src/mcp.rs`, `src/mcp/rmcp_server.rs`, `src/cli/doctor.rs` to wire new modules
-13. Hit compile error: `ExampleRmcpServer.state` is private — fixed by using `rmcp_server()` constructor in `transport.rs`
+13. Hit compile error: `SomaRmcpServer.state` is private — fixed by using `rmcp_server()` constructor in `transport.rs`
 14. Regenerated `docs/MCP_SCHEMA.md` and `docs/generated/openapi.json` after Python changes
 15. Committed `refactor: address all code quality issues` (7 files, 608 insertions / 512 deletions)
 16. Merged 5 dependabot PRs (#2–#6) via `gh pr merge --merge`
@@ -43,13 +43,13 @@ Started with a read-only investigation of OpenAI/OpenAPI schema drift prevention
 ## Key Findings
 
 - **Schema drift prevention was already solid**: `scripts/check-openapi.py --check` runs in CI's `template` job; `just openapi-check` for local use; MCP schema enum is dynamically derived in `src/mcp/schemas.rs:29` via `action_names()`
-- **`xtask patterns` `tooling()` was coupled to Justfile**: `xtask/src/patterns/checks.rs:298–332` checked for `"schema-docs-check"` and `"template-check"` as Justfile strings, not the backing scripts
+- **`xtask patterns` `tooling()` was coupled to Justfile**: `xtask/src/patterns/checks.rs:298–332` checked for `"schema-docs-check"` and `"soma-check"` as Justfile strings, not the backing scripts
 - **`check-openapi.py:326–329`** hardcoded `scaffold_intent` and `elicit_name` as MCP-only guard names — bypassed if a new `McpOnly` action is added without updating the script
 - **`check-openapi.py:167–175`** hardcoded requestBody examples for 4 specific actions — new REST actions would not appear in examples automatically
 - **`src/mcp/rmcp_server.rs`** contained transport setup + 8 host/URL helper functions (lines 206–462) unrelated to the `ServerHandler` impl
 - **`src/cli/doctor.rs`** contained 9 check functions + helpers (lines 221–555) that were natural extraction candidates
 - **`scripts/README.md`** was missing entries for `build-web.sh`, `web-watch.sh`, `generate-cli.sh`, `repair.sh`, `run-ascii-check.sh` — all committed in a prior session
-- **`ExampleRmcpServer.state` field is private** (`src/mcp/rmcp_server.rs`) — `transport.rs` must use the `rmcp_server()` constructor, not struct literal syntax
+- **`SomaRmcpServer.state` field is private** (`src/mcp/rmcp_server.rs`) — `transport.rs` must use the `rmcp_server()` constructor, not struct literal syntax
 - **`tempfile = "3"`** already present as dev-dependency in `Cargo.toml:84`
 
 ## Technical Decisions
@@ -57,7 +57,7 @@ Started with a read-only investigation of OpenAI/OpenAPI schema drift prevention
 - **Script existence over Justfile target presence**: `xtask patterns` `tooling()` now checks `Path::new(script).is_file()` for 5 scripts CI depends on. This decouples the enforcement contract from the developer convenience layer.
 - **`transport.rs` as a sibling of `rmcp_server.rs`**: Transport/host logic doesn't belong in the `ServerHandler` impl. Sibling module in `mcp/` avoids a circular dependency while keeping MCP concerns collocated.
 - **`doctor/checks.rs` as a submodule**: Modern Rust allows `src/cli/doctor.rs` to declare `mod checks;` with the submodule at `src/cli/doctor/checks.rs` without `mod.rs`. Keeps check functions findable by convention.
-- **Sidecar test files over inline `#[cfg(test)]` modules**: Matches the established pattern in `src/app_tests.rs` and `src/example_tests.rs`. Keeps production file LOC counts accurate (the `effective_loc_from_text` function strips inline test modules anyway, but sidecars are more explicit).
+- **Sidecar test files over inline `#[cfg(test)]` modules**: Matches the established pattern in `src/app_tests.rs` and `src/soma_tests.rs`. Keeps production file LOC counts accurate (the `effective_loc_from_text` function strips inline test modules anyway, but sidecars are more explicit).
 - **`_PARAM_EXAMPLES` lookup dict for requestBody examples**: Lets the generator derive examples for all REST actions automatically, with per-action param enrichment for known actions (`greet`, `echo`). New REST actions appear with empty params by default.
 - **Direct `gh pr merge --merge`** for dependabot PRs: Auto-merge is not enabled in the repo (`enablePullRequestAutoMerge` returns GraphQL error). Merged directly since all 5 are GitHub Actions bumps with no logic changes.
 
@@ -99,7 +99,7 @@ gh pr merge 6 --merge         # docker/setup-buildx-action 3→4
 ## Errors Encountered
 
 - **RTK hook integrity failure**: `rtk` refused to execute throughout the session (`Expected hash: ef0d630994fd7ef5, Actual hash: 3e1a5939b46e33ab`). Worked around by using absolute paths (`/usr/bin/git`, `~/.cargo/bin/cargo`) or direct tool invocations. RTK was not repaired in this session.
-- **Compile error — private field access**: `transport.rs` initially constructed `ExampleRmcpServer { state: state.clone() }` directly, failing with `E0451: field 'state' is private`. Fixed by importing and calling `rmcp_server()` constructor: `make_server(state.clone())`.
+- **Compile error — private field access**: `transport.rs` initially constructed `SomaRmcpServer { state: state.clone() }` directly, failing with `E0451: field 'state' is private`. Fixed by importing and calling `rmcp_server()` constructor: `make_server(state.clone())`.
 - **`gh pr merge --auto` rejected**: Repo does not have auto-merge enabled (`enablePullRequestAutoMerge` GraphQL error). Fixed by using `gh pr merge --merge` directly.
 - **`docs/MCP_SCHEMA.md` stale after Python change**: `check-schema-docs.py --check` reported stale. Fixed with `--write` flag; diff was substantive (frontmatter/content regeneration).
 
@@ -107,7 +107,7 @@ gh pr merge 6 --merge         # docker/setup-buildx-action 3→4
 
 | Area | Before | After |
 |---|---|---|
-| `cargo xtask patterns` `tooling` check | Fails if Justfile doesn't contain `"schema-docs-check"`, `"template-check"`, etc. | Fails if any of 5 CI enforcement scripts are missing from disk |
+| `cargo xtask patterns` `tooling` check | Fails if Justfile doesn't contain `"schema-docs-check"`, `"soma-check"`, etc. | Fails if any of 5 CI enforcement scripts are missing from disk |
 | `check-openapi.py` MCP-only guard | Hardcoded check for `scaffold_intent` and `elicit_name` only | Dynamically derives MCP-only names from `action_entries()` — catches any new `McpOnly` action |
 | `check-openapi.py` requestBody examples | Hardcoded 4 examples (`greet`, `echo`, `status`, `help`) | Generated from `rest_actions()` loop; new REST actions appear automatically |
 | `src/mcp/rmcp_server.rs` effective LOC | ~393 | ~260 |
@@ -136,8 +136,8 @@ gh pr merge 6 --merge         # docker/setup-buildx-action 3→4
 ## Decisions Not Taken
 
 - **Wholesale Justfile → scripts refactor**: User initially asked whether to extract all recipes. Recommendation was to fix the xtask coupling problem only, since CI already calls scripts directly and the Justfile is already mostly thin. The 6 recipes with real inline logic were extracted; trivial one-liners were left as-is.
-- **Creating `scripts/run-template-checks.sh`**: Would have been a script that just calls other scripts — a layer without value. Rejected; `just template-check` chains recipes instead.
-- **Making `ExampleRmcpServer.state` pub(crate)**: Would have allowed direct struct construction in `transport.rs`. Rejected in favour of using the existing `rmcp_server()` constructor, which is the established public API.
+- **Creating `scripts/run-soma-checks.sh`**: Would have been a script that just calls other scripts — a layer without value. Rejected; `just soma-check` chains recipes instead.
+- **Making `SomaRmcpServer.state` pub(crate)**: Would have allowed direct struct construction in `transport.rs`. Rejected in favour of using the existing `rmcp_server()` constructor, which is the established public API.
 - **Splitting `print_doctor_report` into its own file**: After removing the check functions, `doctor.rs` dropped to ~230 effective lines — well under the 350 target. No further split needed.
 - **Extracting `publish` recipe**: Has inline bash with a `{{bump}}` just parameter. Left in place since it's a rare release helper and wasn't in the identified list.
 

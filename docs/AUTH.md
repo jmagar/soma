@@ -16,9 +16,9 @@ When both are configured, each request is accepted if it satisfies either mechan
 
 ## Scopes
 
-All non-trivial actions require at least `example:read`. Mutating actions require `example:write`, which also satisfies read checks. The `help` action is always public.
+All non-trivial actions require at least `soma:read`. Mutating actions require `soma:write`, which also satisfies read checks. The `help` action is always public.
 
-Static bearer tokens default to `example:read` only. OAuth tokens carry whatever scopes the OAuth flow issued.
+Static bearer tokens default to `soma:read` only. OAuth tokens carry whatever scopes the OAuth flow issued.
 
 ---
 
@@ -26,12 +26,12 @@ Static bearer tokens default to `example:read` only. OAuth tokens carry whatever
 
 ```bash
 # Generate a token
-export RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)
+export SOMA_MCP_TOKEN=$(openssl rand -hex 32)
 
 # Or: just gen-token
 ```
 
-Set `RTEMPLATE_MCP_TOKEN` in your environment or `.env` file. Clients authenticate with:
+Set `SOMA_MCP_TOKEN` in your environment or `.env` file. Clients authenticate with:
 
 ```
 Authorization: Bearer <token>
@@ -46,16 +46,16 @@ That's all. The server validates the header on every mounted MCP and REST route,
 Set the following environment variables:
 
 ```bash
-RTEMPLATE_MCP_AUTH_MODE=oauth
-RTEMPLATE_MCP_PUBLIC_URL=https://your-server.example.com   # public URL for OAuth callbacks
-RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
-RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
-RTEMPLATE_MCP_AUTH_ADMIN_EMAIL=you@example.com
+SOMA_MCP_AUTH_MODE=oauth
+SOMA_MCP_PUBLIC_URL=https://your-server.example.com   # public URL for OAuth callbacks
+SOMA_MCP_GOOGLE_CLIENT_ID=...
+SOMA_MCP_GOOGLE_CLIENT_SECRET=...
+SOMA_MCP_AUTH_ADMIN_EMAIL=you@example.com
 ```
 
 The server exposes standard OAuth discovery endpoints under `/mcp/.well-known/` that MCP clients can use for dynamic registration. Session cookies are disabled — all auth is via `Authorization` headers.
 
-OAuth and bearer token can coexist: set both `RTEMPLATE_MCP_TOKEN` and the OAuth variables. When `RTEMPLATE_MCP_TOKEN` is unset, OAuth mode accepts only OAuth-issued bearer JWTs.
+OAuth and bearer token can coexist: set both `SOMA_MCP_TOKEN` and the OAuth variables. When `SOMA_MCP_TOKEN` is unset, OAuth mode accepts only OAuth-issued bearer JWTs.
 
 ---
 
@@ -69,22 +69,22 @@ This is enforced by `server::resolve_auth_policy_kind()`. The exact error:
 Refusing to bind MCP server to 0.0.0.0 without authentication.
 
 Choose one of:
-1. Bind to loopback:    RTEMPLATE_MCP_HOST=127.0.0.1
-2. Set a bearer token:  RTEMPLATE_MCP_TOKEN=$(openssl rand -hex 32)
-3. Enable OAuth:        RTEMPLATE_MCP_AUTH_MODE=oauth (+ OAuth credentials)
-4. Disable auth:        RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true
-5. Upstream gateway:    RTEMPLATE_NOAUTH=true  (if a proxy handles auth)
+1. Bind to loopback:    SOMA_MCP_HOST=127.0.0.1
+2. Set a bearer token:  SOMA_MCP_TOKEN=$(openssl rand -hex 32)
+3. Enable OAuth:        SOMA_MCP_AUTH_MODE=oauth (+ OAuth credentials)
+4. Disable auth:        SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true
+5. Upstream gateway:    SOMA_NOAUTH=true  (if a proxy handles auth)
 ```
 
 The guard passes when any of the following is true:
 
 | Condition | Variable | Notes |
 |---|---|---|
-| Loopback bind | `RTEMPLATE_MCP_HOST=127.0.0.1` | Trust boundary is the network address |
-| Bearer token set | `RTEMPLATE_MCP_TOKEN=<token>` | Auth middleware enforces it |
-| OAuth enabled | `RTEMPLATE_MCP_AUTH_MODE=oauth` | Auth middleware enforces it |
-| Auth disabled | `RTEMPLATE_MCP_HOST=127.0.0.1` + `RTEMPLATE_MCP_NO_AUTH=true` | Local dev — see below |
-| Gateway override | `RTEMPLATE_NOAUTH=true` | Upstream handles auth — see below |
+| Loopback bind | `SOMA_MCP_HOST=127.0.0.1` | Trust boundary is the network address |
+| Bearer token set | `SOMA_MCP_TOKEN=<token>` | Auth middleware enforces it |
+| OAuth enabled | `SOMA_MCP_AUTH_MODE=oauth` | Auth middleware enforces it |
+| Auth disabled | `SOMA_MCP_HOST=127.0.0.1` + `SOMA_MCP_NO_AUTH=true` | Local dev — see below |
+| Gateway override | `SOMA_NOAUTH=true` | Upstream handles auth — see below |
 
 ---
 
@@ -94,10 +94,10 @@ For local development, disable auth entirely:
 
 ```bash
 just dev
-# equivalent to: RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run --bin example-server -- serve mcp
+# equivalent to: SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo run --bin soma-server -- serve mcp
 ```
 
-`RTEMPLATE_MCP_NO_AUTH=true` is accepted only on a loopback bind. It sets the auth policy to `LoopbackDev`, removes the auth middleware, and requires no token for local calls.
+`SOMA_MCP_NO_AUTH=true` is accepted only on a loopback bind. It sets the auth policy to `LoopbackDev`, removes the auth middleware, and requires no token for local calls.
 
 **Do not use this in production.**
 
@@ -108,27 +108,27 @@ just dev
 If you deploy behind a gateway that handles authentication for all services (e.g. an MCP proxy that validates tokens before routing to this server), you can disable auth at the server level:
 
 ```bash
-RTEMPLATE_NOAUTH=true         # acknowledge the startup guard that an upstream gateway handles auth
+SOMA_NOAUTH=true         # acknowledge the startup guard that an upstream gateway handles auth
 ```
 
-`RTEMPLATE_NOAUTH=true` selects the explicit `TrustedGatewayUnscoped` policy. It removes the local auth middleware and scope checks, so only use it when a trusted upstream gateway enforces both authentication and authorization before traffic reaches this server.
+`SOMA_NOAUTH=true` selects the explicit `TrustedGatewayUnscoped` policy. It removes the local auth middleware and scope checks, so only use it when a trusted upstream gateway enforces both authentication and authorization before traffic reaches this server.
 
 ---
 
 ## Stdio transport
 
-The stdio transport (`example mcp`) bypasses all HTTP auth entirely. It is always `LoopbackDev` — the trust boundary is the OS pipe between parent and child process. Scope checks are not enforced in stdio mode. This matches the MCP spec: stdio servers are local, trusted, subprocess connections.
+The stdio transport (`soma mcp`) bypasses all HTTP auth entirely. It is always `LoopbackDev` — the trust boundary is the OS pipe between parent and child process. Scope checks are not enforced in stdio mode. This matches the MCP spec: stdio servers are local, trusted, subprocess connections.
 
 ---
 
 ## Auth policy reference
 
-The `AuthPolicy` enum in `crates/rtemplate-runtime/src/server.rs` controls what the router does:
+The `AuthPolicy` enum in `crates/soma-runtime/src/server.rs` controls what the router does:
 
 | Policy | When | Auth enforced? | Scope checks? |
 |---|---|---|---|
-| `LoopbackDev` | Loopback bind, or stdio mode. `RTEMPLATE_MCP_NO_AUTH=true` also enables this policy for loopback development. | No | No |
-| `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `RTEMPLATE_NOAUTH=true` | No | No |
+| `LoopbackDev` | Loopback bind, or stdio mode. `SOMA_MCP_NO_AUTH=true` also enables this policy for loopback development. | No | No |
+| `TrustedGatewayUnscoped` | Non-loopback no-auth deployment with `SOMA_NOAUTH=true` | No | No |
 | `Mounted { auth_state: None }` | Bearer-only mode | Yes (token) | Yes |
 | `Mounted { auth_state: Some(_) }` | OAuth mode (+ optional token) | Yes (OAuth / token) | Yes |
 
@@ -136,6 +136,6 @@ Public endpoints (`/health`, `/status`) are never gated by auth, regardless of p
 
 ---
 
-## TEMPLATE
+## CUSTOMIZE
 
-When you adapt this template, replace all `RTEMPLATE_` prefixes with your service's prefix throughout `crates/rtemplate-contracts/src/config.rs`, `crates/rmcp-template/src/main.rs`, and this document.
+When you adapt Soma, replace all `SOMA_` prefixes with your service's prefix throughout `crates/soma-contracts/src/config.rs`, `crates/soma/src/main.rs`, and this document.

@@ -2,18 +2,18 @@
 title: "Deployment"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 last_reviewed: "2026-05-15"
 ---
 
 # Deployment
 
-This template supports three deployment modes:
+Soma supports three deployment modes:
 
 1. **Local development** with `just dev`.
 2. **Docker Compose** with `just docker-up`.
@@ -40,18 +40,18 @@ for the deployable profile contract.
 
 ## Binary command surface
 
-The all-in-one template binary exposes two server modes and a CLI. If a derived
+The all-in-one Soma binary exposes two server modes and a CLI. If a derived
 server splits local and server profiles, keep the command names stable on the
 profile where they apply:
 
 | Command | Mode | Description |
 |---|---|---|
-| `example mcp` | stdio MCP | For Claude Code `~/.claude/settings.json` stdio servers |
-| `example-server serve` | Streamable HTTP MCP | For Docker/remote deployment |
-| `example [subcommand]` | CLI | Local adapter. With `RTEMPLATE_API_URL` set, targets the deployed `example-server` REST API; otherwise uses template stub responses. |
-| `example doctor` | Pre-flight check | Validates environment and config |
-| `example --help` | Help | Print usage |
-| `example --version` | Version | Print version |
+| `soma mcp` | stdio MCP | For Claude Code `~/.claude/settings.json` stdio servers |
+| `soma-server serve` | Streamable HTTP MCP | For Docker/remote deployment |
+| `soma [subcommand]` | CLI | Local adapter. With `SOMA_API_URL` set, targets the deployed `soma-server` REST API; otherwise uses offline stub responses. |
+| `soma doctor` | Pre-flight check | Validates environment and config |
+| `soma --help` | Help | Print usage |
+| `soma --version` | Version | Print version |
 
 ## Deployment checklist
 
@@ -72,7 +72,7 @@ profile where they apply:
    ```
 6. Smoke-test auth:
    ```bash
-   RTEMPLATE_MCP_TOKEN=<token> just auth-smoke
+   SOMA_MCP_TOKEN=<token> just auth-smoke
    ```
 7. Run MCP integration tests:
    ```bash
@@ -83,7 +83,7 @@ profile where they apply:
 
 The binary normalizes data paths based on its deployment context. Bind host and
 port come from typed config and environment variables; Docker deployments must
-set `RTEMPLATE_MCP_HOST=0.0.0.0` explicitly when exposing the service outside the
+set `SOMA_MCP_HOST=0.0.0.0` explicitly when exposing the service outside the
 container.
 
 ```rust
@@ -107,19 +107,19 @@ All deployments share `~/.<service>` as the logical data root:
 
 | Deployment | Data directory |
 |---|---|
-| Local binary | `~/.example/` |
-| Docker | `/data/` in container, mounted from `~/.example/` on host |
-| Plugin | `$CLAUDE_PLUGIN_DATA` (symlinked to `~/.example/`) |
+| Local binary | `~/.soma/` |
+| Docker | `/data/` in container, mounted from `~/.soma/` on host |
+| Plugin | `$CLAUDE_PLUGIN_DATA` (symlinked to `~/.soma/`) |
 
 ## Auth expectations
 
 Non-loopback HTTP deployments must use bearer auth or OAuth. The server refuses to bind to a non-loopback address without authentication unless explicitly configured:
 
 - Loopback bind → `LoopbackDev` (no auth)
-- `RTEMPLATE_MCP_NO_AUTH=true` → valid only on loopback
+- `SOMA_MCP_NO_AUTH=true` → valid only on loopback
 - Non-loopback + bearer token → mounted bearer auth
 - Non-loopback + `auth_mode=oauth` → mounted OAuth auth
-- Non-loopback + `RTEMPLATE_NOAUTH=true` → `TrustedGatewayUnscoped` (trusted gateway, explicit opt-out)
+- Non-loopback + `SOMA_NOAUTH=true` → `TrustedGatewayUnscoped` (trusted gateway, explicit opt-out)
 - Non-loopback + no credentials + no gateway acknowledgment → startup error
 
 ## Claude Code stdio config
@@ -127,9 +127,9 @@ Non-loopback HTTP deployments must use bearer auth or OAuth. The server refuses 
 ```json
 {
   "mcpServers": {
-    "example": {
+    "soma": {
       "type": "stdio",
-      "command": "example",
+      "command": "soma",
       "args": ["mcp"]
     }
   }
@@ -160,9 +160,9 @@ Each service in the rmcp family uses a fixed port to avoid collisions:
 | unifi-mcp (rustifi) | 7474 | `unifi` |
 | tailscale-mcp (rustscale) | 7575 | `tailscale` |
 | apprise-mcp | 8765 | `apprise` |
-| rmcp-template | 40060 | `example` |
+| soma | 40060 | `soma` |
 
-Set the port via `RTEMPLATE_MCP_PORT` or in `config.toml`. Update `EXPOSE` in the Dockerfile and the port mapping in `docker-compose.yml` to match.
+Set the port via `SOMA_MCP_PORT` or in `config.toml`. Update `EXPOSE` in the Dockerfile and the port mapping in `docker-compose.yml` to match.
 
 ## Worktree file propagation
 

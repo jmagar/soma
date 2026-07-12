@@ -1,27 +1,32 @@
 # =============================================================================
-# Cargo.toml — Virtual workspace root for the rmcp-template project
+# Cargo.toml — Virtual workspace root for the soma project
 #
-# The runnable/library package lives in crates/rmcp-template. Keep new Rust code
+# The runnable/library package lives in crates/soma. Keep new Rust code
 # in workspace crates; the repository root has no src/ crate.
 # =============================================================================
 
 [workspace]
 members = [
-  "crates/rmcp-template",
-  "crates/rtemplate-api",
-  "crates/rtemplate-auth",
-  "crates/rtemplate-cli",
-  "crates/rtemplate-contracts",
-  "crates/rtemplate-mcp",
-  "crates/rtemplate-observability",
-  "crates/rtemplate-plugin-support",
-  "crates/rtemplate-runtime",
-  "crates/rtemplate-service",
-  "crates/rtemplate-test-support",
-  "crates/rtemplate-web",
+  "crates/soma",
+  "crates/soma-api",
+  "crates/soma-auth",
+  "crates/soma-cli",
+  "crates/soma-contracts",
+  "crates/soma-mcp",
+  "crates/soma-observability",
+  "crates/soma-plugin-support",
+  "crates/soma-runtime",
+  "crates/soma-service",
+  "crates/soma-test-support",
+  "crates/soma-web",
   "xtask",
 ]
 resolver = "2"
+
+[workspace.package]
+authors = ["dinglebear.ai <hello@dinglebear.ai>"]
+homepage = "https://soma.dinglebear.ai"
+repository = "https://github.com/jmagar/soma"
 
 # ── profiles ─────────────────────────────────────────────────────────────────
 # release-fast: release-grade binary (optimized, stripped) but with cheap LTO and

@@ -2,7 +2,7 @@
 title: "ADR 0010: Require boundary and generated-client verification"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

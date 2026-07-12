@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail on stale template claims that should never come back."""
+"""Fail on stale Soma claims that should never come back."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEXT_FORBIDDEN = {
-    "localhost:3100": "stale local template port; use localhost:40060",
+    "localhost:3100": "stale local Soma port; use localhost:40060",
     "default_mcp_port() -> u16 {\n    40000": "stale default MCP port; use 40060",
 }
 SKIP_PARTS = {
@@ -38,9 +38,9 @@ TEXT_SUFFIXES = {
     ".example",
 }
 PLUGIN_MANIFESTS = [
-    ROOT / "plugins/rtemplate/.claude-plugin/plugin.json",
-    ROOT / "plugins/rtemplate/.codex-plugin/plugin.json",
-    ROOT / "plugins/rtemplate/gemini-extension.json",
+    ROOT / "plugins/soma/.claude-plugin/plugin.json",
+    ROOT / "plugins/soma/.codex-plugin/plugin.json",
+    ROOT / "plugins/soma/gemini-extension.json",
 ]
 
 
@@ -53,7 +53,7 @@ def should_skip(path: Path) -> bool:
 
 
 def is_text_path(path: Path) -> bool:
-    if path.name in {".env.example", "config.example.toml", "Justfile", "CLAUDE.md", "README.md"}:
+    if path.name in {".env.example", "config.soma.toml", "Justfile", "CLAUDE.md", "README.md"}:
         return True
     return path.suffix in TEXT_SUFFIXES
 

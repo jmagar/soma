@@ -2,11 +2,11 @@
 title: "Configuration"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -21,10 +21,10 @@ Configuration is split between non-secret settings (`config.toml`) and secrets (
 
 | File | Purpose |
 |---|---|
-| `.env.example` | Documented environment variable template. Safe to commit. |
+| `.env.example` | Documented environment variable sample. Safe to commit. |
 | `.env` | Local secrets and deployment settings. Never commit. |
-| `config.example.toml` | Optional structured config example for derived services. |
-| `crates/rtemplate-contracts/src/config.rs` | Loads env/config into typed Rust structs. |
+| `config.soma.toml` | Optional structured config example for derived services. |
+| `crates/soma-contracts/src/config.rs` | Loads env/config into typed Rust structs. |
 
 ## What goes where
 
@@ -46,7 +46,7 @@ Configuration is split between non-secret settings (`config.toml`) and secrets (
 [mcp]
 host = "127.0.0.1"
 port = 40060
-server_name = "rtemplate-mcp"
+server_name = "soma-mcp"
 no_auth = false
 trusted_gateway = false
 allowed_hosts = []
@@ -66,15 +66,15 @@ auth_code_ttl_secs = 300
 
 ```bash
 # .env — secrets and URLs ONLY
-RTEMPLATE_API_URL=https://example.internal/api
-RTEMPLATE_API_KEY=your_api_key_here
+SOMA_API_URL=https://example.internal/api
+SOMA_API_KEY=your_api_key_here
 
 # MCP auth
-RTEMPLATE_MCP_TOKEN=your_bearer_token_here
+SOMA_MCP_TOKEN=your_bearer_token_here
 
 # OAuth (only when auth_mode=oauth in config.toml)
-# RTEMPLATE_MCP_GOOGLE_CLIENT_ID=...
-# RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET=...
+# SOMA_MCP_GOOGLE_CLIENT_ID=...
+# SOMA_MCP_GOOGLE_CLIENT_SECRET=...
 
 # Docker runtime
 PUID=1000
@@ -85,27 +85,27 @@ RUST_LOG=info
 
 ## Config loading pattern
 
-`crates/rtemplate-contracts/src/config.rs` is the source of truth. `Config::load()` starts from typed defaults, loads the first readable `config.toml` from `~/.example/config.toml` or `./config.toml`, then applies env overrides.
+`crates/soma-contracts/src/config.rs` is the source of truth. `Config::load()` starts from typed defaults, loads the first readable `config.toml` from `~/.soma/config.toml` or `./config.toml`, then applies env overrides.
 
 Current env overrides include:
 
 | Config field | Env var |
 |---|---|
-| `mcp.host` | `RTEMPLATE_MCP_HOST` |
-| `mcp.port` | `RTEMPLATE_MCP_PORT` |
-| `mcp.server_name` | `RTEMPLATE_MCP_SERVER_NAME` |
-| `mcp.no_auth` | `RTEMPLATE_MCP_NO_AUTH` |
-| `mcp.trusted_gateway` | `RTEMPLATE_NOAUTH` |
-| `mcp.api_token` | `RTEMPLATE_MCP_TOKEN` |
-| `mcp.allowed_hosts` | `RTEMPLATE_MCP_ALLOWED_HOSTS` |
-| `mcp.allowed_origins` | `RTEMPLATE_MCP_ALLOWED_ORIGINS` |
-| `mcp.auth.public_url` | `RTEMPLATE_MCP_PUBLIC_URL` |
-| `mcp.auth.mode` | `RTEMPLATE_MCP_AUTH_MODE` |
-| `mcp.auth.google_client_id` | `RTEMPLATE_MCP_GOOGLE_CLIENT_ID` |
-| `mcp.auth.google_client_secret` | `RTEMPLATE_MCP_GOOGLE_CLIENT_SECRET` |
-| `mcp.auth.admin_email` | `RTEMPLATE_MCP_AUTH_ADMIN_EMAIL` |
-| `example.api_url` | `RTEMPLATE_API_URL` |
-| `example.api_key` | `RTEMPLATE_API_KEY` |
+| `mcp.host` | `SOMA_MCP_HOST` |
+| `mcp.port` | `SOMA_MCP_PORT` |
+| `mcp.server_name` | `SOMA_MCP_SERVER_NAME` |
+| `mcp.no_auth` | `SOMA_MCP_NO_AUTH` |
+| `mcp.trusted_gateway` | `SOMA_NOAUTH` |
+| `mcp.api_token` | `SOMA_MCP_TOKEN` |
+| `mcp.allowed_hosts` | `SOMA_MCP_ALLOWED_HOSTS` |
+| `mcp.allowed_origins` | `SOMA_MCP_ALLOWED_ORIGINS` |
+| `mcp.auth.public_url` | `SOMA_MCP_PUBLIC_URL` |
+| `mcp.auth.mode` | `SOMA_MCP_AUTH_MODE` |
+| `mcp.auth.google_client_id` | `SOMA_MCP_GOOGLE_CLIENT_ID` |
+| `mcp.auth.google_client_secret` | `SOMA_MCP_GOOGLE_CLIENT_SECRET` |
+| `mcp.auth.admin_email` | `SOMA_MCP_AUTH_ADMIN_EMAIL` |
+| `soma.api_url` | `SOMA_API_URL` |
+| `soma.api_key` | `SOMA_API_KEY` |
 
 ## Auth policy summary
 
@@ -113,10 +113,10 @@ Current env overrides include:
 |---|---|
 | Stdio transport | `LoopbackDev` |
 | Loopback bind | `LoopbackDev` |
-| `RTEMPLATE_MCP_NO_AUTH=true` | `LoopbackDev` only when bound to loopback |
+| `SOMA_MCP_NO_AUTH=true` | `LoopbackDev` only when bound to loopback |
 | Non-loopback with bearer token | `Mounted { auth_state: None }` |
 | OAuth mode (`auth_mode=oauth`) | `Mounted { auth_state: Some(_) }` |
-| Explicit trusted gateway (`RTEMPLATE_NOAUTH=true`) | `TrustedGatewayUnscoped` |
+| Explicit trusted gateway (`SOMA_NOAUTH=true`) | `TrustedGatewayUnscoped` |
 
 Non-loopback no-auth should only be used when an upstream gateway enforces authorization.
 

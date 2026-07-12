@@ -1,13 +1,13 @@
 ---
 date: 2026-05-24 08:51:33 EST
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 6aee3a3
 session id: f90a9ab1-07b2-44cf-bfc5-5391797f46d4
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/f90a9ab1-07b2-44cf-bfc5-5391797f46d4.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template
-beads: rmcp-template-yy0, rmcp-template-jhm
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/f90a9ab1-07b2-44cf-bfc5-5391797f46d4.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma
+beads: soma-yy0, soma-jhm
 ---
 
 # MCP Paging and Documentation Sweep
@@ -32,7 +32,7 @@ Implemented replay-safe MCP response paging with server-side cursors, refreshed 
 
 - MCP continuation needed a cursor because replaying `action=echo` with only `_response_offset` could drop required original arguments or re-run a future mutating action.
 - `just contract-audit` caught that `src/mcp/rmcp_server.rs` exceeded the hard line limit after paging changes; moving paging into `src/mcp/response_paging.rs` restored the contract gate.
-- Several docs still claimed stale defaults: `RTEMPLATE_MCP_HOST=0.0.0.0`, port `3100` or `3000`, `/status` requiring auth, `/metrics` being present, and plugin manifests carrying versions.
+- Several docs still claimed stale defaults: `SOMA_MCP_HOST=0.0.0.0`, port `3100` or `3000`, `/status` requiring auth, `/metrics` being present, and plugin manifests carrying versions.
 - `docs/MCP_SCHEMA.md` is generated, so reserved `_response_*` docs had to be added to `scripts/check-schema-docs.py` and regenerated.
 
 ## Technical Decisions
@@ -40,7 +40,7 @@ Implemented replay-safe MCP response paging with server-side cursors, refreshed 
 - Used a short-lived in-memory `ResponsePageStore` with 300-second TTL for oversized MCP result pages to avoid re-executing actions during continuation.
 - Kept offset-only continuation as a protocol error with structured data because it is an adapter contract violation before business logic should run.
 - Moved paging helpers and tests into `response_paging.rs` / `response_paging_tests.rs` to keep `rmcp_server.rs` under the hard file-size limit.
-- Left the built-in live cursor happy path to Rust tests because the template's built-in actions do not naturally emit responses larger than the 40 KB paging threshold.
+- Left the built-in live cursor happy path to Rust tests because Soma's built-in actions do not naturally emit responses larger than the 40 KB paging threshold.
 
 ## Files Changed
 
@@ -60,16 +60,16 @@ Implemented replay-safe MCP response paging with server-side cursors, refreshed 
 
 | Bead | Title | Actions | Final status | Why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-yy0` | Harden MCP response paging cursors | Created, claimed, closed | closed | Tracked replay-safe cursor paging, protocol errors, tests, docs, and mcporter verification. |
-| `rmcp-template-jhm` | Sweep stale documentation after MCP paging/error updates | Created, claimed, closed | closed | Tracked stale docs sweep, parallel agent findings, docs refresh, and contract-audit repair. |
+| `soma-yy0` | Harden MCP response paging cursors | Created, claimed, closed | closed | Tracked replay-safe cursor paging, protocol errors, tests, docs, and mcporter verification. |
+| `soma-jhm` | Sweep stale documentation after MCP paging/error updates | Created, claimed, closed | closed | Tracked stale docs sweep, parallel agent findings, docs refresh, and contract-audit repair. |
 
 Observed Beads warnings: `bd update/show` sometimes printed `Warning: auto-export: git add failed: exit status 1`, but tracker reads/writes succeeded and `bd dolt push` completed.
 
 ## Repository Maintenance
 
 - Plans: checked `docs/plans`; no files were present, so nothing was moved to `docs/plans/complete/`.
-- Beads: closed `rmcp-template-yy0` and `rmcp-template-jhm` after tests, docs checks, commit, and push evidence.
-- Worktrees/branches: `git worktree list --porcelain` showed only `/home/jmagar/workspace/rmcp-template`; local and remote branches showed only `main` aligned with `origin/main`, so no cleanup was needed.
+- Beads: closed `soma-yy0` and `soma-jhm` after tests, docs checks, commit, and push evidence.
+- Worktrees/branches: `git worktree list --porcelain` showed only `/home/jmagar/workspace/soma`; local and remote branches showed only `main` aligned with `origin/main`, so no cleanup was needed.
 - Stale docs: updated stale MCP/auth/deployment/plugin/web/scaffold docs found by local grep and three parallel agents.
 - Push state: `git rev-list --left-right --count origin/main...HEAD` returned `0 0` after pushing.
 
@@ -88,9 +88,9 @@ Observed Beads warnings: `bd update/show` sometimes printed `Warning: auto-expor
 - `cargo fmt --check`
 - `just contract-audit`
 - `python3 scripts/check-schema-docs.py --write && python3 scripts/check-schema-docs.py --check`
-- `mcporter list --stdio ./target/debug/example --stdio-arg mcp --cwd /home/jmagar/workspace/rmcp-template --name rmcp-template-live --schema --all-parameters --json`
-- `mcporter call --stdio ./target/debug/example --stdio-arg mcp --cwd /home/jmagar/workspace/rmcp-template --name rmcp-template-live example --args '{"action":"status"}' --output raw`
-- `mcporter call --stdio ./target/debug/example --stdio-arg mcp --cwd /home/jmagar/workspace/rmcp-template --name rmcp-template-live example --args '{"action":"echo","message":"live continuation check","_response_offset":1,"_response_page_bytes":8}' --output raw`
+- `mcporter list --stdio ./target/debug/example --stdio-arg mcp --cwd /home/jmagar/workspace/soma --name soma-live --schema --all-parameters --json`
+- `mcporter call --stdio ./target/debug/example --stdio-arg mcp --cwd /home/jmagar/workspace/soma --name soma-live example --args '{"action":"status"}' --output raw`
+- `mcporter call --stdio ./target/debug/example --stdio-arg mcp --cwd /home/jmagar/workspace/soma --name soma-live example --args '{"action":"echo","message":"live continuation check","_response_offset":1,"_response_page_bytes":8}' --output raw`
 - `git pull --rebase`, `bd dolt push`, `git push`
 
 ## Errors Encountered
@@ -129,13 +129,13 @@ Observed Beads warnings: `bd update/show` sometimes printed `Warning: auto-expor
 
 ## Decisions Not Taken
 
-- Did not add a production-only large-response action just to live-test cursor happy path; kept that coverage in Rust tests to avoid expanding the template action surface.
+- Did not add a production-only large-response action just to live-test cursor happy path; kept that coverage in Rust tests to avoid expanding Soma action surface.
 - Did not delete any branches or worktrees because none beyond `main` were registered locally.
 
 ## References
 
 - Commits: `1dba57d`, `9e20fc9`, `6fafbe1`, `6aee3a3`.
-- Beads: `rmcp-template-yy0`, `rmcp-template-jhm`.
+- Beads: `soma-yy0`, `soma-jhm`.
 - Skill: `/home/jmagar/.agents/src/skills/save-to-md/SKILL.md`.
 
 ## Open Questions
@@ -146,5 +146,5 @@ Observed Beads warnings: `bd update/show` sometimes printed `Warning: auto-expor
 ## Next Steps
 
 - For another hardening pass, split remaining above-target files opportunistically.
-- Add a synthetic or fixture-backed live MCP large-response test only if the template gains a natural large-output action.
+- Add a synthetic or fixture-backed live MCP large-response test only if Soma gains a natural large-output action.
 - Continue using `just contract-audit` after template-wide docs edits; it caught both file-size and generated-doc drift during this session.

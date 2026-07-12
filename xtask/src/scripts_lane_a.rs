@@ -61,7 +61,7 @@ pub fn generate_cli() -> Result<()> {
 
     let schema_json = temp_schema_path();
     let _guard = RemoveOnDrop(schema_json.clone());
-    let token = std::env::var("RTEMPLATE_MCP_TOKEN")
+    let token = std::env::var("SOMA_MCP_TOKEN")
         .ok()
         .filter(|v| !v.is_empty());
     let request = GenerateCliRequest::new(token.as_deref());
@@ -78,9 +78,9 @@ pub fn generate_cli() -> Result<()> {
     })?;
 
     let current_hash = sha256sum(&schema_json)?;
-    let cache_file = Path::new("dist/.cache/example-cli.schema_hash");
-    if cached_cli_is_current(cache_file, Path::new("dist/example-cli"), &current_hash)? {
-        println!("SKIP: tool schema unchanged - use existing dist/example-cli");
+    let cache_file = Path::new("dist/.cache/soma-cli.schema_hash");
+    if cached_cli_is_current(cache_file, Path::new("dist/soma-cli"), &current_hash)? {
+        println!("SKIP: tool schema unchanged - use existing dist/soma-cli");
         return Ok(());
     }
 
@@ -88,25 +88,25 @@ pub fn generate_cli() -> Result<()> {
     mcporter_args.extend(request.mcporter_args);
     run_cmd_os("timeout", mcporter_args)?;
 
-    set_private_executable(Path::new("dist/example-cli"))?;
-    if !git_check_ignore(Path::new("dist/example-cli")) {
+    set_private_executable(Path::new("dist/soma-cli"))?;
+    if !git_check_ignore(Path::new("dist/soma-cli")) {
         eprintln!(
-            "warning: dist/example-cli is not ignored; generated CLI embeds secrets and must not be committed"
+            "warning: dist/soma-cli is not ignored; generated CLI embeds secrets and must not be committed"
         );
     }
 
     fs::write(cache_file, current_hash).context("failed to write CLI schema hash cache")?;
-    println!("Generated dist/example-cli (requires bun at runtime)");
+    println!("Generated dist/soma-cli (requires bun at runtime)");
     Ok(())
 }
 
 pub fn repair() -> Result<()> {
-    println!("==> Stopping rtemplate-mcp...");
-    if systemd_user_unit_active("rtemplate-mcp.service") {
-        run_cmd("systemctl", ["--user", "stop", "rtemplate-mcp.service"])?;
+    println!("==> Stopping soma-mcp...");
+    if systemd_user_unit_active("soma-mcp.service") {
+        run_cmd("systemctl", ["--user", "stop", "soma-mcp.service"])?;
         println!("    stopped systemd unit");
-    } else if docker_container_running("rtemplate-mcp") {
-        let _ = run_cmd("docker", ["stop", "rtemplate-mcp"]);
+    } else if docker_container_running("soma-mcp") {
+        let _ = run_cmd("docker", ["stop", "soma-mcp"]);
         println!("    stopped docker container");
     } else {
         println!("    no running instance found");
@@ -119,14 +119,14 @@ pub fn repair() -> Result<()> {
             "build",
             "--release",
             "--bin",
-            "rtemplate-server",
+            "soma-server",
             "--features",
             "full",
         ],
     )?;
 
     println!("==> Restarting...");
-    if systemd_user_unit_file_exists("rtemplate-mcp.service") {
+    if systemd_user_unit_file_exists("soma-mcp.service") {
         let home = std::env::var("HOME").context("HOME is not set")?;
         let bin_dir = Path::new(&home).join(".local/bin");
         fs::create_dir_all(&bin_dir)
@@ -136,21 +136,21 @@ pub fn repair() -> Result<()> {
             [
                 "-m",
                 "755",
-                "target/release/rtemplate-server",
+                "target/release/soma-server",
                 bin_dir
-                    .join("rtemplate-server")
+                    .join("soma-server")
                     .to_str()
                     .context("non-UTF-8 install path")?,
             ],
         )?;
-        run_cmd("systemctl", ["--user", "start", "rtemplate-mcp.service"])?;
+        run_cmd("systemctl", ["--user", "start", "soma-mcp.service"])?;
         println!("    started systemd unit");
     } else if Path::new("docker-compose.yml").is_file() {
         run_cmd("docker", ["compose", "build"])?;
         run_cmd("docker", ["compose", "up", "-d", "--force-recreate"])?;
         println!("    started docker compose service");
     } else {
-        println!("    no service manager detected; binary at target/release/rtemplate-server");
+        println!("    no service manager detected; binary at target/release/soma-server");
     }
 
     println!("==> Done");
@@ -168,11 +168,11 @@ pub fn test_mcp_auth(args: &[String]) -> Result<()> {
         .as_deref()
         .filter(|value| !value.is_empty())
         .ok_or_else(|| {
-            eprintln!("ERROR: set RTEMPLATE_MCP_TOKEN or pass --token");
-            anyhow::anyhow!("missing RTEMPLATE_MCP_TOKEN")
+            eprintln!("ERROR: set SOMA_MCP_TOKEN or pass --token");
+            anyhow::anyhow!("missing SOMA_MCP_TOKEN")
         })?;
 
-    let body_path = Path::new("/tmp/rmcp-template-auth-body.txt");
+    let body_path = Path::new("/tmp/soma-auth-body.txt");
     let _guard = RemoveOnDrop(body_path.to_path_buf());
     let request_body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#;
     let base_url = base_url_from_mcp_url(&options.mcp_url);
@@ -262,9 +262,9 @@ impl GenerateCliRequest {
             "--command",
             "http://localhost:40060/mcp",
             "--name",
-            "example-cli",
+            "soma-cli",
             "--output",
-            "dist/example-cli",
+            "dist/soma-cli",
         ]
         .into_iter()
         .map(OsString::from)
@@ -295,9 +295,9 @@ struct AuthSmokeOptions {
 impl AuthSmokeOptions {
     fn parse(args: &[String]) -> Result<Self> {
         let mut options = Self {
-            mcp_url: std::env::var("RTEMPLATE_MCP_URL")
+            mcp_url: std::env::var("SOMA_MCP_URL")
                 .unwrap_or_else(|_| "http://localhost:40060/mcp".to_owned()),
-            token: std::env::var("RTEMPLATE_MCP_TOKEN").ok(),
+            token: std::env::var("SOMA_MCP_TOKEN").ok(),
             timeout: std::env::var("MCP_AUTH_TIMEOUT").unwrap_or_else(|_| "10".to_owned()),
             check_x_api_key: false,
             help: false,
@@ -359,10 +359,10 @@ fn print_auth_usage() {
         "Usage: scripts/test-mcp-auth.sh [OPTIONS]
 
 Options:
-  --url URL              MCP URL. Default: RTEMPLATE_MCP_URL or http://localhost:40060/mcp.
-  --token TOKEN          Expected static bearer token. Default: RTEMPLATE_MCP_TOKEN.
+  --url URL              MCP URL. Default: SOMA_MCP_URL or http://localhost:40060/mcp.
+  --token TOKEN          Expected static bearer token. Default: SOMA_MCP_TOKEN.
   --check-x-api-key      Also require x-api-key auth to succeed. Off by default because
-                         the template's pinned lab-auth layer only supports Bearer.
+                         Soma's pinned lab-auth layer only supports Bearer.
   -h, --help             Show this help.
 
 Checks:
@@ -523,10 +523,7 @@ fn temp_schema_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    path.push(format!(
-        "rmcp-template-schema-{}-{nanos}.json",
-        std::process::id()
-    ));
+    path.push(format!("soma-schema-{}-{nanos}.json", std::process::id()));
     path
 }
 
@@ -794,7 +791,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let body = dir.path().join("body.json");
 
-        fs::write(&body, r#"{"result":{"tools":[{"name":"example"}]}}"#).unwrap();
+        fs::write(&body, r#"{"result":{"tools":[{"name":"soma"}]}}"#).unwrap();
         assert!(response_has_tools(&body).unwrap());
 
         fs::write(&body, r#"{"result":{"tools":[]}}"#).unwrap();
@@ -805,7 +802,7 @@ mod tests {
     fn cached_cli_requires_matching_hash_and_cli_file() {
         let dir = tempfile::tempdir().unwrap();
         let cache = dir.path().join("hash");
-        let cli = dir.path().join("example-cli");
+        let cli = dir.path().join("soma-cli");
 
         assert!(!cached_cli_is_current(&cache, &cli, "abc").unwrap());
 

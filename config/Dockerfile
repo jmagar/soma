@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1.7
 # =============================================================================
-# Dockerfile — Template for building an rmcp-based MCP server
+# Dockerfile — Soma RMCP server image
 #
-# TEMPLATE: Replace all occurrences of "example" with your binary name.
-#           The server binary name must match Cargo.toml [[bin]] name = "rtemplate-server".
+# CUSTOMIZE: Replace all customization placeholders with your binary name.
+#           The server binary name must match Cargo.toml [[bin]] name = "soma-server".
 #
 # Key substitutions:
-#   "rtemplate-server"     → your server binary name (e.g. "myservice-server")
-#   "example-cargo-*"      → your cache mount IDs (e.g. "myservice-cargo-*")
-#   "template-rmcp"          → your systemd/Docker service name
+#   "soma-server"     → your server binary name (e.g. "myservice-server")
+#   "soma-cargo-*"      → your cache mount IDs (e.g. "myservice-cargo-*")
+#   "soma"          → your systemd/Docker service name
 #   EXPOSE 40060            → your port (must match config.toml [mcp] port)
 #   HEALTHCHECK port 40060  → same as EXPOSE
 #   CMD ["serve", "mcp"]   → default args passed to the server binary
@@ -33,7 +33,7 @@ COPY apps/web/ ./
 RUN pnpm build
 
 # ── Stage 2: Builder ──────────────────────────────────────────────────────────
-# TEMPLATE: Pin to a digest for reproducible builds:
+# CUSTOMIZE: Pin to a digest for reproducible builds:
 #   docker pull rust:1.90-slim-bookworm
 #   docker inspect --format '{{index .RepoDigests 0}}' rust:1.90-slim-bookworm
 FROM rust:1.96-slim-bookworm AS builder
@@ -42,7 +42,7 @@ WORKDIR /app
 
 # Install build dependencies.
 # pkg-config and libssl-dev are needed for openssl-sys (used by reqwest/lab-auth).
-# TEMPLATE: Add other system deps your crates need (e.g. libpq-dev for postgres).
+# CUSTOMIZE: Add other system deps your crates need (e.g. libpq-dev for postgres).
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
 # ── Dependency caching layer ──────────────────────────────────────────────────
@@ -58,13 +58,13 @@ COPY docs/contracts/provider-manifest.schema.json docs/contracts/provider-manife
 COPY --from=web /app/apps/web/out/ apps/web/out/
 
 # ── Application build ─────────────────────────────────────────────────────────
-# TEMPLATE: Replace "example" cache IDs with your service name to avoid
+# CUSTOMIZE: Replace the placeholder cache IDs with your service name to avoid
 #           sharing cache with other projects on the same build host.
-RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
-    --mount=type=cache,id=example-cargo-git,target=/usr/local/cargo/git,sharing=locked \
-    --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked -p rmcp-template --bin rtemplate-server --features full && \
-    cp target/release/rtemplate-server /usr/local/bin/rtemplate-server
+RUN --mount=type=cache,id=soma-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=soma-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=soma-cargo-target,target=/app/target,sharing=locked \
+    cargo build --release --locked -p soma --bin soma-server --features full && \
+    cp target/release/soma-server /usr/local/bin/soma-server
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Minimal Debian image — no Rust toolchain, no build tools.
@@ -79,55 +79,64 @@ FROM debian:bookworm-slim
 #   curl            — used by HEALTHCHECK
 #   gosu            — privilege drop in entrypoint.sh (exec as UID 1000:1000)
 #
-# TEMPLATE: Add other runtime libraries your binary needs (e.g. libssl1.1 if not
+# CUSTOMIZE: Add other runtime libraries your binary needs (e.g. libssl1.1 if not
 #           statically linked). Alpine users: replace gosu with su-exec and update
 #           entrypoint.sh accordingly.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
-# TEMPLATE: Replace "rtemplate-server" with your server binary name in both COPY and target path.
-COPY --from=builder /usr/local/bin/rtemplate-server /usr/local/bin/rtemplate-server
+# CUSTOMIZE: Replace "soma-server" with your server binary name in both COPY and target path.
+COPY --from=builder /usr/local/bin/soma-server /usr/local/bin/soma-server
 
 # Wire in the entrypoint.
-# TEMPLATE: entrypoint.sh lives at the repo root. It runs as root, fixes /data
+# CUSTOMIZE: entrypoint.sh lives at the repo root. It runs as root, fixes /data
 #           permissions, validates env vars, then exec's as UID 1000:1000.
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create a non-root user and group for the service.
 # UID/GID 1000 matches the host user convention in docker-compose.yml.
-# TEMPLATE: Replace "example" with your service name for the user/group.
-RUN groupadd --gid 1000 example && \
-    useradd --uid 1000 --gid example --no-create-home --shell /sbin/nologin example && \
+# CUSTOMIZE: Replace the placeholder with your service name for the user/group.
+RUN groupadd --gid 1000 soma && \
+    useradd --uid 1000 --gid soma --no-create-home --shell /sbin/nologin soma && \
     mkdir -p /data && \
-    chown example:example /data
+    chown soma:soma /data
 
 # Default log level. Override with RUST_LOG env var in docker-compose or at runtime.
 ENV RUST_LOG=info
 
-# TEMPLATE: Add other default env vars your binary needs.
-# ENV RTEMPLATE_MCP_HOST=0.0.0.0
-# ENV RTEMPLATE_MCP_PORT=3000
+ARG SOMA_VERSION=0.4.6
+LABEL org.opencontainers.image.title="Soma" \
+      org.opencontainers.image.description="Batteries-included RMCP runtime for drop-in provider-backed agent capabilities" \
+      org.opencontainers.image.url="https://soma.dinglebear.ai" \
+      org.opencontainers.image.source="https://github.com/jmagar/soma" \
+      org.opencontainers.image.documentation="https://github.com/jmagar/soma/tree/main/docs" \
+      org.opencontainers.image.ref.name="soma" \
+      org.opencontainers.image.vendor="dinglebear.ai" \
+      org.opencontainers.image.authors="dinglebear.ai" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${SOMA_VERSION}" \
+      io.modelcontextprotocol.server.name="dinglebear.ai/soma"
+
+# CUSTOMIZE: Add other default env vars your binary needs.
+# ENV SOMA_MCP_HOST=0.0.0.0
+# ENV SOMA_MCP_PORT=3000
 
 # NOTE: No USER directive here — entrypoint.sh drops to UID 1000:1000 via gosu.
 # This allows entrypoint.sh to run as root (for chown /data) before execing the binary.
 # Pattern §26 + §16 (USER 1000:1000 via entrypoint, not Dockerfile USER directive).
 
-# TEMPLATE: Change to match your config.toml [mcp] port = 3000
+# CUSTOMIZE: Change to match your config.toml [mcp] port = 3000
 EXPOSE 40060/tcp
 
-# Health check hits /health (always unauthenticated in the rmcp-template design).
-# TEMPLATE: Change port to match EXPOSE above.
+# Health check hits /health (always unauthenticated in the soma design).
+# CUSTOMIZE: Change port to match EXPOSE above.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40060/health || exit 1
 
-# MCP registry label — used by Claude Code plugin discovery.
-# TEMPLATE: Replace with your registry path: "tv.tootie/yourservice-mcp"
-LABEL io.modelcontextprotocol.server.name="tv.tootie/template-rmcp"
-
 # Entrypoint handles permission setup and privilege drop.
 # CMD is the default argument passed to entrypoint.sh.
-# TEMPLATE: Replace "example-server" with your server binary name in entrypoint.sh.
+# CUSTOMIZE: Replace "soma-server" with your server binary name in entrypoint.sh.
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["serve", "mcp"]

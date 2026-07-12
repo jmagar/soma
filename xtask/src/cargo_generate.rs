@@ -33,7 +33,7 @@ pub(crate) fn run(args: &[String]) -> Result<()> {
     }
 
     let repo = std::env::current_dir().context("failed to read current directory")?;
-    let temp = TempDir::new("rtemplate-cargo-generate")?;
+    let temp = TempDir::new("soma-cargo-generate")?;
     let template = temp.path().join("_template");
     let cargo_home = stage_cargo_home(temp.path())?;
     stage_template(&repo, &template)?;
@@ -126,7 +126,7 @@ pub(crate) fn stage_template(repo: &Path, template: &Path) -> Result<()> {
         };
         !is_ignored(relative)
     }) {
-        let entry = entry.context("failed to walk template source")?;
+        let entry = entry.context("failed to walk Soma scaffold source")?;
         let relative = entry
             .path()
             .strip_prefix(repo)
@@ -271,12 +271,12 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
 
     assert_missing(project.join("cargo-generate.toml"))?;
     assert_missing(project.join(".cargo-generate-values.toml"))?;
-    assert_missing(project.join("template"))?;
+    assert_missing(project.join("scaffold"))?;
     assert_missing(project.join("docs/CARGO_GENERATE.md"))?;
 
     let readme = read_to_string(project.join("README.md"))?;
     if readme.contains("Generate a New Server") {
-        bail!("generated README still contains template generation instructions");
+        bail!("generated README still contains scaffold generation instructions");
     }
     if readme.contains(&format!(
         "https://github.com/{}/{}",

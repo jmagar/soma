@@ -336,13 +336,13 @@ impl ActionManifest {
 
     pub(crate) fn render_snippets(&self, service_type: &str) -> String {
         let mut output = String::new();
-        output.push_str("### crates/rtemplate-service/src/actions.rs\n\n```rust\n");
+        output.push_str("### crates/soma-service/src/actions.rs\n\n```rust\n");
         output.push_str(&self.render_action_specs_snippet());
-        output.push_str("```\n\n### crates/rtemplate-mcp/src/tools.rs\n\n```rust\n");
+        output.push_str("```\n\n### crates/soma-mcp/src/tools.rs\n\n```rust\n");
         output.push_str(&self.render_tools_snippet());
-        output.push_str("```\n\n### crates/rtemplate-cli/src/lib.rs\n\n```rust\n");
+        output.push_str("```\n\n### crates/soma-cli/src/lib.rs\n\n```rust\n");
         output.push_str(&self.render_cli_snippet());
-        output.push_str("```\n\n### crates/rtemplate-service/src/app.rs\n\n```rust\n");
+        output.push_str("```\n\n### crates/soma-service/src/app.rs\n\n```rust\n");
         output.push_str(&self.render_service_snippet(service_type));
         output.push_str("```\n\n### tests\n\n");
         output.push_str(&self.render_tests_guide());
@@ -444,10 +444,12 @@ impl ActionManifest {
         let mut output = String::new();
         output.push_str("Add service and tool_dispatch coverage for every action.\n");
         output.push_str(
-            "- `crates/rmcp-template/tests/tool_dispatch.rs`: MCP success and validation paths.\n",
+            "- `crates/soma/tests/tool_dispatch.rs`: MCP success and validation paths.\n",
         );
-        output.push_str("- `crates/rmcp-template/tests/cli_parse.rs`: CLI command/flag parsing.\n");
-        output.push_str("- Service-layer tests near `crates/rtemplate-service/src/app.rs` or focused modules.\n");
+        output.push_str("- `crates/soma/tests/cli_parse.rs`: CLI command/flag parsing.\n");
+        output.push_str(
+            "- Service-layer tests near `crates/soma-service/src/app.rs` or focused modules.\n",
+        );
         output.push_str(&format!(
             "- Actions: {}\n",
             self.actions
@@ -500,7 +502,7 @@ fn build_plan(options: &Options) -> Result<ScaffoldPlan> {
         .map(|path| -> Result<String> {
             let text = fs::read_to_string(path)
                 .with_context(|| format!("failed to read action manifest {}", path.display()))?;
-            Ok(ActionManifest::from_json(&text)?.render_snippets("ExampleService"))
+            Ok(ActionManifest::from_json(&text)?.render_snippets("SomaService"))
         })
         .transpose()?;
     Ok(plan.with_action_snippets(action_snippets))
@@ -517,7 +519,7 @@ fn apply_plan(plan: &ScaffoldPlan, parent: &Path, cargo_check: bool) -> Result<(
         .get("package_name")
         .context("scaffold plan is missing package_name")?;
     let repo = std::env::current_dir().context("failed to read current directory")?;
-    let temp = cargo_generate::TempDir::new("rtemplate-scaffold")?;
+    let temp = cargo_generate::TempDir::new("soma-scaffold")?;
     let template = temp.path().join("_template");
     cargo_generate::stage_template(&repo, &template)?;
     let mut args = vec![
@@ -560,7 +562,7 @@ pub(crate) fn verify_generated_project(root: &Path) -> Result<()> {
     for relative in [
         ".cargo-generate-values.toml",
         "cargo-generate.toml",
-        "template",
+        "scaffold",
         "docs/CARGO_GENERATE.md",
     ] {
         if root.join(relative).exists() {
@@ -1109,7 +1111,7 @@ fn write_action_starters(root: &Path, manifest: &ActionManifest) -> Result<()> {
         .context("failed to write cli.rs snippet")?;
     fs::write(
         dir.join("service.rs.snippet"),
-        manifest.render_service_snippet("ExampleService"),
+        manifest.render_service_snippet("SomaService"),
     )
     .context("failed to write service.rs snippet")?;
     fs::write(dir.join("tests.md"), manifest.render_tests_guide())
@@ -1148,21 +1150,20 @@ fn render_adapt_plan(root: &Path) -> Result<String> {
     }
 
     output.push_str("\n## 1. Domain and config\n\n");
-    output.push_str("- Replace the stub client in `crates/rtemplate-service/src/example.rs`.\n");
-    output.push_str("- Put validation, defaults, retries, caching, and domain rules in `crates/rtemplate-service/src/app.rs` or focused modules under `crates/rtemplate-service/src/`.\n");
+    output.push_str("- Replace the stub client in `crates/soma-service/src/soma.rs`.\n");
+    output.push_str("- Put validation, defaults, retries, caching, and domain rules in `crates/soma-service/src/app.rs` or focused modules under `crates/soma-service/src/`.\n");
     output.push_str(
-        "- Update config structs and env prefixes in `crates/rtemplate-contracts/src/config.rs`.\n",
+        "- Update config structs and env prefixes in `crates/soma-contracts/src/config.rs`.\n",
     );
-    output.push_str("- Update `.env.example` and `config.example.toml` with real required credentials and non-secret defaults.\n");
+    output.push_str("- Update `.env.example` and `config.soma.toml` with real required credentials and non-secret defaults.\n");
 
     output.push_str("\n## 2. Business actions\n\n");
-    output.push_str(
-        "- Add action metadata and dispatch in `crates/rtemplate-service/src/actions.rs`.\n",
-    );
+    output
+        .push_str("- Add action metadata and dispatch in `crates/soma-service/src/actions.rs`.\n");
     output.push_str("- Regenerate MCP schema docs and OpenAPI after changing action metadata.\n");
     output.push_str("- Keep MCP, CLI, and REST shims registry-driven.\n");
     if has_api {
-        output.push_str("- Add REST handlers/routes in `crates/rtemplate-api/src/api.rs` and `crates/rmcp-template/src/routes.rs`.\n");
+        output.push_str("- Add REST handlers/routes in `crates/soma-api/src/api.rs` and `crates/soma/src/routes.rs`.\n");
     } else {
         output.push_str("- REST handlers are optional for this profile; add them only if the project needs an API surface.\n");
     }
@@ -1175,7 +1176,7 @@ fn render_adapt_plan(root: &Path) -> Result<String> {
         output.push_str("- Web is not selected by this profile; remove web-specific assumptions if you keep the scaffold lean.\n");
     }
     if has_plugin {
-        output.push_str("- Update plugin options, skills, and setup mappings under `plugins/rtemplate/` and `crates/rtemplate-cli/src/setup.rs`.\n");
+        output.push_str("- Update plugin options, skills, and setup mappings under `plugins/soma/` and `crates/soma-cli/src/setup.rs`.\n");
     } else {
         output.push_str("- Plugin support is not selected by this profile; keep plugin files only if you plan to publish editor integrations.\n");
     }
@@ -1183,10 +1184,8 @@ fn render_adapt_plan(root: &Path) -> Result<String> {
 
     output.push_str("\n## 4. Tests and verification\n\n");
     output.push_str("- Add service behavior tests near the service modules.\n");
-    output.push_str(
-        "- Add MCP dispatch coverage in `crates/rmcp-template/tests/tool_dispatch.rs`.\n",
-    );
-    output.push_str("- Add CLI parsing coverage in `crates/rmcp-template/tests/cli_parse.rs`.\n");
+    output.push_str("- Add MCP dispatch coverage in `crates/soma/tests/tool_dispatch.rs`.\n");
+    output.push_str("- Add CLI parsing coverage in `crates/soma/tests/cli_parse.rs`.\n");
     if has_api {
         output.push_str("- Add REST route coverage for every API action.\n");
     }
@@ -1227,7 +1226,7 @@ mod tests {
     #[test]
     fn intent_json_derives_local_adapter_defines_and_research_plan() {
         let intent = r#"{
-          "kind": "rmcp_template_scaffold_intent",
+          "kind": "soma_scaffold_intent",
           "schema_version": 1,
           "server_category": "upstream-client",
           "required_surfaces": ["mcp", "cli"],
@@ -1324,7 +1323,7 @@ mod tests {
 
         let snippets = ActionManifest::from_json(manifest)
             .expect("manifest")
-            .render_snippets("ExampleService");
+            .render_snippets("SomaService");
 
         assert!(snippets.contains("ActionSpec"));
         assert!(snippets.contains("name: \"list_things\""));
@@ -1343,12 +1342,12 @@ mod tests {
             std::os::unix::fs::symlink("CLAUDE.md", fixture.path().join("AGENTS.md")).unwrap();
             std::os::unix::fs::symlink("CLAUDE.md", fixture.path().join("GEMINI.md")).unwrap();
         }
-        fs::create_dir_all(fixture.path().join("plugins/example/.codex-plugin")).unwrap();
+        fs::create_dir_all(fixture.path().join("plugins/soma-fixture/.codex-plugin")).unwrap();
         fs::write(
             fixture
                 .path()
-                .join("plugins/example/.codex-plugin/plugin.json"),
-            r#"{"name":"example","version":"1.0.0"}"#,
+                .join("plugins/soma-fixture/.codex-plugin/plugin.json"),
+            r#"{"name":"soma","version":"1.0.0"}"#,
         )
         .unwrap();
 
@@ -1372,8 +1371,8 @@ mod tests {
 
         assert!(plan.contains("# Adaptation Plan"));
         assert!(plan.contains("Profile: full"));
-        assert!(plan.contains("crates/rtemplate-service/src/example.rs"));
-        assert!(plan.contains("crates/rtemplate-api/src/api.rs"));
+        assert!(plan.contains("crates/soma-service/src/soma.rs"));
+        assert!(plan.contains("crates/soma-api/src/api.rs"));
         assert!(plan.contains("apps/web"));
         assert!(plan.contains("server.json"));
         assert!(plan.contains("cargo xtask scaffold --verify"));

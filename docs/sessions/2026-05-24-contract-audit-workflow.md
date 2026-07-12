@@ -1,13 +1,13 @@
 ---
 date: 2026-05-24 02:29:51 EDT
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 6957525
 plan: docs/superpowers/plans/2026-05-24-contract-backed-family-testing.md
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template
-pr: "#29 Add contract-backed audit workflow https://github.com/jmagar/rmcp-template/pull/29"
-beads: rmcp-template-13y, rmcp-template-13y.1, rmcp-template-13y.2, rmcp-template-13y.3, rmcp-template-13y.4
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma
+pr: "#29 Add contract-backed audit workflow https://github.com/jmagar/soma/pull/29"
+beads: soma-13y, soma-13y.1, soma-13y.2, soma-13y.3, soma-13y.4
 ---
 
 # Contract-Backed Audit Workflow Session
@@ -19,7 +19,7 @@ The session started by asking whether Rust REST-client MCP servers could be test
 ## Session Overview
 
 - Identified `rustarr`, `rustcane`, and `synapse2` as the Rust server family targets, with `rustcane` as the third server from the earlier implementation session.
-- Added a safe `contract-audit` workflow to `rmcp-template`.
+- Added a safe `contract-audit` workflow to `soma`.
 - Documented the static-spec, contract-real, and production-real evidence tiers for REST-client MCP testing.
 - Created and closed Beads for the implementation.
 - Opened, reviewed, merged, and cleaned up PR #29.
@@ -28,7 +28,7 @@ The session started by asking whether Rust REST-client MCP servers could be test
 
 1. Searched prior session context and Beads state for `rustarr`, `rustcane`, and `synapse2`.
 2. Researched FastMCP in-memory testing, `wiremock`, JSON Schema validation, and OpenAPI fixture limitations.
-3. Created epic `rmcp-template-13y` and four child tasks for design, xtask audit, mock upstream pattern, and documentation.
+3. Created epic `soma-13y` and four child tasks for design, xtask audit, mock upstream pattern, and documentation.
 4. Applied research, design, and engineering-review findings into Beads before implementation.
 5. Created a feature worktree and implementation plan under `docs/superpowers/plans/`.
 6. Implemented `cargo xtask contract-audit`, docs, invariants, and static-audit fixes.
@@ -54,7 +54,7 @@ The session started by asking whether Rust REST-client MCP servers could be test
 
 | status | path | previous path | purpose | evidence |
 |---|---|---|---|---|
-| modified | `Justfile` | | Added `contract-audit` recipe and routed `template-check` through it. | Commit `6957525` |
+| modified | `Justfile` | | Added `contract-audit` recipe and routed `soma-check` through it. | Commit `6957525` |
 | modified | `README.md` | | Documented `cargo xtask contract-audit` and `just contract-audit`. | Commit `6957525` |
 | modified | `docs/PATTERNS.md` | | Added Contract-Backed REST-Client Testing pattern. | Commit `6957525` |
 | modified | `docs/TESTING.md` | | Documented evidence tiers and mock-upstream rules. | Commit `6957525` |
@@ -71,16 +71,16 @@ The session started by asking whether Rust REST-client MCP servers could be test
 
 | bead | title | actions | final status | why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-13y` | Contract-backed family testing for Rust MCP REST-client servers | Created, claimed, annotated with research/design/review findings, closed. | closed | Tracked the session goal and acceptance criteria. |
-| `rmcp-template-13y.1` | Design contract-backed testing architecture | Created, annotated, closed. | closed | Captured evidence-tier design. |
-| `rmcp-template-13y.2` | Add xtask spec/contract audit entrypoint | Created, annotated, closed. | closed | Tracked `cargo xtask contract-audit`. |
-| `rmcp-template-13y.3` | Define schema-backed mock upstream test pattern | Created, annotated, closed. | closed | Tracked the safe mock-upstream testing pattern. |
-| `rmcp-template-13y.4` | Document family testing workflow and live smoke policy | Created and closed. | closed | Tracked README/testing/pattern docs. |
+| `soma-13y` | Contract-backed family testing for Rust MCP REST-client servers | Created, claimed, annotated with research/design/review findings, closed. | closed | Tracked the session goal and acceptance criteria. |
+| `soma-13y.1` | Design contract-backed testing architecture | Created, annotated, closed. | closed | Captured evidence-tier design. |
+| `soma-13y.2` | Add xtask spec/contract audit entrypoint | Created, annotated, closed. | closed | Tracked `cargo xtask contract-audit`. |
+| `soma-13y.3` | Define schema-backed mock upstream test pattern | Created, annotated, closed. | closed | Tracked the safe mock-upstream testing pattern. |
+| `soma-13y.4` | Document family testing workflow and live smoke policy | Created and closed. | closed | Tracked README/testing/pattern docs. |
 
 ## Repository Maintenance
 
 - Plans: `docs/plans/` had no files. `docs/superpowers/plans/2026-05-24-contract-backed-family-testing.md` was left in place because it is the committed implementation-plan evidence for the session.
-- Beads: `bd show rmcp-template-13y --json` confirmed the epic and all four child beads are closed.
+- Beads: `bd show soma-13y --json` confirmed the epic and all four child beads are closed.
 - Worktrees and branches: `git worktree list --porcelain` showed only the main worktree after cleanup. The feature worktree was removed and `feature/contract-audit` was deleted locally and remotely.
 - Stale docs: docs touched by the session were updated in the implementation commit; no additional stale-doc pass was needed.
 - Repo state: `git status --short --branch` showed `main...origin/main` clean before this session note was added.
@@ -110,14 +110,14 @@ The session started by asking whether Rust REST-client MCP servers could be test
 ## Errors Encountered
 
 - `bd` repeatedly printed `Warning: auto-export: git add failed: exit status 1`; Beads writes still succeeded, and the export ran during commit.
-- The first `cargo xtask contract-audit` exposed a false positive: `apps/web/lib/template.test.ts` was classified as a web surface. Fixed by excluding test files in `xtask/src/patterns/surfaces.rs`.
+- The first `cargo xtask contract-audit` exposed a false positive: `apps/web/lib/soma.test.ts` was classified as a web surface. Fixed by excluding test files in `xtask/src/patterns/surfaces.rs`.
 - The audit exposed non-ASCII characters in docs and test comments. Replaced the affected characters so the ASCII check passed.
 - GitHub CI on PR #29 showed failures because jobs did not start due account billing/spending-limit.
 - Initial `gh pr merge --delete-branch` failed locally because `main` was already checked out in the primary worktree; retrying without local cleanup showed the PR was already merged, then cleanup was performed manually.
 
 ## Behavior Changes
 
-- Before: template checks were split across several commands and did not expose one clear local static/spec contract audit.
+- Before: Soma checks were split across several commands and did not expose one clear local static/spec contract audit.
 - After: `cargo xtask contract-audit` and `just contract-audit` run the local static/spec checks without contacting live upstream services.
 - Before: docs did not clearly distinguish mocked contract evidence from production-live evidence.
 - After: docs explicitly separate `static-spec`, `contract-real`, and `production-real` testing.
@@ -130,7 +130,7 @@ The session started by asking whether Rust REST-client MCP servers could be test
 |---|---|---|---|
 | `cargo fmt` | Rust formatting succeeds. | Succeeded. | pass |
 | `cargo test -p xtask` | xtask tests pass. | 13 tests passed. | pass |
-| `cargo test --test template_invariants` | template invariant tests pass. | 5 tests passed. | pass |
+| `cargo test --test template_invariants` | Soma invariant tests pass. | 5 tests passed. | pass |
 | `cargo xtask --help` | Help lists `contract-audit`. | Listed `contract-audit`. | pass |
 | `cargo xtask contract-audit` | Static/spec audit passes without live upstream calls. | Passed all six steps. | pass |
 | `gh pr view 29` | PR is merged after merge request. | State `MERGED`, merge commit `6957525b8b3a4d152756f3110fe0e93061a893ef`. | pass |
@@ -138,22 +138,22 @@ The session started by asking whether Rust REST-client MCP servers could be test
 
 ## Risks and Rollback
 
-- Risk: `contract-audit` now makes `template-check` stricter by bundling existing static checks into one path. Local verification passed.
+- Risk: `contract-audit` now makes `soma-check` stricter by bundling existing static checks into one path. Local verification passed.
 - Risk: derived servers still need their own mock-upstream tests; this session documented the pattern but did not retrofit sibling repos.
 - Rollback: revert merge commit `6957525b8b3a4d152756f3110fe0e93061a893ef` or remove the `contract-audit` command and Justfile recipe.
 
 ## Decisions Not Taken
 
 - Did not add `wiremock` or `jsonschema` to `xtask`; those dependencies belong in derived server test suites.
-- Did not build a cross-repo family runner for `rustarr`, `rustcane`, and `synapse2`; the first slice establishes the template pattern.
+- Did not build a cross-repo family runner for `rustarr`, `rustcane`, and `synapse2`; the first slice establishes Soma pattern.
 - Did not generate a mock server from OpenAPI; upstream schemas can be incomplete and require curated overlays.
 - Did not run live destructive tests; default automation must remain non-destructive.
 
 ## References
 
-- PR #29: https://github.com/jmagar/rmcp-template/pull/29
+- PR #29: https://github.com/jmagar/soma/pull/29
 - Merge commit: `6957525b8b3a4d152756f3110fe0e93061a893ef`
-- Beads epic: `rmcp-template-13y`
+- Beads epic: `soma-13y`
 - Plan: `docs/superpowers/plans/2026-05-24-contract-backed-family-testing.md`
 - Testing docs: `docs/TESTING.md`
 - Patterns docs: `docs/PATTERNS.md`
@@ -167,4 +167,4 @@ The session started by asking whether Rust REST-client MCP servers could be test
 
 - Add mock-upstream contract tests in `rustarr`, `rustcane`, and `synapse2` using the documented pattern.
 - Consider a follow-up Bead for a family manifest runner once at least one derived server has adopted the local mock pattern.
-- Run `cargo xtask contract-audit` after future template changes that affect MCP schemas, OpenAPI docs, plugin contracts, or template invariants.
+- Run `cargo xtask contract-audit` after future template changes that affect MCP schemas, OpenAPI docs, plugin contracts, or Soma invariants.

@@ -1,11 +1,11 @@
 ---
 date: 2026-06-26 23:04:38 EST
-repo: git@github.com:jmagar/template-rmcp.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 7dc3515
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template 7dc3515 [main]
-beads: rmcp-template-t8l, rmcp-template-6il, rmcp-template-c8a, rmcp-template-tk3, rmcp-template-9a3
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma 7dc3515 [main]
+beads: soma-t8l, soma-6il, soma-c8a, soma-tk3, soma-9a3
 ---
 
 # CI workflows and no-MCP cleanup
@@ -32,7 +32,7 @@ The session implemented and stabilized upstream-monitor automation, synchronized
 - `.github/workflows/check-no-mcp-drift.yml:13` and `.github/workflows/sync-marketplace-no-mcp.yml:21` were using `ubuntu-latest`; those jobs failed without executing steps because this repo is configured for self-hosted `dookie` runners.
 - `cargo xtask patterns` failed because `docs/references/mcp/schema/2025-11-25/schema.ts` was treated as source and because large transitional xtask modules crossed the hard file-size threshold.
 - `xtask/src/patterns/util.rs:32` now keeps `xtask/src/rmcp_release_monitor.rs` and `xtask/src/scaffold.rs` visible as warnings, while `xtask/src/patterns/util.rs:57` exempts vendored MCP schema references from size enforcement.
-- The CI `Test` job failed on `stdio_mcp::stdio_child_process_lists_tools_and_calls_actions` because restored `target` cache could leave the integration test binary pointing at a missing `rtemplate` executable. `.github/workflows/ci.yml:128` now builds `rtemplate` before `cargo nextest`.
+- The CI `Test` job failed on `stdio_mcp::stdio_child_process_lists_tools_and_calls_actions` because restored `target` cache could leave the integration test binary pointing at a missing `soma` executable. `.github/workflows/ci.yml:128` now builds `soma` before `cargo nextest`.
 - `codex/frictionless-scaffold` had SHA-unique commits, but `git range-diff main~4..main codex/frictionless-scaffold~2..codex/frictionless-scaffold` showed its two feature commits were patch-equivalent to commits already on `main`.
 
 ## Technical Decisions
@@ -47,16 +47,16 @@ The session implemented and stabilized upstream-monitor automation, synchronized
 
 | status | path | previous path | purpose | evidence |
 |---|---|---|---|---|
-| modified | `README.md` | - | Repositioned the template as a full-stack scaffold and documented monitor/scaffold workflows. | Commits `30a9032`, `6f41e1c`, `07df9d7`, `5396247` |
+| modified | `README.md` | - | Repositioned Soma as a full-stack scaffold and documented monitor/scaffold workflows. | Commits `30a9032`, `6f41e1c`, `07df9d7`, `5396247` |
 | modified | `cargo-generate.toml` | - | Added scaffold/generation configuration for the frictionless workflow. | Commit `30a9032` |
-| modified | `crates/rmcp-template/Cargo.toml` | - | Wired feature/dependency support for scaffold generation. | Commit `30a9032` |
-| modified | `crates/rmcp-template/src/lib.rs` | - | Exposed generated-project/scaffold support hooks. | Commit `30a9032` |
-| modified | `crates/rmcp-template/tests/api_routes.rs` | - | Extended route/scaffold contract coverage. | Commit `30a9032` |
-| modified | `crates/rmcp-template/tests/tool_dispatch.rs` | - | Extended MCP dispatch/scaffold action coverage. | Commit `30a9032` |
+| modified | `crates/soma/Cargo.toml` | - | Wired feature/dependency support for scaffold generation. | Commit `30a9032` |
+| modified | `crates/soma/src/lib.rs` | - | Exposed generated-project/scaffold support hooks. | Commit `30a9032` |
+| modified | `crates/soma/tests/api_routes.rs` | - | Extended route/scaffold contract coverage. | Commit `30a9032` |
+| modified | `crates/soma/tests/tool_dispatch.rs` | - | Extended MCP dispatch/scaffold action coverage. | Commit `30a9032` |
 | modified | `docs/CARGO_GENERATE.md` | - | Documented generated-project behavior. | Commit `30a9032` |
 | modified | `docs/QUICKSTART.md` | - | Updated onboarding commands and generated-project guidance. | Commit `30a9032` |
 | created | `docs/SCAFFOLD.md` | - | Added scaffold workflow documentation. | Commits `30a9032`, `07df9d7`, `5396247` |
-| modified | `plugins/rtemplate/skills/scaffold-project/SKILL.md` | - | Updated scaffold skill guidance. | Commit `30a9032` |
+| modified | `plugins/soma/skills/scaffold-project/SKILL.md` | - | Updated scaffold skill guidance. | Commit `30a9032` |
 | modified | `xtask/README.md` | - | Documented new xtask scaffold and monitor commands. | Commits `30a9032`, `07df9d7`, `5396247` |
 | modified | `xtask/src/cargo_generate.rs` | - | Integrated scaffold/generation workflow logic. | Commit `30a9032` |
 | modified | `xtask/src/cargo_generate_post.rs` | - | Added post-generation starter artifact behavior. | Commit `30a9032` |
@@ -72,18 +72,18 @@ The session implemented and stabilized upstream-monitor automation, synchronized
 | modified | `.github/workflows/check-no-mcp-drift.yml` | - | Moved drift checker to the self-hosted Linux runner. | Commit `88064e9` |
 | modified | `xtask/src/patterns/checks.rs` | - | Skipped size enforcement for exempt reference files. | Commit `88064e9` |
 | modified | `xtask/src/patterns/util.rs` | - | Added transitional xtask size targets and MCP schema reference exemption. | Commit `88064e9` |
-| modified | `.github/workflows/ci.yml` | - | Built `rtemplate` before nextest so restored target caches cannot break stdio integration tests. | Commit `7dc3515` |
+| modified | `.github/workflows/ci.yml` | - | Built `soma` before nextest so restored target caches cannot break stdio integration tests. | Commit `7dc3515` |
 | created | `docs/sessions/2026-06-26-ci-workflows-no-mcp-cleanup.md` | - | Captured this session. | This artifact |
 
 ## Beads Activity
 
 | bead | title | actions | final status | why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-t8l` | Rewrite README for full-stack scaffold positioning | Claimed and closed during the session. | closed | Tracked README positioning work for the full-stack scaffold framing. |
-| `rmcp-template-6il` | Add scaffold adaptation planner | Claimed and closed during the session. | closed | Tracked `cargo xtask scaffold --adapt-plan` work. |
-| `rmcp-template-c8a` | Monitor rmcp releases and open drift issue | Claimed and closed during the session. | closed | Tracked the initial rmcp release monitor workflow and issue renderer. |
-| `rmcp-template-tk3` | Materialize scaffold action starter artifacts | Claimed and closed during the session. | closed | Tracked generated action starter artifact support. |
-| `rmcp-template-9a3` | Extend rmcp monitor to watch MCP schema | Claimed and closed during the session. | closed | Tracked MCP schema and conformance monitor extension work. |
+| `soma-t8l` | Rewrite README for full-stack scaffold positioning | Claimed and closed during the session. | closed | Tracked README positioning work for the full-stack scaffold framing. |
+| `soma-6il` | Add scaffold adaptation planner | Claimed and closed during the session. | closed | Tracked `cargo xtask scaffold --adapt-plan` work. |
+| `soma-c8a` | Monitor rmcp releases and open drift issue | Claimed and closed during the session. | closed | Tracked the initial rmcp release monitor workflow and issue renderer. |
+| `soma-tk3` | Materialize scaffold action starter artifacts | Claimed and closed during the session. | closed | Tracked generated action starter artifact support. |
+| `soma-9a3` | Extend rmcp monitor to watch MCP schema | Claimed and closed during the session. | closed | Tracked MCP schema and conformance monitor extension work. |
 
 ## Repository Maintenance
 
@@ -97,7 +97,7 @@ No completed plans were moved because `find docs/plans -maxdepth 2 -type f` fail
 
 ### Worktrees and branches
 
-The cleanup pass observed only two local branches and two remote branches: `main` and `marketplace-no-mcp`. `git worktree list --porcelain` showed only `/home/jmagar/workspace/rmcp-template` on `main` and `/home/jmagar/workspace/_no_mcp_worktrees/rmcp-template` on protected `marketplace-no-mcp`. Earlier stale cleanup removed duplicate `fix/no-mcp-marketplace` after proving it was an ancestor of protected no-MCP, and removed `codex/frictionless-scaffold` after range-diff showed its feature commits were represented on `main`.
+The cleanup pass observed only two local branches and two remote branches: `main` and `marketplace-no-mcp`. `git worktree list --porcelain` showed only `/home/jmagar/workspace/soma` on `main` and `/home/jmagar/workspace/_no_mcp_worktrees/soma` on protected `marketplace-no-mcp`. Earlier stale cleanup removed duplicate `fix/no-mcp-marketplace` after proving it was an ancestor of protected no-MCP, and removed `codex/frictionless-scaffold` after range-diff showed its feature commits were represented on `main`.
 
 ### Stale docs
 
@@ -105,7 +105,7 @@ No stale docs were updated during the save pass. Workflow and session evidence d
 
 ### Transcript
 
-The latest Claude transcript path was `/home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl`, but its tail showed a May 29 updater/advisor discussion, not this Codex session. It was checked and not used as the source of truth for this artifact.
+The latest Claude transcript path was `/home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl`, but its tail showed a May 29 updater/advisor discussion, not this Codex session. It was checked and not used as the source of truth for this artifact.
 
 ## Tools and Skills Used
 
@@ -124,21 +124,21 @@ The latest Claude transcript path was `/home/jmagar/.claude/projects/-home-jmaga
 | `cargo test -p xtask` | Passed, including new pattern utility tests. |
 | `cargo clippy -p xtask -- -D warnings` | Passed. |
 | `actionlint .github/workflows/*.yml` | Passed. |
-| `cargo test --workspace --exclude rtemplate-web` | Passed locally. |
+| `cargo test --workspace --exclude soma-web` | Passed locally. |
 | `cargo nextest run --profile ci` | Passed locally. |
-| `CARGO_TARGET_DIR=/tmp/rmcp-template-nextest-clean cargo nextest run --profile ci -E 'test(stdio_child_process_lists_tools_and_calls_actions)'` | Passed from a fresh target directory. |
-| `cargo build --bin rtemplate` | Passed locally and was added to CI before nextest. |
+| `CARGO_TARGET_DIR=/tmp/soma-nextest-clean cargo nextest run --profile ci -E 'test(stdio_child_process_lists_tools_and_calls_actions)'` | Passed from a fresh target directory. |
+| `cargo build --bin soma` | Passed locally and was added to CI before nextest. |
 | `cargo xtask check-no-mcp-drift --compare-ref` | Passed after no-MCP branch sync. |
-| `gh workflow run check-no-mcp-drift.yml --repo jmagar/template-rmcp --ref main` | Dispatched run `28198633309`, which completed successfully. |
+| `gh workflow run check-no-mcp-drift.yml --repo jmagar/soma --ref main` | Dispatched run `28198633309`, which completed successfully. |
 | `bd dolt push` | Pushed bead state successfully. |
 | `git push` | Pushed `main` after commits `88064e9` and `7dc3515`. |
 | `git push origin marketplace-no-mcp` | Initially rejected because the workflow pushed first; local branch was aligned after proving identical trees. |
 
 ## Errors Encountered
 
-- **No-MCP workflows failed with no steps.** Root cause: `ubuntu-latest` runner labels in no-MCP workflows did not match the repo's self-hosted runner policy. Fixed by switching to `[self-hosted, Linux, rmcp-template, dookie]`.
+- **No-MCP workflows failed with no steps.** Root cause: `ubuntu-latest` runner labels in no-MCP workflows did not match the repo's self-hosted runner policy. Fixed by switching to `[self-hosted, Linux, soma, dookie]`.
 - **Pattern gate failed.** Root cause: vendored MCP schema snapshots and transitional xtask modules exceeded hard source-size thresholds. Fixed by exempting schema references and assigning transitional warning limits to the two large xtask modules.
-- **CI Test job failed in GitHub but not after local warm build.** Root cause: target-cache restore could preserve the integration test binary while omitting the spawned `rtemplate` binary. Fixed by adding `cargo build --bin rtemplate` before `cargo nextest run --profile ci`.
+- **CI Test job failed in GitHub but not after local warm build.** Root cause: target-cache restore could preserve the integration test binary while omitting the spawned `soma` binary. Fixed by adding `cargo build --bin soma` before `cargo nextest run --profile ci`.
 - **No-MCP protected-branch push was rejected.** Root cause: the sync workflow pushed an equivalent merge commit first. Resolved by fetching, proving identical trees, and aligning local `marketplace-no-mcp` to `origin/marketplace-no-mcp` without force push.
 
 ## Behavior Changes (Before/After)
@@ -148,17 +148,17 @@ The latest Claude transcript path was `/home/jmagar/.claude/projects/-home-jmaga
 | Upstream monitoring | No scheduled rmcp/MCP schema/conformance issue monitor existed. | Scheduled/manual monitor opens or updates a GitHub issue with release, schema, conformance, and impact details. |
 | no-MCP workflows | no-MCP workflows could fail before any step on unavailable runner labels. | no-MCP sync and drift checks run on the repo's self-hosted Linux runner. |
 | Pattern checks | Vendored MCP schema snapshots could hard-fail source-size checks. | Schema references are exempt; large transitional xtask modules warn instead of blocking unrelated workflow fixes. |
-| CI stdio test | `nextest` could fail from a restored target cache missing the spawned CLI binary. | CI builds `rtemplate` before nextest, making the stdio integration test deterministic. |
+| CI stdio test | `nextest` could fail from a restored target cache missing the spawned CLI binary. | CI builds `soma` before nextest, making the stdio integration test deterministic. |
 | Branch hygiene | Stale/duplicate branches and worktrees existed. | Only `main` and protected `marketplace-no-mcp` remain locally and remotely. |
 
 ## Verification Evidence
 
 | command | expected | actual | status |
 |---|---|---|---|
-| `gh run list --repo jmagar/template-rmcp --limit 20 --json ...` | Latest core workflows green on `7dc3515`. | CI, MSRV, Auto Tag, Sync marketplace-no-mcp, Check no-MCP drift, and rmcp release monitor all showed `success`. | pass |
-| `gh run view --repo jmagar/template-rmcp 28198633309 --json ...` | Manual no-MCP drift workflow passes. | `Check no-MCP branch drift` completed `success`. | pass |
+| `gh run list --repo jmagar/soma --limit 20 --json ...` | Latest core workflows green on `7dc3515`. | CI, MSRV, Auto Tag, Sync marketplace-no-mcp, Check no-MCP drift, and rmcp release monitor all showed `success`. | pass |
+| `gh run view --repo jmagar/soma 28198633309 --json ...` | Manual no-MCP drift workflow passes. | `Check no-MCP branch drift` completed `success`. | pass |
 | `git status --short --branch` | `main` clean and synced. | `## main...origin/main`; no dirty files. | pass |
-| `git -C /home/jmagar/workspace/_no_mcp_worktrees/rmcp-template status --short --branch` | protected no-MCP worktree clean and synced. | `## marketplace-no-mcp...origin/marketplace-no-mcp`; no dirty files. | pass |
+| `git -C /home/jmagar/workspace/_no_mcp_worktrees/soma status --short --branch` | protected no-MCP worktree clean and synced. | `## marketplace-no-mcp...origin/marketplace-no-mcp`; no dirty files. | pass |
 | `git branch --all --verbose --verbose` | Only `main` and `marketplace-no-mcp` locally/remotely. | Only those branches plus `origin/HEAD -> origin/main` were listed. | pass |
 | `git worktree list --porcelain` | Only main and protected no-MCP worktrees. | Exactly two worktrees were listed. | pass |
 | `cargo xtask check-no-mcp-drift --compare-ref` | `origin/marketplace-no-mcp` equals `origin/main` plus transform. | Drift compare passed with tree `1c687862272240349b87e8dbe81df980631bb325`. | pass |
@@ -178,13 +178,13 @@ The latest Claude transcript path was `/home/jmagar/.claude/projects/-home-jmaga
 
 ## References
 
-- GitHub issue #56: `https://github.com/jmagar/template-rmcp/issues/56`
-- CI run: `https://github.com/jmagar/template-rmcp/actions/runs/28197902247`
-- Auto Tag run: `https://github.com/jmagar/template-rmcp/actions/runs/28197902443`
-- MSRV run: `https://github.com/jmagar/template-rmcp/actions/runs/28197902300`
-- Sync marketplace-no-mcp run: `https://github.com/jmagar/template-rmcp/actions/runs/28197902275`
-- Check no-MCP drift run: `https://github.com/jmagar/template-rmcp/actions/runs/28198633309`
-- Scheduled rmcp release monitor run: `https://github.com/jmagar/template-rmcp/actions/runs/28226640275`
+- GitHub issue #56: `https://github.com/jmagar/soma/issues/56`
+- CI run: `https://github.com/jmagar/soma/actions/runs/28197902247`
+- Auto Tag run: `https://github.com/jmagar/soma/actions/runs/28197902443`
+- MSRV run: `https://github.com/jmagar/soma/actions/runs/28197902300`
+- Sync marketplace-no-mcp run: `https://github.com/jmagar/soma/actions/runs/28197902275`
+- Check no-MCP drift run: `https://github.com/jmagar/soma/actions/runs/28198633309`
+- Scheduled rmcp release monitor run: `https://github.com/jmagar/soma/actions/runs/28226640275`
 
 ## Open Questions
 

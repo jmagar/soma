@@ -1,7 +1,7 @@
 # =============================================================================
-# Justfile — Development and deployment commands for the Example MCP server
+# Justfile — Development and deployment commands for Soma
 #
-# TEMPLATE: Replace "example" with your binary/service name throughout.
+# CUSTOMIZE: Soma is the product binary; internal crate names still use soma in this compatibility pass.
 #           Replace port 40060 with your service's port if different.
 #
 # Usage: just <recipe>   (install just: cargo install just)
@@ -14,21 +14,21 @@ default:
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
-# WARNING: RTEMPLATE_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
+# WARNING: SOMA_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
 dev:
-    RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_NO_AUTH=true cargo run --bin rtemplate-server -- serve mcp
+    SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo run --bin soma-server -- serve mcp
 
 # Run in stdio MCP transport mode (for Claude Desktop or direct pipe)
 mcp:
-    cargo run --bin rtemplate -- mcp
+    cargo run --bin soma -- mcp
 
 # Run a quick CLI greeting (smoke test without a running server)
 greet:
-    cargo run --bin rtemplate -- greet --name "Developer"
+    cargo run --bin soma -- greet --name "Developer"
 
 # Run the doctor pre-flight check
 doctor:
-    cargo run --bin rtemplate -- doctor
+    cargo run --bin soma -- doctor
 
 # ── Building ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ build:
 
 # Compile the lightweight local/plugin binary only
 build-local:
-    cargo build --bin rtemplate --no-default-features --features local-adapter
+    cargo build --bin soma --no-default-features --features local-adapter
 
 # Compile optimized release build (slower compile, much faster runtime)
 build-release:
@@ -46,11 +46,11 @@ build-release:
 
 # Compile the lightweight local/plugin release binary only
 build-local-release:
-    cargo build --release --bin rtemplate --no-default-features --features local-adapter
+    cargo build --release --bin soma --no-default-features --features local-adapter
 
 # Compile the full server release binary only
 build-server-release:
-    cargo build --release --bin rtemplate-server --features full
+    cargo build --release --bin soma-server --features full
 
 # Build the Next.js web UI static export (required before cargo build embeds it)
 # Output lands in apps/web/out/ and is baked into the binary via the `web` feature
@@ -147,7 +147,7 @@ ascii-fix:
 file-size-check:
     cargo xtask check-file-size
 
-# Regenerate MCP schema contract docs from crates/rtemplate-mcp/src/schemas.rs
+# Regenerate MCP schema contract docs from crates/soma-mcp/src/schemas.rs
 schema-docs:
     cargo xtask check-schema-docs --write
 
@@ -163,7 +163,7 @@ generate-docs:
 check-docs:
     cargo xtask check-docs
 
-# Verify stale hardcoded template claims have not reappeared
+# Verify stale hardcoded Soma claims have not reappeared
 check-stale-claims:
     cargo xtask check-stale-claims
 
@@ -195,12 +195,12 @@ patterns-json:
 contract-audit:
     cargo xtask contract-audit
 
-# Run shell/Rust-adjacent template invariant smoke tests
-template-features:
-    cargo xtask test-template-features
+# Run shell/Rust-adjacent Soma invariant smoke tests
+soma-features:
+    cargo xtask test-soma-features
 
-# Run fast template-specific checks
-template-check:
+# Run fast Soma-specific checks
+soma-check:
     just contract-audit
     just validate-plugin
 
@@ -225,7 +225,7 @@ pre-push:
 
 # Run the full local pre-push validation suite
 pre-push-full:
-    RTEMPLATE_FULL_PRE_PUSH=1 python3 scripts/ci/pre_push.py
+    SOMA_FULL_PRE_PUSH=1 python3 scripts/ci/pre_push.py
 
 # Ensure pre-commit stays limited to fast staged-file checks
 lefthook-speed-check:
@@ -255,7 +255,7 @@ symlink-docs:
     cargo xtask symlink-docs
 
 # Inline version of symlink-docs — no xtask required.
-# TEMPLATE: Use this if xtask is unavailable (e.g. before first cargo build).
+# CUSTOMIZE: Use this if xtask is unavailable (e.g. before first cargo build).
 symlink-docs-inline:
     find . -name "CLAUDE.md" -not -path "./.git/*" -not -path "./target/*" \
         -exec sh -c 'dir=$(dirname "$1"); ln -sf CLAUDE.md "${dir}/AGENTS.md"; ln -sf CLAUDE.md "${dir}/GEMINI.md"; echo "  link ${dir}/AGENTS.md + ${dir}/GEMINI.md"' _ {} \;
@@ -295,7 +295,7 @@ uninstall-hooks:
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 
-# Generate a cryptographically random bearer token for RTEMPLATE_MCP_TOKEN
+# Generate a cryptographically random bearer token for SOMA_MCP_TOKEN
 # Copy the output into your .env file
 gen-token:
     openssl rand -hex 32
@@ -309,10 +309,10 @@ setup:
 
 # Build the Docker image from source (does not start the container)
 docker-build:
-    docker build -f config/Dockerfile -t rtemplate-mcp .
+    docker build -f config/Dockerfile -t soma .
 
 # Start the Docker Compose stack in detached mode
-# TEMPLATE: The compose file references the "jakenet" external network.
+# CUSTOMIZE: The compose file references the "jakenet" external network.
 #           Create it first if it doesn't exist: docker network create jakenet
 docker-up:
     docker compose up -d
@@ -340,7 +340,7 @@ docker-rebuild:
 # Uses the `release-fast` profile (release opts, no LTO, many codegen units) so
 # the binary behaves like release while compiling in a fraction of the time.
 build-fast:
-    cargo build --profile release-fast --bin rtemplate-server --features full
+    cargo build --profile release-fast --bin soma-server --features full
 
 # Fast "edit → rebuild image → check in browser" loop.
 # Unlike docker-rebuild's --no-cache full build, this reuses BuildKit layer and
@@ -362,7 +362,7 @@ logs:
 # ── Health & diagnostics ──────────────────────────────────────────────────────
 
 # Check the MCP server health endpoint (no auth required)
-# TEMPLATE: Change port 40060 if you use a different port
+# CUSTOMIZE: Change port 40060 if you use a different port
 health:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -374,26 +374,26 @@ health:
 
 # Verify that the running Docker/systemd service matches the current artifact
 runtime-current:
-    cargo xtask check-runtime-current --expected-binary target/release/rtemplate-server
+    cargo xtask check-runtime-current --expected-binary target/release/soma-server
 
 # Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
 auth-smoke:
     cargo xtask test-mcp-auth
 
-# Call the status action via the REST API (requires RTEMPLATE_MCP_TOKEN in env)
+# Call the status action via the REST API (requires SOMA_MCP_TOKEN in env)
 status:
     #!/usr/bin/env bash
     set -euo pipefail
-    TOKEN="${RTEMPLATE_MCP_TOKEN:-}"
+    TOKEN="${SOMA_MCP_TOKEN:-}"
     if [[ -z "${TOKEN}" ]]; then
-        echo "Set RTEMPLATE_MCP_TOKEN or use 'just dev' (no-auth mode)"
+        echo "Set SOMA_MCP_TOKEN or use 'just dev' (no-auth mode)"
         exit 1
     fi
     curl -sf http://localhost:40060/mcp \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json, text/event-stream" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"example","arguments":{"action":"status"}}}' \
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"soma","arguments":{"action":"status"}}}' \
         | { if command -v jq >/dev/null 2>&1; then jq .; else python3 -m json.tool; fi; }
 
 # ── Plugin ────────────────────────────────────────────────────────────────────
@@ -412,8 +412,8 @@ install: install-local
 # Install the release binary on the local PATH for runtime smoke testing
 install-local: build-local-release
     mkdir -p "${HOME}/.local/bin"
-    install -m 755 target/release/rtemplate "${HOME}/.local/bin/rtemplate"
-    @echo "Installed ${HOME}/.local/bin/rtemplate"
+    install -m 755 target/release/soma "${HOME}/.local/bin/soma"
+    @echo "Installed ${HOME}/.local/bin/soma"
 
 # Validate all plugin manifests, MCP config, hooks, and skills
 validate-plugin:
@@ -425,7 +425,7 @@ validate-skills: validate-plugin
 # ── mcporter ─────────────────────────────────────────────────────────────────
 
 # Run mcporter-based integration tests (requires running server + mcporter CLI)
-# TEMPLATE: Ensure the server is running first: just dev   or   just docker-up
+# CUSTOMIZE: Ensure the server is running first: just dev   or   just docker-up
 test-mcporter:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -433,7 +433,7 @@ test-mcporter:
         echo "mcporter not found. Install it first."
         exit 1
     fi
-    bash crates/rmcp-template/tests/mcporter/test-mcp.sh
+    bash crates/soma/tests/mcporter/test-mcp.sh
 
 # ── MCP conformance ────────────────────────────────────────────────────────────
 
@@ -441,7 +441,7 @@ test-mcporter:
 # Boots a loopback no-auth server, waits for /health, runs the suite, tears down.
 # Requires npx (Node). Suite: active (latest dated spec, default) | draft | all | pending
 # Defaults to port 41060 to avoid colliding with a live server on the default 40060.
-# TEMPLATE: adjust the default port and binary name if you renamed them.
+# CUSTOMIZE: adjust the default port and binary name if you renamed them.
 conformance suite="active" port="41060":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -458,11 +458,11 @@ conformance suite="active" port="41060":
         exit 1
     fi
     echo "Building server (default features)..."
-    cargo build --bin rtemplate-server
+    cargo build --bin soma-server
     echo "Starting loopback no-auth server on ${PORT}..."
-    RTEMPLATE_MCP_HOST=127.0.0.1 RTEMPLATE_MCP_PORT=${PORT} RTEMPLATE_MCP_NO_AUTH=true \
-        RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true \
-        ./target/debug/rtemplate-server serve mcp >/tmp/rtemplate-conformance-server.log 2>&1 &
+    SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_PORT=${PORT} SOMA_MCP_NO_AUTH=true \
+        SOMA_MCP_CONFORMANCE_FIXTURES=true \
+        ./target/debug/soma-server serve mcp >/tmp/soma-conformance-server.log 2>&1 &
     SERVER_PID=$!
     trap 'kill ${SERVER_PID} 2>/dev/null || true' EXIT
     echo "Waiting for /health on ${PORT}..."
@@ -473,7 +473,7 @@ conformance suite="active" port="41060":
     # Hard guard: ensure OUR server is the one answering, not a pre-existing one.
     if ! kill -0 ${SERVER_PID} 2>/dev/null; then
         echo "Server failed to start (likely bind error). Log:"
-        cat /tmp/rtemplate-conformance-server.log
+        cat /tmp/soma-conformance-server.log
         exit 1
     fi
     echo "Running MCP conformance suite '{{suite}}' against ${URL}..."
@@ -491,20 +491,20 @@ pre-release:
     cargo xtask pre-release-check
 
 # Generate a standalone CLI for this server via mcporter (requires running server)
-# TEMPLATE: Update port and token env var name in scripts/generate-cli.sh
+# CUSTOMIZE: Update port and token env var name in scripts/generate-cli.sh
 generate-cli:
     cargo xtask generate-cli
 
 # ── Publishing ────────────────────────────────────────────────────────────────
 
-# Bump the template release component and all manifest-declared version files.
+# Bump the Soma release component and all manifest-declared version files.
 bump-version bump="patch":
-    cargo xtask bump-version template {{bump}}
+    cargo xtask bump-version soma {{bump}}
 
 # Bump version, tag, and push (triggers CI publish workflow)
 # Updates the release/components.toml-declared version files only.
 # (GitHub SHA is the version for plugins; every push is a new release automatically)
-# TEMPLATE: Requires main branch + clean working tree
+# CUSTOMIZE: Requires main branch + clean working tree
 publish bump="patch":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -516,7 +516,7 @@ publish bump="patch":
       *) echo "Usage: just publish [major|minor|patch]"; exit 1 ;;
     esac
     just bump-version "{{bump}}"
-    NEW=$(grep -m1 "^version" crates/rmcp-template/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+    NEW=$(grep -m1 "^version" crates/soma/Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
     cargo xtask check-version-sync
     git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"

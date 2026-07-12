@@ -1,8 +1,8 @@
 {
-  "provider_fingerprint": "sha256:c0c63fc4531f0e7610bcdb717e75ad3bf7b2c6da6deaddedd809759cdeeed08d",
+  "provider_fingerprint": "sha256:3be19b2149cbe295823a623c7ec548fce543d0761d7909eb9f06d402666b756b",
   "providers": [
     {
-      "description": "Native service actions compiled into the template.",
+      "description": "Native service actions compiled into Soma.",
       "elicitation": [],
       "kind": "static-rust",
       "name": "static-rust",
@@ -24,7 +24,7 @@
               "value_name": "NAME"
             }
           ],
-          "cli_usage": "example greet [--name NAME]",
+          "cli_usage": "soma greet [--name NAME]",
           "cost": "cheap",
           "description": "Return a greeting.",
           "destructive": false,
@@ -42,16 +42,35 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example greet [--name NAME]",
+            "cli_usage": "soma greet [--name NAME]",
             "returns": "Greeting",
             "scaffold_fallback": null
           },
           "name": "greet",
-          "output_schema": null,
+          "output_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "greeting": {
+                "type": "string"
+              },
+              "server": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "greeting",
+              "target",
+              "server"
+            ],
+            "type": "object"
+          },
           "requires_admin": false,
           "rest": true,
           "rest_route": "POST /v1/greet",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": true,
@@ -66,7 +85,7 @@
               "value_name": "MSG"
             }
           ],
-          "cli_usage": "example echo --message MSG",
+          "cli_usage": "soma echo --message MSG",
           "cost": "cheap",
           "description": "Echo a message back unchanged.",
           "destructive": false,
@@ -88,16 +107,27 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example echo --message MSG",
+            "cli_usage": "soma echo --message MSG",
             "returns": "EchoResult",
             "scaffold_fallback": null
           },
           "name": "echo",
-          "output_schema": null,
+          "output_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "echo": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "echo"
+            ],
+            "type": "object"
+          },
           "requires_admin": false,
           "rest": true,
           "rest_route": "POST /v1/echo",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": true,
@@ -105,7 +135,7 @@
           "cli_command": "status",
           "cli_default_output": null,
           "cli_flags": [],
-          "cli_usage": "example status",
+          "cli_usage": "soma status",
           "cost": "cheap",
           "description": "Return server status and configuration info.",
           "destructive": false,
@@ -118,16 +148,36 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example status",
+            "cli_usage": "soma status",
             "returns": "Status",
             "scaffold_fallback": null
           },
           "name": "status",
-          "output_schema": null,
+          "output_schema": {
+            "additionalProperties": true,
+            "properties": {
+              "note": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "warnings": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "type": "object"
+          },
           "requires_admin": false,
           "rest": true,
           "rest_route": "GET /v1/status",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": false,
@@ -153,11 +203,34 @@
             "scaffold_fallback": null
           },
           "name": "elicit_name",
-          "output_schema": null,
+          "output_schema": {
+            "additionalProperties": true,
+            "properties": {
+              "fallback_greeting": {
+                "type": "string"
+              },
+              "greeting": {
+                "type": "string"
+              },
+              "hint": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
           "requires_admin": false,
           "rest": false,
           "rest_route": "N/A",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": false,
@@ -186,11 +259,55 @@
             }
           },
           "name": "scaffold_intent",
-          "output_schema": null,
+          "output_schema": {
+            "additionalProperties": true,
+            "properties": {
+              "handoff": {
+                "type": "object"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "mcp_primitives": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "policy": {
+                "type": "object"
+              },
+              "project": {
+                "type": "object"
+              },
+              "required_surfaces": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "runtime": {
+                "type": "object"
+              },
+              "schema_version": {
+                "type": "integer"
+              },
+              "server_category": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "upstream": {
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
           "requires_admin": false,
           "rest": false,
           "rest_route": "N/A",
-          "scope": "example:read"
+          "scope": "soma:read"
         },
         {
           "cli": true,
@@ -198,7 +315,7 @@
           "cli_command": "help",
           "cli_default_output": null,
           "cli_flags": [],
-          "cli_usage": "example help",
+          "cli_usage": "soma help",
           "cost": "cheap",
           "description": "Show the action reference.",
           "destructive": false,
@@ -211,19 +328,59 @@
           },
           "mcp": true,
           "meta": {
-            "cli_usage": "example help",
+            "cli_usage": "soma help",
             "returns": "HelpPayload",
             "scaffold_fallback": null
           },
           "name": "help",
-          "output_schema": null,
+          "output_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "catalog": {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "examples": {
+                "type": "object"
+              },
+              "mcp_only_actions": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "preferred_rest_style": {
+                "type": "string"
+              },
+              "usage": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "actions",
+              "mcp_only_actions",
+              "catalog",
+              "preferred_rest_style",
+              "usage",
+              "examples"
+            ],
+            "type": "object"
+          },
           "requires_admin": false,
           "rest": true,
           "rest_route": "GET /v1/help",
           "scope": null
         }
       ],
-      "when_to_use": "Use for rmcp-template built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
+      "when_to_use": "Use for Soma built-in Rust actions, scaffold intent collection, MCP elicitation flows, and CLI/REST action reference."
     }
   ],
   "schema_version": 1,
@@ -254,7 +411,7 @@
       "scaffold_intent",
       "status"
     ],
-    "node_package": "packages/rtemplate-mcp/package.json",
+    "node_package": "packages/soma-rmcp/package.json",
     "palette": "deferred until Axon tauri-palette port lands",
     "plugin": "docs/generated/plugin.json",
     "provider_dir": "providers",

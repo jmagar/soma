@@ -2,11 +2,11 @@
 title: "Testing"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -44,50 +44,50 @@ retries = 2
 
 | File | Purpose |
 |---|---|
-| `crates/rmcp-template/tests/cli_parse.rs` | CLI parser behavior. |
-| `crates/rmcp-template/tests/tool_dispatch.rs` | Service/action semantics without live credentials. |
-| `crates/rmcp-template/tests/api_routes.rs` | REST and mounted auth route behavior. |
-| `crates/rmcp-template/tests/plugin_contract.rs` | Plugin package and hook contracts. |
-| `crates/rmcp-template/tests/template_invariants.rs` | Automation/template invariants. |
-| `crates/rtemplate-service/src/app_tests.rs` | Private service-layer unit tests (sidecar to `app.rs`). |
+| `crates/soma/tests/cli_parse.rs` | CLI parser behavior. |
+| `crates/soma/tests/tool_dispatch.rs` | Service/action semantics without live credentials. |
+| `crates/soma/tests/api_routes.rs` | REST and mounted auth route behavior. |
+| `crates/soma/tests/plugin_contract.rs` | Plugin package and hook contracts. |
+| `crates/soma/tests/soma_invariants.rs` | Automation/Soma invariants. |
+| `crates/soma-service/src/app_tests.rs` | Private service-layer unit tests (sidecar to `app.rs`). |
 
 ## Test sidecars
 
 All tests that need access to private functions live in `_tests.rs` sidecar files, not inline:
 
 ```rust
-// crates/rtemplate-service/src/app.rs
-pub struct ExampleService { ... }
-impl ExampleService { ... }
+// crates/soma-service/src/app.rs
+pub struct SomaService { ... }
+impl SomaService { ... }
 
 #[cfg(test)]
 #[path = "app_tests.rs"]
 mod tests;
 
-// crates/rtemplate-service/src/app_tests.rs
+// crates/soma-service/src/app_tests.rs
 use super::*;  // access to private items
 
 #[test]
 fn destructive_gate_blocks_without_confirm() {
-    let svc = ExampleService::new(stub_client());
+    let svc = SomaService::new(stub_client());
     let err = svc.destructive_gate(false).unwrap_err();
     assert!(err.to_string().contains("confirm=true"));
 }
 
 #[test]
 fn destructive_gate_allows_with_confirm() {
-    let svc = ExampleService::new(stub_client());
+    let svc = SomaService::new(stub_client());
     assert!(svc.destructive_gate(true).is_ok());
 }
 ```
 
 ## Test helpers
 
-`crates/rmcp-template/src/lib.rs` exports helpers for integration tests. Prefer the helper over
+`crates/soma/src/lib.rs` exports helpers for integration tests. Prefer the helper over
 hand-constructing `AppState` in integration tests:
 
 ```rust
-use rmcp_template::testing::loopback_state;
+use soma::testing::loopback_state;
 
 #[tokio::test]
 async fn tool_path_uses_loopback_state() {
@@ -99,13 +99,13 @@ async fn tool_path_uses_loopback_state() {
 Use `loopback_state()` in integration tests:
 
 ```rust
-// crates/rmcp-template/tests/tool_dispatch.rs
-use example_mcp::testing::loopback_state;
+// crates/soma/tests/tool_dispatch.rs
+use soma::testing::loopback_state;
 
 #[tokio::test]
 async fn help_returns_help_key() {
     let state = loopback_state();
-    let result = execute_tool(&state, "example", json!({"action": "help"})).await.unwrap();
+    let result = execute_tool(&state, "soma", json!({"action": "help"})).await.unwrap();
     assert!(result.get("help").is_some());
     assert!(!result["help"].as_str().unwrap().is_empty());
 }
@@ -115,25 +115,25 @@ async fn help_returns_help_key() {
 
 ```bash
 just dev
-bash crates/rmcp-template/tests/mcporter/test-mcp.sh
+bash crates/soma/tests/mcporter/test-mcp.sh
 just test-mcporter
 ```
 
 The mcporter harness validates tools and resources against a running server. It logs calls to `/tmp/test-mcp.<timestamp>.log`.
 
 The test script validates:
-- auth rejection when `RTEMPLATE_MCP_TOKEN` is set
+- auth rejection when `SOMA_MCP_TOKEN` is set
 - tool semantic behavior for `greet`, `echo`, `status`, and `help`
-- MCP resource behavior for `example://schema/mcp-tool`
+- MCP resource behavior for `soma://schema/mcp-tool`
 
 Use semantic assertions, not liveness-only checks:
 
 ```bash
 # Bad test — only proves MCP responded
-run_test "server info" "example" '{"action":"status"}'
+run_test "server info" "soma" '{"action":"status"}'
 
 # Good test — proves the service actually returned real data
-run_test "status has version" "example" '{"action":"status"}' "version"
+run_test "status has version" "soma" '{"action":"status"}' "version"
 ```
 
 ## Contract-backed REST-client tests
@@ -143,7 +143,7 @@ services in default tests. Use three evidence tiers instead:
 
 | Tier | What it proves | Default? |
 |---|---|---|
-| `static-spec` | The repo's MCP schema docs, OpenAPI docs, action metadata, plugin contracts, sidecar tests, and template invariants are in sync. | Yes |
+| `static-spec` | The repo's MCP schema docs, OpenAPI docs, action metadata, plugin contracts, sidecar tests, and Soma invariants are in sync. | Yes |
 | `contract-real` | The service builds the expected outbound HTTP requests, parses fixtures, maps upstream errors, and enforces safety gates against a local mock upstream and schema fixtures. | Yes |
 | `production-real` | A deployed server can answer read-only MCP calls against a real upstream. | Explicit opt-in only |
 
@@ -169,10 +169,10 @@ Live `mcporter` smoke remains `production-real` evidence. Keep it read-only and
 explicitly allowlisted; do not include delete/update/send actions in the live
 suite unless a disposable target is configured.
 
-## Template checks
+## Soma README Shape checks
 
 ```bash
-just template-check
+just soma-check
 cargo xtask contract-audit
 cargo xtask patterns
 cargo xtask pre-release-check

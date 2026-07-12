@@ -2,14 +2,14 @@
 # .gitleaks.toml — secret-scanning policy for this repo
 #
 # Extends gitleaks' built-in ruleset (useDefault = true) and layers an allowlist
-# for the placeholder / fixture credentials this template ships on purpose, so
+# for the placeholder / fixture credentials Soma ships on purpose, so
 # the `gitleaks` CI job stays sharp without false-failing on documented examples.
 #
-# TEMPLATE: keep this file. Add real allowlist entries here when a legitimate
+# CUSTOMIZE: keep this file. Add real allowlist entries here when a legitimate
 # placeholder trips the scanner — never disable the job or commit real secrets.
 # =============================================================================
 
-title = "rmcp-template gitleaks config"
+title = "soma gitleaks config"
 
 [extend]
 useDefault = true
@@ -28,14 +28,14 @@ regexes = [
 # Paths that only ever contain examples, fixtures, or generated docs.
 paths = [
   '''.*tests?/.*''',
-  '''config\.example\.toml''',
+  '''config\.soma\.toml''',
   '''CHANGELOG\.md''',
   '''docs/.*''',
 ]
 
 # Generic placeholder words that should never be treated as live secrets.
 stopwords = [
-  "example",
+  "soma",
   "placeholder",
   "changeme",
   "your-token",

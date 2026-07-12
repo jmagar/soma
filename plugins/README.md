@@ -8,7 +8,7 @@ All platforms share the same skills and lifecycle hooks.
 ## Structure
 
 ```
-plugins/rtemplate/
+plugins/soma/
 ├── .claude-plugin/
 │   └── plugin.json       # Claude Code manifest
 ├── .codex-plugin/
@@ -18,7 +18,7 @@ plugins/rtemplate/
 ├── hooks/
 │   └── hooks.json        # Lifecycle hook definitions (call the binary directly)
 └── skills/
-    ├── example/
+    ├── soma/
     │   └── SKILL.md      # Tool documentation for Claude and Codex
     └── scaffold-project/
         └── SKILL.md      # Turns scaffold_intent JSON into an approval-first plan
@@ -44,10 +44,11 @@ Claude Code plugin manifest. Defines the plugin identity, lifecycle hooks, and u
 | `google_client_id` | string (sensitive) | Google OAuth client ID |
 | `google_client_secret` | string (sensitive) | Google OAuth client secret |
 | `auth_admin_email` | string | OAuth admin email |
-| `rtemplate_api_url` | string | Deployed platform API or upstream service URL used by stdio adapter |
-| `rtemplate_api_key` | string (sensitive) | Deployed API bearer token or upstream service API key |
+| `soma_api_url` | string | Deployed platform API or upstream service URL used by stdio adapter |
+| `soma_api_key` | string (sensitive) | Deployed API bearer token or upstream service API key |
 
-**TEMPLATE**: Replace `rtemplate_api_url` / `rtemplate_api_key` with your service's credential fields.
+Soma maps these plugin options into the current `SOMA_API_URL` /
+`SOMA_API_KEY` runtime env names for compatibility.
 
 ### `.codex-plugin/plugin.json`
 
@@ -68,16 +69,16 @@ Defines two lifecycle hooks:
 
 | Hook | Trigger | Command |
 |---|---|---|
-| `SessionStart` | Every Claude Code session start | `rtemplate setup plugin-hook` |
-| `ConfigChange` | User updates plugin settings | `rtemplate setup plugin-hook` |
+| `SessionStart` | Every Claude Code session start | `soma setup plugin-hook` |
+| `ConfigChange` | User updates plugin settings | `soma setup plugin-hook` |
 
 Timeout: 300 seconds.
 
-### `rtemplate setup plugin-hook`
+### `soma setup plugin-hook`
 
 The lifecycle command. Runs on every session start and config change, called directly by `hooks.json` (no shell wrapper).
 
-- Reads `CLAUDE_PLUGIN_OPTION_*` env vars from plugin `userConfig` and maps them to the binary's `RTEMPLATE_*` runtime env vars (`apply_plugin_options()` in `src/cli/setup.rs`)
+- Reads `CLAUDE_PLUGIN_OPTION_*` env vars from plugin `userConfig` and maps them to the binary's `SOMA_*` runtime env vars (`apply_plugin_options()` in `src/cli/setup.rs`)
 - Runs from the binary already installed on `PATH`
 - Prepares the plugin appdata directory
 - Checks/repairs setup and emits the JSON hook contract
@@ -88,9 +89,9 @@ Deployment policy, repair behavior, env-var mapping, and failure classification 
 
 ## Skills
 
-### `skills/example/SKILL.md`
+### `skills/soma/SKILL.md`
 
-Three-tier structured documentation for the `example` MCP tool, used by both Claude Code and Codex to understand when and how to invoke the tool.
+Three-tier structured documentation for the `soma` MCP tool, used by both Claude Code and Codex to understand when and how to invoke the tool.
 
 **Tier 1** (above the fold): tool name, quick action table, most common usage.  
 **Tier 2**: full action reference — parameters, types, example calls, response shapes.  
@@ -98,7 +99,7 @@ Three-tier structured documentation for the `example` MCP tool, used by both Cla
 
 Also includes HTTP fallback examples using `CLAUDE_PLUGIN_OPTION_SERVER_URL` and `CLAUDE_PLUGIN_OPTION_API_TOKEN` env vars for when the MCP connection isn't available.
 
-**TEMPLATE**: Replace the action table and examples with your service's actual actions.
+Soma ships with the action table and examples generated from its canonical action registry.
 
 ---
 
@@ -118,13 +119,13 @@ Use `scripts/bump-version.sh patch` (or `minor`/`major`) to update version-beari
 
 ---
 
-## TEMPLATE checklist
+## Scaffold Checklist
 
 When adapting this plugin for a real service:
 
-1. Replace all `example` / `Example` / `RTEMPLATE_` identifiers with your service name.
+1. Replace Soma identifiers and `SOMA_` env vars with your service name and env prefix.
 2. Update `userConfig` in both `plugin.json` files to match your service's credential fields.
-3. Update `skills/example/SKILL.md` with your actual actions, parameters, and examples.
+3. Update `skills/soma/SKILL.md` with your actual actions, parameters, and examples.
 4. Set `brandColor` in `.codex-plugin/plugin.json` to your service's color.
 5. Replace `defaultPrompt` entries in the Codex manifest with realistic prompts for your service.
 6. Run `scripts/bump-version.sh` after any version change.

@@ -2,18 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a native Rust service-owned action registry so a business action added in `rtemplate-service` becomes callable from MCP, REST, and CLI without editing `rtemplate-mcp`, `rtemplate-api`, or `rtemplate-cli`.
+**Goal:** Build a native Rust service-owned action registry so a business action added in `soma-service` becomes callable from MCP, REST, and CLI without editing `soma-mcp`, `soma-api`, or `soma-cli`.
 
-**Architecture:** Move static native action metadata and execution into `rtemplate-service`, then expose a cached `ActionRegistry` snapshot with O(1) lookup maps, derived help/catalog data, and provider-backed validation/auth helpers. MCP stays one tool with an `action` argument, REST uses direct `POST /v1/{action}` routes for registry actions, and CLI treats the first argument as either a built-in command or a registry action command. Future Wasm/TypeScript providers remain out of scope; do not introduce a provider trait until a second provider exists.
+**Architecture:** Move static native action metadata and execution into `soma-service`, then expose a cached `ActionRegistry` snapshot with O(1) lookup maps, derived help/catalog data, and provider-backed validation/auth helpers. MCP stays one tool with an `action` argument, REST uses direct `POST /v1/{action}` routes for registry actions, and CLI treats the first argument as either a built-in command or a registry action command. Future Wasm/TypeScript providers remain out of scope; do not introduce a provider trait until a second provider exists.
 
 **Tech Stack:** Rust workspace crates, `serde_json::Value`, `std::sync::OnceLock`, `std::collections::HashMap`, Axum `POST /v1/{action}`, current rmcp single-tool server, existing `cargo xtask check-openapi`.
 
 ## Global Constraints
 
 - Keep MCP as one action-dispatched tool; do not generate one MCP tool per action.
-- Keep REST direct-route-only; `POST /v1/example` must not be present.
+- Keep REST direct-route-only; `the retired REST action-envelope route` must not be present.
 - Registry REST business actions are `POST`-only in this phase; keep existing explicit `GET /v1/status`, `GET /v1/help`, and `GET /v1/capabilities`.
-- Future native business actions must require edits only in `crates/rtemplate-service`, plus generated docs/OpenAPI artifacts.
+- Future native business actions must require edits only in `crates/soma-service`, plus generated docs/OpenAPI artifacts.
 - Do not add `ActionProvider`, `StaticRustProvider`, `WasmProvider`, TypeScript, Node, Bun, AI SDK, `wasmtime`, or hot-reload code in this plan.
 - Preserve destructive confirmation, scope checks, admin checks, structured errors, dispatch logging, metrics, and token-budget behavior.
 - Generic `Json<Value>` input must be validated from registry metadata before dispatch: unknown fields denied, required fields checked, primitive types checked, duplicate CLI flags denied, and flag-looking values rejected.
@@ -26,17 +26,17 @@
 
 Create:
 
-- `crates/rtemplate-service/src/actions.rs` — single source of truth for native action specs, registry maps, validation, help/catalog generation, and execution.
-- `crates/rtemplate-service/src/actions_tests.rs` — unit tests for registry lookup, validation, drift detection, cached help/catalog, and test-only proof action.
+- `crates/soma-service/src/actions.rs` — single source of truth for native action specs, registry maps, validation, help/catalog generation, and execution.
+- `crates/soma-service/src/actions_tests.rs` — unit tests for registry lookup, validation, drift detection, cached help/catalog, and test-only proof action.
 
 Modify:
 
-- `crates/rtemplate-service/src/lib.rs` — re-export registry APIs and change `dispatch_action` to accept `(action: &str, params: &Value, surface: &str)`.
-- `crates/rtemplate-contracts/src/actions.rs` — keep pure metadata/error types and provider-independent helper functions that accept `&[ActionSpec]`; remove or stop using contract-global `ACTION_SPECS` as a live registry.
-- `crates/rtemplate-cli/src/lib.rs` and `crates/rtemplate-cli/src/cli_tests.rs` — parse dynamic registry actions as natural subcommands while keeping built-ins explicit.
-- `crates/rtemplate-api/src/api.rs` — add generic `POST /v1/{action}` handler with provider-backed lookup, auth/scope/admin/confirmation, validation, dispatch, and response capping.
-- `crates/rmcp-template/src/routes.rs` and `crates/rmcp-template/tests/api_routes.rs` — mount generic POST route and assert `/v1/example` is absent.
-- `crates/rtemplate-mcp/src/rmcp_server.rs`, `crates/rtemplate-mcp/src/tools.rs`, `crates/rtemplate-mcp/src/schemas.rs`, and `crates/rmcp-template/tests/tool_dispatch.rs` — use the service registry for MCP schema, known-action checks, scope checks, destructive confirmation, and dispatch.
+- `crates/soma-service/src/lib.rs` — re-export registry APIs and change `dispatch_action` to accept `(action: &str, params: &Value, surface: &str)`.
+- `crates/soma-contracts/src/actions.rs` — keep pure metadata/error types and provider-independent helper functions that accept `&[ActionSpec]`; remove or stop using contract-global `ACTION_SPECS` as a live registry.
+- `crates/soma-cli/src/lib.rs` and `crates/soma-cli/src/cli_tests.rs` — parse dynamic registry actions as natural subcommands while keeping built-ins explicit.
+- `crates/soma-api/src/api.rs` — add generic `POST /v1/{action}` handler with provider-backed lookup, auth/scope/admin/confirmation, validation, dispatch, and response capping.
+- `crates/soma/src/routes.rs` and `crates/soma/tests/api_routes.rs` — mount generic POST route and assert `retired REST action-envelope route` is absent.
+- `crates/soma-mcp/src/rmcp_server.rs`, `crates/soma-mcp/src/tools.rs`, `crates/soma-mcp/src/schemas.rs`, and `crates/soma/tests/tool_dispatch.rs` — use the service registry for MCP schema, known-action checks, scope checks, destructive confirmation, and dispatch.
 - `xtask/src/scripts_lane_d.rs` and `docs/generated/openapi.json` — generate OpenAPI from registry metadata without adding heavy service runtime coupling beyond metadata access.
 - `README.md`, `docs/API.md`, `docs/ARCHITECTURE.md`, `docs/SERVICE_SURFACE_SUGGESTIONS.md`, `CHANGELOG.md` — document the add-action workflow and deferred runtime-provider direction.
 
@@ -45,30 +45,30 @@ Modify:
 ### Task 1: Create Service-Owned Registry Snapshot
 
 **Files:**
-- Create: `crates/rtemplate-service/src/actions.rs`
-- Create: `crates/rtemplate-service/src/actions_tests.rs`
-- Modify: `crates/rtemplate-service/src/lib.rs`
-- Modify: `crates/rtemplate-contracts/src/actions.rs`
+- Create: `crates/soma-service/src/actions.rs`
+- Create: `crates/soma-service/src/actions_tests.rs`
+- Modify: `crates/soma-service/src/lib.rs`
+- Modify: `crates/soma-contracts/src/actions.rs`
 
 **Interfaces:**
-- Consumes: `ExampleService`, existing `ActionSpec`, `ActionTransport`, `ActionCost`, `ParamSpec`, `CliSpec`, `CliFlagSpec`, `ValidationError`.
+- Consumes: `SomaService`, existing `ActionSpec`, `ActionTransport`, `ActionCost`, `ParamSpec`, `CliSpec`, `CliFlagSpec`, `ValidationError`.
 - Produces:
   - `pub struct ActionRegistry`
   - `pub fn action_registry() -> &'static ActionRegistry`
   - `pub fn action_specs() -> &'static [ActionSpec]`
-  - `pub async fn execute_native_action(service: &ExampleService, action: &str, params: &Value) -> anyhow::Result<Value>`
-  - `pub async fn dispatch_action(service: &ExampleService, action: &str, params: &Value, surface: &str) -> anyhow::Result<Value>`
+  - `pub async fn execute_native_action(service: &SomaService, action: &str, params: &Value) -> anyhow::Result<Value>`
+  - `pub async fn dispatch_action(service: &SomaService, action: &str, params: &Value, surface: &str) -> anyhow::Result<Value>`
 
 - [ ] **Step 1: Write failing registry tests**
 
-Create `crates/rtemplate-service/src/actions_tests.rs`:
+Create `crates/soma-service/src/actions_tests.rs`:
 
 ```rust
 use serde_json::json;
 
 use crate::actions::{action_registry, action_specs, execute_native_action, validate_params};
-use crate::{ExampleClient, ExampleService};
-use rtemplate_contracts::actions::{ActionTransport, READ_SCOPE};
+use crate::{SomaClient, SomaService};
+use soma_contracts::actions::{ActionTransport, READ_SCOPE};
 
 #[test]
 fn registry_has_single_source_action_metadata() {
@@ -113,8 +113,8 @@ fn param_validation_rejects_wrong_type_and_large_strings() {
 
 #[tokio::test]
 async fn native_executor_dispatches_registered_action() {
-    let cfg = rtemplate_contracts::config::ExampleConfig::default();
-    let service = ExampleService::new(ExampleClient::new(&cfg).unwrap());
+    let cfg = soma_contracts::config::SomaConfig::default();
+    let service = SomaService::new(SomaClient::new(&cfg).unwrap());
     let value = execute_native_action(&service, "echo", &json!({"message": "hello"}))
         .await
         .unwrap();
@@ -127,14 +127,14 @@ async fn native_executor_dispatches_registered_action() {
 Run:
 
 ```bash
-cargo test -p rtemplate-service actions_tests -- --nocapture
+cargo test -p soma-service actions_tests -- --nocapture
 ```
 
 Expected: FAIL because `actions.rs`, `ActionRegistry`, `action_registry`, `execute_native_action`, and `validate_params` do not exist.
 
 - [ ] **Step 3: Add metadata validation fields to contracts**
 
-In `crates/rtemplate-contracts/src/actions.rs`, extend `ParamSpec` and `ActionSpec`:
+In `crates/soma-contracts/src/actions.rs`, extend `ParamSpec` and `ActionSpec`:
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,17 +221,17 @@ pub fn require_confirmation_if_destructive_from(
 Keep existing contract wrappers temporarily only if they are still needed by untouched code, but add a comment above them:
 
 ```rust
-// Transitional compatibility only. New code must pass rtemplate_service::action_specs()
+// Transitional compatibility only. New code must pass soma_service::action_specs()
 // to the explicit *_from helpers so there is one live registry.
 ```
 
 - [ ] **Step 4: Create service action registry**
 
-Create `crates/rtemplate-service/src/actions.rs`:
+Create `crates/soma-service/src/actions.rs`:
 
 ```rust
 use anyhow::Result;
-use rtemplate_contracts::actions::{
+use soma_contracts::actions::{
     ActionCost, ActionSpec, ActionTransport, CatalogVisibility, CliFlagSpec, CliSpec, ParamSpec,
     READ_SCOPE,
 };
@@ -239,7 +239,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::ExampleService;
+use crate::SomaService;
 
 const MAX_STRING_PARAM_LEN: usize = 4096;
 
@@ -290,7 +290,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         returns: "Greeting",
         cli: Some(CliSpec {
             command: "greet",
-            usage: "example greet [--name NAME]",
+            usage: "soma greet [--name NAME]",
             flags: GREET_CLI_FLAGS,
             description: "Greet NAME, or the world when omitted.",
         }),
@@ -310,7 +310,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         returns: "EchoResult",
         cli: Some(CliSpec {
             command: "echo",
-            usage: "example echo --message MSG",
+            usage: "soma echo --message MSG",
             flags: ECHO_CLI_FLAGS,
             description: "Echo MSG back unchanged.",
         }),
@@ -330,7 +330,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         returns: "Status",
         cli: Some(CliSpec {
             command: "status",
-            usage: "example status",
+            usage: "soma status",
             flags: &[],
             description: "Show service status.",
         }),
@@ -350,7 +350,7 @@ pub const ACTION_SPECS: &[ActionSpec] = &[
         returns: "HelpPayload",
         cli: Some(CliSpec {
             command: "help",
-            usage: "example help",
+            usage: "soma help",
             flags: &[],
             description: "Show JSON action reference.",
         }),
@@ -453,8 +453,8 @@ pub fn action_specs() -> &'static [ActionSpec] {
 
 pub fn validate_params(spec: &ActionSpec, params: &Value) -> Result<()> {
     let object = params.as_object().ok_or_else(|| {
-        rtemplate_contracts::actions::action_error(
-            rtemplate_contracts::actions::ValidationError::WrongType {
+        soma_contracts::actions::action_error(
+            soma_contracts::actions::ValidationError::WrongType {
                 field: "params".to_owned(),
             },
         )
@@ -474,8 +474,8 @@ fn validate_param_object(spec: &ActionSpec, object: &Map<String, Value>) -> Resu
     for param in spec.params {
         let value = object.get(param.name);
         if param.required && value.is_none() {
-            return Err(rtemplate_contracts::actions::action_error(
-                rtemplate_contracts::actions::ValidationError::MissingField {
+            return Err(soma_contracts::actions::action_error(
+                soma_contracts::actions::ValidationError::MissingField {
                     field: param.name.to_owned(),
                 },
             ));
@@ -511,14 +511,14 @@ fn validate_param_object(spec: &ActionSpec, object: &Map<String, Value>) -> Resu
 }
 
 pub async fn execute_native_action(
-    service: &ExampleService,
+    service: &SomaService,
     action: &str,
     params: &Value,
 ) -> Result<Value> {
     let spec = action_registry()
         .action(action)
-        .ok_or_else(|| rtemplate_contracts::actions::action_error(
-            rtemplate_contracts::actions::ValidationError::UnknownAction {
+        .ok_or_else(|| soma_contracts::actions::action_error(
+            soma_contracts::actions::ValidationError::UnknownAction {
                 action: action.to_owned(),
             },
         ))?;
@@ -530,8 +530,8 @@ pub async fn execute_native_action(
         "help" => Ok(action_registry().public_help()),
         "elicit_name" => Err(anyhow::anyhow!("action=elicit_name requires an MCP peer")),
         "scaffold_intent" => Err(anyhow::anyhow!("action=scaffold_intent requires MCP elicitation")),
-        other => Err(rtemplate_contracts::actions::action_error(
-            rtemplate_contracts::actions::ValidationError::UnknownAction {
+        other => Err(soma_contracts::actions::action_error(
+            soma_contracts::actions::ValidationError::UnknownAction {
                 action: other.to_owned(),
             },
         )),
@@ -551,8 +551,8 @@ fn optional_string_param(params: &Value, name: &str) -> Result<Option<String>> {
 fn required_string_param(params: &Value, name: &str) -> Result<String> {
     optional_string_param(params, name)?
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| rtemplate_contracts::actions::action_error(
-            rtemplate_contracts::actions::ValidationError::MissingField {
+        .ok_or_else(|| soma_contracts::actions::action_error(
+            soma_contracts::actions::ValidationError::MissingField {
                 field: name.to_owned(),
             },
         ))
@@ -562,9 +562,9 @@ fn build_help_payload(specs: &[ActionSpec], authenticated: bool) -> Value {
     let visible: Vec<&ActionSpec> = specs
         .iter()
         .filter(|spec| match spec.catalog_visibility {
-            rtemplate_contracts::actions::CatalogVisibility::Public => true,
-            rtemplate_contracts::actions::CatalogVisibility::Authenticated => authenticated,
-            rtemplate_contracts::actions::CatalogVisibility::Hidden => false,
+            soma_contracts::actions::CatalogVisibility::Public => true,
+            soma_contracts::actions::CatalogVisibility::Authenticated => authenticated,
+            soma_contracts::actions::CatalogVisibility::Hidden => false,
         })
         .collect();
     json!({
@@ -576,7 +576,7 @@ fn build_help_payload(specs: &[ActionSpec], authenticated: bool) -> Value {
 }
 
 #[cfg(any(test, feature = "test-support"))]
-pub async fn execute_test_reverse(_service: &ExampleService, params: &Value) -> Result<Value> {
+pub async fn execute_test_reverse(_service: &SomaService, params: &Value) -> Result<Value> {
     validate_param_object(
         &ActionSpec {
             name: "reverse",
@@ -610,23 +610,23 @@ pub async fn execute_test_reverse(_service: &ExampleService, params: &Value) -> 
 
 - [ ] **Step 5: Wire service dispatch through registry**
 
-Modify `crates/rtemplate-service/src/lib.rs`:
+Modify `crates/soma-service/src/lib.rs`:
 
 ```rust
 pub mod actions;
 pub mod app;
-pub mod example;
+pub mod soma;
 
 use anyhow::Result;
-use rtemplate_contracts::errors::{ServiceError, ToolError};
+use soma_contracts::errors::{ServiceError, ToolError};
 use serde_json::Value;
 
 pub use actions::{action_registry, action_specs, execute_native_action, validate_params, ActionRegistry};
-pub use app::{ElicitedNameOutcome, ExampleService, ScaffoldIntent, ScaffoldIntentValidationError};
-pub use example::ExampleClient;
+pub use app::{ElicitedNameOutcome, SomaService, ScaffoldIntent, ScaffoldIntentValidationError};
+pub use example::SomaClient;
 
 pub async fn dispatch_action(
-    service: &ExampleService,
+    service: &SomaService,
     action: &str,
     params: &Value,
     surface: &str,
@@ -638,7 +638,7 @@ pub async fn dispatch_action(
 
     tracing::info!(
         surface,
-        service = "example",
+        service = "soma",
         action,
         outcome,
         elapsed_ms = elapsed_ms as u64,
@@ -657,7 +657,7 @@ Keep existing `record_action_metric`, `classify_service_error`, and `is_validati
 Run:
 
 ```bash
-cargo test -p rtemplate-service actions_tests -- --nocapture
+cargo test -p soma-service actions_tests -- --nocapture
 ```
 
 Expected: PASS.
@@ -665,7 +665,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/rtemplate-service/src/actions.rs crates/rtemplate-service/src/actions_tests.rs crates/rtemplate-service/src/lib.rs crates/rtemplate-contracts/src/actions.rs
+git add crates/soma-service/src/actions.rs crates/soma-service/src/actions_tests.rs crates/soma-service/src/lib.rs crates/soma-contracts/src/actions.rs
 git commit -m "feat: add service action registry"
 ```
 
@@ -674,22 +674,22 @@ git commit -m "feat: add service action registry"
 ### Task 2: Make CLI Business Commands Registry-Driven
 
 **Files:**
-- Modify: `crates/rtemplate-cli/src/lib.rs`
-- Modify: `crates/rtemplate-cli/src/cli_tests.rs`
+- Modify: `crates/soma-cli/src/lib.rs`
+- Modify: `crates/soma-cli/src/cli_tests.rs`
 
 **Interfaces:**
-- Consumes: `rtemplate_service::action_registry()`, `rtemplate_service::dispatch_action(service, action, params, "cli")`.
+- Consumes: `soma_service::action_registry()`, `soma_service::dispatch_action(service, action, params, "cli")`.
 - Produces:
   - `Command::Action { name: String, params: Value, yes: bool }`
-  - natural dynamic commands such as `example echo --message hello`
+  - natural dynamic commands such as `soma echo --message hello`
   - built-ins remain explicit: `doctor`, `watch`, `setup`, `mcp`, `serve`, `--help`, `--version`
 
 - [ ] **Step 1: Write failing dynamic CLI tests**
 
-Add to `crates/rtemplate-cli/src/cli_tests.rs`:
+Add to `crates/soma-cli/src/cli_tests.rs`:
 
 ```rust
-use rtemplate_cli::{parse_args_from, Command};
+use soma_cli::{parse_args_from, Command};
 use serde_json::json;
 
 #[test]
@@ -731,14 +731,14 @@ fn dynamic_action_rejects_missing_required_flags() {
 Run:
 
 ```bash
-cargo test -p rtemplate-cli dynamic_action -- --nocapture
+cargo test -p soma-cli dynamic_action -- --nocapture
 ```
 
 Expected: FAIL because `Command::Action` does not exist.
 
 - [ ] **Step 3: Replace business enum variants with generic action command**
 
-In `crates/rtemplate-cli/src/lib.rs`, replace `Greet`, `Echo`, `Status`, and `Help` variants with:
+In `crates/soma-cli/src/lib.rs`, replace `Greet`, `Echo`, `Status`, and `Help` variants with:
 
 ```rust
 Action {
@@ -756,7 +756,7 @@ Add:
 
 ```rust
 fn parse_dynamic_action_command(action: &str, rest: &[String]) -> Result<Option<Command>> {
-    let Some(spec) = rtemplate_service::action_registry().cli_command(action) else {
+    let Some(spec) = soma_service::action_registry().cli_command(action) else {
         return Ok(None);
     };
     let mut params = serde_json::Map::new();
@@ -797,7 +797,7 @@ fn parse_dynamic_action_command(action: &str, rest: &[String]) -> Result<Option<
         }
     }
     let params = serde_json::Value::Object(params);
-    rtemplate_service::validate_params(spec, &params)?;
+    soma_service::validate_params(spec, &params)?;
     Ok(Some(Command::Action {
         name: spec.name.to_owned(),
         params,
@@ -844,8 +844,8 @@ fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {
     if *yes {
         return Ok(());
     }
-    rtemplate_contracts::actions::require_confirmation_if_destructive_from(
-        rtemplate_service::action_specs(),
+    soma_contracts::actions::require_confirmation_if_destructive_from(
+        soma_service::action_specs(),
         name,
         params,
     )
@@ -858,7 +858,7 @@ fn confirm_command_if_destructive(cmd: &Command) -> Result<()> {
 Run:
 
 ```bash
-cargo test -p rtemplate-cli --tests
+cargo test -p soma-cli --tests
 ```
 
 Expected: PASS after updating old tests to expect `Command::Action`.
@@ -866,7 +866,7 @@ Expected: PASS after updating old tests to expect `Command::Action`.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add crates/rtemplate-cli/src/lib.rs crates/rtemplate-cli/src/cli_tests.rs
+git add crates/soma-cli/src/lib.rs crates/soma-cli/src/cli_tests.rs
 git commit -m "feat: make cli actions registry driven"
 ```
 
@@ -875,17 +875,17 @@ git commit -m "feat: make cli actions registry driven"
 ### Task 3: Make REST Direct POST Routes Generic and Safe
 
 **Files:**
-- Modify: `crates/rtemplate-api/src/api.rs`
-- Modify: `crates/rmcp-template/src/routes.rs`
-- Modify: `crates/rmcp-template/tests/api_routes.rs`
+- Modify: `crates/soma-api/src/api.rs`
+- Modify: `crates/soma/src/routes.rs`
+- Modify: `crates/soma/tests/api_routes.rs`
 
 **Interfaces:**
-- Consumes: `rtemplate_service::action_registry()`, `rtemplate_service::validate_params`, `rtemplate_service::dispatch_action`.
+- Consumes: `soma_service::action_registry()`, `soma_service::validate_params`, `soma_service::dispatch_action`.
 - Produces: `POST /v1/{action}` for registry POST actions with provider-backed transport, auth/scope/admin, destructive confirmation, validation, and response capping.
 
 - [ ] **Step 1: Write failing REST safety tests**
 
-Add to `crates/rmcp-template/tests/api_routes.rs`:
+Add to `crates/soma/tests/api_routes.rs`:
 
 ```rust
 #[tokio::test]
@@ -924,7 +924,7 @@ async fn removed_rest_envelope_is_not_found() {
     let (status, _body) = request_json(
         app,
         Method::POST,
-        "/v1/example",
+        "retired REST action-envelope route",
         None,
         Some(json!({"action": "echo", "params": {"message": "hello"}})),
     )
@@ -938,14 +938,14 @@ async fn removed_rest_envelope_is_not_found() {
 Run:
 
 ```bash
-cargo test -p rmcp-template generic_post_route removed_rest_envelope -- --nocapture
+cargo test -p soma generic_post_route removed_rest_envelope -- --nocapture
 ```
 
-Expected: FAIL until generic route and `/v1/example` removal are complete in this worktree.
+Expected: FAIL until generic route and `retired REST action-envelope route` removal are complete in this worktree.
 
 - [ ] **Step 3: Add generic POST handler**
 
-In `crates/rtemplate-api/src/api.rs`, add `Path` import and:
+In `crates/soma-api/src/api.rs`, add `Path` import and:
 
 ```rust
 pub async fn v1_action_post(
@@ -959,7 +959,7 @@ pub async fn v1_action_post(
         Err(error) => return rest_json_rejection_response(error),
     };
 
-    let Some(spec) = rtemplate_service::action_registry().rest_post(&action) else {
+    let Some(spec) = soma_service::action_registry().rest_post(&action) else {
         return (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))).into_response();
     };
 
@@ -984,10 +984,10 @@ async fn run_rest_action_request(
     action_name: &str,
     params: Value,
 ) -> axum::response::Response {
-    let Some(spec) = rtemplate_service::action_registry().action(action_name) else {
+    let Some(spec) = soma_service::action_registry().action(action_name) else {
         return rest_error_response(
-            rtemplate_contracts::actions::action_error(
-                rtemplate_contracts::actions::ValidationError::UnknownAction {
+            soma_contracts::actions::action_error(
+                soma_contracts::actions::ValidationError::UnknownAction {
                     action: action_name.to_owned(),
                 },
             ),
@@ -1008,8 +1008,8 @@ async fn run_rest_action_request(
             return (StatusCode::FORBIDDEN, Json(json!({"error": "forbidden: requires admin"}))).into_response();
         }
     }
-    if let Err(error) = rtemplate_contracts::actions::require_confirmation_if_destructive_from(
-        rtemplate_service::action_specs(),
+    if let Err(error) = soma_contracts::actions::require_confirmation_if_destructive_from(
+        soma_service::action_specs(),
         action_name,
         &params,
     ) {
@@ -1019,7 +1019,7 @@ async fn run_rest_action_request(
         )
             .into_response();
     }
-    if let Err(error) = rtemplate_service::validate_params(spec, &params) {
+    if let Err(error) = soma_service::validate_params(spec, &params) {
         return rest_error_response(error, action_name);
     }
     match dispatch_action(&state.service, action_name, &params, "rest").await {
@@ -1039,11 +1039,11 @@ async fn run_rest_action_request(
 }
 ```
 
-Keep `enforce_rest_scope`, but update it to use `required_scope_for_action_from(rtemplate_service::action_specs(), action)`.
+Keep `enforce_rest_scope`, but update it to use `required_scope_for_action_from(soma_service::action_specs(), action)`.
 
 - [ ] **Step 5: Update router**
 
-In `crates/rmcp-template/src/routes.rs`, remove `api_dispatch`, `v1_greet`, and `v1_echo` imports. Add `v1_action_post`.
+In `crates/soma/src/routes.rs`, remove `api_dispatch`, `v1_greet`, and `v1_echo` imports. Add `v1_action_post`.
 
 Use:
 
@@ -1054,14 +1054,14 @@ Use:
 .route("/v1/{action}", post(v1_action_post));
 ```
 
-Do not mount `/v1/example`.
+Do not mount `retired REST action-envelope route`.
 
 - [ ] **Step 6: Run REST route tests**
 
 Run:
 
 ```bash
-cargo test -p rmcp-template --test api_routes
+cargo test -p soma --test api_routes
 ```
 
 Expected: PASS.
@@ -1069,7 +1069,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/rtemplate-api/src/api.rs crates/rmcp-template/src/routes.rs crates/rmcp-template/tests/api_routes.rs
+git add crates/soma-api/src/api.rs crates/soma/src/routes.rs crates/soma/tests/api_routes.rs
 git commit -m "feat: route rest actions through registry"
 ```
 
@@ -1078,18 +1078,18 @@ git commit -m "feat: route rest actions through registry"
 ### Task 4: Make MCP Registry-Backed End to End
 
 **Files:**
-- Modify: `crates/rtemplate-mcp/src/rmcp_server.rs`
-- Modify: `crates/rtemplate-mcp/src/tools.rs`
-- Modify: `crates/rtemplate-mcp/src/schemas.rs`
-- Modify: `crates/rmcp-template/tests/tool_dispatch.rs`
+- Modify: `crates/soma-mcp/src/rmcp_server.rs`
+- Modify: `crates/soma-mcp/src/tools.rs`
+- Modify: `crates/soma-mcp/src/schemas.rs`
+- Modify: `crates/soma/tests/tool_dispatch.rs`
 
 **Interfaces:**
-- Consumes: `rtemplate_service::action_specs()`, `rtemplate_service::action_registry()`, `rtemplate_service::dispatch_action`.
+- Consumes: `soma_service::action_specs()`, `soma_service::action_registry()`, `soma_service::dispatch_action`.
 - Produces: MCP schema, known-action checks, scope checks, confirmation, and dispatch all use the service registry.
 
 - [ ] **Step 1: Write failing full-path MCP tests**
 
-Add to `crates/rmcp-template/tests/tool_dispatch.rs`:
+Add to `crates/soma/tests/tool_dispatch.rs`:
 
 ```rust
 #[tokio::test]
@@ -1109,29 +1109,29 @@ Use the existing full `call_tool` helper in this file if present. If no helper e
 Run:
 
 ```bash
-cargo test -p rmcp-template --test tool_dispatch full_mcp_call_tool_path_uses_service_registry -- --nocapture
+cargo test -p soma --test tool_dispatch full_mcp_call_tool_path_uses_service_registry -- --nocapture
 ```
 
 Expected: FAIL until `rmcp_server.rs` no longer reads stale contract-global metadata.
 
 - [ ] **Step 3: Update MCP server authorization gates**
 
-In `crates/rtemplate-mcp/src/rmcp_server.rs`, replace imports and calls:
+In `crates/soma-mcp/src/rmcp_server.rs`, replace imports and calls:
 
 ```rust
-rtemplate_contracts::actions::is_known_action_from(rtemplate_service::action_specs(), action)
-rtemplate_contracts::actions::required_scope_for_action_from(rtemplate_service::action_specs(), action)
-rtemplate_contracts::actions::require_confirmation_if_destructive_from(rtemplate_service::action_specs(), action, args)
+soma_contracts::actions::is_known_action_from(soma_service::action_specs(), action)
+soma_contracts::actions::required_scope_for_action_from(soma_service::action_specs(), action)
+soma_contracts::actions::require_confirmation_if_destructive_from(soma_service::action_specs(), action, args)
 ```
 
 Remove use of contract-global `is_known_action`, `required_scope_for_action`, and `require_confirmation_if_destructive`.
 
 - [ ] **Step 4: Update tool dispatch**
 
-In `crates/rtemplate-mcp/src/tools.rs`, use:
+In `crates/soma-mcp/src/tools.rs`, use:
 
 ```rust
-let action = rtemplate_contracts::actions::action_name_from_mcp_args(&args)?;
+let action = soma_contracts::actions::action_name_from_mcp_args(&args)?;
 match action {
     "elicit_name" => elicit_name(&state.service, peer).await,
     "scaffold_intent" => scaffold_intent(&state.service, peer).await,
@@ -1143,10 +1143,10 @@ For peerless tests, keep the MCP-only rejection path for `elicit_name` and `scaf
 
 - [ ] **Step 5: Update MCP schema generation**
 
-In `crates/rtemplate-mcp/src/schemas.rs`, replace `ACTION_SPECS` reads with:
+In `crates/soma-mcp/src/schemas.rs`, replace `ACTION_SPECS` reads with:
 
 ```rust
-rtemplate_service::action_specs()
+soma_service::action_specs()
 ```
 
 Preserve existing `OnceLock` schema caching. Native static providers are immutable after process start.
@@ -1156,7 +1156,7 @@ Preserve existing `OnceLock` schema caching. Native static providers are immutab
 Run:
 
 ```bash
-cargo test -p rmcp-template --test tool_dispatch
+cargo test -p soma --test tool_dispatch
 ```
 
 Expected: PASS.
@@ -1164,7 +1164,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add crates/rtemplate-mcp/src/rmcp_server.rs crates/rtemplate-mcp/src/tools.rs crates/rtemplate-mcp/src/schemas.rs crates/rmcp-template/tests/tool_dispatch.rs
+git add crates/soma-mcp/src/rmcp_server.rs crates/soma-mcp/src/tools.rs crates/soma-mcp/src/schemas.rs crates/soma/tests/tool_dispatch.rs
 git commit -m "feat: make mcp action gates registry backed"
 ```
 
@@ -1181,8 +1181,8 @@ git commit -m "feat: make mcp action gates registry backed"
 - Modify: `CHANGELOG.md`
 
 **Interfaces:**
-- Consumes: `rtemplate_service::action_specs()`.
-- Produces: OpenAPI and docs that reflect registry actions, direct REST routes, no `/v1/example`, and the native add-action workflow.
+- Consumes: `soma_service::action_specs()`.
+- Produces: OpenAPI and docs that reflect registry actions, direct REST routes, no `retired REST action-envelope route`, and the native add-action workflow.
 
 - [ ] **Step 1: Update OpenAPI validation**
 
@@ -1190,9 +1190,9 @@ In `xtask/src/scripts_lane_d.rs`, ensure validation contains:
 
 ```rust
 if value.pointer("/paths/~1v1~1example").is_some() {
-    failures.push("/v1/example must not be present; REST uses direct routes only".to_owned());
+    failures.push("retired REST action-envelope route must not be present; REST uses direct routes only".to_owned());
 }
-for action in rtemplate_service::action_specs()
+for action in soma_service::action_specs()
     .iter()
     .filter(|spec| spec.transport.rest())
 {
@@ -1215,7 +1215,7 @@ for action in rtemplate_service::action_specs()
 Replace local parsed action entry collection for REST route generation with:
 
 ```rust
-let rest_actions: Vec<_> = rtemplate_service::action_specs()
+let rest_actions: Vec<_> = soma_service::action_specs()
     .iter()
     .filter(|spec| spec.transport.rest())
     .collect();
@@ -1232,7 +1232,7 @@ cargo xtask check-openapi --write
 cargo xtask check-openapi --check
 ```
 
-Expected: PASS and no `/v1/example`.
+Expected: PASS and no `retired REST action-envelope route`.
 
 - [ ] **Step 4: Update docs**
 
@@ -1243,12 +1243,12 @@ Add to `docs/SERVICE_SURFACE_SUGGESTIONS.md`:
 
 To add a native Rust action:
 
-1. Add the business method to `crates/rtemplate-service/src/app.rs` or a focused service module.
-2. Add one action metadata entry and one executor match arm in `crates/rtemplate-service/src/actions.rs`.
-3. Run `cargo test -p rtemplate-service -p rtemplate-cli -p rmcp-template --tests`.
+1. Add the business method to `crates/soma-service/src/app.rs` or a focused service module.
+2. Add one action metadata entry and one executor match arm in `crates/soma-service/src/actions.rs`.
+3. Run `cargo test -p soma-service -p soma-cli -p soma --tests`.
 4. Run `cargo xtask check-openapi --write`.
 
-No edits should be required in `crates/rtemplate-api`, `crates/rtemplate-cli`, or `crates/rtemplate-mcp`.
+No edits should be required in `crates/soma-api`, `crates/soma-cli`, or `crates/soma-mcp`.
 ```
 
 Add to `CHANGELOG.md`:
@@ -1269,11 +1269,11 @@ git commit -m "docs: describe service action registry"
 ### Task 6: Prove New Native Actions Require No Surface Edits
 
 **Files:**
-- Modify: `crates/rtemplate-service/src/actions.rs`
-- Modify: `crates/rtemplate-service/src/actions_tests.rs`
-- Modify: `crates/rmcp-template/tests/api_routes.rs`
-- Modify: `crates/rmcp-template/tests/tool_dispatch.rs`
-- Modify: `crates/rtemplate-cli/src/cli_tests.rs`
+- Modify: `crates/soma-service/src/actions.rs`
+- Modify: `crates/soma-service/src/actions_tests.rs`
+- Modify: `crates/soma/tests/api_routes.rs`
+- Modify: `crates/soma/tests/tool_dispatch.rs`
+- Modify: `crates/soma-cli/src/cli_tests.rs`
 
 **Interfaces:**
 - Consumes: registry from prior tasks.
@@ -1286,8 +1286,8 @@ Add tests that use a test registry extension or existing `execute_test_reverse` 
 ```rust
 #[tokio::test]
 async fn test_only_reverse_proves_action_execution_without_surface_code() {
-    let cfg = rtemplate_contracts::config::ExampleConfig::default();
-    let service = ExampleService::new(ExampleClient::new(&cfg).unwrap());
+    let cfg = soma_contracts::config::SomaConfig::default();
+    let service = SomaService::new(SomaClient::new(&cfg).unwrap());
     let value = crate::actions::execute_test_reverse(&service, &json!({"text": "stressed"}))
         .await
         .unwrap();
@@ -1310,7 +1310,7 @@ Expected: no matches outside test-only code.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add crates/rtemplate-service/src/actions.rs crates/rtemplate-service/src/actions_tests.rs crates/rmcp-template/tests/api_routes.rs crates/rmcp-template/tests/tool_dispatch.rs crates/rtemplate-cli/src/cli_tests.rs
+git add crates/soma-service/src/actions.rs crates/soma-service/src/actions_tests.rs crates/soma/tests/api_routes.rs crates/soma/tests/tool_dispatch.rs crates/soma-cli/src/cli_tests.rs
 git commit -m "test: prove registry action extension path"
 ```
 
@@ -1371,7 +1371,7 @@ Expected: PASS.
 Run:
 
 ```bash
-rg -n "api_dispatch|ActionRequest|/v1/example|Command::Greet|Command::Echo|Command::Status|Command::Help|StaticRustProvider|ActionProvider|WasmProvider" crates docs README.md
+rg -n "api_dispatch|ActionRequest|retired REST action-envelope route|Command::Greet|Command::Echo|Command::Status|Command::Help|StaticRustProvider|ActionProvider|WasmProvider" crates docs README.md
 ```
 
 Expected: no active code references. Historical `docs/sessions/*` references are acceptable only if the path is clearly a historical note. `docs/SERVICE_SURFACE_SUGGESTIONS.md` may mention runtime providers as deferred future work without defining code APIs.
@@ -1392,7 +1392,7 @@ Skip this commit if the worktree is already clean.
 
 - Removed premature `ActionProvider`, `StaticRustProvider`, and `STATIC_RUST_PROVIDER`.
 - Added cached `ActionRegistry` maps for action, CLI command, and REST POST lookup.
-- Made `rtemplate-service::action_specs()` the only live registry for new code.
+- Made `soma-service::action_specs()` the only live registry for new code.
 - Required provider-backed scope, admin, destructive confirmation, and validation before generic REST dispatch.
 - Required MCP `rmcp_server.rs` known-action, scope, and confirmation gates to use service registry metadata.
 - Added metadata-driven input validation to replace typed REST DTO protections.
@@ -1410,7 +1410,7 @@ Spec coverage:
 - No API/CLI/MCP edits for future native business actions: Task 6 proof plus registry-driven Tasks 2 through 4.
 - MCP remains one tool: Task 4.
 - CLI supports natural subcommands without constant `--action`: Task 2.
-- REST remains direct-route-only and removes `/v1/example`: Task 3.
+- REST remains direct-route-only and removes `retired REST action-envelope route`: Task 3.
 - Build-time benefit from stable surfaces: achieved by eliminating recurring surface edits.
 - Future `WasmProvider`/TypeScript providers are documented as deferred, not implemented.
 

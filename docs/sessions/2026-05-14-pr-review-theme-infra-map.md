@@ -1,13 +1,13 @@
 ---
 date: 2026-05-14 13:28:25 EST
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: main
 head: 14ab610
 plan: none
 agent: Claude (claude-sonnet-4-6)
 session id: 8ee9e706-62e9-4afc-b325-4fabf0f29ad4
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8ee9e706-62e9-4afc-b325-4fabf0f29ad4.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8ee9e706-62e9-4afc-b325-4fabf0f29ad4.jsonl
+working directory: /home/jmagar/workspace/soma
 ---
 
 ## User Request
@@ -58,18 +58,18 @@ Four main workstreams: (1) researched Claude Code custom theme format and create
 | `~/.claude/themes/aurora.json` | Overwritten | Correct official token names; violet `claude`, full 40+ token set |
 | `~/.claude/themes/aurora-light.json` | Created | Light variant |
 | `CLAUDE.md.local` | Created | Local infra map: devices, service map with live ports, SWAG conf list |
-| `src/config.rs:263` | Modified | Reject invalid `RTEMPLATE_MCP_AUTH_MODE` values instead of silent Bearer coercion |
+| `src/config.rs:263` | Modified | Reject invalid `SOMA_MCP_AUTH_MODE` values instead of silent Bearer coercion |
 | `entrypoint.sh:108` | Modified | Passthrough case for non-subcommand args |
 | `src/cli.rs:380` | Modified | `.env` written with `chmod 0600` on Unix |
 | `.github/workflows/dependabot-auto-merge.yml:19` | Modified | Pin `fetch-metadata` to commit SHA |
-| `plugins/rtemplate/gemini-extension.json` | Modified | `"secret"` → `"sensitive"` |
+| `plugins/soma/gemini-extension.json` | Modified | `"secret"` → `"sensitive"` |
 | `lefthook.yml:62` | Modified | Glob `*.{rs,ts,tsx}` → `**/*.{rs,ts,tsx}` |
 | `apps/web/README.md:30` | Modified | Correct `npm run start` description |
 | `Justfile` | Modified | All `localhost:3000` → `localhost:3100` |
 | `src/cli/watch.rs:42` | Modified | Validate `interval_secs > 0` |
 | `scripts/asciicheck.py:90` | Modified | Allow `\r` and `\t` as valid control chars |
-| `plugins/rtemplate/README.md:30` | Modified | Clarify Gemini uses inline `mcpServers`, not `.mcp.json` |
-| `plugins/rtemplate/hooks/plugin-setup.sh:55` | Modified | Map `CLAUDE_PLUGIN_OPTION_NO_AUTH` → `RTEMPLATE_MCP_NO_AUTH` |
+| `plugins/soma/README.md:30` | Modified | Clarify Gemini uses inline `mcpServers`, not `.mcp.json` |
+| `plugins/soma/hooks/plugin-setup.sh:55` | Modified | Map `CLAUDE_PLUGIN_OPTION_NO_AUTH` → `SOMA_MCP_NO_AUTH` |
 | `scripts/check-file-size.sh:59` | Modified | `rs_production_lines` matches `#[cfg(test)] mod` blocks only |
 | `scripts/refresh-docs.sh:304` | Modified | Fail loudly on required crawl failures |
 | `config/Dockerfile:51` | Modified | Clarified `.gitkeep` rationale |
@@ -114,7 +114,7 @@ bd dolt push
 |------|--------|-------|
 | Aurora theme in `/theme` | Present but ~35 tokens silently ignored (invalid names) | All 40+ tokens applied correctly |
 | `aurora-light` theme | Did not exist | Available in `/theme` picker |
-| `RTEMPLATE_MCP_AUTH_MODE=typo` | Silently used Bearer | Hard error at startup |
+| `SOMA_MCP_AUTH_MODE=typo` | Silently used Bearer | Hard error at startup |
 | `docker run ... bash` | Ran `example bash` (unknown subcommand error) | Execs `bash` directly under gosu |
 | `.env` secrets file | World-readable (default umask) | `chmod 0600` on Unix |
 | `lefthook.yml` file-size hook | Only matched root-level `*.rs` files | Matches `**/*.rs` in all subdirectories |
@@ -137,7 +137,7 @@ bd dolt push
 - [Claude Code custom theme docs](https://code.claude.com/docs/en/terminal-config#create-a-custom-theme)
 - [wmedia.es theme tutorial](https://wmedia.es/en/tips/claude-code-custom-themes)
 - Aurora color source: `aurora-design-system/registry/aurora/styles/aurora.css`
-- [PR #1](https://github.com/jmagar/rmcp-template/pull/1) — merged
+- [PR #1](https://github.com/jmagar/soma/pull/1) — merged
 
 ## Next Steps
 

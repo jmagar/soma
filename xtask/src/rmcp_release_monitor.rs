@@ -10,10 +10,7 @@ use walkdir::WalkDir;
 
 const MARKER: &str = "<!-- rmcp-release-monitor -->";
 const DEFAULT_MAX_BODY_BYTES: usize = 60_000;
-const RMCP_MANIFESTS: [&str; 2] = [
-    "crates/rmcp-template/Cargo.toml",
-    "crates/rtemplate-mcp/Cargo.toml",
-];
+const RMCP_MANIFESTS: [&str; 2] = ["crates/soma/Cargo.toml", "crates/soma-mcp/Cargo.toml"];
 
 #[derive(Debug)]
 struct MonitorReport {
@@ -281,14 +278,14 @@ fn build_monitor_report(
     let latest_version = latest.to_string();
     let issue_title = match (rmcp_drift, mcp_schema_drift, conformance_drift) {
         (true, false, false) => {
-            format!("rmcp {latest_version} released (template pins {current_version})")
+            format!("rmcp {latest_version} released (Soma pins {current_version})")
         }
         (false, true, false) => "MCP schema changed upstream".to_owned(),
         (false, false, true) => "MCP conformance changed upstream".to_owned(),
         (false, false, false) => {
             format!("rmcp, MCP schema, and conformance are current at {current_version}")
         }
-        _ => "MCP upstream changes need template review".to_owned(),
+        _ => "MCP upstream changes need Soma review".to_owned(),
     };
     let issue_body = if drift {
         render_issue_body(
@@ -302,7 +299,7 @@ fn build_monitor_report(
         )?
     } else {
         format!(
-            "{MARKER}\n<!-- rmcp-current-version: {current_version} -->\n<!-- rmcp-latest-version: {latest_version} -->\n\nThe template rmcp pin, MCP schema baseline, and conformance baseline are current.\n"
+            "{MARKER}\n<!-- rmcp-current-version: {current_version} -->\n<!-- rmcp-latest-version: {latest_version} -->\n\nThe Soma rmcp pin, MCP schema baseline, and conformance baseline are current.\n"
         )
     };
     Ok(MonitorReport {
@@ -427,7 +424,7 @@ fn render_issue_body(
     body.push('\n');
     if latest > current {
         body.push_str(&format!(
-            "`rmcp` has a newer published crate release. This template currently pins `{current}` and crates.io now publishes `{latest}`.\n\n"
+            "`rmcp` has a newer published crate release. Soma currently pins `{current}` and crates.io now publishes `{latest}`.\n\n"
         ));
         body.push_str("## Release Window\n\n");
         body.push_str("| Version | Published | Yanked | Links |\n");
@@ -503,7 +500,7 @@ fn render_issue_body(
     body.push_str(
         "- Run `cargo update -p rmcp`, `cargo test`, and the MCP dispatch/schema/conformance checks.\n",
     );
-    body.push_str("- Update template docs/examples if the rmcp API or feature flags changed.\n");
+    body.push_str("- Update Soma docs/examples if the rmcp API or feature flags changed.\n");
     Ok(clamp_issue_body(body, max_body_bytes))
 }
 
@@ -1294,9 +1291,9 @@ mod tests {
     #[test]
     fn report_includes_mcp_schema_drift_when_schema_hash_changes() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("crates/rtemplate-mcp/src")).unwrap();
+        fs::create_dir_all(temp.path().join("crates/soma-mcp/src")).unwrap();
         fs::write(
-            temp.path().join("crates/rtemplate-mcp/src/rmcp_server.rs"),
+            temp.path().join("crates/soma-mcp/src/rmcp_server.rs"),
             "fn inspect_schema() { let _schema_type = \"NewThing\"; }\n",
         )
         .unwrap();
@@ -1334,7 +1331,7 @@ mod tests {
             .contains("Potential schema impact in this repo"));
         assert!(report
             .issue_body
-            .contains("crates/rtemplate-mcp/src/rmcp_server.rs"));
+            .contains("crates/soma-mcp/src/rmcp_server.rs"));
         assert!(report.issue_body.contains("`NewThing`"));
         assert!(report.issue_body.contains("+export interface NewThing {}"));
     }
@@ -1369,9 +1366,9 @@ mod tests {
     #[test]
     fn report_includes_conformance_drift_and_repo_impact_candidates() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir_all(temp.path().join("crates/rtemplate-runtime/src")).unwrap();
+        fs::create_dir_all(temp.path().join("crates/soma-runtime/src")).unwrap();
         fs::write(
-            temp.path().join("crates/rtemplate-runtime/src/server.rs"),
+            temp.path().join("crates/soma-runtime/src/server.rs"),
             "const AUTH_METADATA_FIELD: &str = \"client_id_metadata_document_supported\";\n",
         )
         .unwrap();
@@ -1409,7 +1406,7 @@ mod tests {
             .contains("Potential conformance impact in this repo"));
         assert!(report
             .issue_body
-            .contains("crates/rtemplate-runtime/src/server.rs"));
+            .contains("crates/soma-runtime/src/server.rs"));
         assert!(report
             .issue_body
             .contains("`client_id_metadata_document_supported`"));
@@ -1419,15 +1416,15 @@ mod tests {
     fn current_version_discovery_requires_consistent_rmcp_pins() {
         let temp = TempDir::new().unwrap();
         let root = temp.path();
-        fs::create_dir_all(root.join("crates/rmcp-template")).unwrap();
-        fs::create_dir_all(root.join("crates/rtemplate-mcp")).unwrap();
+        fs::create_dir_all(root.join("crates/soma")).unwrap();
+        fs::create_dir_all(root.join("crates/soma-mcp")).unwrap();
         fs::write(
-            root.join("crates/rmcp-template/Cargo.toml"),
+            root.join("crates/soma/Cargo.toml"),
             "rmcp = { version = \"1.7.0\", default-features = false }\n",
         )
         .unwrap();
         fs::write(
-            root.join("crates/rtemplate-mcp/Cargo.toml"),
+            root.join("crates/soma-mcp/Cargo.toml"),
             "rmcp = { version = \"1.7.0\", default-features = false }\n",
         )
         .unwrap();
@@ -1435,7 +1432,7 @@ mod tests {
         assert_eq!(detect_current_rmcp_version(root).unwrap(), "1.7.0");
 
         fs::write(
-            root.join("crates/rtemplate-mcp/Cargo.toml"),
+            root.join("crates/soma-mcp/Cargo.toml"),
             "rmcp = { version = \"1.8.0\", default-features = false }\n",
         )
         .unwrap();

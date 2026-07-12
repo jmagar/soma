@@ -1,13 +1,13 @@
 ---
 date: 2026-06-20 19:24:22 EST
-repo: git@github.com:jmagar/rtemplate-mcp.git
+repo: git@github.com:jmagar/soma-mcp.git
 branch: main
 head: 41827fc
 session id: 8dd2c014-bb7a-46f4-941d-3d4510a9f94d
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template
-beads: rmcp-template-6zz, rmcp-template-c4h
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/8dd2c014-bb7a-46f4-941d-3d4510a9f94d.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma
+beads: soma-6zz, soma-c4h
 ---
 
 # Session: main cleanup and marketplace branch protection
@@ -41,7 +41,7 @@ The repository was moved through a large automation cleanup: scripts were docume
 ## Technical Decisions
 
 - `CLAUDE.md` was edited instead of `AGENTS.md` or `GEMINI.md`, because project instructions define `CLAUDE.md` as the source of truth and both sibling files are symlinks to it.
-- The branch-protection language was made global, covering every repo, because the failure mode was not limited to `rmcp-template`.
+- The branch-protection language was made global, covering every repo, because the failure mode was not limited to `soma`.
 - The save artifact is a markdown file under `docs/sessions/` to match the existing session-log convention.
 - The session artifact commit is path-limited so no other file can be staged or committed accidentally.
 
@@ -50,10 +50,10 @@ The repository was moved through a large automation cleanup: scripts were docume
 | status | path | previous path | purpose | evidence |
 |---|---|---|---|---|
 | modified | `mcp-server-inventory.md` | - | Save generated MCP server inventory drift. | Commit `2f17a81`; `git show --name-status` showed one modified file. |
-| modified | `plugins/rtemplate/.claude-plugin/plugin.json` | - | Apply no-MCP marketplace manifest shape. | Commit `039cd94`; `mcpServers` registration removed. |
-| modified | `plugins/rtemplate/.codex-plugin/plugin.json` | - | Apply no-MCP marketplace manifest shape. | Commit `039cd94`; shared `.mcp.json` reference removed. |
-| deleted | `plugins/rtemplate/.mcp.json` | - | Remove bundled MCP registration from marketplace package. | Commit `039cd94`; file deleted. |
-| modified | `plugins/rtemplate/gemini-extension.json` | - | Apply no-MCP marketplace manifest shape. | Commit `039cd94`; inline `mcpServers` removed. |
+| modified | `plugins/soma/.claude-plugin/plugin.json` | - | Apply no-MCP marketplace manifest shape. | Commit `039cd94`; `mcpServers` registration removed. |
+| modified | `plugins/soma/.codex-plugin/plugin.json` | - | Apply no-MCP marketplace manifest shape. | Commit `039cd94`; shared `.mcp.json` reference removed. |
+| deleted | `plugins/soma/.mcp.json` | - | Remove bundled MCP registration from marketplace package. | Commit `039cd94`; file deleted. |
+| modified | `plugins/soma/gemini-extension.json` | - | Apply no-MCP marketplace manifest shape. | Commit `039cd94`; inline `mcpServers` removed. |
 | modified | `plugins/README.md` | - | Align plugin docs with generated no-MCP manifests. | Commit `998b0f3`; README no longer promises `.mcp.json`. |
 | modified | `scripts/generate-docs.py` | - | Stop generating `.mcp.json` and `mcpServers` fields. | Commit `998b0f3`; generation contract changed. |
 | modified | `CLAUDE.md` | - | Protect `marketplace-no-mcp` branches/worktrees from broad cleanup. | Commit `41827fc`; lines 9-20 contain the new rule. |
@@ -63,8 +63,8 @@ The repository was moved through a large automation cleanup: scripts were docume
 
 | bead | title | actions | final status | why it mattered |
 |---|---|---|---|---|
-| `rmcp-template-6zz` | Address stale Dependabot PR CI failures | Created, claimed, closed. | closed | Tracked the PR #40/#36/#30 Dependabot cleanup, local verification, actionlint mise pin, and stale branch/worktree cleanup. |
-| `rmcp-template-c4h` | Consolidate dirty work back to main | Created, claimed, closed. | closed | Tracked the cleanup that committed inventory drift, merged no-MCP changes into `main`, updated generation/docs, pushed `main`, and incorrectly removed the no-MCP branch/worktree. |
+| `soma-6zz` | Address stale Dependabot PR CI failures | Created, claimed, closed. | closed | Tracked the PR #40/#36/#30 Dependabot cleanup, local verification, actionlint mise pin, and stale branch/worktree cleanup. |
+| `soma-c4h` | Consolidate dirty work back to main | Created, claimed, closed. | closed | Tracked the cleanup that committed inventory drift, merged no-MCP changes into `main`, updated generation/docs, pushed `main`, and incorrectly removed the no-MCP branch/worktree. |
 
 ## Repository Maintenance
 
@@ -74,11 +74,11 @@ The repository was moved through a large automation cleanup: scripts were docume
 
 ### Beads
 
-The session inspected recent bead state with `bd list --all --sort updated --reverse --limit 100 --json` and recent interactions with `tail -200 .beads/interactions.jsonl`. No new bead was created during this save pass; the directly relevant closed beads were `rmcp-template-6zz` and `rmcp-template-c4h`.
+The session inspected recent bead state with `bd list --all --sort updated --reverse --limit 100 --json` and recent interactions with `tail -200 .beads/interactions.jsonl`. No new bead was created during this save pass; the directly relevant closed beads were `soma-6zz` and `soma-c4h`.
 
 ### Worktrees and branches
 
-The final inspection before this note showed one worktree, `/home/jmagar/workspace/rmcp-template`, on `main`; local branches showed only `main`; remote branches showed only `origin/main`. This state was achieved by a prior cleanup that deleted `marketplace-no-mcp`, which is now documented as a mistake and explicitly forbidden by `CLAUDE.md:9-20`.
+The final inspection before this note showed one worktree, `/home/jmagar/workspace/soma`, on `main`; local branches showed only `main`; remote branches showed only `origin/main`. This state was achieved by a prior cleanup that deleted `marketplace-no-mcp`, which is now documented as a mistake and explicitly forbidden by `CLAUDE.md:9-20`.
 
 ### Stale docs
 
@@ -112,11 +112,11 @@ No branch or worktree cleanup was performed during this save-to-md pass. The pro
 | `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr` | Passed and reported `template changed=true version=0.4.2`. |
 | `cargo xtask check-version-sync` | Passed; template version-bearing files were in sync at `0.4.2`. |
 | `cargo test -p xtask` | Passed: 63 tests. |
-| `bd dolt push` | Pushed bead state after closing `rmcp-template-c4h`. |
+| `bd dolt push` | Pushed bead state after closing `soma-c4h`. |
 
 ## Errors Encountered
 
-- `git cherry-pick marketplace-no-mcp` conflicted in `plugins/rtemplate/.claude-plugin/plugin.json`. It was resolved by preserving current `main` metadata while applying the no-MCP manifest intent.
+- `git cherry-pick marketplace-no-mcp` conflicted in `plugins/soma/.claude-plugin/plugin.json`. It was resolved by preserving current `main` metadata while applying the no-MCP manifest intent.
 - `cargo xtask check-docs` initially failed because the generator still expected `.mcp.json` and `mcpServers` fields. `scripts/generate-docs.py` and `plugins/README.md` were updated, then `cargo xtask generate-docs` and `cargo xtask check-docs` passed.
 - The serious process error was deleting `marketplace-no-mcp` local/remote state and its worktree during broad cleanup. The remediation was to update `CLAUDE.md:9-20` with an explicit global protection rule.
 - A plan lookup using `rg --files docs/plans docs/sessions` reported `docs/plans` missing. That was treated as evidence that there were no plan files to move.
@@ -156,12 +156,12 @@ The generator change in `998b0f3` makes no-MCP manifests the `main` behavior. If
 
 - `CLAUDE.md:9-20` for the new protected branch rule.
 - `docs/sessions/2026-06-20-xtask-migration-dependabot-cleanup.md` for the prior session-log artifact covering the xtask and Dependabot work.
-- Beads `rmcp-template-6zz` and `rmcp-template-c4h` for tracker history.
+- Beads `soma-6zz` and `soma-c4h` for tracker history.
 
 ## Open Questions
 
 - Should `marketplace-no-mcp` be recreated as a separate local and remote branch from `66fd8dd`, or is the current `main` no-MCP generator behavior now the desired steady state?
-- Should `rmcp-template-c4h` receive a follow-up comment explicitly marking its cleanup outcome as partially wrong because it removed protected branch state?
+- Should `soma-c4h` receive a follow-up comment explicitly marking its cleanup outcome as partially wrong because it removed protected branch state?
 
 ## Next Steps
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://template-rmcp.local/schemas/provider-manifest.schema.json",
-  "title": "rmcp-template Provider Manifest",
+  "$id": "https://soma.local/schemas/provider-manifest.schema.json",
+  "title": "soma Provider Manifest",
   "description": "Resolved provider manifest consumed by the dynamic provider runtime.",
   "type": "object",
   "additionalProperties": false,
@@ -74,7 +74,7 @@
         "name": { "$ref": "#/$defs/name" },
         "kind": {
           "type": "string",
-          "enum": ["static-rust", "openapi", "ai-sdk", "wasm", "mcp"]
+          "enum": ["static-rust", "openapi", "ai-sdk", "wasm", "mcp", "python", "langchain", "llamaindex"]
         },
         "title": { "type": "string" },
         "description": { "type": "string" },

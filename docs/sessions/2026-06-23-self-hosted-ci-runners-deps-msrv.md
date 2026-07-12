@@ -1,11 +1,11 @@
 ---
 date: 2026-06-23 16:34:43 EST
-repo: git@github.com:jmagar/template-rmcp.git
+repo: git@github.com:jmagar/soma.git
 branch: main (work landed here; /save invoked from worktree claude/lucid-perlman-6392e0)
 head: 70d8f90
-working directory: /home/jmagar/workspace/rmcp-template/.claude/worktrees/lucid-perlman-6392e0
+working directory: /home/jmagar/workspace/soma/.claude/worktrees/lucid-perlman-6392e0
 worktree: session-log committed via a temporary worktree on main
-beads: rmcp-template-vs9, rmcp-template-7ak, rmcp-template-ecc, rmcp-template-27p, rmcp-template-bn1 (created+closed this session); rmcp-template-7f5, rmcp-template-5yz (created as follow-ups)
+beads: soma-vs9, soma-7ak, soma-ecc, soma-27p, soma-bn1 (created+closed this session); soma-7f5, soma-5yz (created as follow-ups)
 ---
 
 # Self-hosted CI runners, dependency batch, and MSRV 1.96
@@ -48,8 +48,8 @@ MSRV, and migrating every workflow to the runner.
    `peaceful-hamilton` worktree/branch (local + remote).
 3. **Pattern port**: three `Explore` agents surveyed cortex/axon/lab; implemented the
    genuinely-missing patterns (Tiers 1–3) and pushed. Tracked under beads
-   `rmcp-template-vs9` (epic) + 4 children.
-4. **Remote URL**: `origin` → `git@github.com:jmagar/template-rmcp.git` (repo moved).
+   `soma-vs9` (epic) + 4 children.
+4. **Remote URL**: `origin` → `git@github.com:jmagar/soma.git` (repo moved).
 5. **Yanked advisory**: bumped `crypto-bigint` 0.7.3 → 0.7.5 to clear `cargo deny`.
 6. **CI diagnosis**: every job failed in ~2s at "Set up job" → annotation said
    "recent account payments have failed or your spending limit needs to be
@@ -83,7 +83,7 @@ MSRV, and migrating every workflow to the runner.
 - **`actions/cache` referenced `~/.cargo` literally** — on a self-hosted runner `~`
   is the dev home, so the cache step read/would-overwrite the dev cargo registry.
   Fixed to cache only `target/`.
-- **The MCP smoke server loaded the dev's `~/.example/.env`** (real credentials) →
+- **The MCP smoke server loaded the dev's `~/.soma/.env`** (real credentials) →
   DeployedApi mode → `status`/`echo` returned `execution_error`. Fixed by an
   isolated per-runner `HOME`.
 - **mise shims break under an isolated HOME** — they need mise's trust/cache dirs;
@@ -129,11 +129,11 @@ session log itself is the only file in this commit.
 | created | `.github/workflows/scheduled.yml` | weekly cargo-deny advisory + dispatch | `f405abb` |
 | created | `.gitleaks.toml` | placeholder/fixture allowlist | `f405abb` |
 | modified | service/runtime/api/mcp crates | `/readyz`, `/metrics`, `dispatch_action`, confirm gate | `f4dce62` |
-| created | `crates/rtemplate-observability/src/metrics.rs` (+`metrics_tests.rs`) | Prometheus recorder | `f4dce62`,`dfe9257` |
-| created | `crates/rtemplate-test-support/src/tracing_capture.rs` | in-process tracing capture | `f4dce62` |
-| created | `crates/rmcp-template/tests/architecture_boundaries.rs`,`dispatch_logging.rs` | thin-shim + log contract tests | `f4dce62` |
+| created | `crates/soma-observability/src/metrics.rs` (+`metrics_tests.rs`) | Prometheus recorder | `f4dce62`,`dfe9257` |
+| created | `crates/soma-test-support/src/tracing_capture.rs` | in-process tracing capture | `f4dce62` |
+| created | `crates/soma/tests/architecture_boundaries.rs`,`dispatch_logging.rs` | thin-shim + log contract tests | `f4dce62` |
 | modified | `Cargo.toml`,`Justfile` | `release-fast` profile, `build-fast`/`sync-container` | `f4dce62` |
-| modified | `crates/rtemplate-contracts/{Cargo.toml,src/config_tests.rs}` | `serial_test` | `cf0e28b` |
+| modified | `crates/soma-contracts/{Cargo.toml,src/config_tests.rs}` | `serial_test` | `cf0e28b` |
 | modified | `Cargo.lock` | crypto-bigint 0.7.5; dep batch | `b224128`, dependabot merges |
 | modified | 12 `crates/*/Cargo.toml`, `.github/workflows/msrv.yml`, 4 docs | MSRV 1.90 → 1.96 | `4910f58` |
 | modified | `.github/workflows/{auto-tag,release,docker-publish,msrv,dependabot-auto-merge}.yml` | migrate to dookie | `5072260`,`4a51967`,`2b4a19f`,`30e309b`,`70d8f90` |
@@ -145,15 +145,15 @@ session log itself is the only file in this commit.
 
 | id | title | action | status | why |
 |---|---|---|---|---|
-| rmcp-template-vs9 | Port sibling-repo dev-infra patterns (epic) | created, closed | closed | tracked the pattern-port work |
-| rmcp-template-7ak | CI: ci-gate/deny cron/dispatch/gitleaks | created, claimed, closed | closed | Group A |
-| rmcp-template-ecc | HTTP surface: /readyz + /metrics | created, closed | closed | Group B |
-| rmcp-template-27p | Dispatch wrapper + tracing harness + boundary test | created, closed | closed | Group C |
-| rmcp-template-bn1 | Dev ergonomics: profile, recipes, serial_test | created, closed | closed | Group D |
-| rmcp-template-7f5 | Make self-hosted runner setup reproducible | created | open | runners are hand-built, not in VCS |
-| rmcp-template-5yz | Decide fate of GHAS-gated CI steps | created | open | Trivy upload + dependabot-auto-merge can't function on free private |
+| soma-vs9 | Port sibling-repo dev-infra patterns (epic) | created, closed | closed | tracked the pattern-port work |
+| soma-7ak | CI: ci-gate/deny cron/dispatch/gitleaks | created, claimed, closed | closed | Group A |
+| soma-ecc | HTTP surface: /readyz + /metrics | created, closed | closed | Group B |
+| soma-27p | Dispatch wrapper + tracing harness + boundary test | created, closed | closed | Group C |
+| soma-bn1 | Dev ergonomics: profile, recipes, serial_test | created, closed | closed | Group D |
+| soma-7f5 | Make self-hosted runner setup reproducible | created | open | runners are hand-built, not in VCS |
+| soma-5yz | Decide fate of GHAS-gated CI steps | created | open | Trivy upload + dependabot-auto-merge can't function on free private |
 
-Existing open beads `rmcp-template-otd` (cancelled Docker Publish run), `-2qk`
+Existing open beads `soma-otd` (cancelled Docker Publish run), `-2qk`
 (SBOM/cosign), `-490` (MCP_PRIVATE_KEY secret) are related to the migrated
 `docker-publish` workflow but predate/are out of scope for this session; left open.
 
@@ -167,7 +167,7 @@ Existing open beads `rmcp-template-otd` (cancelled Docker Publish run), `-2qk`
   with `git diff origin/main <branch>` empty). The `lucid-perlman-6392e0` session
   worktree is stale (no unique commits, behind `main`) but is the active session
   worktree — left in place (cannot remove the worktree in use). The main worktree
-  `/home/jmagar/workspace/rmcp-template` is on `codex/frictionless-scaffold` (a
+  `/home/jmagar/workspace/soma` is on `codex/frictionless-scaffold` (a
   parallel session's branch) — left untouched. Session log committed to `main` via a
   temporary worktree, which was then removed.
 - **Stale docs**: updated `docs/CI.md`, `docs/LINUX-RUNNER.md`, `CLAUDE.md`, and the
@@ -198,7 +198,7 @@ Existing open beads `rmcp-template-otd` (cancelled Docker Publish run), `-2qk`
 | command | result |
 |---|---|
 | `gh api .../actions/jobs/<id>` annotations | revealed the billing failure root cause |
-| `./config.sh --unattended … --labels rmcp-template,dookie --work /opt/gha-home-N/_work` | registered 3 runners |
+| `./config.sh --unattended … --labels soma,dookie --work /opt/gha-home-N/_work` | registered 3 runners |
 | `sudo ./svc.sh install jmagar && start` | runners online as systemd services |
 | `rustup default stable` | local default → 1.96.0 |
 | `cargo +stable build/clippy/nextest` | build ✓, clippy ✓, 519 tests pass |
@@ -247,10 +247,10 @@ Existing open beads `rmcp-template-otd` (cancelled Docker Publish run), `-2qk`
 
 - **All CI on one box (dookie)** — single point of failure; CI competes with dev/agent
   load. Rollback: revert `runs-on` to `ubuntu-latest` (needs billing resolved).
-- **Runners are hand-built, not in VCS** (`rmcp-template-7f5`) — a dookie rebuild loses
+- **Runners are hand-built, not in VCS** (`soma-7f5`) — a dookie rebuild loses
   them; `docs/LINUX-RUNNER.md` documents recreation.
 - **GHAS-gated steps** (Trivy upload, dependabot-auto-merge) will fail on releases
-  (`rmcp-template-5yz`).
+  (`soma-5yz`).
 - **MSRV == latest stable** — anyone on < 1.96 can no longer build; intentional.
 
 ## Decisions Not Taken
@@ -270,15 +270,15 @@ Existing open beads `rmcp-template-otd` (cancelled Docker Publish run), `-2qk`
 ## Open Questions
 
 - Should the Trivy SARIF upload step be removed (keep the scan as a gate) or is GHAS
-  worth buying? (`rmcp-template-5yz`)
+  worth buying? (`soma-5yz`)
 - Keep `dependabot-auto-merge.yml` at all, given it can't enable auto-merge? (`-5yz`)
 
 ## Next Steps
 
 - **From this session (done)**: all 8 (now 7) workflows on dookie, green; 11 deps
   merged; MSRV 1.96; local default 1.96.
-- **Immediate**: resolve `rmcp-template-5yz` (Trivy upload / dependabot-auto-merge fate)
-  and `rmcp-template-7f5` (runner setup script) before the next `v*` release.
+- **Immediate**: resolve `soma-5yz` (Trivy upload / dependabot-auto-merge fate)
+  and `soma-7f5` (runner setup script) before the next `v*` release.
 - **Watch**: the first `v*` tag will exercise `auto-tag` → `release` (LFS) →
   `docker-publish` on dookie for the first time; verify the release pipeline end-to-end.
 - **Cleanup**: once out of the `lucid-perlman-6392e0` worktree,

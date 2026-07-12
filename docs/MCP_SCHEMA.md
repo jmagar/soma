@@ -1,6 +1,6 @@
 # MCP Schema Contract
 
-Generated from `crates/rtemplate-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.
+Generated from `crates/soma-contracts/src/actions.rs` and checked against the schema, README, skill docs, help text, and scope routing.
 
 Run:
 
@@ -13,43 +13,43 @@ cargo xtask check-schema-docs --check
 
 | Field | Value |
 |---|---|
-| Tool name | `example` |
-| Schema resource | `example://schema/mcp-tool` |
+| Tool name | `soma` |
+| Schema resource | `soma://schema/mcp-tool` |
 | Dispatch parameter | `action` |
 
 ## Actions
 
 | Action | Scope | Cost | Description |
 |---|---|---|---|
-| `greet` | `example:read` | `cheap` | Return a greeting. |
-| `echo` | `example:read` | `cheap` | Echo a message back unchanged. |
-| `status` | `example:read` | `cheap` | Return server status and configuration info. |
-| `elicit_name` | `example:read` | `cheap` | Ask the MCP client to collect a name, then return a personalised greeting. |
-| `scaffold_intent` | `example:read` | `moderate` | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
+| `greet` | `soma:read` | `cheap` | Return a greeting. |
+| `echo` | `soma:read` | `cheap` | Echo a message back unchanged. |
+| `status` | `soma:read` | `cheap` | Return server status and configuration info. |
+| `elicit_name` | `soma:read` | `cheap` | Ask the MCP client to collect a name, then return a personalised greeting. |
+| `scaffold_intent` | `soma:read` | `moderate` | Collect scaffold setup intent through MCP elicitation and return JSON for the scaffold-project skill. |
 | `help` | public | `cheap` | Show the action reference. |
 
 ## Drift Rules
 
-- `ACTION_SPECS` in `crates/rtemplate-contracts/src/actions.rs` is the canonical action and scope list.
+- `ACTION_SPECS` in `crates/soma-contracts/src/actions.rs` is the canonical action and scope list.
 - Action cost is planner metadata. Use `cheap` for first-pass reads, `moderate` for bounded workflow setup, `expensive` for broad scans or long-running work, and `write` for mutating operations.
-- `crates/rtemplate-mcp/src/schemas.rs` must derive its enum from `ACTION_SPECS`.
+- `crates/soma-mcp/src/schemas.rs` must derive its enum from `ACTION_SPECS`.
 - The MCP tool schema must reject unknown top-level parameters except reserved `_response_*` continuation fields, and encode action-specific requirements that fit the single-tool dispatch model.
 - `help` is intentionally public and must have no required scope.
-- `crates/rtemplate-mcp/src/tools.rs`, `README.md`, and `plugins/rtemplate/skills/example/SKILL.md` must mention every action.
-- `crates/rtemplate-mcp/src/rmcp_server.rs` owns stable resources and must keep `example://schema/mcp-tool` wired to `tool_definitions()`.
-- `crates/rtemplate-mcp/src/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.
+- `crates/soma-mcp/src/tools.rs`, `README.md`, and `plugins/soma/skills/soma/SKILL.md` must mention every action.
+- `crates/soma-mcp/src/rmcp_server.rs` owns stable resources and must keep `soma://schema/mcp-tool` wired to `tool_definitions()`.
+- `crates/soma-mcp/src/prompts.rs` owns stable prompts and must keep `quick_start` covered by prompt tests.
 
 ## Resources
 
 | URI | Source | Contract |
 |---|---|---|
-| `example://schema/mcp-tool` | `crates/rtemplate-mcp/src/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |
+| `soma://schema/mcp-tool` | `crates/soma-mcp/src/rmcp_server.rs` | Returns `tool_definitions()` as `application/json`. |
 
 ## Prompts
 
 | Prompt | Source | Contract |
 |---|---|---|
-| `quick_start` | `crates/rtemplate-mcp/src/prompts.rs` | Guides a client to call `status` and `greet`. |
+| `quick_start` | `crates/soma-mcp/src/prompts.rs` | Guides a client to call `status` and `greet`. |
 
 ## Input Validation
 

@@ -1,8 +1,8 @@
 # =============================================================================
-# .cargo/config.toml — Cargo workspace configuration for rmcp-template
+# .cargo/config.toml — Cargo workspace configuration for soma
 #
-# TEMPLATE: Copy this file unchanged to any new server repo derived from this
-#           template. The [alias] section wires `cargo xtask` so it runs the
+# CUSTOMIZE: Copy this file unchanged to any new server repo derived from this
+#           Soma scaffold. The [alias] section wires `cargo xtask` so it runs the
 #           xtask crate.
 #
 # Most build settings (linker, profile tuning, jobs) live in the developer's
@@ -16,10 +16,9 @@
 [alias]
 # The `cargo xtask` convention: `cargo xtask <cmd>` delegates to the xtask crate.
 # See: https://github.com/matklad/cargo-xtask
-# TEMPLATE: No changes needed here — "xtask" is the conventional crate name.
+# CUSTOMIZE: No changes needed here — "xtask" is the conventional crate name.
 xtask = "run --package xtask --"
 
 [build]
 # Keep completed Cargo binary artifacts in ./bin without committing them.
 rustc-wrapper = "scripts/cargo-rustc-wrapper"
-

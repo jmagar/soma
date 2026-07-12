@@ -1,7 +1,7 @@
 # =============================================================================
 # .config/nextest.toml — cargo-nextest configuration
 #
-# TEMPLATE: Copy this file unchanged to any new server repo.
+# CUSTOMIZE: Copy this file unchanged to any new server repo.
 #           Adjust fail-fast and retry settings if your test suite has
 #           specific requirements (e.g. integration tests that can flake).
 #
@@ -30,14 +30,14 @@ fail-fast = true
 
 # Retry each test once before marking it as failed. Handles transient network
 # or timing issues in integration tests without hiding real failures.
-# TEMPLATE: Increase to 3 for services with flaky network-dependent tests.
+# CUSTOMIZE: Increase to 3 for services with flaky network-dependent tests.
 retries = 2
 
 # Always show output in CI so logs contain full failure context.
 failure-output = "immediate-final"
 
 # ── Optional: test groups for parallelism control ─────────────────────────────
-# TEMPLATE: Uncomment and configure if your integration tests need to run
+# CUSTOMIZE: Uncomment and configure if your integration tests need to run
 #           against a single server instance (can't parallelize).
 #
 # [test-groups]

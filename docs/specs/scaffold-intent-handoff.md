@@ -2,11 +2,11 @@
 
 ## Status
 
-Draft / implemented in template skeleton.
+Draft / implemented in Soma scaffold.
 
 ## Purpose
 
-`rmcp-template` provides an MCP elicitation setup wizard that helps a user describe the server they want to scaffold without granting the tool permission to mutate files directly.
+`soma` provides an MCP elicitation setup wizard that helps a user describe the server they want to scaffold without granting the tool permission to mutate files directly.
 
 The wizard returns structured JSON. A plugin skill then reads that JSON and creates an approval-first implementation plan. The user remains in control because normal editor/plugin permissions govern any later file edits.
 
@@ -49,7 +49,7 @@ sequenceDiagram
     participant A as Coding Agent
 
     U->>C: Request help scaffolding project
-    C->>S: example(action="scaffold_intent")
+    C->>S: soma(action="scaffold_intent")
     S->>C: elicitation/create with scaffold fields
     C->>U: Render setup wizard form
     U->>C: Submit project details
@@ -74,7 +74,7 @@ MCP-only.
 
 ### Scope
 
-`example:read` in the template. Scaffolded projects should rename this to the service read scope, for example `unraid:read`.
+`soma:read` in Soma. Scaffolded projects should rename this to the service read scope, for example `unraid:read`.
 
 ### Rationale for MCP-only
 
@@ -114,7 +114,7 @@ structured `crawl_docs` object in the returned payload.
 
 ## Returned JSON contract
 
-The action returns a JSON object with `kind = "rmcp_template_scaffold_intent"` and `schema_version = 1`.
+The action returns a JSON object with `kind = "soma_scaffold_intent"` and `schema_version = 1`.
 
 Machine-readable contract: [`docs/contracts/scaffold-intent.schema.json`](../contracts/scaffold-intent.schema.json).
 
@@ -143,7 +143,7 @@ These fields are part of the core scaffold decision:
 
 ```json
 {
-  "kind": "rmcp_template_scaffold_intent",
+  "kind": "soma_scaffold_intent",
   "schema_version": 1,
   "server_category": "upstream-client",
   "required_surfaces": ["mcp", "cli"],
@@ -194,7 +194,7 @@ These fields are part of the core scaffold decision:
 
 ```json
 {
-  "kind": "rmcp_template_scaffold_intent",
+  "kind": "soma_scaffold_intent",
   "schema_version": 1,
   "server_category": "application-platform",
   "required_surfaces": ["api", "cli", "mcp", "web"],
@@ -261,7 +261,7 @@ The `scaffold-project` skill is responsible for turning scaffold intent JSON int
 Location:
 
 ```text
-plugins/rtemplate/skills/scaffold-project/SKILL.md
+plugins/soma/skills/scaffold-project/SKILL.md
 ```
 
 The skill must:
@@ -321,21 +321,21 @@ The coding agent may mutate files only after the user approves the plan produced
 
 | Concern | File |
 |---|---|
-| Action metadata and parser | `crates/rtemplate-contracts/src/actions.rs` |
-| Elicitation implementation | `crates/rtemplate-mcp/src/tools.rs` |
-| MCP schema/action enum | `crates/rtemplate-mcp/src/schemas.rs` via `action_names()` |
+| Action metadata and parser | `crates/soma-contracts/src/actions.rs` |
+| Elicitation implementation | `crates/soma-mcp/src/tools.rs` |
+| MCP schema/action enum | `crates/soma-mcp/src/schemas.rs` via `action_names()` |
 | Generated schema docs | `docs/MCP_SCHEMA.md` |
 | Schema docs generator descriptions | `scripts/check-schema-docs.py` |
-| Tool skill reference | `plugins/rtemplate/skills/example/SKILL.md` |
-| Handoff skill | `plugins/rtemplate/skills/scaffold-project/SKILL.md` |
-| Web API explorer metadata | `apps/web/lib/template.ts` |
+| Tool skill reference | `plugins/soma/skills/soma/SKILL.md` |
+| Handoff skill | `plugins/soma/skills/scaffold-project/SKILL.md` |
+| Web API explorer metadata | `apps/web/lib/soma.ts` |
 
 ## Validation requirements
 
 After changing this flow, run:
 
 ```bash
-cargo fmt --package rmcp-template
+cargo fmt --package soma
 cargo test --lib
 just schema-docs-check
 just scaffold-contract-check

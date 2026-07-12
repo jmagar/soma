@@ -2,7 +2,7 @@
 title: "ADR 0007: Package reusable admin UI as a web boundary"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

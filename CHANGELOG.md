@@ -5,11 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-<!-- TEMPLATE: When releasing, move items from [Unreleased] to a new version section.
+<!-- CUSTOMIZE: When releasing, move items from [Unreleased] to a new version section.
                Format: ## [X.Y.Z] — YYYY-MM-DD
                Use Added / Changed / Deprecated / Removed / Fixed / Security headers. -->
 
 ## [Unreleased]
+
+## [0.4.7]
+
+### Added
+
+- Added tag-time npm publishing for `soma-rmcp` with trusted publishing/provenance support.
+
+### Changed
+
+- Bumped Soma release metadata to `0.4.7` so refreshed npm discovery metadata can ship after the already-published `0.4.6`.
 
 ## [0.4.6]
 
@@ -30,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- Removed the deprecated `POST /v1/example` REST action-envelope route. REST now exposes
+- Removed the deprecated `the retired REST action-envelope route` REST action-envelope route. REST now exposes
   only direct typed `/v1/*` business routes while MCP keeps compact action dispatch behind
   its single tool surface.
 
@@ -63,22 +73,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upstream dependency and returns `503 Service Unavailable` when it is unreachable, so
   orchestrators only route traffic once the server can serve it.
 - `GET /metrics` Prometheus endpoint (public, requires the `observability` feature): the
-  server installs a global recorder at startup and exposes `rtemplate_actions_total` and
-  `rtemplate_action_duration_ms` (labelled by `surface`/`action`/`outcome`) in text
+  server installs a global recorder at startup and exposes `soma_actions_total` and
+  `soma_action_duration_ms` (labelled by `surface`/`action`/`outcome`) in text
   exposition format. Returns `503` until the recorder is installed.
-- `rtemplate_service::dispatch_action(service, action, surface)` — a unified dispatch seam
+- `soma_service::dispatch_action(service, action, surface)` — a unified dispatch seam
   that all surfaces (MCP, REST, CLI) now route through, emitting one structured log line
   per action (`surface`, `action`, `outcome`, `elapsed_ms`; never parameters) plus metrics.
 - `require_confirmation_if_destructive(action, params)` confirmation gate in
-  `rtemplate-contracts`, enforced on the MCP and REST dispatch paths (the CLI already
+  `soma-contracts`, enforced on the MCP and REST dispatch paths (the CLI already
   gated): a `destructive` action without `"confirm": true` returns a structured
-  validation error. No-op for the template's current actions; gates any future one.
+  validation error. No-op for Soma's current actions; gates any future one.
 - `.gitleaks.toml` secret-scan policy with an allowlist for placeholder/fixture
   credentials, plus a `scheduled.yml` workflow (weekly cron + `workflow_dispatch`) that
   refreshes RUSTSEC advisories without a push, and a `workflow_dispatch` trigger on CI.
 - A `ci-gate` aggregation job in CI: a single required status that fails if any needed job
   ended in anything other than success or skipped (point branch protection at it).
-- In-process tracing-capture test harness (`rtemplate-test-support`: `SharedBuf`,
+- In-process tracing-capture test harness (`soma-test-support`: `SharedBuf`,
   `SharedWriter`, `tracing_test_lock`) and a `dispatch_logging` regression test that pins
   the structured-logging contract.
 - Architecture boundary tests (`tests/architecture_boundaries.rs`) that make the thin-shim
@@ -101,7 +111,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.2] — 2026-06-19
 
 
-<!-- TEMPLATE: Add changes here as you work. They move to a version section on release. -->
+<!-- CUSTOMIZE: Add changes here as you work. They move to a version section on release. -->
 
 ### Added
 
@@ -111,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Moved the root package into `crates/rmcp-template` and made the repository root a virtual Cargo workspace.
+- Moved the root package into `crates/soma` and made the repository root a virtual Cargo workspace.
 - Updated Docker, docs, tests, cargo-generate, pattern checks, and release metadata for the crate-split layout.
 
 ### Fixed
@@ -122,11 +132,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Plugin `SessionStart`/`ConfigChange` hooks now call `${CLAUDE_PLUGIN_ROOT}/bin/rtemplate setup plugin-hook` directly instead of going through the `plugin-setup.sh` shell wrapper. The env-var mapping the script performed (`CLAUDE_PLUGIN_OPTION_*` → `RTEMPLATE_*`) now lives in `apply_plugin_options()` in `src/cli/setup.rs`, applied before `Config::load()` on the plugin-hook path.
+- Plugin `SessionStart`/`ConfigChange` hooks now call `${CLAUDE_PLUGIN_ROOT}/bin/soma setup plugin-hook` directly instead of going through the `plugin-setup.sh` shell wrapper. The env-var mapping the script performed (`CLAUDE_PLUGIN_OPTION_*` → `SOMA_*`) now lives in `apply_plugin_options()` in `src/cli/setup.rs`, applied before `Config::load()` on the plugin-hook path.
 
 ### Removed
 
-- `plugins/rtemplate/hooks/plugin-setup.sh` — the wrapper was a pure env-mapping middleman now handled by the binary's `setup plugin-hook` command.
+- `plugins/soma/hooks/plugin-setup.sh` — the wrapper was a pure env-mapping middleman now handled by the binary's `setup plugin-hook` command.
 
 ## [0.4.0] — 2026-05-14
 
@@ -140,20 +150,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `src/cli/watch.rs` — `example watch` subcommand for live file-system monitoring.
-- `plugins/rtemplate/monitors/` — plugin monitor definitions for event-driven automation.
-- `plugins/rtemplate/gemini-extension.json` — Gemini extension manifest for multi-platform plugin distribution.
+- `src/cli/watch.rs` — `soma watch` subcommand for live file-system monitoring.
+- `plugins/soma/monitors/` — plugin monitor definitions for event-driven automation.
+- `plugins/soma/gemini-extension.json` — Gemini extension manifest for multi-platform plugin distribution.
 - `.github/dependabot.yml` + `.github/workflows/dependabot-auto-merge.yml` — automated dependency updates with auto-merge for minor/patch bumps.
 - `scripts/asciicheck.py`, `scripts/check-blob-size.py`, `scripts/check-dependency-updates.sh`, `scripts/check-file-size.sh`, `scripts/check-runtime-current.sh`, `scripts/validate-plugin-layout.sh`, `scripts/blob-size-allowlist.txt` — repository validation and quality scripts.
 - `tests/plugin_contract.rs` — plugin contract integration tests.
 - `docs/PLUGINS.md` — documentation for the plugin system and distribution model.
-- `plugins/README.md`, `plugins/rtemplate/README.md`, `plugins/rtemplate/CLAUDE.md` — plugin-level documentation and agent guidance.
+- `plugins/README.md`, `plugins/soma/README.md`, `plugins/soma/CLAUDE.md` — plugin-level documentation and agent guidance.
 - `apps/web/README.md`, `xtask/README.md`, `tests/README.md`, `scripts/README.md` — README coverage for every major directory.
 - `.claude/` — Claude Code project settings for agent-assisted development.
 
 ### Changed
 
-- `plugins/rtemplate/hooks/plugin-setup.sh` — significant simplification; reduced from ~500 to ~50 lines by extracting reusable logic and removing duplication.
+- `plugins/soma/hooks/plugin-setup.sh` — significant simplification; reduced from ~500 to ~50 lines by extracting reusable logic and removing duplication.
 - `Justfile` — expanded with additional recipes covering plugin validation, script checks, and workflow shortcuts.
 - `lefthook.yml` — pre-commit hook additions aligned with new script suite.
 - `AGENTS.md`, `CLAUDE.md` — updated agent and AI tooling guidance to reflect current project structure.
@@ -185,21 +195,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Layered architecture: `ExampleClient` (transport) → `ExampleService` (business logic) → MCP/CLI shims
-- Action-based dispatch: single `example` MCP tool with `action` parameter routing
-- Both transports: Streamable HTTP (`example serve`) and stdio (`example mcp`)
-- Bearer token authentication via `RTEMPLATE_MCP_TOKEN`
-- Google OAuth authentication via `RTEMPLATE_MCP_AUTH_MODE=oauth` (issues RS256 JWTs)
+- Layered architecture: `SomaClient` (transport) → `SomaService` (business logic) → MCP/CLI shims
+- Action-based dispatch: single `soma` MCP tool with `action` parameter routing
+- Both transports: Streamable HTTP (`example serve`) and stdio (`soma mcp`)
+- Bearer token authentication via `SOMA_MCP_TOKEN`
+- Google OAuth authentication via `SOMA_MCP_AUTH_MODE=oauth` (issues RS256 JWTs)
 - Loopback/no-auth mode for local development
 - MCP elicitation support (`elicit_name` action, spec 2025-06-18) with graceful fallback
-- MCP resources: exposes tool schema at `example://schema/mcp-tool`
+- MCP resources: exposes tool schema at `soma://schema/mcp-tool`
 - MCP prompts: `quick_start` prompt
 - CLI with `greet`, `echo`, and `status` subcommands
 - Test helpers: `loopback_state()` and `bearer_state()` for credential-free integration tests
 - `AuthPolicy` enum making auth choice explicit at construction time
 - CORS, Host header validation, request body size limiting built-in
 - `resolve_auth_policy_kind()` — refuses to bind `0.0.0.0` without auth (Pattern §27)
-- `default_data_dir()` — detects container vs bare-metal, returns `/data` or `~/.example`
+- `default_data_dir()` — detects container vs bare-metal, returns `/data` or `~/.soma`
 - `entrypoint.sh` — Docker entrypoint with permission setup and privilege drop to UID 1000
 - `xtask` crate with `dist`, `ci`, `symlink-docs`, `check-env` commands
 - `.config/nextest.toml` — nextest configuration with `default` and `ci` profiles
@@ -208,8 +218,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/workflows/ci.yml` — CI: fmt, clippy, nextest, taplo, audit, gitleaks
 - `.github/workflows/docker-publish.yml` — multi-platform Docker build + Trivy scan
 - `.github/workflows/release.yml` — release binaries for linux/amd64 and linux/arm64
-- `config.example.toml` — fully annotated config template
-- `.env.example` — documented secrets template
+- `config.soma.toml` — fully annotated config sample
+- `.env.example` — documented secrets sample
 - `CHANGELOG.md` following Keep a Changelog format
 - Workspace structure: root crate + `xtask/` member
 - `symlink-docs` and `symlink-docs-inline` Justfile recipes

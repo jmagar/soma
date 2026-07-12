@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const OUTPUT_KEYS: &[&str] = &[
-    "all", "docs", "workflow", "rust", "web", "native", "mcp", "docker", "toml", "template",
+    "all", "docs", "workflow", "rust", "web", "native", "mcp", "docker", "toml", "soma",
     "security", "secrets", "release",
 ];
 
@@ -116,17 +116,17 @@ fn classify(event: &str, paths: &[String]) -> BTreeMap<String, bool> {
             )
     });
     let web = any(paths, |p| {
-        starts(p, &["apps/web/", "crates/rtemplate-web/"])
+        starts(p, &["apps/web/", "crates/soma-web/"])
             || matches!(p, "package.json" | "pnpm-lock.yaml" | "pnpm-workspace.yaml")
     });
     let mcp = any(paths, |p| {
         starts(
             p,
             &[
-                "crates/rtemplate-mcp/",
-                "crates/rtemplate-api/",
-                "crates/rtemplate-contracts/",
-                "crates/rmcp-template/tests/mcporter/",
+                "crates/soma-mcp/",
+                "crates/soma-api/",
+                "crates/soma-contracts/",
+                "crates/soma/tests/mcporter/",
                 "docs/reference/mcp/",
             ],
         )
@@ -151,14 +151,12 @@ fn classify(event: &str, paths: &[String]) -> BTreeMap<String, bool> {
                 )
         });
     let toml = any(paths, |p| p.ends_with(".toml"));
-    let template = rust
+    let soma = rust
         || mcp
         || docs
         || any(paths, |p| {
-            starts(
-                p,
-                &["plugins/", "templates/", "cargo-generate/", ".claude/"],
-            ) || matches!(p, "Justfile" | "lefthook.yml")
+            starts(p, &["plugins/", "scaffold/", "cargo-generate/", ".claude/"])
+                || matches!(p, "Justfile" | "lefthook.yml")
         });
     let security = rust
         || any(paths, |p| {
@@ -177,7 +175,7 @@ fn classify(event: &str, paths: &[String]) -> BTreeMap<String, bool> {
     result.insert("mcp".to_owned(), mcp);
     result.insert("docker".to_owned(), docker);
     result.insert("toml".to_owned(), toml);
-    result.insert("template".to_owned(), template);
+    result.insert("soma".to_owned(), soma);
     result.insert("security".to_owned(), security);
     result.insert(
         "secrets".to_owned(),
@@ -328,10 +326,10 @@ mod tests {
     }
 
     #[test]
-    fn prose_docs_skip_runtime_but_enable_template_docs() {
+    fn prose_docs_skip_runtime_but_enable_soma_docs() {
         let out = classify_paths(&["docs/SCAFFOLD.md"]);
         assert!(out["docs"]);
-        assert!(out["template"]);
+        assert!(out["soma"]);
         assert!(!out["rust"]);
         assert!(!out["web"]);
         assert!(!out["native"]);
@@ -340,12 +338,12 @@ mod tests {
 
     #[test]
     fn rust_changes_enable_runtime_dependents() {
-        let out = classify_paths(&["crates/rtemplate-mcp/src/tool.rs"]);
+        let out = classify_paths(&["crates/soma-mcp/src/tool.rs"]);
         assert!(out["rust"]);
         assert!(out["mcp"]);
         assert!(out["native"]);
         assert!(out["docker"]);
-        assert!(out["template"]);
+        assert!(out["soma"]);
         assert!(out["security"]);
         assert!(out["release"]);
     }

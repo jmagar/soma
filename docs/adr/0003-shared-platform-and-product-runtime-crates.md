@@ -2,7 +2,7 @@
 title: "ADR 0003: Split shared platform crates from product runtime crates"
 doc_type: "adr"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"

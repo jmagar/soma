@@ -6,7 +6,7 @@ cargo_generate_version = ">=0.23.0"
 # assets.
 include = [
   "cargo-generate.toml",
-  "template/cargo-generate/post.rhai",
+  "scaffold/cargo-generate/post.rhai",
 ]
 ignore = [
   "cargo-generate.toml",
@@ -56,4 +56,4 @@ github_repo = { type = "string", prompt = "GitHub repo name for docs", regex = "
 default_features = { type = "string", prompt = "Default Cargo features (comma-separated)", regex = "^[a-z0-9_,-]+$", default = "full" }
 
 [hooks]
-post = ["template/cargo-generate/post.rhai"]
+post = ["scaffold/cargo-generate/post.rhai"]

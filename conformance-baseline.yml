@@ -1,11 +1,11 @@
 # MCP conformance expected-failures baseline (official @modelcontextprotocol/conformance).
 #
-# Scenarios the rmcp-template server does not satisfy out of the box, recorded so
+# Scenarios the soma server does not satisfy out of the box, recorded so
 # `just conformance` fails only on a NEW regression — and flags any baselined
 # scenario that starts passing as a stale entry to remove.
 #
 # Updated 2026-07-04 against the `active` suite with
-# RTEMPLATE_MCP_CONFORMANCE_FIXTURES=true on a no-auth loopback server.
+# SOMA_MCP_CONFORMANCE_FIXTURES=true on a no-auth loopback server.
 #
 # The CORE protocol scenarios PASS — server-initialize, ping, tools-list,
 # resources-list, prompts-list, completion-complete, dns-rebinding-protection —
@@ -13,7 +13,7 @@
 # below fail for two benign reasons, not protocol violations:
 #
 #   1. The server runs in JSON-response mode, so the multiple-SSE-stream
-#      transport scenario does not apply to this template harness.
+#      transport scenario does not apply to Soma harness.
 #   2. Progress and elicitation reference-fixture scenarios need live client
 #      notification/input round trips beyond the static fixture overlay.
 #   3. Logging, sampling, and resource subscriptions are deprecated/removed in
@@ -34,5 +34,5 @@ server:
   - resources-subscribe
   - resources-unsubscribe
   # Pending SEP-1699 transport experiment. Removed in the draft protocol and not
-  # implemented by this JSON-response template harness.
+  # implemented by this JSON-response conformance harness.
   - server-sse-polling

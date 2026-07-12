@@ -2,11 +2,11 @@
 title: "Docker"
 doc_type: "guide"
 status: "active"
-owner: "rmcp-template"
+owner: "soma"
 audience:
   - "contributors"
   - "agents"
-scope: "template"
+scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
@@ -41,19 +41,19 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package rmcp-template --bin example-server
+    cargo build --release --locked --package soma --bin soma-server
 
 # Build real binary
 COPY config/ config/
 COPY entrypoint.sh entrypoint.sh
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package rmcp-template --bin example-server --features full && \
-    cp target/release/example-server /usr/local/bin/example-server
+    cargo build --release --locked --package soma --bin soma-server --features full && \
+    cp target/release/soma-server /usr/local/bin/soma-server
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/local/bin/example-server /usr/local/bin/example-server
+COPY --from=builder /usr/local/bin/soma-server /usr/local/bin/soma-server
 RUN groupadd --gid 1000 example && \
     useradd --uid 1000 --gid example --no-create-home --shell /sbin/nologin example && \
     mkdir -p /data && chown example:example /data
@@ -69,19 +69,19 @@ CMD ["serve", "mcp"]
 
 ```yaml
 services:
-  rtemplate-mcp:
-    image: ghcr.io/jmagar/rtemplate-mcp:${VERSION:-latest}
+  soma-mcp:
+    image: ghcr.io/jmagar/soma-mcp:${VERSION:-latest}
     build:
       context: .
       dockerfile: config/Dockerfile
-    container_name: rtemplate-mcp
+    container_name: soma-mcp
     restart: unless-stopped
     user: "${PUID:-1000}:${PGID:-1000}"
     env_file:
       - path: .env
         required: false
     ports:
-      - "${RTEMPLATE_MCP_HOST_PORT:-40060}:40060/tcp"
+      - "${SOMA_MCP_HOST_PORT:-40060}:40060/tcp"
     volumes:
       - ${HOME}/.example:/data
     networks:
@@ -100,7 +100,7 @@ services:
 
 networks:
   mcp:
-    name: ${DOCKER_NETWORK:-rtemplate-mcp}
+    name: ${DOCKER_NETWORK:-soma-mcp}
     external: true
 ```
 
@@ -122,9 +122,9 @@ Local binary and Docker use the same data directory:
 
 | Deployment | Data directory |
 |---|---|
-| Local binary | `~/.example/` |
-| Docker | `/data/` inside container, mounted from `~/.example/` on host |
-| Plugin | `$CLAUDE_PLUGIN_DATA` (symlinked to `~/.example/`) |
+| Local binary | `~/.soma/` |
+| Docker | `/data/` inside container, mounted from `~/.soma/` on host |
+| Plugin | `$CLAUDE_PLUGIN_DATA` (symlinked to `~/.soma/`) |
 
 ```rust
 fn default_data_dir() -> PathBuf {
@@ -145,7 +145,7 @@ set -e
 DATA_DIR="${DATA_DIR:-/data}"
 
 # Validate required vars before starting
-for var in RTEMPLATE_API_URL RTEMPLATE_API_KEY; do
+for var in SOMA_API_URL SOMA_API_KEY; do
     eval "val=\${${var}:-}"
     [ -z "${val}" ] && { echo "FATAL: ${var} is not set" >&2; exit 1; }
 done

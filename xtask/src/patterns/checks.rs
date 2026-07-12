@@ -11,21 +11,21 @@ use super::{
 };
 
 const REQUIRED_PATTERN_FILES: &[&str] = &[
-    "crates/rtemplate-service/src/example.rs",
-    "crates/rtemplate-service/src/app.rs",
-    "crates/rtemplate-service/src/actions.rs",
-    "crates/rtemplate-mcp/src/lib.rs",
-    "crates/rtemplate-mcp/src/tools.rs",
-    "crates/rtemplate-mcp/src/schemas.rs",
-    "crates/rtemplate-mcp/src/rmcp_server.rs",
-    "crates/rmcp-template/src/routes.rs",
-    "crates/rtemplate-mcp/src/prompts.rs",
-    "crates/rtemplate-contracts/src/config.rs",
-    "crates/rtemplate-cli/src/lib.rs",
-    "crates/rmcp-template/src/main.rs",
-    "crates/rmcp-template/src/lib.rs",
-    "crates/rmcp-template/tests/tool_dispatch.rs",
-    "config.example.toml",
+    "crates/soma-service/src/soma.rs",
+    "crates/soma-service/src/app.rs",
+    "crates/soma-contracts/src/actions.rs",
+    "crates/soma-mcp/src/lib.rs",
+    "crates/soma-mcp/src/tools.rs",
+    "crates/soma-mcp/src/schemas.rs",
+    "crates/soma-mcp/src/rmcp_server.rs",
+    "crates/soma/src/routes.rs",
+    "crates/soma-mcp/src/prompts.rs",
+    "crates/soma-contracts/src/config.rs",
+    "crates/soma-cli/src/lib.rs",
+    "crates/soma/src/main.rs",
+    "crates/soma/src/lib.rs",
+    "crates/soma/tests/tool_dispatch.rs",
+    "config.soma.toml",
     "taplo.toml",
     "lefthook.yml",
     "install.sh",
@@ -150,13 +150,13 @@ pub(super) fn file_sizes(reporter: &mut PatternReporter) -> Result<()> {
 pub(super) fn thin_shims(reporter: &mut PatternReporter) {
     let policies = [
         (
-            "crates/rtemplate-mcp/src/tools.rs",
-            &["state.service", "execute_service_action"][..],
+            "crates/soma-mcp/src/tools.rs",
+            &["state.service", "provider_registry"][..],
             FORBIDDEN_SHIM_TOKENS,
         ),
         (
-            "crates/rtemplate-cli/src/lib.rs",
-            &["ExampleService::new", "service."][..],
+            "crates/soma-cli/src/lib.rs",
+            &["SomaService::new", "service."][..],
             &["reqwest::", "hyper::Client", "sqlx::", "rusqlite::"][..],
         ),
     ];
@@ -178,7 +178,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
             reporter.warn(
                 "thin-shim",
                 format!(
-                    "{path} does not contain expected delegation token(s): {}. Hint: shims should parse inputs and delegate to ExampleService.",
+                    "{path} does not contain expected delegation token(s): {}. Hint: shims should parse inputs and delegate to SomaService.",
                     missing.join(", ")
                 ),
             );
@@ -199,7 +199,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
 }
 
 pub(super) fn routes(reporter: &mut PatternReporter) {
-    let routes = read_file("crates/rmcp-template/src/routes.rs");
+    let routes = read_file("crates/soma/src/routes.rs");
     let missing = ["\"/mcp\"", "\"/health\"", "\"/status\""]
         .iter()
         .copied()
@@ -246,19 +246,19 @@ pub(super) fn plugins(reporter: &mut PatternReporter) {
         reporter.fail("plugins", failures.join("; "));
     }
 
-    let hook_path = Path::new("plugins/rtemplate/hooks/hooks.json");
+    let hook_path = Path::new("plugins/soma/hooks/hooks.json");
     if hook_path.exists() {
-        let hook = read_file("plugins/rtemplate/hooks/hooks.json");
+        let hook = read_file("plugins/soma/hooks/hooks.json");
         // The hook must call the installed PATH binary directly (no plugin-setup.sh wrapper).
         if hook.contains("plugin-setup.sh") {
             reporter.fail(
                 "plugins",
                 "hooks.json must not reference the removed plugin-setup.sh wrapper",
             );
-        } else if !hook.contains("rtemplate setup plugin-hook") {
+        } else if !hook.contains("soma setup plugin-hook") {
             reporter.fail(
                 "plugins",
-                "hooks.json must call `rtemplate setup plugin-hook` directly",
+                "hooks.json must call `soma setup plugin-hook` directly",
             );
         } else {
             reporter.ok(
@@ -277,8 +277,8 @@ pub(super) fn config_and_auth(reporter: &mut PatternReporter) {
         reporter.fail("config", ".gitignore should ignore .env secrets");
     }
 
-    let server = read_file("crates/rtemplate-runtime/src/server.rs");
-    let config = read_file("crates/rtemplate-contracts/src/config.rs");
+    let server = read_file("crates/soma-runtime/src/server.rs");
+    let config = read_file("crates/soma-contracts/src/config.rs");
     if !server.contains("LoopbackDev") || !server.contains("Mounted") {
         reporter.fail(
             "auth",
@@ -307,7 +307,7 @@ pub(super) fn tooling(reporter: &mut PatternReporter) {
         "scripts/check-openapi.py",
         "scripts/check-scaffold-intent-contract.py",
         "scripts/validate-plugin-layout.sh",
-        "scripts/test-template-features.sh",
+        "scripts/test-soma-features.sh",
     ] {
         if !Path::new(script).is_file() {
             missing.push(script.to_string());

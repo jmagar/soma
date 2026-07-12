@@ -1,13 +1,13 @@
 ---
 date: 2026-05-14 20:20:14 EDT
-repo: git@github.com:jmagar/rmcp-template.git
+repo: git@github.com:jmagar/soma.git
 branch: full-review-remediation
 head: 2a4599c
 agent: Codex
 session id: a5ff4274-c46a-4127-af34-aa6cfff2b3f7
-transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-rmcp-template/a5ff4274-c46a-4127-af34-aa6cfff2b3f7.jsonl
-working directory: /home/jmagar/workspace/rmcp-template
-worktree: /home/jmagar/workspace/rmcp-template  2a4599c [full-review-remediation]
+transcript: /home/jmagar/.claude/projects/-home-jmagar-workspace-soma/a5ff4274-c46a-4127-af34-aa6cfff2b3f7.jsonl
+working directory: /home/jmagar/workspace/soma
+worktree: /home/jmagar/workspace/soma  2a4599c [full-review-remediation]
 ---
 
 # PR Review Toolkit Remediation Session
@@ -41,10 +41,10 @@ Four PR Review Toolkit review lanes were run against the branch diff: code revie
 ## Technical Decisions
 
 - Kept `TrustedGatewayUnscoped` as an explicit policy name because that accurately describes the behavior: no local auth middleware and no local scope checks.
-- Treated `example:write` as satisfying read checks instead of keeping the obsolete `example:admin` wording.
+- Treated `soma:write` as satisfying read checks instead of keeping the obsolete `soma:admin` wording.
 - Classified only parser/validation errors as REST 400s; service execution failures now log and return 500.
 - Kept `apps/web/out/` generated output ignored, with only `.gitkeep` tracked to satisfy clean Rust builds.
-- Updated the schema-doc checker to read `ACTION_SPECS` rather than regexing deleted `RTEMPLATE_ACTIONS` and `READ_ONLY_ACTIONS` constants.
+- Updated the schema-doc checker to read `ACTION_SPECS` rather than regexing deleted `SOMA_ACTIONS` and `READ_ONLY_ACTIONS` constants.
 
 ## Files Modified
 
@@ -55,16 +55,16 @@ Four PR Review Toolkit review lanes were run against the branch diff: code revie
 - `src/cli.rs`, `src/cli/doctor.rs`: CLI parse validation and doctor error reporting.
 - `src/token_limit.rs`: truncation now respects the total response cap including the notice and keeps UTF-8 boundaries.
 - `tests/api_routes.rs`, `tests/cli_parse.rs`, `tests/template_invariants.rs`, `tests/tool_dispatch.rs`: route, parser, invariant, and helper-comment coverage.
-- `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/AUTH.md`, `docs/MCP_SCHEMA.md`, `docs/PATTERNS.md`, `plugins/README.md`, `scripts/README.md`, `scripts/check-schema-docs.py`, `config.example.toml`, `CHANGELOG.md`: stale contract and workflow documentation updates.
+- `README.md`, `AGENTS.md`, `CLAUDE.md`, `docs/AUTH.md`, `docs/MCP_SCHEMA.md`, `docs/PATTERNS.md`, `plugins/README.md`, `scripts/README.md`, `scripts/check-schema-docs.py`, `config.soma.toml`, `CHANGELOG.md`: stale contract and workflow documentation updates.
 
 ## Commands Executed
 
-- `cargo test`: passed after updating token-limit and template invariant tests.
+- `cargo test`: passed after updating token-limit and Soma invariant tests.
 - `cargo clippy --all-targets -- -D warnings`: passed.
 - `cargo fmt --all -- --check`: passed.
 - `python3 scripts/check-schema-docs.py --check`: passed.
 - `bash scripts/validate-plugin-layout.sh`: passed, 41 checks.
-- `bash scripts/test-template-features.sh`: passed, 6 checks.
+- `bash scripts/test-soma-features.sh`: passed, 6 checks.
 - `pnpm --dir apps/web lint`: passed.
 - `pnpm --dir apps/web build`: passed after clearing stale `apps/web/.next`.
 - `cargo deny --all-features check`: passed with warnings only.
@@ -87,7 +87,7 @@ Four PR Review Toolkit review lanes were run against the branch diff: code revie
 | Action contract | Duplicated action and scope lists across files | `ACTION_SPECS` drives action names, REST help, schema enum, and scope routing |
 | REST errors | Internal service failures could appear as 400 validation errors | Validation errors return 400; execution failures log and return 500 |
 | MCP tool errors | Internal failures could be wrapped as tool error payloads | Internal failures propagate as MCP internal errors |
-| `/status` | Returned local metadata without calling the service | Calls `ExampleService::status()` and merges redacted local metadata |
+| `/status` | Returned local metadata without calling the service | Calls `SomaService::status()` and merges redacted local metadata |
 | CLI echo/watch | Missing echo message and invalid interval could silently default | Invalid inputs now fail parsing |
 | Release assets | Raw binary artifacts did not match installer tarball names | Release workflow creates `example-linux-x86_64.tar.gz` and `example-linux-aarch64.tar.gz` tarballs matching installer platform naming |
 
@@ -100,7 +100,7 @@ Four PR Review Toolkit review lanes were run against the branch diff: code revie
 | `cargo fmt --all -- --check` | no formatting diff | completed successfully | pass |
 | `python3 scripts/check-schema-docs.py --check` | schema docs current | `schema docs are current` | pass |
 | `bash scripts/validate-plugin-layout.sh` | plugin layout valid | 41 passed, 0 failed | pass |
-| `bash scripts/test-template-features.sh` | template smoke tests pass | 6 passed, 0 failed | pass |
+| `bash scripts/test-soma-features.sh` | template smoke tests pass | 6 passed, 0 failed | pass |
 | `pnpm --dir apps/web lint` | web lint passes | Biome checked 22 files with no fixes | pass |
 | `pnpm --dir apps/web build` | static export builds | Next.js build completed successfully | pass |
 | `cargo deny --all-features check` | dependency policy passes | advisories, bans, licenses, sources ok; warnings only | pass |
@@ -117,7 +117,7 @@ Four PR Review Toolkit review lanes were run against the branch diff: code revie
 
 - Did not track generated `apps/web/out/` build output. Only `.gitkeep` is tracked so clean Rust builds have a directory while release/CodeQL builds still generate real assets.
 - Did not weaken tests to preserve old defaults. CLI and REST validation now reject missing or wrong-type required inputs.
-- Did not keep `example:admin`; docs and code now use `example:write` as the elevated scope.
+- Did not keep `soma:admin`; docs and code now use `soma:write` as the elevated scope.
 
 ## References
 

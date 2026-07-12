@@ -162,7 +162,7 @@ fn compare_refs(
     }
 
     let temp_parent = std::env::temp_dir().join(format!(
-        "rtemplate-no-mcp-drift.{}.{}",
+        "soma-no-mcp-drift.{}.{}",
         std::process::id(),
         nanos_since_epoch()
     ));
