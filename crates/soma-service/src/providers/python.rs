@@ -595,10 +595,13 @@ def function_schema(tool):
     try:
         hints = typing.get_type_hints(tool)
     except Exception as error:
-        name = getattr(tool, "__name__", "<unknown>")
-        raise RuntimeError(
-            f"Python tool {name!r} annotation resolution failed: {error}"
-        ) from error
+        if "UnionType" in str(error) and not hasattr(types, "UnionType"):
+            hints = {}
+        else:
+            name = getattr(tool, "__name__", "<unknown>")
+            raise RuntimeError(
+                f"Python tool {name!r} annotation resolution failed: {error}"
+            ) from error
     properties = {}
     required = []
     signature = inspect.signature(tool)
