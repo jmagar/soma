@@ -125,7 +125,7 @@ Local builds:
 
 ```bash
 just build-web   # scripts/build-web.sh: frozen pnpm install if needed, then pnpm build
-just build-full  # build web assets, then cargo build --release --bin soma-server --features full
+just build-full  # build web assets, then cargo build --release --bin soma --features full
 ```
 
 Docker builds use the `web` stage in `config/Dockerfile`, run
@@ -173,7 +173,8 @@ const config = {
 The UI calls:
 - `/health`
 - `/status`
-- direct `/v1/*` business routes such as `/v1/greet`, `/v1/echo`, `/v1/status`, and `/v1/help`
+- direct native `/v1/*` business routes such as `/v1/greet`, `/v1/echo`, `/v1/status`, and `/v1/help`
+- provider-backed REST surfaces such as `/v1/providers`, `POST /v1/tools/{action}`, and provider-declared dynamic `/v1/*` routes
 - `/mcp` for MCP clients rather than browser UI calls
 
 ## Aurora design system

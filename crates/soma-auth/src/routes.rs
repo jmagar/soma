@@ -39,7 +39,7 @@ pub fn router(state: AuthState) -> Router {
         .layer(middleware::from_fn(auth_dispatch_observability))
 }
 
-/// Bearer-only OAuth subset router for headless consumers (e.g. syslog-mcp).
+/// Bearer-only OAuth subset router for headless consumers (e.g. cortex).
 ///
 /// Mounts only the endpoints a non-browser MCP client needs to discover and
 /// exchange tokens — `/.well-known/*`, `/jwks`, `/authorize`,

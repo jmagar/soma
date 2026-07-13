@@ -194,6 +194,7 @@ fn service() -> anyhow::Result<SomaService> {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "test".to_owned(),
+        ..SomaConfig::default()
     })?;
     Ok(SomaService::new(client))
 }

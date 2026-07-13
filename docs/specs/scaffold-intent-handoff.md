@@ -93,9 +93,9 @@ The intent should stay lightweight. The wizard asks enough to choose the scaffol
 
 | Field | Type | Purpose | Example |
 |---|---|---|---|
-| `display_name` | string | Human-readable project name | `Unraid MCP` |
-| `crate_name` | string | Cargo package name | `unraid-mcp` |
-| `binary_name` | string | CLI/MCP server binary name | `unraid` |
+| `display_name` | string | Human-readable project name | `unraid-rmcp` |
+| `crate_name` | string | Cargo package name | `unraid-rmcp` |
+| `binary_name` | string | CLI/MCP server binary name | `runraid` |
 | `server_category` | string | Surface category | `upstream-client` or `application-platform` |
 | `env_prefix` | string | Environment variable prefix | `UNRAID` |
 | `auth_kind` | string | Upstream auth type | `none`, `api-key`, `bearer`, `oauth`, `both`, `other` |
@@ -148,9 +148,9 @@ These fields are part of the core scaffold decision:
   "server_category": "upstream-client",
   "required_surfaces": ["mcp", "cli"],
   "project": {
-    "display_name": "Unraid MCP",
-    "crate_name": "unraid-mcp",
-    "binary_name": "unraid",
+    "display_name": "unraid-rmcp",
+    "crate_name": "unraid-rmcp",
+    "binary_name": "runraid",
     "service_name": "unraid",
     "env_prefix": "UNRAID"
   },
@@ -287,8 +287,8 @@ Every business action must have MCP + CLI parity. `scaffold_intent` is not treat
 
 | Server category | Required surfaces | Examples |
 |---|---|---|
-| `upstream-client` | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` |
-| `application-platform` | API + CLI + MCP + Web | `axon`, `lab`, `syslog` |
+| `upstream-client` | MCP + CLI | `unraid-rmcp`, `unifi-rmcp`, `gotify-rmcp`, `tailscale-rmcp`, `apprise-rmcp` |
+| `application-platform` | API + CLI + MCP + Web | `axon`, `labby`, `cortex` |
 
 Allowed exceptions:
 

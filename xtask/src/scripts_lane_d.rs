@@ -520,7 +520,7 @@ fn render_openapi(root: &Path) -> Result<Value> {
             "action_metadata": "crates/soma-contracts/src/actions.rs",
             "preferred_rest_style": "direct_routes",
             "binary": "soma",
-            "server_binary": "soma-server",
+            "server_binary": "soma",
             "node_package": "soma-rmcp",
             "oci_image": format!("ghcr.io/jmagar/soma:{version}"),
             "mcp_registry": "server.json",

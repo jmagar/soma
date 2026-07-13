@@ -10,6 +10,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from readme_related_servers import replace_related_servers_section
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTION_RS = ROOT / "crates/soma-contracts/src/actions.rs"
@@ -389,7 +391,7 @@ def render_env_doc() -> str:
 
 def placeholder_for(spec: EnvSpec) -> str:
     placeholders = {
-        "SOMA_API_URL": "https://api.example.com/v1",
+        "SOMA_API_URL": "https://api.example.com",
         "SOMA_API_KEY": "your-api-key-here",
         "SOMA_MCP_TOKEN": "",
         "SOMA_SERVER_URL": "http://localhost:40060",
@@ -478,7 +480,7 @@ def render_config_example() -> str:
 
 [soma]
 # Set SOMA_API_URL and SOMA_API_KEY in .env instead of committing them.
-# api_url = "https://api.example.com/v1"
+# api_url = "https://api.example.com"
 # api_key = ""
 
 [mcp]
@@ -914,6 +916,7 @@ def replace_or_insert(text: str, name: str, body: str, anchor: str) -> str:
 
 def render_readme() -> str:
     text = read(README)
+    text = replace_related_servers_section(text, README, self_name="soma")
     text = replace_or_insert(
         text,
         "README_ACTION_TABLE",

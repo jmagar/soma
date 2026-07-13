@@ -4,8 +4,8 @@
 
 Soma is a batteries-included Rust RMCP runtime for shipping MCP servers with
 drop-in tools, prompts, resources, auth, docs, plugins, web fallback, and
-release automation already wired. The local adapter binary is `soma`; the
-server binary is `soma-server`.
+release automation already wired. The canonical binary is `soma`; explicit
+subcommands select HTTP server, stdio MCP, or CLI adapter mode.
 
 ## Long-Lived Branches
 

@@ -16,10 +16,10 @@
 #   COPY entrypoint.sh /entrypoint.sh
 #   RUN chmod +x /entrypoint.sh
 #   ENTRYPOINT ["/entrypoint.sh"]
-#   CMD ["serve", "mcp"]
+#   CMD ["serve"]
 #
 # The ENTRYPOINT + CMD split means:
-#   - `docker run image`                   → runs: /entrypoint.sh serve mcp
+#   - `docker run image`                   → runs: /entrypoint.sh serve
 #   - `docker run image --help`            → runs: /entrypoint.sh --help
 #   - `docker run image sh`                → runs: /entrypoint.sh sh  (useful for debugging)
 #
@@ -27,7 +27,7 @@
 # =============================================================================
 set -e
 
-SERVICE_NAME="soma-server"
+SERVICE_NAME="soma"
 BINARY="/usr/local/bin/${SERVICE_NAME}"
 
 # ── Data directory ─────────────────────────────────────────────────────────────

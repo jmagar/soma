@@ -27,15 +27,16 @@ CLI shim       (crates/soma-cli/src/lib.rs)         → parse argv → call serv
 REST shim      (crates/soma-api/src/api.rs)       → parse HTTP JSON → call service → return JSON
 ```
 
-**The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or `main.rs`, you are doing it wrong. Move it to `app.rs`.
+**The golden rule:** If you are writing business logic in `mcp/tools.rs`,
+`cli.rs`, or the canonical binary entrypoint, you are doing it wrong. Move it to
+`app.rs`.
 
 ## Module layout
 
 ```
 crates/
   soma/        ← thin binary/facade package
-    src/main.rs         ← full server binary mode dispatch
-    src/bin/soma.rs  ← local CLI + stdio MCP binary dispatch
+    src/bin/soma.rs     ← canonical soma mode dispatch: serve, mcp, CLI
     src/routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
     src/lib.rs          ← public facade + test helpers (testing::*)
     tests/              ← integration tests and mcporter harness
@@ -61,7 +62,7 @@ crates/
 | `crates/soma-runtime/src/server.rs` | Shared auth policy resolution and app state. |
 | `crates/soma/src/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
 | `crates/soma-contracts/src/config.rs` | Environment/config loading and safe defaults. |
-| `crates/soma/src/main.rs` | Full server binary mode dispatch. |
+| `crates/soma/src/bin/soma.rs` | Canonical binary mode dispatch for `serve`, `mcp`, and CLI commands. |
 
 ## AppState
 
@@ -77,14 +78,16 @@ pub struct AppState {
 
 `AppState` is cloned per-request by the RMCP framework. Keep it cheap to clone — the service wraps an `Arc`-backed `reqwest::Client` internally.
 
-## Binary and transport profiles
+## Runtime modes and feature sets
 
-Soma supports two deployment shapes, chosen by server category:
+Soma ships one canonical binary with explicit runtime modes. Derived projects
+may choose narrower Cargo feature sets, but the command roles stay stable:
 
-| Server kind | Default shape |
+| Command | Default shape |
 |---|---|
-| Upstream-client MCP server | Local `CLI + stdio MCP` binary that calls the upstream API directly. |
-| Application/platform server | Docker/server binary with REST API, Web UI, Streamable HTTP MCP, health/auth, and optional local CLI/stdio adapter. |
+| `soma mcp` | Local stdio MCP adapter. |
+| `soma serve` | HTTP runtime with REST API, Web UI, Streamable HTTP MCP, health/auth, and provider registry. |
+| `soma <command>` | CLI adapter that uses local provider/static dispatch or the configured remote REST API. |
 
 Keep MCP-specific behavior in the MCP layer. If a stdio adapter talks to a
 platform API, that API should expose business actions, not MCP protocol

@@ -206,6 +206,7 @@ struct ToolEntry {
     tool: ProviderTool,
     capabilities: HostCapabilities,
     input_validator: Arc<JSONSchema>,
+    output_validator: Option<Arc<JSONSchema>>,
 }
 
 #[derive(Clone)]
@@ -388,6 +389,7 @@ impl ProviderRegistry {
             tracing::warn!(provider, action, code, "provider call failed");
         })?;
         enforce_response_limit(&entry, &call, &output)?;
+        enforce_output_schema(&entry, &output)?;
         Ok(output)
     }
 }
@@ -430,6 +432,20 @@ fn build_snapshot(
                     )
                 })?);
             compiled_validator_count += 1;
+            let output_validator = match &tool.output_schema {
+                Some(output_schema) => {
+                    let validator =
+                        Arc::new(JSONSchema::compile(output_schema).map_err(|error| {
+                            ProviderValidationError::new(
+                                "output_schema_invalid",
+                                format!("tool `{}` has invalid output_schema: {error}", tool.name),
+                            )
+                        })?);
+                    compiled_validator_count += 1;
+                    Some(validator)
+                }
+                None => None,
+            };
             let action = tool.name.clone();
             let entry = ToolEntry {
                 provider: catalog.provider.name.clone(),
@@ -437,6 +453,7 @@ fn build_snapshot(
                 tool: tool.clone(),
                 capabilities: catalog.capabilities.clone(),
                 input_validator,
+                output_validator,
             };
             if action_index.insert(action.clone(), entry).is_some() {
                 return Err(ProviderValidationError::new(
@@ -812,4 +829,25 @@ fn enforce_response_limit(
         format!("provider response exceeded {max} bytes"),
         "Reduce the response size or add paging before exposing this provider action.",
     ))
+}
+
+fn enforce_output_schema(entry: &ToolEntry, output: &ProviderOutput) -> Result<(), ProviderError> {
+    let Some(output_validator) = &entry.output_validator else {
+        return Ok(());
+    };
+    if let Err(errors) = output_validator.validate(&output.value) {
+        let details = errors
+            .map(|error| format!("{}: {}", error.instance_path, error))
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(ProviderError::new(
+            "output_schema_failed",
+            &entry.provider,
+            Some(entry.action.clone()),
+            details,
+            "Fix the provider output or its declared output_schema, then retry.",
+        )
+        .with_phase("output_validation"));
+    }
+    Ok(())
 }

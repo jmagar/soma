@@ -1,7 +1,6 @@
 let package_name = variable::get("package_name");
 let crate_prefix = variable::get("crate_prefix");
 let binary_name = variable::get("binary_name");
-let server_binary_name = variable::get("server_binary_name");
 let service_slug = variable::get("service_slug");
 let type_prefix = variable::get("type_prefix");
 let env_prefix = variable::get("env_prefix");
@@ -15,7 +14,6 @@ file::write(".cargo-generate-values.toml", [
     "package_name = \"" + package_name + "\"",
     "crate_prefix = \"" + crate_prefix + "\"",
     "binary_name = \"" + binary_name + "\"",
-    "server_binary_name = \"" + server_binary_name + "\"",
     "service_slug = \"" + service_slug + "\"",
     "type_prefix = \"" + type_prefix + "\"",
     "env_prefix = \"" + env_prefix + "\"",

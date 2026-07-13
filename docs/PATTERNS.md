@@ -1,9 +1,8 @@
 # rmcp-server Patterns
 
 Canonical reference for all patterns used across the Rust MCP server family:
-`lab`, `axon_rust` (Axon), `syslog-mcp`, `rustify` (Gotify), `rustifi` (UniFi),
-`apprise-mcp`, `rustscale` (Tailscale), `soma` (this repo), and
-`unrust` (Unraid).
+`labby`, `axon`, `cortex`, `gotify-rmcp`, `unifi-rmcp`, `apprise-rmcp`,
+`tailscale-rmcp`, `unraid-rmcp`, and `soma` (this repo).
 
 Every server in the family MUST follow these patterns. Deviation requires an explicit
 architectural decision recorded in the repo.
@@ -22,8 +21,8 @@ than a thin client over an upstream API.
 
 | Server category | Required surfaces | Examples | Guidance |
 |---|---|---|---|
-| Upstream-client MCP server | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` | Do not duplicate the upstream HTTP API as a local REST API by default. Add REST/Web only when the server owns meaningful state, workflows, dashboards, or non-MCP consumers. |
-| Application/platform server | API + CLI + MCP + Web | `axon`, `lab`, `syslog` | Keep all four surfaces thin and backed by the same service layer. Web talks to the local API; API/MCP/CLI all delegate to `app/`. |
+| Upstream-client MCP server | MCP + CLI | `unraid-rmcp`, `unifi-rmcp`, `gotify-rmcp`, `tailscale-rmcp`, `apprise-rmcp` | Do not duplicate the upstream HTTP API as a local REST API by default. Add REST/Web only when the server owns meaningful state, workflows, dashboards, or non-MCP consumers. |
+| Application/platform server | API + CLI + MCP + Web | `axon`, `labby`, `cortex` | Keep all four surfaces thin and backed by the same service layer. Web talks to the local API; API/MCP/CLI all delegate to `app/`. |
 
 Allowed exceptions:
 
@@ -54,8 +53,9 @@ Rule: keep business logic out of transports, but DO NOT force all logic into one
 The service layer may be split across multiple focused modules under `crates/soma-service/src/`; what matters
 is that transports stay thin and all domain logic lives in the service layer.
 
-**The golden rule:** If you are writing business logic in `mcp/tools.rs`, `cli.rs`, or
-`main.rs`, you are doing it wrong. Move it to `app.rs`.
+**The golden rule:** If you are writing business logic in `mcp/tools.rs`,
+`cli.rs`, or the canonical binary entrypoint, you are doing it wrong. Move it
+to `app.rs`.
 
 ### What "thin shim" means
 
@@ -127,7 +127,7 @@ src/
   │
   ├── cli.rs                  ← thin shim: parse args → call service → format/print
   ├── lib.rs                  ← pub modules + test helpers (testing::*)
-  └── main.rs                 ← mode dispatch ONLY (serve / serve_stdio / run_cli)
+  └── bin/<service>.rs        ← mode dispatch ONLY (serve / mcp / run_cli)
 ```
 
 ### Port/router layout
@@ -415,7 +415,7 @@ When `auth_state: Some(_)`, the OAuth router is automatically mounted:
 Both transports build the same `AppState` and serve the same `ServerHandler`:
 
 ```rust
-// HTTP mode (default: `soma-server` or `soma-server serve`)
+// HTTP mode (default: `soma` or `soma serve`)
 async fn serve_mcp() -> Result<()> {
     let config = Config::load()?;
     let state = build_state(config).await?;
@@ -797,15 +797,15 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package soma --bin soma-server
+    cargo build --release --locked --package soma --bin soma
 
 # Build real binary
 COPY config/ config/
 COPY entrypoint.sh entrypoint.sh
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package soma --bin soma-server --features full && \
-    cp target/release/soma-server /usr/local/bin/soma-server
+    cargo build --release --locked --package soma --bin soma --features full && \
+    cp target/release/soma /usr/local/bin/soma
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates curl gosu && rm -rf /var/lib/apt/lists/*
@@ -820,7 +820,7 @@ EXPOSE 40060/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40060/health || exit 1
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["serve", "mcp"]
+CMD ["serve"]
 ```
 
 ---
@@ -1046,15 +1046,15 @@ curl -H "Authorization: Bearer $SOMA_API_KEY" \
 
 | Service | MCP Port | Binary name |
 |---|---|---|
-| lab | 8765 | `labby` |
-| axon_rust (axon) | 8001 | `axon` |
-| syslog-mcp | 3100 | `syslog` |
-| unraid-mcp (unrust) | 6970 | `unraid` |
-| gotify-mcp (rustify) | 9158 | `gotify` |
-| unifi-mcp (rustifi) | 7474 | `unifi` |
-| tailscale-mcp (rustscale) | 7575 | `tailscale` |
-| apprise-mcp | 8765 | `apprise` |
-| soma | 40060 | `example` |
+| labby | 8765 | `labby` |
+| axon | 8001 | `axon` |
+| cortex | 3100 | `cortex` |
+| unraid-rmcp | 6970 | `runraid` |
+| gotify-rmcp | 9158 | `rgotify` |
+| unifi-rmcp | 7474 | `runifi` |
+| tailscale-rmcp | 7575 | `rtailscale` |
+| apprise-rmcp | 8765 | `rapprise` |
+| soma | 40060 | `soma` |
 
 ---
 
@@ -1227,7 +1227,7 @@ consistent between Docker and bare-metal deployments.
 
 | Deployment | Data directory |
 |---|---|
-| Local binary | `~/.unraid/`, `~/.gotify/`, `~/.tailscale-mcp/`, etc. |
+| Local binary | `~/.unraid-rmcp/`, `~/.gotify-rmcp/`, `~/.tailscale-rmcp/`, etc. |
 | Docker | `/data/` inside container, mounted from `~/.<service>/` on host |
 | Plugin | `$CLAUDE_PLUGIN_DATA` (symlinked to `~/.<service>/`) |
 
@@ -1300,7 +1300,7 @@ Dockerfile:
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && apt-get update && apt-get install -y gosu
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["serve", "mcp"]
+CMD ["serve"]
 ```
 
 ---
@@ -1507,7 +1507,7 @@ Run `just symlink-docs` after adding any new `CLAUDE.md` file.
 
 ## 33. .gitignore and .dockerignore
 
-Use the canonical files from syslog-mcp as the base. Copy them without modification.
+Use the canonical files from cortex as the base. Copy them without modification.
 
 Key `.gitignore` rules:
 - `.env` and `.env.*` ignored, `.env.example` committed
@@ -1575,7 +1575,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] Write `crates/soma/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md`
 - [ ] Write `install.sh` matching the GitHub release tarball names
-- [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
+- [ ] Copy `.gitignore` and `.dockerignore` from cortex
 - [ ] Write `CHANGELOG.md`
 - [ ] Run `just symlink-docs` to create AGENTS.md + GEMINI.md symlinks
 - [ ] Write `server.json` for MCP registry
@@ -1805,14 +1805,14 @@ Adapted from the earlier `agentcast/scripts/refresh-docs.sh` pattern. The core m
 
 | Repo | Crawled sites | Repomix packs |
 |---|---|---|
-| lab | project docs and service docs as needed | jmagar/lab |
-| axon_rust | modelcontextprotocol.io, Gemini/Qdrant/TEI docs as needed | jmagar/axon, mcp/rust-sdk |
-| syslog-mcp | RFC/syslog and modelcontextprotocol.io docs as needed | jmagar/syslog-mcp, mcp/rust-sdk |
-| unrust | docs.unraid.net, modelcontextprotocol.io | jmagar/unraid-api, mcp/rust-sdk, mcp/registry |
-| rustify | gotify.net/docs, modelcontextprotocol.io | gotify/server, gotify/android, mcp/rust-sdk |
-| rustifi | developer.ui.com, modelcontextprotocol.io | Art-of-WiFi/UniFi-API-client, mcp/rust-sdk |
-| rustscale | tailscale.com/api, modelcontextprotocol.io | tailscale/tailscale (filtered), mcp/rust-sdk |
-| apprise-mcp | github.com/caronc/apprise/wiki, modelcontextprotocol.io | caronc/apprise, caronc/apprise-api, mcp/rust-sdk |
+| labby | project docs and service docs as needed | jmagar/labby |
+| axon | modelcontextprotocol.io, Gemini/Qdrant/TEI docs as needed | jmagar/axon, mcp/rust-sdk |
+| cortex | RFC/syslog and modelcontextprotocol.io docs as needed | jmagar/cortex, mcp/rust-sdk |
+| unraid-rmcp | docs.unraid.net, modelcontextprotocol.io | jmagar/unraid-rmcp, mcp/rust-sdk, mcp/registry |
+| gotify-rmcp | gotify.net/docs, modelcontextprotocol.io | gotify/server, gotify/android, mcp/rust-sdk |
+| unifi-rmcp | developer.ui.com, modelcontextprotocol.io | Art-of-WiFi/UniFi-API-client, mcp/rust-sdk |
+| tailscale-rmcp | tailscale.com/api, modelcontextprotocol.io | tailscale/tailscale (filtered), mcp/rust-sdk |
+| apprise-rmcp | github.com/caronc/apprise/wiki, modelcontextprotocol.io | caronc/apprise, caronc/apprise-api, mcp/rust-sdk |
 | soma | modelcontextprotocol.io, code.claude.com | mcp/rust-sdk, mcp/spec, mcp/registry, openclaw/mcporter |
 
 ### docs/references/ layout
@@ -2296,7 +2296,7 @@ pipeable when stderr is redirected.
 ### Log format — console
 
 ```
-2026-05-13T14:32:01Z  INFO  unraid-mcp started  bind=0.0.0.0:6970  auth=bearer
+2026-05-13T14:32:01Z  INFO  unraid-rmcp started  bind=0.0.0.0:6970  auth=bearer
 2026-05-13T14:32:05Z  INFO  MCP tool call  tool=unraid  action=array  elapsed_ms=42
 2026-05-13T14:32:10Z  WARN  upstream slow  action=metrics  elapsed_ms=3200
 2026-05-13T14:32:15Z ERROR  upstream failed  action=docker  error="connection refused"
@@ -2535,8 +2535,8 @@ fi
 
 ## 46. Binary Commands — Canonical Mode Names
 
-Command names stay stable across binary profiles. The all-in-one Soma
-binary exposes two server modes and a CLI; split-profile services expose the
+Command names stay stable across feature sets. The all-in-one Soma binary
+exposes explicit `serve`, `mcp`, and CLI modes; narrower services expose the
 same command names on the binary where that mode applies.
 
 | Command | Mode | Description |
@@ -2637,7 +2637,7 @@ soma-mcp v0.1.0 — environment check
   ✓ Auth mode:         no-auth (SOMA_NOAUTH=true)
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1 issue found. Fix it before running: soma-server serve
+  1 issue found. Fix it before running: soma serve
 
 ```
 
@@ -3350,17 +3350,17 @@ export default config;
 
 ## A5. Cargo.toml — Binary Profiles and Web Feature Gate
 
-Soma has separate binary profiles: `soma` for local CLI + stdio MCP
-and `soma-server` for API + Web + HTTP MCP deployments. The full profile is
-the default so existing `cargo build` workflows still build the complete
-runtime.
+Soma has one canonical binary with feature-selected runtime shapes. The full
+profile is the default so existing `cargo build` workflows still build the
+complete runtime.
 
-For application/platform servers, the local `soma` profile is an adapter to
-the deployed platform API. Set `SOMA_API_URL=https://service.example.com/`
-and optional `SOMA_API_KEY=<token>`; local CLI and stdio MCP actions forward
-to direct business routes such as `POST {SOMA_API_URL}/v1/echo` and
-`GET {SOMA_API_URL}/v1/status`. Leaving `SOMA_API_URL` empty keeps the
-offline stub active for tests and first-run scaffolds.
+For application/platform servers, local CLI and stdio MCP can either dispatch
+against local provider/static actions or forward to a deployed platform API. Set
+`SOMA_API_URL=https://service.example.com/` and optional
+`SOMA_API_KEY=<token>` for remote mode; actions forward to direct business
+routes such as `POST {SOMA_API_URL}/v1/echo` and `GET
+{SOMA_API_URL}/v1/status`. Leaving `SOMA_API_URL` empty keeps local dispatch
+active for tests and first-run scaffolds.
 
 ```toml
 [features]
@@ -3393,8 +3393,8 @@ pub fn web_assets_available() -> bool {
 Build without web UI:
 ```bash
 cargo build --bin soma --no-default-features --features local-adapter
-cargo build --bin soma-server --no-default-features --features server
-cargo build --bin soma-server --features full
+cargo build --bin soma --no-default-features --features server
+cargo build --bin soma --features full
 ```
 
 ---

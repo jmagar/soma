@@ -25,7 +25,7 @@ const installSteps = [
   },
   {
     label: "Bring online",
-    command: "soma-server --transport streamable-http --port 40060",
+    command: "soma serve",
     description: "Serve MCP, REST, and the embedded web UI from one runtime.",
   },
   {
@@ -60,7 +60,7 @@ const providerSurfaces = [
 
 const trustSignals = [
   ["Package", "soma-rmcp"],
-  ["Binary", "soma / soma-server"],
+  ["Binary", "soma"],
   ["Image", "ghcr.io/jmagar/soma:0.4.6"],
   ["License", "MIT"],
   ["Publisher", "dinglebear.ai"],

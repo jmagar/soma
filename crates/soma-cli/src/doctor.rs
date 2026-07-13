@@ -349,16 +349,16 @@ fn print_doctor_report(checks: &[DoctorCheck]) {
         println!(
             "  {}  All checks passed. Run: {}",
             green!("✓"),
-            bold!("soma-server serve")
+            bold!("soma serve")
         );
     } else {
-        // CUSTOMIZE: Replace "soma-server serve" with your server binary name.
+        // CUSTOMIZE: Replace "soma serve" with your server command.
         let noun = if issues == 1 { "issue" } else { "issues" };
         println!(
             "  {}  {} {noun} found. Fix before running: {}",
             red!("✗"),
             red!(issues.to_string()),
-            bold!("soma-server serve")
+            bold!("soma serve")
         );
     }
     println!();

@@ -9,7 +9,7 @@ web fallback, Docker/runtime samples, generated contracts, and release
 automation.
 
 The repository can still scaffold a renamed project, but Soma is now a shipped
-runtime first. The default product path is to run `soma` or `soma-server`,
+runtime first. The default product path is to run `soma` in an explicit mode,
 drop provider files into `providers/` (or point `SOMA_PROVIDER_DIR`
 elsewhere), and let the provider registry project those capabilities across MCP,
 CLI, REST, OpenAPI, Palette summaries, generated docs, and plugin metadata.
@@ -20,7 +20,7 @@ distributable repo with the same locked-in runtime.
 **30-second path:** `npx -y soma-rmcp mcp` -> `soma status` -> call the
 `soma` MCP tool through `tools/call` with `{"action":"status"}`.
 
-**Status:** production runtime template. Write-capable provider actions are
+**Status:** production RMCP runtime. Write-capable provider actions are
 allowed only when the provider declares them and destructive actions are gated.
 
 **Not for:** an unauthenticated public gateway, a replacement for upstream
@@ -52,15 +52,15 @@ security boundary by itself.
 
 ## Naming
 
-Soma is both the runtime product and the template source for generated RMCP
-servers. Generated projects replace these names during scaffold post-processing.
+Soma is the runtime product first and the template/export source second.
+Generated projects replace these names during scaffold post-processing, but the
+shipped `soma` command is the source of truth for product behavior.
 
 | Surface | Soma value | Generated-project pattern |
 |---|---|---|
 | Repository | `jmagar/soma` | `<service>-rmcp` or a documented product exception |
 | Rust crate/package | `soma` | service-specific crate names |
-| Local binary | `soma` | usually `r<service>` or the product name |
-| Server binary | `soma-server` | usually `<service>-server` |
+| Canonical binary | `soma` | usually `r<service>` or the product name |
 | npm package | `soma-rmcp` | `<service>-rmcp` |
 | MCP tool | `soma` | usually `<service>` |
 | Env prefix | `SOMA_*` | generated service prefix |
@@ -71,15 +71,15 @@ servers. Generated projects replace these names during scaffold post-processing.
 |---|---|---|---|
 | Drop-in provider | You can describe a capability as a manifest, script, WASM module, OpenAPI operation, or upstream MCP call. | Files under `providers/` with tools, prompts, resources, env needs, capability grants, and surface overlays. | MCP tool dispatch, dynamic CLI commands, direct REST routes, schema validation, auth policy, refresh, OpenAPI/Palette summaries, generated docs, and plugin metadata. |
 | Static Rust provider | The capability needs native Rust, tight integration, or reusable crates. | A Rust provider/action registered with the provider registry. | The same MCP/CLI/REST/docs/plugin projection without per-surface rewrites. |
-| Scaffolded product | You need a renamed repository, package identity, ports, plugins, Docker labels, and release metadata. | A `scaffold_intent` payload or `cargo xtask scaffold` options. | A compiling product repo, scaffold report, cargo-generate post-processing, and verification checks. |
+| Scaffolded product | You need a renamed repository, package identity, ports, plugins, Docker labels, and release metadata. | A `scaffold_intent` payload or `cargo xtask scaffold` options. | A compiling product repo, scaffold report, cargo-generate post-processing, and scaffold/export verification checks. |
 | Custom profile | You need a narrower binary or deployment shape. | Cargo feature selection. | The same runtime crates behind `local-adapter`, `server`, and `full` profiles. |
 
 ## Batteries Included
 
 - One compact MCP service tool (`soma`) with `action` dispatch, so agent tool
   lists stay small even as provider catalogs grow.
-- Two binaries: `soma` for local CLI + stdio MCP, and `soma-server`
-  for REST API + Streamable HTTP MCP + stdio MCP + optional web UI.
+- One canonical binary: `soma` with explicit `serve`, `mcp`, and CLI modes for
+  REST API, Streamable HTTP MCP, stdio MCP, optional web UI, and local actions.
 - Dynamic provider loading from `.json`, `.ts`, `.py`, and `.wasm` files, plus
   native Rust providers and upstream MCP/OpenAPI provider kinds.
 - Provider manifest contracts for tools, prompts, resources, tasks,
@@ -106,7 +106,7 @@ Use Cargo while developing the repo:
 
 ```bash
 cargo run --bin soma -- mcp
-cargo run --bin soma-server -- serve mcp
+cargo run --bin soma -- serve
 ```
 
 Release builds publish GitHub Release binaries, Docker/OCI metadata, the
@@ -140,7 +140,7 @@ Lower-level Cargo features are available when you need a custom shape:
 | `observability` | Metrics/tracing hooks. |
 | `plugin` | Plugin setup/support helpers. |
 | `local-adapter` | Lean local binary: `cli` + `mcp-stdio`. |
-| `server` | Deployable server binary: `cli` + `api` + HTTP MCP + stdio MCP. |
+| `server` | Deployable HTTP runtime profile: `cli` + `api` + HTTP MCP + stdio MCP. |
 | `full` | Complete platform profile: local adapter, server, web, OAuth, observability, and plugin support. |
 
 ## Quickstart
@@ -151,8 +151,8 @@ Run the product as-is:
 git clone https://github.com/jmagar/soma
 cd soma
 
-# Full server binary: REST API + HTTP MCP + web fallback on :40060
-cargo run --bin soma-server -- serve mcp
+# Full platform mode: REST API + HTTP MCP + web fallback on :40060
+cargo run --bin soma -- serve
 
 # Local binary: stdio MCP
 cargo run --bin soma -- mcp
@@ -234,7 +234,7 @@ cargo run --bin soma -- hello-local --name Alice
 Run the server and call the same provider over REST and MCP:
 
 ```bash
-cargo run --bin soma-server -- serve mcp
+cargo run --bin soma -- serve
 
 curl -s -X POST http://localhost:40060/v1/hello-local \
   -H "Content-Type: application/json" \
@@ -289,7 +289,7 @@ Use `cargo xtask scaffold` when the provider-first path needs to become a new
 repository with its own crate names, binary names, ports, plugin package,
 Docker metadata, release metadata, and docs. It can plan without touching files,
 generate with `cargo-generate` plus the Rust post-processor, write
-`docs/scaffold-report.md`, and verify the generated project.
+`docs/scaffold-report.md`, and verify the generated export shape.
 
 Plan from a short service name:
 
@@ -409,15 +409,15 @@ Do not put business rules in CLI, MCP, REST handlers, or `main.rs`.
 
 ## Runtime Surfaces
 
-The full server binary can run the whole app from one executable:
+The canonical binary can run the whole app from one executable:
 
 ```bash
-soma-server serve mcp   # HTTP server: REST API + Streamable HTTP MCP + web fallback
-soma-server mcp         # stdio MCP transport
-soma-server status      # CLI command through the server binary
+soma serve       # HTTP server: REST API + Streamable HTTP MCP + web fallback
+soma mcp         # stdio MCP transport
+soma status      # CLI command through the same binary
 ```
 
-The local adapter binary is optimized for plugin/local use:
+Local adapter mode is optimized for plugin/local use:
 
 ```bash
 soma mcp                # stdio MCP transport
@@ -427,10 +427,10 @@ soma watch              # poll /health and emit state changes
 soma setup check        # plugin/appdata setup checks
 ```
 
-Both binaries load the provider registry. File providers default to
-`./providers` and can be moved with `SOMA_PROVIDER_DIR`. CLI startup,
-MCP dispatch, and dynamic REST routes refresh file providers before execution,
-then enforce the active provider snapshot's schema, surface, scope, capability,
+Every explicit runtime mode loads the provider registry. File providers default
+to `./providers` and can be moved with `SOMA_PROVIDER_DIR`. CLI startup, MCP
+dispatch, and dynamic REST routes refresh file providers before execution, then
+enforce the active provider snapshot's schema, surface, scope, capability,
 destructive-action, and response-limit rules.
 
 HTTP routes in the server profile:
@@ -535,9 +535,9 @@ See [docs/AUTH.md](docs/AUTH.md) for the detailed auth model.
 ## Configuration
 
 Values load from `config.toml`, local appdata files, and environment variables;
-explicit environment variables win. Soma stub works without real
-credentials, but generated projects should mark their real upstream/platform
-credentials as required.
+explicit environment variables win. The built-in offline provider works without
+real credentials, but generated projects should mark their real
+upstream/platform credentials as required.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
@@ -569,8 +569,8 @@ Samples:
 ```bash
 # Build profiles
 cargo build --bin soma --no-default-features --features local-adapter
-cargo build --bin soma-server --no-default-features --features server
-cargo build --bin soma-server --features full
+cargo build --bin soma --no-default-features --features server
+cargo build --bin soma --features full
 
 # Run checks
 cargo fmt -- --check
@@ -585,7 +585,7 @@ just mcp                 # stdio MCP
 just greet               # CLI smoke test
 just doctor              # pre-flight check
 just build-local         # local adapter binary
-just build-full          # web assets + full server binary
+just build-full          # web assets + full platform binary
 just verify              # fmt, lint, check, test
 just check-docs          # generated docs/metadata current
 just scaffold-contract-check
@@ -621,7 +621,7 @@ Stdio:
       "command": "/path/to/soma",
       "args": ["mcp"],
       "env": {
-        "SOMA_API_URL": "https://api.example.com/v1",
+        "SOMA_API_URL": "https://api.example.com",
         "SOMA_API_KEY": "YOUR_API_KEY",
         "RUST_LOG": "warn"
       }
@@ -681,18 +681,18 @@ Generated projects that do not need a human UI should use `local-adapter`,
 
 ## Deployment
 
-The full server profile is designed for one deployable binary. The repository
+The full platform profile is designed for one deployable `soma` binary. The repository
 also includes Docker and Compose samples:
 
 - [config/Dockerfile](config/Dockerfile)
 - [docker-compose.prod.yml](docker-compose.prod.yml)
 - [entrypoint.sh](entrypoint.sh)
 
-When adapting a generated project, verify the server binary name, exposed port,
-healthcheck port, image labels, service user/group, data volume, and required
-environment variables. The scaffold verifier catches several scaffold-only
-artifacts, but deployment files still need service-specific review before
-publishing an image.
+When adapting a generated project, verify the canonical binary name, exposed
+port, healthcheck port, image labels, service user/group, data volume, and
+required environment variables. The scaffold verifier catches several
+scaffold-only artifacts, but deployment files still need service-specific review
+before publishing an image.
 
 ## When Drop-In Providers Are Not Enough
 
@@ -727,7 +727,8 @@ action metadata, MCP dispatch, CLI variants, service stubs, and test coverage.
 7. Update `.env.example`, `config.soma.toml`, plugin options, and setup mappings.
 8. Update `server.json`, plugin metadata, repository URLs, Docker labels, and release metadata.
 9. Add tests for MCP dispatch, CLI parsing, REST routes, provider loading, and service behavior.
-10. Run scaffold verification and the local quality gates.
+10. For generated/exported projects, run scaffold verification plus the
+    project's local quality gates.
 
 For public repositories, also review tracked docs, generated metadata, CI runner
 configuration, and secret-scanning allowlists before publishing.
@@ -745,21 +746,19 @@ configuration, and secret-scanning allowlists before publishing.
 
 ## Related Servers
 
-- `unifi-rmcp / rustifi` - UniFi controller REST API bridge.
-- `tailscale-rmcp / rustscale` - Tailscale API bridge for devices, users, and tailnet operations.
-- `unraid-rmcp / unrust` - Unraid GraphQL bridge for NAS and server management.
-- `apprise-rmcp` - Apprise notification fan-out bridge for many delivery backends.
-- `gotify-rmcp` - Gotify push notification bridge for sends, messages, apps, and clients.
-- `arcane-rmcp` - Arcane Docker management bridge for containers and related resources.
-- `yarr-rmcp` - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
-- `ytdl-mcp` - Media download and metadata workflow server.
-- `synapse` - Local Synapse workflow server for scout and flux actions.
-- `cortex` - Syslog and homelab log aggregation MCP server.
-- `axon` - RAG, crawl, scrape, extract, and semantic search project.
-- `lab` - Homelab control plane and Labby gateway project.
-- `lumen` - Local semantic code search MCP server.
-- `nugs` - Project/package management helper for local agent workflows.
-- `agentcast` - Agent transcript and activity publishing project.
+- [unifi-rmcp](https://github.com/jmagar/unifi-rmcp) - UniFi controller REST API bridge.
+- [tailscale-rmcp](https://github.com/jmagar/tailscale-rmcp) - Tailscale API bridge for devices, users, and tailnet operations.
+- [unraid-rmcp](https://github.com/jmagar/unraid-rmcp) - Unraid GraphQL bridge for NAS and server management.
+- [apprise-rmcp](https://github.com/jmagar/apprise-rmcp) - Apprise notification fan-out bridge for many delivery backends.
+- [gotify-rmcp](https://github.com/jmagar/gotify-rmcp) - Gotify push notification bridge for sends, messages, apps, and clients.
+- [arcane-rmcp](https://github.com/jmagar/arcane-rmcp) - Arcane Docker management bridge for containers and related resources.
+- [yarr](https://github.com/jmagar/yarr) - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
+- [ytdl-rmcp](https://github.com/jmagar/ytdl-rmcp) - Media download and metadata workflow server.
+- [synapse-rmcp](https://github.com/jmagar/synapse-rmcp) - Local Synapse workflow server for scout and flux actions.
+- [cortex](https://github.com/jmagar/cortex) - Syslog and homelab log aggregation MCP server.
+- [axon](https://github.com/jmagar/axon) - RAG, crawl, scrape, extract, and semantic search project.
+- [labby](https://github.com/jmagar/labby) - Homelab control plane and MCP gateway project.
+- [lumen](https://github.com/jmagar/lumen) - Local semantic code search MCP server.
 
 ## Documentation
 
@@ -780,21 +779,29 @@ configuration, and secret-scanning allowlists before publishing.
 
 ## Verification
 
-Common local gates:
+Product runtime gates:
 
 ```bash
-cargo xtask scaffold --verify ../generated/myservice-mcp
 cargo xtask check-docs
 cargo xtask generate-provider-surfaces --check
 cargo xtask check-schema-docs --check
 cargo xtask check-openapi --check
-cargo xtask check-scaffold-intent-contract
 cargo xtask validate-plugin-layout
 cargo xtask check-version-sync
 just verify
 ```
 
-Use targeted checks while iterating, then run the broader gates before release.
+Scaffold/template gates are a separate lane. Run them when a change touches the
+scaffold contract, cargo-generate post-processing, or generated-project output:
+
+```bash
+cargo xtask check-scaffold-intent-contract
+cargo xtask scaffold --verify ../generated/myservice-mcp
+cargo xtask check-cargo-generate
+```
+
+Use targeted checks while iterating, then run the broader product and affected
+scaffold gates before release.
 
 ## License
 

@@ -2,7 +2,10 @@
 
 ## What this directory is
 
-Multi-platform plugin package for the Soma MCP server. Contains manifests for Claude Code, Codex, and Gemini CLI — all pointing at the same MCP connection config and skills.
+Multi-platform plugin package for the Soma MCP server. Contains manifests for
+Claude Code, Codex, and Gemini CLI plus shared skills. MCP connection
+registration is supplied by the client or gateway; the default command is
+`soma mcp`.
 
 ## File map
 
@@ -11,7 +14,6 @@ Multi-platform plugin package for the Soma MCP server. Contains manifests for Cl
 | `.claude-plugin/plugin.json` | Claude Code manifest — identity, hooks, skills, monitors, `userConfig` |
 | `.codex-plugin/plugin.json` | Codex manifest — same data + Codex UI fields (`interface`) |
 | `gemini-extension.json` | Gemini CLI manifest — uses `settings` array instead of `userConfig` |
-| `.mcp.json` | Shared MCP server connection config used by all three platforms |
 | `hooks/hooks.json` | Lifecycle hook definitions: `SessionStart`, `ConfigChange` — call `soma setup plugin-hook` directly (no shell wrapper) |
 | `monitors/monitors.json` | Background health monitor config (requires Claude Code v2.1.105+) |
 | `skills/soma/SKILL.md` | Three-tier tool documentation shared by Claude and Codex |
@@ -22,14 +24,16 @@ Multi-platform plugin package for the Soma MCP server. Contains manifests for Cl
 
 ## Updating a manifest
 
-When changing connection config (URL, auth headers), update `.mcp.json` — do not duplicate the values into each manifest separately. All three platforms read `.mcp.json`.
+When changing connection guidance (URL, auth headers, stdio args), update this
+README, the platform manifests/settings, and `gemini-extension.json` examples
+together. Do not assume a shared `.mcp.json` exists in this plugin.
 
 When changing user-configurable settings, update all three manifests: `userConfig` in the Claude and Codex `plugin.json` files, and `settings` in `gemini-extension.json`. Keep field names and descriptions consistent across all three.
 
 ## Monitors (Claude Code v2.1.105+)
 
-`.mcp.json` runs `soma mcp` as the default stdio MCP server. The binary must
-be installed on `PATH` before the plugin is installed. Install it with:
+The default stdio MCP registration runs `soma mcp`. The binary must be installed
+on `PATH` before the plugin is installed. Install it with:
 
 ```bash
 just install-local

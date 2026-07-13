@@ -16,7 +16,7 @@
 //! The values below match `lab/crates/lab/src/output/theme.rs` exactly.
 //! When adapting Soma for your service, copy this file unchanged.
 //! The aurora palette is shared across the entire rmcp server family:
-//! unrust, rustify, rustifi, rustscale, apprise-mcp, and soma.
+//! unraid-rmcp, gotify-rmcp, unifi-rmcp, tailscale-rmcp, apprise-rmcp, and soma.
 //!
 //! # ANSI 256 vs TrueColor
 //!

@@ -2,7 +2,7 @@
 //!
 //! **Soma note**: this client has two modes:
 //!   - empty `SOMA_API_URL` keeps the offline stub working;
-//!   - non-empty `SOMA_API_URL` forwards operations to a deployed `soma-server`
+//!   - non-empty `SOMA_API_URL` forwards operations to a deployed `soma serve`
 //!     REST API, which is the local CLI/stdio adapter shape for platform servers.
 //!
 //! The pattern:
@@ -32,7 +32,7 @@ mod tests;
 /// HTTP (or other transport) client for the Soma runtime.
 ///
 /// For application/platform servers, the lightweight local binary uses this as
-/// an adapter to the deployed `soma-server` REST API. For upstream-client
+/// an adapter to the deployed `soma serve` REST API. For upstream-client
 /// servers, replace the REST envelope with the upstream service's native API.
 #[derive(Clone)]
 pub struct SomaClient {
@@ -122,6 +122,26 @@ impl SomaClient {
         });
         add_status_warnings(&mut status);
         Ok(status)
+    }
+
+    /// Call one direct REST action on a running Soma HTTP server.
+    ///
+    /// This is used by remote adapter surfaces (`soma <command>` and eventually
+    /// stdio MCP adapter mode) so the local binary does not need local provider
+    /// manifests to execute provider-backed actions.
+    pub async fn call_rest_action(&self, action: &str, params: Value) -> Result<Value> {
+        validate_action_path_segment(action)?;
+        let relative_path = format!("v1/{action}");
+        let body = if remote_action_uses_get(action, &params) {
+            None
+        } else {
+            Some(params)
+        };
+        self.call_deployed_api(action, &relative_path, body)
+            .await?
+            .ok_or_else(|| {
+                anyhow::anyhow!("SOMA_API_URL is required for remote runtime mode action={action}")
+            })
     }
 
     /// Readiness probe of the upstream dependency.
@@ -271,6 +291,18 @@ fn api_url(base_url: &Url, relative_path: &str) -> Result<Url> {
 fn non_empty(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn remote_action_uses_get(action: &str, params: &Value) -> bool {
+    params.as_object().is_some_and(|object| object.is_empty())
+        && matches!(action, "status" | "help")
+}
+
+fn validate_action_path_segment(action: &str) -> Result<()> {
+    if action.is_empty() || action.contains('/') {
+        anyhow::bail!("remote REST action must be a non-empty path segment");
+    }
+    Ok(())
 }
 
 #[cfg(feature = "observability")]

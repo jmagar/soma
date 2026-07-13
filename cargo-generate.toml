@@ -44,8 +44,7 @@ ignore = [
 [placeholders]
 package_name = { type = "string", prompt = "Cargo package/repo name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice-mcp" }
 crate_prefix = { type = "string", prompt = "Workspace crate prefix", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
-binary_name = { type = "string", prompt = "Local CLI/stdin MCP binary name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
-server_binary_name = { type = "string", prompt = "Server binary name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice-server" }
+binary_name = { type = "string", prompt = "CLI, stdio MCP, and HTTP server binary name", regex = "^[a-z][a-z0-9_-]*$", default = "myservice" }
 service_slug = { type = "string", prompt = "MCP tool/action service slug (Rust identifier-safe)", regex = "^[a-z][a-z0-9_]*$", default = "myservice" }
 type_prefix = { type = "string", prompt = "Rust type prefix", regex = "^[A-Z][A-Za-z0-9]*$", default = "MyService" }
 env_prefix = { type = "string", prompt = "Environment variable prefix", regex = "^[A-Z][A-Z0-9_]*$", default = "MYSERVICE" }

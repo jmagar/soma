@@ -42,6 +42,7 @@ fn stub_config() -> SomaConfig {
         // CUSTOMIZE: Replace with your service's config struct fields.
         api_url: String::new(),
         api_key: "test-key".to_string(),
+        ..SomaConfig::default()
     }
 }
 
@@ -132,6 +133,7 @@ fn test_client_builds_with_empty_config() {
     let config = SomaConfig {
         api_url: String::new(),
         api_key: String::new(),
+        ..SomaConfig::default()
     };
     let result = SomaClient::new(&config);
     // CUSTOMIZE: Change to assert!(result.is_err()) once you add real validation
@@ -169,6 +171,7 @@ async fn test_client_forwards_actions_to_deployed_api_when_configured() {
     let client = SomaClient::new(&SomaConfig {
         api_url: base_url,
         api_key: "secret-token".to_string(),
+        ..SomaConfig::default()
     })
     .expect("remote client should build");
 

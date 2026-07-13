@@ -141,9 +141,9 @@ mcp__soma__soma(action="scaffold_intent")
   "server_category": "upstream-client",
   "required_surfaces": ["mcp", "cli"],
   "project": {
-    "display_name": "Unraid MCP",
-    "crate_name": "unraid-mcp",
-    "binary_name": "unraid",
+    "display_name": "unraid-rmcp",
+    "crate_name": "unraid-rmcp",
+    "binary_name": "runraid",
     "service_name": "unraid",
     "env_prefix": "UNRAID"
   },

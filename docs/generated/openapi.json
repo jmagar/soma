@@ -848,7 +848,7 @@
       "help"
     ],
     "security_policy": "https://github.com/jmagar/soma/security/policy",
-    "server_binary": "soma-server",
+    "server_binary": "soma",
     "source": "scripts/check-openapi.py",
     "support": "https://github.com/jmagar/soma/issues",
     "surfaces": [

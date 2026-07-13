@@ -139,6 +139,7 @@ fn render_palette_manifest() -> Result<Value> {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
+        ..SomaConfig::default()
     })?;
     let service = SomaService::new(client);
     let registry = static_provider_registry(service)?;
@@ -165,6 +166,7 @@ fn render_provider_snapshot() -> Result<Value> {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
+        ..SomaConfig::default()
     })?;
     let service = SomaService::new(client);
     let registry = dynamic_provider_registry(service)?;
@@ -375,6 +377,9 @@ fn render_provider_skill(provider: &Value) -> Result<String> {
     render_primitive_section(&mut out, "Resources", &provider["resources"]);
     render_primitive_section(&mut out, "Tasks", &provider["tasks"]);
     render_primitive_section(&mut out, "Elicitation", &provider["elicitation"]);
+    while out.ends_with("\n\n") {
+        out.pop();
+    }
     Ok(out)
 }
 
@@ -676,7 +681,7 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
         },
         "binaries": {
             "cli": "soma",
-            "server": "soma-server"
+            "server": "soma"
         },
         "packages": {
             "npm": "soma-rmcp",

@@ -133,7 +133,7 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
     );
     assert_eq!(
         manifest["_meta"]["ai.dinglebear.soma"]["server_binary"],
-        "soma-server"
+        "soma"
     );
     assert_eq!(
         manifest["_meta"]["io.modelcontextprotocol.registry/publisher-provided"]["publisher"]

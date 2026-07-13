@@ -133,7 +133,7 @@ pub struct AuthConfig {
     /// Scopes minted into the static-bearer-derived AuthContext so legacy
     /// admin tools keep functioning when the dual-mode middleware (L2) is
     /// deployed. Lab keeps the legacy `["lab:read","lab:admin"]` defaults;
-    /// syslog-mcp will override with `["syslog:read","syslog:admin"]`.
+    /// cortex will override with `["syslog:read","syslog:admin"]`.
     pub static_token_scopes: Vec<String>,
     /// Path of the browser login route (typically `/auth/login`).
     pub login_path: String,
@@ -142,7 +142,7 @@ pub struct AuthConfig {
     pub enable_dynamic_registration: bool,
     /// When `true`, dual-mode middleware MUST reject the static bearer
     /// token whenever OAuth is active. Defaults to `false` (lab keeps the
-    /// historical break-glass behavior); syslog-mcp overrides to `true`.
+    /// historical break-glass behavior); cortex overrides to `true`.
     pub disable_static_token_with_oauth: bool,
     /// Optional at-rest encryption key for upstream provider refresh tokens.
     ///

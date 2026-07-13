@@ -63,7 +63,7 @@ readonly TS_START="$(date +%s%N)"
 readonly LOG_FILE="${TMPDIR:-/tmp}/${SCRIPT_NAME%.sh}.$(date +%Y%m%d-%H%M%S).log"
 
 # CUSTOMIZE: Change this path if your credentials live elsewhere.
-#           syslog-mcp uses ~/.claude-homelab/.env; adapt to your convention.
+#           cortex uses ~/.claude-homelab/.env; adapt to your convention.
 readonly ENV_FILE="${HOME}/.claude-homelab/.env"
 
 # ── Colour support ────────────────────────────────────────────────────────────

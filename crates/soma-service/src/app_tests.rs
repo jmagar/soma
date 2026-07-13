@@ -23,6 +23,7 @@ fn stub_service() -> SomaService {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "test-key".to_string(),
+        ..SomaConfig::default()
     })
     .expect("stub client should always build");
     SomaService::new(client)

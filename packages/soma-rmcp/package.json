@@ -10,13 +10,15 @@
   "bugs": {
     "url": "https://github.com/jmagar/soma/issues"
   },
-  "description": "Node launcher for Soma, a batteries-included RMCP runtime and scaffold for provider-backed Rust MCP servers.",
+  "description": "Node launcher for Soma, a product-first RMCP runtime for provider-backed agent capabilities with CLI, REST, HTTP MCP, plugins, and derivative scaffold support.",
   "engines": {
     "node": ">=18"
   },
   "files": [
     "bin/",
+    "scripts/",
     "README.md",
+    "LICENSE*",
     "package.json"
   ],
   "homepage": "https://soma.dinglebear.ai",
@@ -51,5 +53,10 @@
     "type": "git",
     "url": "git+https://github.com/jmagar/soma.git"
   },
-  "version": "0.4.7"
+  "version": "0.4.7",
+  "scripts": {
+    "prepack": "node scripts/sync-readme.js",
+    "check": "node --check bin/soma-rmcp.js && node --check scripts/sync-readme.js && node --check scripts/check-package.js && node scripts/check-package.js",
+    "prepublishOnly": "node scripts/check-package.js --release"
+  }
 }

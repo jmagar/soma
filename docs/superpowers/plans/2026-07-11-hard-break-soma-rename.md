@@ -4,7 +4,7 @@
 
 **Goal:** Complete the pivot from the former template identity into Soma as a product. The repo should expose Soma as the binary, crate family, plugin, env-var prefix, package docs, and user-facing identity, with no legacy aliases, shims, compatibility env vars, or old-name documentation left in tracked files.
 
-**Architecture:** Treat this as a hard product rename, not a compatibility migration. Rename filesystem paths first, then package identities and Rust imports, then user-facing strings, env registry, plugins, workflows, and generated contract docs. The resulting product ships a batteries-included `soma`/`soma-server` binary and a `soma-rmcp` npm package.
+**Architecture:** Treat this as a hard product rename, not a compatibility migration. Rename filesystem paths first, then package identities and Rust imports, then user-facing strings, env registry, plugins, workflows, and generated contract docs. The resulting product ships a batteries-included `soma` binary and a `soma-rmcp` npm package.
 
 **Tech Stack:** Rust workspace, Cargo packages, RMCP transport crates, Node package wrapper, Claude/Codex plugin metadata, GitHub Actions, xtask contract checks, Beads.
 
@@ -12,7 +12,7 @@
 
 - No aliases, legacy support, shim binaries, compatibility env vars, or old package names.
 - Leave unrelated pre-existing work alone, especially `docs/superpowers/plans/2026-07-09-provider-drop-in-ux.md`.
-- Keep binary names `soma` and `soma-server`.
+- Keep the canonical binary name `soma`.
 - Keep the npm package name `soma-rmcp`.
 - Rename old crate/package/import prefixes to `soma`.
 - Rename the old env prefix to `SOMA_`.

@@ -4,7 +4,7 @@
 
 A Next.js 16 frontend (static export) that serves the soma demo UI. It connects to the `soma` MCP server's REST API and provides interactive tooling, an API explorer, and a dashboard.
 
-Use `apps/web` only for application/platform servers that intentionally expose API + CLI + MCP + Web (for example `axon`, `lab`, and `syslog`). Upstream-client MCP servers such as `unrust`, `rustifi`, `rustify`, `rustscale`, and `apprise` should keep MCP + CLI parity and omit REST/Web unless they own additional workflows, state, dashboards, or non-MCP consumers.
+Use `apps/web` only for application/platform servers that intentionally expose API + CLI + MCP + Web (for example `axon`, `labby`, and `cortex`). Upstream-client MCP servers such as `unraid-rmcp`, `unifi-rmcp`, `gotify-rmcp`, `tailscale-rmcp`, and `apprise-rmcp` should keep MCP + CLI parity and omit REST/Web unless they own additional workflows, state, dashboards, or non-MCP consumers.
 
 The UI is built entirely on the **Aurora design system** — a shadcn-compatible component registry at `https://aurora.tootie.tv`. Aurora components are dark-first, operator-grade, and designed for AI/agent UIs.
 

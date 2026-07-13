@@ -1,8 +1,9 @@
 # Frictionless Scaffolding
 
-`cargo xtask scaffold` is the front door for starting a new rmcp-family server.
-It bridges the MCP `scaffold_intent` JSON, `cargo-generate`, the Rust
-post-processor, action starter snippets, and generated-project verification.
+`cargo xtask scaffold` is the front door for exporting a new Soma-shaped
+repository. It bridges the MCP `scaffold_intent` JSON, `cargo-generate`, the
+Rust post-processor, action starter snippets, and scaffold/export-lane
+verification.
 
 ## Plan first
 
@@ -31,13 +32,14 @@ cargo xtask scaffold --intent scaffold-intent.json --apply ../generated
 ```
 
 The command runs `cargo generate`, applies `cargo xtask cargo-generate-post`,
-writes `docs/scaffold-report.md` in the generated project, verifies generated
-shape, and runs `cargo check --workspace --all-targets` unless
+writes `docs/scaffold-report.md` in the exported project, verifies the generated
+export shape, and runs `cargo check --workspace --all-targets` unless
 `--no-cargo-check` is passed.
 
 ## Verify
 
-Before publishing or committing a generated project, prove the scaffold shape:
+Before publishing or committing an exported project, prove the scaffold/export
+shape:
 
 ```bash
 cargo xtask scaffold --verify ../generated/myservice-mcp

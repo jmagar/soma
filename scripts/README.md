@@ -389,7 +389,7 @@ Environment:
 
 ```bash
 scripts/check-runtime-current.sh
-scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/soma-server
+scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/soma
 scripts/check-runtime-current.sh --mode docker --pull --compose-dir .
 just runtime-current
 ```
@@ -559,7 +559,7 @@ Flow:
 
 1. Stop `soma-mcp.service` if active.
 2. Otherwise stop a Docker container named `soma-mcp` if active.
-3. Build `target/release/soma-server` with `--features full`.
+3. Build `target/release/soma` with `--features full`.
 4. If the systemd unit exists, install the binary into `~/.local/bin/` and start
    the unit.
 5. Otherwise, if `docker-compose.yml` exists, rebuild and recreate with Docker
@@ -695,7 +695,7 @@ Ignored paths:
 Requires:
 
 ```bash
-cargo install watchexec-cli
+mise install watchexec
 ```
 
 ## Hook And CI Integration

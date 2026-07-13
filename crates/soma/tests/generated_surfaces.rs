@@ -79,16 +79,17 @@ fn public_docs_and_smokes_do_not_reference_removed_example_binary() {
 }
 
 #[test]
-fn installer_targets_real_soma_server_release() {
+fn installer_targets_real_soma_release() {
     let root = workspace_root();
     let text = fs::read_to_string(root.join("install.sh")).expect("installer should read");
 
     assert!(!text.contains("your-org/soma-mcp"));
     assert!(text.contains("REPO=\"jmagar/soma\""));
-    assert!(text.contains("BINARY_NAME=\"soma-server\""));
-    assert!(text.contains("soma-server serve"));
+    assert!(text.contains("BINARY_NAME=\"soma\""));
+    assert!(text.contains("soma serve"));
     assert!(text.contains("localhost:40060/health"));
-    assert!(!text.contains("soma serve"));
+    let legacy_split_server_command = format!("{}-server serve", "soma");
+    assert!(!text.contains(&legacy_split_server_command));
     assert!(!text.contains("localhost:3000/health"));
 }
 

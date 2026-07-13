@@ -13,6 +13,27 @@ fn result_text(result: &rmcp::model::CallToolResult) -> &str {
 }
 
 #[test]
+fn tool_result_from_json_adds_action_discriminator() {
+    let store = soma_runtime::server::ResponsePageStore::default();
+    let result = tool_result_from_json(
+        json!({ "status": "ok" }),
+        &store,
+        ResponsePageRequest::default(),
+        "soma",
+        Some("status"),
+        None,
+    )
+    .expect("tool result should serialize");
+    let text = result_text(&result);
+    let parsed: serde_json::Value =
+        serde_json::from_str(text).expect("tool text should remain valid JSON");
+
+    assert_eq!(parsed["status"], "ok");
+    assert_eq!(parsed["_soma_action"], "status");
+    assert_eq!(result.structured_content.as_ref(), Some(&parsed));
+}
+
+#[test]
 fn tool_result_from_json_returns_scrollable_page_envelope() {
     let store = soma_runtime::server::ResponsePageStore::default();
     let result = tool_result_from_json(

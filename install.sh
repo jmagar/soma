@@ -26,8 +26,8 @@ set -euo pipefail
 # CUSTOMIZE: Replace with your GitHub org/repo (e.g. "jmagar/myservice-mcp")
 REPO="jmagar/soma"
 
-# CUSTOMIZE: Replace with your server binary name (matches Cargo.toml [[bin]] name)
-BINARY_NAME="soma-server"
+# CUSTOMIZE: Replace with your binary name (matches Cargo.toml [[bin]] name)
+BINARY_NAME="soma"
 
 # CUSTOMIZE: Replace with your service display name (shown in messages)
 SERVICE_NAME="Soma"
@@ -185,7 +185,7 @@ post_install_message() {
   printf '  1. Copy the example config:   cp .env.example .env\n'
   printf '  2. Edit .env and set:         SOMA_API_URL, SOMA_API_KEY\n'
   printf '  3. Generate an auth token:    openssl rand -hex 32\n'
-  printf '  4. Start the server:          soma-server serve\n'
+  printf '  4. Start the server:          soma serve\n'
   printf '  5. Check health:              curl http://localhost:40060/health\n'
   printf '\n'
   printf '  Or deploy with Docker:        docker compose up -d\n'

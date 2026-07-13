@@ -5,8 +5,8 @@ fn args(values: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn http_server_requests_are_rejected_by_local_binary() {
-    assert!(is_http_server_request(&args(&[])));
+fn explicit_serve_requests_enter_server_mode() {
+    assert!(!is_http_server_request(&args(&[])));
     assert!(is_http_server_request(&args(&["serve"])));
     assert!(is_http_server_request(&args(&["serve", "mcp"])));
 }

@@ -10,6 +10,7 @@ use soma_runtime::server::ResponsePageStore;
 const RESPONSE_OFFSET_PARAM: &str = "_response_offset";
 const RESPONSE_PAGE_BYTES_PARAM: &str = "_response_page_bytes";
 const RESPONSE_CURSOR_PARAM: &str = "_response_cursor";
+pub(crate) const ACTION_DISCRIMINATOR_FIELD: &str = "_soma_action";
 const DEFAULT_RESPONSE_PAGE_BYTES: usize = 16_000;
 const MAX_RESPONSE_PAGE_BYTES: usize = 16_000;
 
@@ -145,7 +146,7 @@ pub(super) fn strip_response_page_params(arguments: &mut Value) {
 }
 
 pub(super) fn tool_result_from_json(
-    value: Value,
+    mut value: Value,
     response_pages: &ResponsePageStore,
     page_request: ResponsePageRequest,
     tool: &str,
@@ -155,6 +156,7 @@ pub(super) fn tool_result_from_json(
     if let Some(cursor) = page_request.cursor.clone() {
         return tool_result_from_cached_page(response_pages, &cursor, page_request, tool, action);
     }
+    add_action_discriminator(&mut value, action);
 
     // Compact JSON (not pretty) recovers ~30-40% of the 40 KB token budget.
     let text = serde_json::to_string(&value)
@@ -179,6 +181,16 @@ pub(super) fn tool_result_from_json(
     let mut result = CallToolResult::structured(payload);
     result.content = vec![ContentBlock::text(text)];
     Ok(result)
+}
+
+fn add_action_discriminator(value: &mut Value, action: Option<&str>) {
+    let (Some(action), Some(object)) = (action, value.as_object_mut()) else {
+        return;
+    };
+    object.insert(
+        ACTION_DISCRIMINATOR_FIELD.to_owned(),
+        Value::String(action.to_owned()),
+    );
 }
 
 pub(super) fn tool_result_from_cached_page(

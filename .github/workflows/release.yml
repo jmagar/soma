@@ -35,7 +35,6 @@ on:
 env:
   # CUSTOMIZE: Replace "soma" with your binary name.
   BINARY_NAME: soma
-  SERVER_BINARY_NAME: soma-server
   CARGO_INCREMENTAL: "0"
   # Release builds use sccache, while still overriding the repo's dev-only
   # scripts/cargo-rustc-wrapper so it cannot auto-sync binaries into ./bin before
@@ -189,24 +188,22 @@ jobs:
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER: x86_64-w64-mingw32-gcc
         run: |
           cargo build --release --locked --target ${{ matrix.target }} \
-            --bin ${{ env.BINARY_NAME }} --no-default-features --features cli-mcp
-          cargo build --release --locked --target ${{ matrix.target }} \
-            --bin ${{ env.SERVER_BINARY_NAME }} --features full
+            --bin ${{ env.BINARY_NAME }} --features full
 
       - name: Prepare binary artifact
         run: |
           mkdir -p package artifacts
           # CUSTOMIZE: Replace the binary name if you fork Soma.
-          cp target/${{ matrix.target }}/release/${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }} \
-             package/${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }}
-          chmod +x package/${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }}
-          tar -C package -czf artifacts/${{ env.SERVER_BINARY_NAME }}-${{ matrix.arch }}.tar.gz \
-            ${{ env.SERVER_BINARY_NAME }}${{ matrix.ext }}
+          cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.ext }} \
+             package/${{ env.BINARY_NAME }}${{ matrix.ext }}
+          chmod +x package/${{ env.BINARY_NAME }}${{ matrix.ext }}
+          tar -C package -czf artifacts/${{ env.BINARY_NAME }}-${{ matrix.arch }}.tar.gz \
+            ${{ env.BINARY_NAME }}${{ matrix.ext }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.SERVER_BINARY_NAME }}-${{ matrix.arch }}
+          name: ${{ env.BINARY_NAME }}-${{ matrix.arch }}
           path: artifacts/
 
   # ── Commit binaries to bin/ via Git LFS ──────────────────────────────────────
@@ -251,7 +248,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p bin
-          BIN=${{ env.SERVER_BINARY_NAME }}
+          BIN=${{ env.BINARY_NAME }}
 
           # Each artifact dir is named <binary>-<arch> and contains one tarball.
           # merge-multiple flattens all artifact contents into artifacts/ directly.
