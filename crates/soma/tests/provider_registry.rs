@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use serde_json::json;
 use soma_contracts::providers::{
     CapabilityGrant, HostCapabilities, NetworkCapability, ProviderCatalog, ProviderIdentity,
-    ProviderKind, ProviderManifest, ProviderTool, RestOverlay,
+    ProviderKind, ProviderManifest, ProviderPrompt, ProviderResource, ProviderTool, RestOverlay,
 };
 use soma_service::capabilities::CapabilityBroker;
 use soma_service::provider_registry::{
@@ -61,6 +61,13 @@ fn rest_tool(name: &str, path: &str) -> ProviderTool {
     }
 }
 
+fn tool_with_output_schema(name: &str, output_schema: serde_json::Value) -> ProviderTool {
+    ProviderTool {
+        output_schema: Some(output_schema),
+        ..tool(name)
+    }
+}
+
 fn catalog(provider: &str, tools: Vec<ProviderTool>) -> ProviderCatalog {
     ProviderManifest {
         schema_version: 1,
@@ -96,6 +103,34 @@ fn catalog_with_capabilities(
     ProviderManifest {
         capabilities,
         ..catalog(provider, tools)
+    }
+}
+
+fn catalog_with_primitives(provider: &str) -> ProviderCatalog {
+    ProviderManifest {
+        prompts: vec![ProviderPrompt {
+            name: "brief_prompt".to_owned(),
+            description: "Prompt for a compact brief".to_owned(),
+            arguments_schema: Some(json!({
+                "type": "object",
+                "properties": {
+                    "topic": { "type": "string" }
+                }
+            })),
+            scope: Some("soma:read".to_owned()),
+            mcp: None,
+            examples: Vec::new(),
+        }],
+        resources: vec![ProviderResource {
+            uri_template: "soma://demo/{id}".to_owned(),
+            name: "demo_resource".to_owned(),
+            description: "Demo resource".to_owned(),
+            mime_type: Some("application/json".to_owned()),
+            scope: Some("soma:read".to_owned()),
+            mcp: None,
+            annotations: json!({}),
+        }],
+        ..catalog(provider, vec![rest_tool("weather", "/v1/weather")])
     }
 }
 
@@ -174,6 +209,30 @@ fn snapshot_indexes_are_deterministic_and_fingerprinted() {
 }
 
 #[test]
+fn inspection_report_includes_provider_routes_schemas_prompts_and_resources() {
+    let provider = Arc::new(EchoProvider {
+        catalog: catalog_with_primitives("demo"),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+    let inspection = registry.snapshot().inspection_report();
+    let provider = &inspection["providers"][0];
+
+    assert_eq!(provider["tools"][0]["name"], "weather");
+    assert_eq!(provider["tools"][0]["input_schema"]["type"], "object");
+    assert_eq!(provider["tools"][0]["rest"]["path"], "/v1/weather");
+    assert_eq!(provider["tools"][0]["surfaces"]["rest"], true);
+    assert_eq!(provider["prompts"][0]["name"], "brief_prompt");
+    assert_eq!(
+        provider["prompts"][0]["arguments_schema"]["properties"]["topic"]["type"],
+        "string"
+    );
+    assert_eq!(provider["resources"][0]["name"], "demo_resource");
+    assert_eq!(provider["resources"][0]["uri_template"], "soma://demo/{id}");
+}
+
+#[test]
 fn duplicate_actions_fail_snapshot_validation() {
     let provider = Arc::new(EchoProvider {
         catalog: catalog("demo", vec![tool("dupe"), tool("dupe")]),
@@ -185,6 +244,23 @@ fn duplicate_actions_fail_snapshot_validation() {
         Err(error) => error,
     };
     assert_eq!(error.code(), "duplicate_tool_name");
+}
+
+#[test]
+fn invalid_output_schema_fails_snapshot_validation() {
+    let provider = Arc::new(EchoProvider {
+        catalog: catalog(
+            "demo",
+            vec![tool_with_output_schema("broken", json!({ "type": 42 }))],
+        ),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let error = match ProviderRegistry::new(vec![provider]) {
+        Ok(_) => panic!("invalid output schema should fail"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "output_schema_invalid");
 }
 
 #[test]
@@ -261,6 +337,57 @@ async fn input_schema_and_response_limits_are_enforced_before_and_after_provider
         .await
         .expect_err("response is capped");
     assert_eq!(&*error.code, "response_too_large");
+}
+
+#[tokio::test]
+async fn output_schema_is_enforced_after_provider_code() {
+    let provider = Arc::new(EchoProvider {
+        catalog: catalog(
+            "demo",
+            vec![
+                tool_with_output_schema(
+                    "checked_echo",
+                    json!({
+                        "type": "object",
+                        "additionalProperties": true,
+                        "required": ["message"],
+                        "properties": {
+                            "message": { "type": "string" }
+                        }
+                    }),
+                ),
+                tool_with_output_schema(
+                    "bad_echo",
+                    json!({
+                        "type": "object",
+                        "additionalProperties": true,
+                        "required": ["ok"],
+                        "properties": {
+                            "ok": { "type": "boolean" }
+                        }
+                    }),
+                ),
+            ],
+        ),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+    assert_eq!(registry.snapshot().compiled_validator_count, 4);
+
+    let output = registry
+        .dispatch(call("checked_echo", json!({"message": "valid"})))
+        .await
+        .expect("matching output schema should allow dispatch");
+    assert_eq!(output.value["message"], "valid");
+
+    let error = registry
+        .dispatch(call("bad_echo", json!({"message": "invalid"})))
+        .await
+        .expect_err("provider output should be schema checked");
+    assert_eq!(&*error.code, "output_schema_failed");
+    let error_json = serde_json::to_value(&error).expect("provider error serializes");
+    assert_eq!(error_json["phase"], "output_validation");
 }
 
 #[tokio::test]

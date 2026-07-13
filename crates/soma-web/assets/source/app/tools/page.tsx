@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ParamInput } from "@/components/tools/param-input";
 import { ResponsePanel } from "@/components/tools/response-panel";
 import { SubmitButton } from "@/components/tools/submit-button";
 import { Button } from "@/components/ui/button";
-import { callAction } from "@/lib/api";
-import { DEFAULT_REST_ACTION, REST_ACTIONS, type RestActionId } from "@/lib/soma";
+import { callRestAction, getProviderCatalog } from "@/lib/api";
+import {
+  coerceParamValues,
+  DEFAULT_REST_ACTION,
+  mergeProviderRestActions,
+  type ProviderInspection,
+  providerInventory,
+  REST_ACTIONS,
+  type RestAction,
+  type RestActionId,
+} from "@/lib/soma";
 
 export default function ToolsPage() {
   const [selectedAction, setSelectedAction] = useState<RestActionId>(DEFAULT_REST_ACTION.id);
@@ -14,8 +23,30 @@ export default function ToolsPage() {
   const [response, setResponse] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isError, setIsError] = useState(false);
+  const [providerCatalog, setProviderCatalog] = useState<ProviderInspection | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
-  const action = REST_ACTIONS.find((a) => a.id === selectedAction) ?? DEFAULT_REST_ACTION;
+  useEffect(() => {
+    let cancelled = false;
+    getProviderCatalog().then((result) => {
+      if (cancelled) return;
+      if (result.error) {
+        setCatalogError(result.error);
+        return;
+      }
+      setProviderCatalog(result.data ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const actions = useMemo(
+    () => mergeProviderRestActions(REST_ACTIONS, providerCatalog),
+    [providerCatalog],
+  );
+  const inventory = useMemo(() => providerInventory(providerCatalog), [providerCatalog]);
+  const action = actions.find((a) => a.id === selectedAction) ?? actions[0] ?? DEFAULT_REST_ACTION;
 
   const handleSelect = (id: RestActionId) => {
     setSelectedAction(id);
@@ -30,12 +61,9 @@ export default function ToolsPage() {
     setResponse(null);
     setIsError(false);
 
-    const params: Record<string, string> = {};
-    for (const [k, v] of Object.entries(paramValues)) {
-      if (v.trim()) params[k] = v.trim();
-    }
+    const params = coerceParamValues(action, paramValues);
 
-    const res = await callAction(selectedAction, params);
+    const res = await callRestAction(action, params);
     setLoading(false);
 
     if (res.error) {
@@ -74,6 +102,11 @@ export default function ToolsPage() {
             {action.method} {action.path}
           </code>
         </p>
+        {catalogError && (
+          <p style={{ color: "var(--aurora-error)", fontSize: "0.8rem", marginTop: "0.5rem" }}>
+            Provider catalog unavailable: {catalogError}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -99,7 +132,7 @@ export default function ToolsPage() {
             Actions
           </p>
           <div className="space-y-1">
-            {REST_ACTIONS.map((a) => (
+            {actions.map((a) => (
               <Button
                 type="button"
                 key={a.id}
@@ -120,10 +153,14 @@ export default function ToolsPage() {
                       : "2px solid transparent",
                 }}
               >
-                {a.label}
+                <span className="min-w-0 truncate">{a.label}</span>
               </Button>
             ))}
           </div>
+
+          <ProviderInventory title="MCP-only tools" items={inventory.mcpOnlyTools} />
+          <ProviderInventory title="Prompts" items={inventory.prompts} />
+          <ProviderInventory title="Resources" items={inventory.resources} uri />
         </div>
 
         {/* Form + response */}
@@ -249,10 +286,7 @@ export default function ToolsPage() {
   );
 }
 
-function requestPreview(
-  action: typeof DEFAULT_REST_ACTION,
-  paramValues: Record<string, string>,
-): string {
+function requestPreview(action: RestAction, paramValues: Record<string, string>): string {
   const method = action.method ?? "POST";
   const path = action.path ?? "/v1/unknown";
   if (method === "GET") {
@@ -260,4 +294,50 @@ function requestPreview(
   }
   const body = Object.fromEntries(Object.entries(paramValues).filter(([, value]) => value.trim()));
   return `${method} ${path}\nContent-Type: application/json\n\n${JSON.stringify(body, null, 2)}`;
+}
+
+function ProviderInventory({
+  title,
+  items,
+  uri = false,
+}: {
+  title: string;
+  items: Array<{ name: string; provider: string; uri_template?: string }>;
+  uri?: boolean;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div style={{ marginTop: "1rem" }}>
+      <p
+        style={{
+          color: "var(--aurora-text-muted)",
+          fontSize: "0.75rem",
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.05em",
+          marginBottom: "0.5rem",
+        }}
+      >
+        {title}
+      </p>
+      <div className="space-y-1">
+        {items.map((item) => (
+          <div
+            key={`${item.provider}:${item.name}`}
+            style={{
+              color: "var(--aurora-text-muted)",
+              fontFamily: "var(--aurora-font-mono)",
+              fontSize: "0.75rem",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+            title={`${item.provider}: ${uri ? item.uri_template : item.name}`}
+          >
+            {uri ? item.uri_template : item.name}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

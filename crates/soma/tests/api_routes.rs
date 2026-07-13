@@ -166,6 +166,27 @@ async fn dynamic_provider_rest_route_dispatches_from_registry_snapshot() {
     assert_eq!(body["city"], "Paris");
 }
 
+#[tokio::test]
+async fn providers_endpoint_lists_live_provider_rest_tools() {
+    let mut state = loopback_state();
+    state.provider_registry =
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let app = server::router(state);
+    let (status, body) = request_json(app, Method::GET, "/v1/providers", None, None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["providers"][0]["name"], "dynamic-rest");
+    assert_eq!(body["providers"][0]["tools"][0]["name"], "weather");
+    assert_eq!(
+        body["providers"][0]["tools"][0]["input_schema"]["properties"]["city"]["type"],
+        "string"
+    );
+    assert_eq!(
+        body["providers"][0]["tools"][0]["rest"]["path"],
+        "/v1/weather"
+    );
+}
+
 #[test]
 fn rest_routes_match_action_registry_metadata() {
     for spec in ACTION_SPECS.iter().filter(|spec| spec.transport.rest()) {

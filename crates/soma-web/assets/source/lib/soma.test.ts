@@ -2,7 +2,15 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { ACTIONS, normalizeApiBaseUrl, REST_ACTIONS } from "./soma";
+import {
+  ACTIONS,
+  coerceParamValues,
+  mergeProviderRestActions,
+  normalizeApiBaseUrl,
+  type ProviderInspection,
+  providerInventory,
+  REST_ACTIONS,
+} from "./soma";
 
 type OpenApiActionMetadata = {
   components: {
@@ -65,5 +73,81 @@ describe("normalizeApiBaseUrl", () => {
 
   it("preserves empty same-origin configuration", () => {
     expect(normalizeApiBaseUrl("")).toBe("");
+  });
+});
+
+describe("provider catalog conversion", () => {
+  const inspection: ProviderInspection = {
+    schema_version: 1,
+    provider_fingerprint: "sha256:test",
+    providers: [
+      {
+        name: "dynamic",
+        kind: "ai-sdk",
+        tools: [
+          {
+            name: "summarize",
+            title: "Summarize",
+            description: "Summarize text.",
+            input_schema: {
+              type: "object",
+              required: ["text"],
+              properties: {
+                text: { type: "string", description: "Text to summarize." },
+                max_words: { type: "integer", default: 12 },
+              },
+            },
+            surfaces: { mcp: true, rest: true },
+            rest: { enabled: true, method: "POST", path: "/v1/providers/summarize" },
+          },
+          {
+            name: "mcp_only",
+            description: "MCP-only tool.",
+            surfaces: { mcp: true, rest: false },
+          },
+        ],
+        prompts: [{ name: "brief", description: "Brief prompt." }],
+        resources: [
+          {
+            name: "note",
+            uri_template: "soma://notes/{id}",
+            description: "Note resource.",
+          },
+        ],
+      },
+    ],
+  };
+
+  it("merges REST-capable provider tools without duplicating static actions", () => {
+    const actions = mergeProviderRestActions(REST_ACTIONS, inspection);
+    const action = actions.find((item) => item.id === "summarize");
+
+    expect(action?.path).toBe("/v1/providers/summarize");
+    expect(action?.params.map((param) => [param.name, param.type, param.required])).toEqual([
+      ["text", "text", true],
+      ["max_words", "number", false],
+    ]);
+    expect(actions.filter((item) => item.id === "echo")).toHaveLength(1);
+  });
+
+  it("separates MCP-only tools, prompts, and resources for inventory display", () => {
+    const inventory = providerInventory(inspection);
+
+    expect(inventory.mcpOnlyTools.map((item) => item.name)).toEqual(["mcp_only"]);
+    expect(inventory.prompts.map((item) => item.name)).toEqual(["brief"]);
+    expect(inventory.resources.map((item) => item.uri_template)).toEqual(["soma://notes/{id}"]);
+  });
+
+  it("coerces numeric parameters before dispatch", () => {
+    const action = mergeProviderRestActions(REST_ACTIONS, inspection).find(
+      (item) => item.id === "summarize",
+    );
+
+    expect(action).toBeDefined();
+    if (!action) throw new Error("summarize action should exist");
+    expect(coerceParamValues(action, { text: " hello ", max_words: "8" })).toEqual({
+      text: "hello",
+      max_words: 8,
+    });
   });
 });

@@ -22,7 +22,7 @@ use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use crate::api::{
     health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
-    v1_greet, v1_help, v1_service_status,
+    v1_greet, v1_help, v1_providers, v1_service_status,
 };
 use soma_mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use soma_runtime::server::{build_auth_layer, AppState, AuthPolicy};
@@ -52,6 +52,7 @@ pub fn router(state: AppState) -> Router {
     let api_and_mcp: Router<AppState> = Router::new()
         .nest_service("/mcp", streamable_http_service(state.clone(), rmcp_config))
         .route("/v1/capabilities", get(v1_capabilities))
+        .route("/v1/providers", get(v1_providers))
         .route("/v1/greet", post(v1_greet))
         .route("/v1/echo", post(v1_echo))
         .route("/v1/status", get(v1_service_status))

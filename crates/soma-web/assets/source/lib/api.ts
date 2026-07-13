@@ -9,7 +9,13 @@
  * both the API and the web UI — no CORS or cross-origin config needed.
  */
 
-import { endpoint, WEB_APP_CONFIG } from "@/lib/soma";
+import {
+  type ActionSpec,
+  endpoint,
+  type ProviderInspection,
+  REST_ACTIONS,
+  WEB_APP_CONFIG,
+} from "@/lib/soma";
 
 export interface ApiResponse<T = unknown> {
   data?: T;
@@ -73,23 +79,39 @@ function postJson<T>(path: string, body: Record<string, unknown>): Promise<ApiRe
   });
 }
 
+/** Fetch the live provider catalog used by MCP/REST dispatch. */
+export function getProviderCatalog(): Promise<ApiResponse<ProviderInspection>> {
+  return apiFetch<ProviderInspection>(endpoint("/v1/providers"));
+}
+
+/** Dispatch any REST-exposed action through its advertised route. */
+export function callRestAction<T = unknown>(
+  action: Pick<ActionSpec, "id" | "method" | "path">,
+  params: Record<string, unknown> = {},
+): Promise<ApiResponse<T>> {
+  if (!action.path) {
+    return Promise.resolve({ error: `REST action has no route: ${action.id}` });
+  }
+  const method = action.method ?? "POST";
+  if (method === "GET") {
+    return apiFetch<T>(endpoint(action.path));
+  }
+  return apiFetch<T>(endpoint(action.path), {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+}
+
 /** Dispatch a Soma REST action through its direct route. */
 export function callAction<T = unknown>(
   action: string,
   params: Record<string, unknown> = {},
 ): Promise<ApiResponse<T>> {
-  switch (action) {
-    case "greet":
-      return postJson<T>("/v1/greet", params);
-    case "echo":
-      return postJson<T>("/v1/echo", params);
-    case "status":
-      return apiFetch<T>(endpoint("/v1/status"));
-    case "help":
-      return apiFetch<T>(endpoint("/v1/help"));
-    default:
-      return Promise.resolve({ error: `Unknown REST action: ${action}` });
-  }
+  const spec = REST_ACTIONS.find((item) => item.id === action);
+  return spec
+    ? callRestAction<T>(spec, params)
+    : Promise.resolve({ error: `Unknown REST action: ${action}` });
 }
 
 /** GET /health */

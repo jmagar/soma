@@ -81,6 +81,13 @@ pub const REST_ROUTES: &[RestRoute] = &[
         description: "Direct REST route inventory and server metadata.",
     },
     RestRoute {
+        method: "GET",
+        path: "/v1/providers",
+        action: None,
+        auth: "mounted auth policy",
+        description: "Live provider catalog, including dropped provider tools and MCP primitives.",
+    },
+    RestRoute {
         method: "POST",
         path: "/v1/greet",
         action: Some("greet"),
@@ -143,6 +150,13 @@ pub async fn v1_capabilities() -> impl IntoResponse {
             .collect(),
         routes: REST_ROUTES,
     })
+}
+
+pub async fn v1_providers(State(state): State<AppState>) -> axum::response::Response {
+    if let Some(response) = refresh_file_providers(&state) {
+        return response;
+    }
+    Json(state.provider_registry.snapshot().inspection_report()).into_response()
 }
 
 pub async fn v1_greet(
