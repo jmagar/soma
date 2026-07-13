@@ -19,13 +19,11 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up mise tools
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
         with:
-          node-version: "22"
-
-      - name: Install OpenWiki
-        run: npm install --global openwiki
+          install_args: node npm:openwiki
+          cache: true
 
       - name: Run OpenWiki
         run: openwiki --update --print
