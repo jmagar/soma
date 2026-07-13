@@ -123,18 +123,7 @@ fn static_tool(spec: &soma_contracts::actions::ActionSpec) -> ProviderTool {
             title: None,
             annotations: json!({}),
         }),
-        rest: spec.rest_path.map(|path| RestOverlay {
-            enabled: spec.transport.rest(),
-            method: spec.rest_method.map(ToOwned::to_owned),
-            path: Some(path.to_owned()),
-            tags: vec!["soma".to_owned()],
-            summary: Some(spec.description.to_owned()),
-            description: Some(spec.description.to_owned()),
-            deprecated: false,
-            path_params: json!({}),
-            query_params: json!({}),
-            request_body_schema: None,
-        }),
+        rest: static_rest_overlay(spec),
         cli: spec.cli.map(|cli| CliOverlay {
             enabled: spec.transport.cli(),
             command: Some(cli.command.to_owned()),
@@ -180,6 +169,36 @@ fn static_tool(spec: &soma_contracts::actions::ActionSpec) -> ProviderTool {
                 Value::Null
             },
         }),
+    }
+}
+
+fn static_rest_overlay(spec: &soma_contracts::actions::ActionSpec) -> Option<RestOverlay> {
+    match spec.rest_path {
+        Some(path) => Some(RestOverlay {
+            enabled: spec.transport.rest(),
+            method: spec.rest_method.map(ToOwned::to_owned),
+            path: Some(path.to_owned()),
+            tags: vec!["soma".to_owned()],
+            summary: Some(spec.description.to_owned()),
+            description: Some(spec.description.to_owned()),
+            deprecated: false,
+            path_params: json!({}),
+            query_params: json!({}),
+            request_body_schema: None,
+        }),
+        None if !spec.transport.rest() => Some(RestOverlay {
+            enabled: false,
+            method: None,
+            path: None,
+            tags: vec!["soma".to_owned()],
+            summary: Some(spec.description.to_owned()),
+            description: Some(spec.description.to_owned()),
+            deprecated: false,
+            path_params: json!({}),
+            query_params: json!({}),
+            request_body_schema: None,
+        }),
+        None => None,
     }
 }
 

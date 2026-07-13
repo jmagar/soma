@@ -89,6 +89,13 @@ pub const REST_ROUTES: &[RestRoute] = &[
     },
     RestRoute {
         method: "POST",
+        path: "/v1/tools/{action}",
+        action: None,
+        auth: "mounted auth policy; requires the provider tool scope when scoped",
+        description: "Generic REST execution route for provider-backed tools.",
+    },
+    RestRoute {
+        method: "POST",
         path: "/v1/greet",
         action: Some("greet"),
         auth: "mounted auth policy; requires soma:read when scoped",
@@ -217,6 +224,27 @@ pub async fn v1_help(
         auth.as_ref().map(|Extension(auth)| auth),
         Ok(SomaAction::Help),
         "help",
+    )
+    .await
+}
+
+pub async fn v1_provider_tool_action(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+    Path(action): Path<String>,
+    body: Result<Json<Value>, JsonRejection>,
+) -> axum::response::Response {
+    let params = match body {
+        Ok(Json(value)) => value,
+        Err(JsonRejection::MissingJsonContentType(_)) => json!({}),
+        Err(error) => return rest_json_rejection_response(error),
+    };
+
+    run_provider_rest_action(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        action,
+        params,
     )
     .await
 }

@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::RegistrySnapshot;
+use super::{provider_tool_surface_enabled, ProviderSurface, RegistrySnapshot};
 
 impl RegistrySnapshot {
     pub fn validation_summary(&self) -> Value {
@@ -26,6 +26,15 @@ impl RegistrySnapshot {
                     .tools
                     .iter()
                     .map(|tool| {
+                        let rest_enabled =
+                            provider_tool_surface_enabled(tool, ProviderSurface::Rest);
+                        let generic_rest = rest_enabled.then(|| {
+                            json!({
+                                "enabled": true,
+                                "method": "POST",
+                                "path": format!("/v1/tools/{}", tool.name),
+                            })
+                        });
                         json!({
                             "name": tool.name.clone(),
                             "title": tool.title.clone(),
@@ -36,12 +45,13 @@ impl RegistrySnapshot {
                             "destructive": tool.destructive,
                             "requires_admin": tool.requires_admin,
                             "surfaces": {
-                                "mcp": tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
-                                "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
-                                "cli": tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
-                                "palette": tool.palette.as_ref().map(|palette| palette.enabled).unwrap_or(true)
+                                "mcp": provider_tool_surface_enabled(tool, ProviderSurface::Mcp),
+                                "rest": rest_enabled,
+                                "cli": provider_tool_surface_enabled(tool, ProviderSurface::Cli),
+                                "palette": provider_tool_surface_enabled(tool, ProviderSurface::Palette)
                             },
                             "rest": tool.rest.clone(),
+                            "generic_rest": generic_rest,
                             "limits": tool.limits.clone(),
                             "env": tool.env.clone(),
                         })

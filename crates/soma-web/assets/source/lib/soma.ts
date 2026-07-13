@@ -84,6 +84,11 @@ export type ProviderInspectionTool = {
     method?: string | null;
     path?: string | null;
   } | null;
+  generic_rest?: {
+    enabled?: boolean;
+    method?: string | null;
+    path?: string | null;
+  } | null;
 };
 
 export type ProviderInspectionPrompt = {
@@ -171,8 +176,8 @@ function providerToolToRestAction(
     description: tool.description,
     scope: tool.scope ?? "public",
     transport: "rest",
-    method: normalizeMethod(tool.rest?.method),
-    path: tool.rest?.path ?? `/v1/${tool.name}`,
+    method: normalizeMethod(tool.rest?.method ?? tool.generic_rest?.method),
+    path: tool.rest?.path ?? tool.generic_rest?.path ?? `/v1/${tool.name}`,
     params: paramsFromSchema(tool.input_schema),
     example: {
       action: tool.name,

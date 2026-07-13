@@ -21,6 +21,29 @@ use soma_service::ProviderError;
 use std::sync::Arc;
 use tower::ServiceExt;
 
+fn provider_tool(name: &str, description: &str, input_schema: Value) -> ProviderTool {
+    ProviderTool {
+        name: name.to_owned(),
+        description: description.to_owned(),
+        title: None,
+        input_schema,
+        output_schema: None,
+        scope: Some("soma:read".to_owned()),
+        destructive: false,
+        requires_admin: false,
+        cost: Some("cheap".to_owned()),
+        env: Vec::new(),
+        limits: None,
+        mcp: None,
+        rest: None,
+        cli: None,
+        palette: None,
+        ui: None,
+        examples: Vec::new(),
+        meta: json!({}),
+    }
+}
+
 async fn request_json(
     app: axum::Router,
     method: Method,
@@ -56,6 +79,17 @@ struct RestDynamicProvider;
 #[async_trait]
 impl Provider for RestDynamicProvider {
     fn catalog(&self) -> ProviderCatalog {
+        let weather_schema = json!({
+            "type": "object",
+            "required": ["city"],
+            "additionalProperties": false,
+            "properties": {"city": {"type": "string"}}
+        });
+        let empty_schema = json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+        });
         ProviderManifest {
             schema_version: 1,
             provider: ProviderIdentity {
@@ -68,42 +102,43 @@ impl Provider for RestDynamicProvider {
                 version: None,
                 enabled: Some(true),
             },
-            tools: vec![ProviderTool {
-                name: "weather".to_owned(),
-                description: "Fetch weather".to_owned(),
-                title: None,
-                input_schema: json!({
-                    "type": "object",
-                    "required": ["city"],
-                    "additionalProperties": false,
-                    "properties": {"city": {"type": "string"}}
-                }),
-                output_schema: None,
-                scope: Some("soma:read".to_owned()),
-                destructive: false,
-                requires_admin: false,
-                cost: Some("cheap".to_owned()),
-                env: Vec::new(),
-                limits: None,
-                mcp: None,
-                rest: Some(RestOverlay {
-                    enabled: true,
-                    method: Some("POST".to_owned()),
-                    path: Some("/v1/weather".to_owned()),
-                    tags: vec!["dynamic".to_owned()],
-                    summary: None,
-                    description: None,
-                    deprecated: false,
-                    path_params: json!({}),
-                    query_params: json!({}),
-                    request_body_schema: None,
-                }),
-                cli: None,
-                palette: None,
-                ui: None,
-                examples: Vec::new(),
-                meta: json!({}),
-            }],
+            tools: vec![
+                ProviderTool {
+                    rest: Some(RestOverlay {
+                        enabled: true,
+                        method: Some("POST".to_owned()),
+                        path: Some("/v1/weather".to_owned()),
+                        tags: vec!["dynamic".to_owned()],
+                        summary: None,
+                        description: None,
+                        deprecated: false,
+                        path_params: json!({}),
+                        query_params: json!({}),
+                        request_body_schema: None,
+                    }),
+                    ..provider_tool("weather", "Fetch weather", weather_schema)
+                },
+                provider_tool(
+                    "runtime_check",
+                    "Check the provider runtime",
+                    empty_schema.clone(),
+                ),
+                ProviderTool {
+                    rest: Some(RestOverlay {
+                        enabled: false,
+                        method: None,
+                        path: None,
+                        tags: Vec::new(),
+                        summary: None,
+                        description: None,
+                        deprecated: false,
+                        path_params: json!({}),
+                        query_params: json!({}),
+                        request_body_schema: None,
+                    }),
+                    ..provider_tool("hidden", "Hidden REST tool", empty_schema)
+                },
+            ],
             prompts: Vec::new(),
             resources: Vec::new(),
             tasks: Vec::new(),
@@ -167,6 +202,33 @@ async fn dynamic_provider_rest_route_dispatches_from_registry_snapshot() {
 }
 
 #[tokio::test]
+async fn generic_provider_tool_route_dispatches_tools_without_custom_rest_overlay() {
+    let mut state = loopback_state();
+    state.provider_registry =
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let app = server::router(state);
+    let (status, body) =
+        request_json(app, Method::POST, "/v1/tools/runtime_check", None, None).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["provider"], "dynamic-rest");
+    assert_eq!(body["action"], "runtime_check");
+}
+
+#[tokio::test]
+async fn generic_provider_tool_route_respects_explicit_rest_disable() {
+    let mut state = loopback_state();
+    state.provider_registry =
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let app = server::router(state);
+    let (status, body) =
+        request_json(app, Method::POST, "/v1/tools/hidden", None, Some(json!({}))).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "surface_not_exposed");
+}
+
+#[tokio::test]
 async fn providers_endpoint_lists_live_provider_rest_tools() {
     let mut state = loopback_state();
     state.provider_registry =
@@ -185,6 +247,18 @@ async fn providers_endpoint_lists_live_provider_rest_tools() {
         body["providers"][0]["tools"][0]["rest"]["path"],
         "/v1/weather"
     );
+    assert_eq!(body["providers"][0]["tools"][1]["name"], "runtime_check");
+    assert_eq!(
+        body["providers"][0]["tools"][1]["generic_rest"]["path"],
+        "/v1/tools/runtime_check"
+    );
+    assert_eq!(body["providers"][0]["tools"][1]["surfaces"]["rest"], true);
+    assert_eq!(body["providers"][0]["tools"][2]["name"], "hidden");
+    assert_eq!(
+        body["providers"][0]["tools"][2]["generic_rest"],
+        Value::Null
+    );
+    assert_eq!(body["providers"][0]["tools"][2]["surfaces"]["rest"], false);
 }
 
 #[test]
@@ -265,6 +339,10 @@ async fn capabilities_advertises_direct_rest_routes() {
         .as_array()
         .expect("supported_routes should be an array")
         .contains(&json!("POST /v1/echo")));
+    assert!(body["supported_routes"]
+        .as_array()
+        .expect("supported_routes should be an array")
+        .contains(&json!("POST /v1/tools/{action}")));
     assert!(!body["supported_routes"]
         .as_array()
         .expect("supported_routes should be an array")

@@ -105,6 +105,12 @@ describe("provider catalog conversion", () => {
             description: "MCP-only tool.",
             surfaces: { mcp: true, rest: false },
           },
+          {
+            name: "runtime_check",
+            description: "Check runtime.",
+            surfaces: { mcp: true, rest: true },
+            generic_rest: { enabled: true, method: "POST", path: "/v1/tools/runtime_check" },
+          },
         ],
         prompts: [{ name: "brief", description: "Brief prompt." }],
         resources: [
@@ -128,6 +134,9 @@ describe("provider catalog conversion", () => {
       ["max_words", "number", false],
     ]);
     expect(actions.filter((item) => item.id === "echo")).toHaveLength(1);
+    expect(actions.find((item) => item.id === "runtime_check")?.path).toBe(
+      "/v1/tools/runtime_check",
+    );
   });
 
   it("separates MCP-only tools, prompts, and resources for inventory display", () => {

@@ -563,6 +563,48 @@ fn openapi_paths_from_rest_index(rest_index: &HashMap<(String, String), String>)
             }
         }),
     );
+    paths.insert(
+        "/v1/providers".to_owned(),
+        json!({
+            "get": {
+                "summary": "Inspect live providers",
+                "operationId": "v1Providers",
+                "responses": {
+                    "200": {"description": "Live provider catalog and runtime inventory"}
+                }
+            }
+        }),
+    );
+    paths.insert(
+        "/v1/tools/{action}".to_owned(),
+        json!({
+            "post": {
+                "summary": "Run a provider tool",
+                "operationId": "runProviderTool",
+                "parameters": [{
+                    "name": "action",
+                    "in": "path",
+                    "required": true,
+                    "schema": {"type": "string"},
+                    "description": "Provider tool action name"
+                }],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {"type": "object", "additionalProperties": true}
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {"description": "Provider action response"},
+                    "400": {"description": "Provider validation error"},
+                    "403": {"description": "Provider authorization error"},
+                    "404": {"description": "Unknown action or surface not exposed"}
+                }
+            }
+        }),
+    );
 
     let mut routes = rest_index
         .iter()
@@ -627,32 +669,7 @@ fn enforce_call(
 }
 
 fn enforce_surface(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    let allowed = match call.surface {
-        ProviderSurface::Mcp => entry
-            .tool
-            .mcp
-            .as_ref()
-            .map(|mcp| mcp.enabled)
-            .unwrap_or(true),
-        ProviderSurface::Rest => entry
-            .tool
-            .rest
-            .as_ref()
-            .map(|rest| rest.enabled)
-            .unwrap_or(false),
-        ProviderSurface::Cli => entry
-            .tool
-            .cli
-            .as_ref()
-            .map(|cli| cli.enabled)
-            .unwrap_or(false),
-        ProviderSurface::Palette => entry
-            .tool
-            .palette
-            .as_ref()
-            .map(|palette| palette.enabled)
-            .unwrap_or(true),
-    };
+    let allowed = provider_tool_surface_enabled(&entry.tool, call.surface);
     if allowed {
         return Ok(());
     }
@@ -665,6 +682,19 @@ fn enforce_surface(entry: &ToolEntry, call: &ProviderCall) -> Result<(), Provide
             entry.action, call.surface
         ),
     ))
+}
+
+pub(super) fn provider_tool_surface_enabled(tool: &ProviderTool, surface: ProviderSurface) -> bool {
+    match surface {
+        ProviderSurface::Mcp => tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
+        ProviderSurface::Rest => tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(true),
+        ProviderSurface::Cli => tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
+        ProviderSurface::Palette => tool
+            .palette
+            .as_ref()
+            .map(|palette| palette.enabled)
+            .unwrap_or(true),
+    }
 }
 
 fn enforce_scope(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
