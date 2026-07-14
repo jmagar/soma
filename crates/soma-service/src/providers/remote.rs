@@ -249,3 +249,7 @@ fn optional_string(value: &Value, field: &str) -> Option<String> {
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
 }
+
+#[cfg(test)]
+#[path = "remote_tests.rs"]
+mod tests;
