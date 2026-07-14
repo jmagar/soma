@@ -12,8 +12,8 @@ use crate::at_rest::{TokenEncryptionKey, maybe_decrypt, maybe_encrypt};
 use crate::error::AuthError;
 use crate::types::{
     AllowedUserRow, AuthorizationCodeRow, AuthorizationRequestRow, BrowserLoginStateRow,
-    BrowserSessionRow, RefreshTokenRow, RegisteredClient, UpstreamOauthCredentialRow,
-    UpstreamOauthStateRow,
+    BrowserSessionRow, NativeAuthorizationResultRow, RefreshTokenRow, RegisteredClient,
+    UpstreamOauthCredentialRow, UpstreamOauthStateRow,
 };
 
 const UPSTREAM_OAUTH_STATE_MAX_TTL_SECS: i64 = 600;
@@ -439,6 +439,25 @@ impl SqliteStore {
         .await
     }
 
+    /// Whether any unexpired refresh token has ever been issued, for
+    /// any client. This is a single-tenant, admin-only gateway, so "someone
+    /// already completed the Google consent screen once" is a reasonable
+    /// proxy for "we don't need to force full re-consent again" without
+    /// having to know which subject is about to authenticate.
+    pub async fn has_any_refresh_token(&self) -> Result<bool, AuthError> {
+        let now = now_unix();
+        self.with_conn(move |conn| {
+            conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE expires_at > ?1)",
+                params![now],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count != 0)
+            .map_err(sqlite_error)
+        })
+        .await
+    }
+
     pub async fn upsert_browser_session(
         &self,
         session: BrowserSessionRow,
@@ -549,7 +568,17 @@ impl SqliteStore {
                     |row| row.get(0),
                 )
                 .map_err(sqlite_error)?;
-            Ok((authorization_requests + browser_login_states) as usize)
+            let native_authorization_results: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM native_authorization_results WHERE expires_at > ?1",
+                    params![now],
+                    |row| row.get(0),
+                )
+                .map_err(sqlite_error)?;
+            Ok(
+                (authorization_requests + browser_login_states + native_authorization_results)
+                    as usize,
+            )
         })
         .await
     }
@@ -575,6 +604,62 @@ impl SqliteStore {
         .await
     }
 
+    /// Store a native-flow authorization code keyed by `state`, for the
+    /// polling desktop client to retrieve via `take_native_authorization_result`.
+    ///
+    /// Last-write-wins on a `state` collision (e.g. a client retrying
+    /// `/authorize` with the same `state` after a timeout): each row is
+    /// single-use (deleted on first successful poll), so overwriting with the
+    /// newest code is correct — silently dropping the newest code instead
+    /// (`DO NOTHING`) would leave the polling client hung until the row's TTL
+    /// expires, with no error surfaced anywhere.
+    pub async fn insert_native_authorization_result(
+        &self,
+        result: NativeAuthorizationResultRow,
+    ) -> Result<(), AuthError> {
+        self.with_conn(move |conn| {
+            conn.execute(
+                "INSERT INTO native_authorization_results (state, code, created_at, expires_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(state) DO UPDATE SET
+                    code = excluded.code,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at",
+                params![
+                    result.state,
+                    result.code,
+                    result.created_at,
+                    result.expires_at,
+                ],
+            )
+            .map_err(sqlite_error)?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// One-shot read-and-delete of a pending native-flow authorization code.
+    pub async fn take_native_authorization_result(
+        &self,
+        state: &str,
+    ) -> Result<Option<NativeAuthorizationResultRow>, AuthError> {
+        let state = state.to_string();
+        let now = now_unix();
+        self.with_conn(move |conn| {
+            conn.query_row(
+                "DELETE FROM native_authorization_results
+                 WHERE state = ?1
+                   AND expires_at > ?2
+                 RETURNING state, code, created_at, expires_at",
+                params![state, now],
+                row_to_native_authorization_result,
+            )
+            .optional()
+            .map_err(sqlite_error)
+        })
+        .await
+    }
+
     /// Delete expired rows from all short-lived tables. Also drops upstream OAuth
     /// credential rows whose access token has expired AND have no refresh token
     /// available for re-use (SEC-9). Returns the total number of deleted rows.
@@ -588,6 +673,7 @@ impl SqliteStore {
                 "refresh_tokens",
                 "browser_sessions",
                 "browser_login_states",
+                "native_authorization_results",
             ] {
                 let deleted = conn
                     .execute(
@@ -1126,6 +1212,12 @@ fn open_connection(path: &Path) -> Result<Connection, AuthError> {
             created_at INTEGER NOT NULL,
             expires_at INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS native_authorization_results (
+            state TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS upstream_oauth_credentials (
             upstream_name             TEXT NOT NULL,
             subject                   TEXT NOT NULL,
@@ -1402,6 +1494,17 @@ fn row_to_browser_login_state(row: &rusqlite::Row<'_>) -> rusqlite::Result<Brows
     })
 }
 
+fn row_to_native_authorization_result(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<NativeAuthorizationResultRow> {
+    Ok(NativeAuthorizationResultRow {
+        state: row.get(0)?,
+        code: row.get(1)?,
+        created_at: row.get(2)?,
+        expires_at: row.get(3)?,
+    })
+}
+
 fn row_to_upstream_oauth_credentials(
     row: &rusqlite::Row<'_>,
 ) -> rusqlite::Result<UpstreamOauthCredentialRow> {
@@ -1512,6 +1615,45 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[tokio::test]
+    async fn has_any_refresh_token_reflects_unexpired_rows_only() {
+        let store = temp_store().await;
+        assert!(!store.has_any_refresh_token().await.unwrap());
+
+        store
+            .upsert_refresh_token(RefreshTokenRow {
+                refresh_token: "expired-refresh".to_string(),
+                client_id: "client".to_string(),
+                subject: "google-user".to_string(),
+                resource: "https://lab.example.com/mcp".to_string(),
+                scope: "lab".to_string(),
+                provider_refresh_token: None,
+                created_at: now_unix() - 300,
+                expires_at: now_unix() - 1,
+            })
+            .await
+            .unwrap();
+        assert!(
+            !store.has_any_refresh_token().await.unwrap(),
+            "an expired-only store should not count as having a refresh token"
+        );
+
+        store
+            .upsert_refresh_token(RefreshTokenRow {
+                refresh_token: "live-refresh".to_string(),
+                client_id: "client".to_string(),
+                subject: "google-user".to_string(),
+                resource: "https://lab.example.com/mcp".to_string(),
+                scope: "lab".to_string(),
+                provider_refresh_token: None,
+                created_at: now_unix(),
+                expires_at: now_unix() + 3600,
+            })
+            .await
+            .unwrap();
+        assert!(store.has_any_refresh_token().await.unwrap());
     }
 
     #[tokio::test]

@@ -11,7 +11,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `soma-auth` gained an `upstream/` module (behind the new `upstream-oauth-rmcp`
+  feature) implementing the outbound `authorization_code` + PKCE flow for
+  connecting to OAuth-protected upstream MCP servers: per-`(upstream, subject)`
+  token storage, single-flight refresh, AEAD encryption-at-rest, and a cached
+  `AuthClient` pool. It is fully self-contained — no dependency on any
+  gateway/runtime crate — via a minimal local `UpstreamConfig` shape scoped to
+  just the fields the OAuth runtime reads.
+- `soma-auth` gained an RFC 8252 §7.1-style native-app OAuth flow (behind the
+  existing `http-axum` feature): `/native/callback` and `/native/poll` routes
+  let desktop/mobile clients with no loopback listener or custom URI scheme
+  complete sign-in via a server-hosted callback and poll for the resulting
+  code.
+- `soma-auth`'s Cargo features are now split: `http-axum` gates the
+  axum/tower-based HTTP middleware and OAuth route handlers, and
+  `upstream-oauth-rmcp` gates the new outbound OAuth runtime. Both default off.
+
+### Changed
+
+- `soma-auth` no longer forces a Google re-consent screen on every dynamic
+  client registration attempt — `force_consent` is now only set the first
+  time a gateway has never issued a refresh token, avoiding a slow
+  interactive round trip that could time out impatient MCP clients on retry.
+- `soma-auth`'s default auth-database directory is now `~/.soma` instead of
+  the inherited `~/.lab`.
+
 ### Fixed
+
+- `soma-auth` error/log messages that referenced token TTL environment
+  variables no longer hardcode the `LAB_` prefix; they now interpolate the
+  configured `env_prefix` so the message matches the variable an operator
+  actually needs to set.
 
 - Restored clean-build compatibility with the dependency versions already
   pinned in `Cargo.lock`: ported schema validation to the jsonschema 0.47

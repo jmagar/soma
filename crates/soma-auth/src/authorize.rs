@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr};
 
 use axum::extract::{ConnectInfo, Query, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Redirect};
 use axum::{Json, response::Response};
 use base64::Engine;
@@ -16,15 +16,17 @@ use crate::state::AuthState;
 use crate::types::{
     AuthorizationCodeRow, AuthorizationRequestRow, AuthorizeQuery, BrowserLoginQuery,
     BrowserLoginStateRow, CallbackQuery, ClientRegistrationRequest, ClientRegistrationResponse,
-    RegisteredClient,
+    NativeAuthorizationResultRow, NativePollQuery, NativePollResponse, RegisteredClient,
 };
 use crate::util::{expires_at, fingerprint, now_unix, random_token};
 
 const AUTH_REQUEST_TTL_SECS: i64 = 300;
+const NATIVE_SUCCESS_PAGE: &str = r#"<!doctype html><html><body style="font-family:sans-serif;background:#07131c;color:#e6f4fb;text-align:center;padding-top:4rem"><h2>Signed in</h2><p>You can close this tab and return to the app.</p></body></html>"#;
+const NATIVE_CALLBACK_EXPIRED_PAGE: &str = r#"<!doctype html><html><body style="font-family:sans-serif;background:#07131c;color:#e6f4fb;text-align:center;padding-top:4rem"><h2>Sign-in link expired</h2><p>Return to the app and start sign-in again.</p></body></html>"#;
 
 /// Extract the `IpAddr` from a `SocketAddr`, normalizing IPv4-mapped IPv6
 /// addresses (`::ffff:a.b.c.d`) back to plain IPv4 so per-IP rate-limiting
-/// keys are consistent regardless of listener address family (lab-77y5.10).
+/// keys are consistent regardless of listener address family.
 fn remote_ip(addr: SocketAddr) -> IpAddr {
     match addr.ip() {
         IpAddr::V6(v6) => v6
@@ -106,6 +108,7 @@ pub async fn browser_login(
         scope: state.config.default_scope.clone(),
         code_challenge: provider_code_challenge,
         code_challenge_method: "S256".to_string(),
+        force_consent: true,
     })?;
     info!(
         oauth_state_id = %oauth_state_id,
@@ -132,15 +135,19 @@ pub async fn register_client(
             "at least one redirect URI is required".to_string(),
         ));
     }
+    let native_callback_endpoint = crate::metadata::native_callback_endpoint(&state);
     for redirect_uri in &request.redirect_uris {
-        if !is_allowed_redirect_uri(redirect_uri, &state.config.allowed_client_redirect_uris) {
+        if redirect_uri != &native_callback_endpoint
+            && !is_allowed_redirect_uri(redirect_uri, &state.config.allowed_client_redirect_uris)
+        {
             warn!(
                 redirect_uri = %redirect_uri,
+                native_callback_endpoint = %native_callback_endpoint,
                 allowed_patterns = ?state.config.allowed_client_redirect_uris,
-                "oauth register rejected: redirect URI is not in the allowlist or loopback set"
+                "oauth register rejected: redirect URI is not in the allowlist, native callback, or loopback set"
             );
             return Err(AuthError::Validation(format!(
-                "redirect URI `{redirect_uri}` must target a loopback host or match an allowed redirect pattern"
+                "redirect URI `{redirect_uri}` must target a loopback host, match the native callback endpoint, or match an allowed redirect pattern"
             )));
         }
     }
@@ -264,11 +271,19 @@ pub async fn authorize(
         })
         .await?;
 
+    // We don't know which Google subject is about to sign in until they come
+    // back from the consent screen, so use "has this gateway ever minted a
+    // refresh token before" as a single-tenant proxy for "already granted."
+    // Forcing full re-consent on every DCR client attempt (Raycast, Warp,
+    // etc.) adds an interactive round trip long enough for impatient clients
+    // to time out and retry before the human finishes clicking through it.
+    let force_consent = !state.store.has_any_refresh_token().await?;
     let location = state.google.authorize_url(&AuthorizeUrlRequest {
         state: request_state,
         scope: scope.clone(),
         code_challenge: provider_code_challenge,
         code_challenge_method: "S256".to_string(),
+        force_consent,
     })?;
     info!(
         client_id = %query.client_id,
@@ -414,7 +429,7 @@ pub async fn callback(
             expires_at: expires_at(
                 now_unix(),
                 state.config.auth_code_ttl,
-                "LAB_AUTH_CODE_TTL_SECS",
+                &format!("{}_AUTH_CODE_TTL_SECS", state.config.env_prefix),
             )?,
         })
         .await?;
@@ -427,6 +442,40 @@ pub async fn callback(
         redirect_uri = %request.redirect_uri,
         "oauth callback issued local authorization code"
     );
+
+    // Native-flow clients (desktop/mobile apps with no loopback listener or
+    // custom URI scheme) register `redirect_uri = native_callback_endpoint` —
+    // our own HTTPS route — instead of a client-hosted URL. In that case there
+    // is no redirect target to send the browser back to: stash the code keyed
+    // by `state` for the client to retrieve via `/native/poll`, and show a
+    // plain "signed in" page directly.
+    let native_callback_endpoint = crate::metadata::native_callback_endpoint(&state);
+    if request.redirect_uri == native_callback_endpoint {
+        let now = now_unix();
+        state
+            .store
+            .insert_native_authorization_result(NativeAuthorizationResultRow {
+                state: request.client_state,
+                code: auth_code,
+                created_at: now,
+                expires_at: expires_at(
+                    now,
+                    state.config.auth_code_ttl,
+                    &format!("{}_AUTH_CODE_TTL_SECS", state.config.env_prefix),
+                )?,
+            })
+            .await?;
+        let mut response = axum::response::Html(NATIVE_SUCCESS_PAGE).into_response();
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        debug!(
+            auth_code_id = %auth_code_id,
+            native_callback_endpoint = %native_callback_endpoint,
+            "oauth callback stored native authorization code for polling"
+        );
+        return Ok(response);
+    }
 
     let redirect_uri = reqwest::Url::parse(&request.redirect_uri).map_err(|error| {
         AuthError::Storage(format!(
@@ -446,6 +495,64 @@ pub async fn callback(
     );
 
     Ok(Redirect::to(redirect_uri.as_str()).into_response())
+}
+
+/// Direct-hit fallback for the registered native `redirect_uri`. In the real
+/// flow this path is never dereferenced by an actual browser redirect —
+/// Google's redirect target is always `/auth/google/callback`, which detects
+/// a native-flow authorization request and short-circuits into stashing the
+/// code for `/native/poll` instead of redirecting here. This handler only
+/// answers a stray direct visit (e.g. a stale bookmark or a misconfigured
+/// client), so `state` is validated for URL-shape consistency but
+/// deliberately not looked up — there's nothing to correlate it against.
+pub async fn native_callback(Query(query): Query<NativePollQuery>) -> Result<Response, AuthError> {
+    let state_param = query.state.trim();
+    if state_param.is_empty() {
+        return Err(AuthError::Validation(
+            "missing `state` parameter".to_string(),
+        ));
+    }
+    let mut response = (
+        StatusCode::GONE,
+        axum::response::Html(NATIVE_CALLBACK_EXPIRED_PAGE),
+    )
+        .into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(response)
+}
+
+pub async fn native_poll(
+    State(state): State<AuthState>,
+    Query(query): Query<NativePollQuery>,
+) -> Result<Response, AuthError> {
+    let state_param = query.state.trim();
+    if state_param.is_empty() {
+        return Err(AuthError::Validation(
+            "missing `state` parameter".to_string(),
+        ));
+    }
+    let mut response = if let Some(row) = state
+        .store
+        .take_native_authorization_result(state_param)
+        .await?
+    {
+        Json(NativePollResponse {
+            code: Some(row.code),
+        })
+        .into_response()
+    } else {
+        (
+            StatusCode::ACCEPTED,
+            Json(NativePollResponse { code: None }),
+        )
+            .into_response()
+    };
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(response)
 }
 
 fn sanitize_return_to(state: &AuthState, requested: Option<&str>) -> String {
@@ -619,8 +726,24 @@ fn is_loopback_redirect(value: &str) -> bool {
     matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))
 }
 
+/// Native-app private-use URI scheme redirects (RFC 8252 §7.1), e.g.
+/// `com.raycast:/oauth`. Only an app registered for that scheme with the
+/// OS can receive the redirect, so — like loopback — these don't need an
+/// explicit allowlist entry per client. Deliberately excludes `http(s)`
+/// (network-reachable, needs the allowlist) and script-executing pseudo
+/// schemes a browser might act on directly instead of merely redirecting.
+fn is_native_app_scheme_redirect(value: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(value) else {
+        return false;
+    };
+    !matches!(
+        url.scheme(),
+        "http" | "https" | "javascript" | "data" | "vbscript" | "file"
+    )
+}
+
 fn is_allowed_redirect_uri(value: &str, patterns: &[String]) -> bool {
-    if is_loopback_redirect(value) {
+    if is_loopback_redirect(value) || is_native_app_scheme_redirect(value) {
         return true;
     }
 
@@ -672,16 +795,28 @@ fn wildcard_matches(pattern: &str, value: &str) -> bool {
 }
 
 fn redirect_pattern_matches(pattern: &str, candidate: &reqwest::Url) -> bool {
-    let Ok(pattern) = reqwest::Url::parse(pattern) else {
+    if pattern == "https://*" {
+        return candidate.scheme() == "https" && candidate.host_str().is_some();
+    }
+
+    let Ok(pattern_url) = reqwest::Url::parse(pattern) else {
         return false;
     };
-    if pattern.scheme() != candidate.scheme() {
+    if pattern_url.scheme() != candidate.scheme() {
         return false;
     }
-    if pattern.port_or_known_default() != candidate.port_or_known_default() {
+
+    // Native-app custom URI schemes (e.g. `com.raycast:/oauth`) have no
+    // authority component, so `host_str()` is None and can never satisfy the
+    // host/port comparison below. Compare the whole URI instead.
+    if pattern_url.host_str().is_none() || candidate.host_str().is_none() {
+        return wildcard_matches(pattern, candidate.as_str());
+    }
+
+    if pattern_url.port_or_known_default() != candidate.port_or_known_default() {
         return false;
     }
-    let Some(pattern_host) = pattern.host_str() else {
+    let Some(pattern_host) = pattern_url.host_str() else {
         return false;
     };
     let Some(candidate_host) = candidate.host_str() else {
@@ -690,11 +825,11 @@ fn redirect_pattern_matches(pattern: &str, candidate: &reqwest::Url) -> bool {
     if !host_pattern_matches(pattern_host, candidate_host) {
         return false;
     }
-    if !wildcard_matches(pattern.path(), candidate.path()) {
+    if !wildcard_matches(pattern_url.path(), candidate.path()) {
         return false;
     }
 
-    match (pattern.query(), candidate.query()) {
+    match (pattern_url.query(), candidate.query()) {
         (Some(pattern_query), Some(candidate_query)) => {
             wildcard_matches(pattern_query, candidate_query)
         }
@@ -737,7 +872,7 @@ pub mod tests {
     use crate::config::{AuthConfig, AuthMode, GoogleConfig};
     use crate::google::GoogleProvider;
     use crate::state::AuthState;
-    use crate::types::{AuthorizationRequestRow, RegisteredClient};
+    use crate::types::{AuthorizationRequestRow, NativeAuthorizationResultRow, RegisteredClient};
 
     use crate::util::now_unix;
 
@@ -798,12 +933,40 @@ pub mod tests {
     }
 
     #[tokio::test]
-    async fn register_accepts_allowed_non_loopback_redirect_patterns() {
+    async fn register_accepts_native_callback_endpoint_without_redirect_allowlist() {
         let mut config = test_auth_config();
         config.enable_dynamic_registration = true;
-        config.allowed_client_redirect_uris =
-            vec!["https://callback.tootie.tv/callback/*".to_string()];
-        let app = router(test_auth_state_with_config(config).await);
+        let state = test_auth_state_with_config(config).await;
+        let native_callback_endpoint = crate::metadata::native_callback_endpoint(&state);
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/register")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({ "redirect_uris": [native_callback_endpoint] }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn register_rejects_native_callback_endpoint_smuggled_with_an_unsafe_redirect_uri() {
+        // The native-endpoint bypass in `register_client` is per-redirect_uri —
+        // confirm a registration that mixes the native endpoint with an
+        // otherwise-disallowed redirect_uri in the same request still fails
+        // validation for the whole request, rather than the native match
+        // short-circuiting the loop and letting the unsafe URI through.
+        let mut config = test_auth_config();
+        config.enable_dynamic_registration = true;
+        let state = test_auth_state_with_config(config).await;
+        let native_callback_endpoint = crate::metadata::native_callback_endpoint(&state);
+        let app = router(state);
         let response = app
             .oneshot(
                 Request::builder()
@@ -812,7 +975,10 @@ pub mod tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         json!({
-                            "redirect_uris": ["https://callback.tootie.tv/callback/dookie"]
+                            "redirect_uris": [
+                                native_callback_endpoint,
+                                "https://evil.example/callback",
+                            ]
                         })
                         .to_string(),
                     ))
@@ -820,7 +986,7 @@ pub mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
@@ -916,6 +1082,202 @@ pub mod tests {
     }
 
     #[tokio::test]
+    async fn native_poll_returns_202_with_no_code_for_an_unknown_state() {
+        let app = router(test_auth_state().await);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/native/poll?state=never-issued")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(json.get("code").is_none());
+    }
+
+    #[tokio::test]
+    async fn native_poll_rejects_missing_state() {
+        let app = router(test_auth_state().await);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/native/poll?state=")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[tokio::test]
+    async fn native_poll_is_one_shot_and_returns_the_code_exactly_once() {
+        let state = test_auth_state().await;
+        state
+            .store
+            .insert_native_authorization_result(NativeAuthorizationResultRow {
+                state: "poll-me".to_string(),
+                code: "the-code".to_string(),
+                created_at: now_unix(),
+                expires_at: now_unix() + 300,
+            })
+            .await
+            .unwrap();
+        let app = router(state);
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/native/poll?state=poll-me")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(first.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["code"], "the-code");
+
+        // Second poll for the same `state` must not still return the code —
+        // `take_native_authorization_result` is a one-shot read-and-delete.
+        let second = app
+            .oneshot(
+                Request::builder()
+                    .uri("/native/poll?state=poll-me")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::ACCEPTED);
+    }
+
+    #[tokio::test]
+    async fn native_callback_direct_hit_shows_expired_page_and_never_stores_a_code() {
+        let app = router(test_auth_state().await);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/native/callback?state=whatever&code=attacker-supplied")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::GONE);
+    }
+
+    #[tokio::test]
+    async fn insert_native_authorization_result_overwrites_on_state_collision() {
+        // A retried /authorize with a reused `state` must not silently lose
+        // the newer code — last-write-wins, not `DO NOTHING`.
+        let state = test_auth_state().await;
+        state
+            .store
+            .insert_native_authorization_result(NativeAuthorizationResultRow {
+                state: "collide".to_string(),
+                code: "first-code".to_string(),
+                created_at: now_unix(),
+                expires_at: now_unix() + 300,
+            })
+            .await
+            .unwrap();
+        state
+            .store
+            .insert_native_authorization_result(NativeAuthorizationResultRow {
+                state: "collide".to_string(),
+                code: "second-code".to_string(),
+                created_at: now_unix(),
+                expires_at: now_unix() + 300,
+            })
+            .await
+            .unwrap();
+        let fetched = state
+            .store
+            .take_native_authorization_result("collide")
+            .await
+            .unwrap()
+            .expect("row should still be present");
+        assert_eq!(fetched.code, "second-code");
+    }
+
+    #[tokio::test]
+    async fn callback_stores_native_flow_code_for_polling_instead_of_redirecting() {
+        let native_state = test_auth_state_with_mock_google_native().await;
+        let app = router(native_state);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/google/callback?state=native-good-state&code=upstream-code")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // The native branch never redirects the browser — it shows a static
+        // "signed in" page directly.
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body = String::from_utf8_lossy(&body);
+        assert!(body.contains("Signed in"));
+
+        let poll = app
+            .oneshot(
+                Request::builder()
+                    .uri("/native/poll?state=native-client-state")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(poll.status(), StatusCode::OK);
+        let poll_body = axum::body::to_bytes(poll.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let poll_json: serde_json::Value = serde_json::from_slice(&poll_body).unwrap();
+        assert!(poll_json["code"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn register_accepts_allowed_non_loopback_redirect_patterns() {
+        let mut config = test_auth_config();
+        config.enable_dynamic_registration = true;
+        config.allowed_client_redirect_uris =
+            vec!["https://callback.example.com/callback/*".to_string()];
+        let app = router(test_auth_state_with_config(config).await);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/register")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "redirect_uris": ["https://callback.example.com/callback/node-a"]
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn register_is_rate_limited_after_configured_burst() {
         let mut config = test_auth_config();
         config.enable_dynamic_registration = true;
@@ -963,19 +1325,22 @@ pub mod tests {
     #[test]
     fn wildcard_redirect_patterns_support_leading_and_infix_matches() {
         assert!(wildcard_matches(
-            "https://callback.tootie.tv/callback/*",
-            "https://callback.tootie.tv/callback/dookie"
+            "https://callback.example.com/callback/*",
+            "https://callback.example.com/callback/node-a"
         ));
         assert!(wildcard_matches(
-            "https://callback.*.tv/callback/*",
-            "https://callback.tootie.tv/callback/dookie"
+            "https://callback.*.com/callback/*",
+            "https://callback.example.com/callback/node-a"
         ));
         assert!(!wildcard_matches("/callback", "/callback/extra"));
     }
 
     #[test]
     fn host_patterns_support_full_label_wildcards_only() {
-        assert!(host_pattern_matches("callback.*.tv", "callback.tootie.tv"));
+        assert!(host_pattern_matches(
+            "callback.*.com",
+            "callback.example.com"
+        ));
         assert!(host_pattern_matches(
             "*.example.com",
             "callback.example.com"
@@ -993,12 +1358,65 @@ pub mod tests {
     #[test]
     fn wildcard_redirect_patterns_do_not_overmatch_similar_hosts() {
         assert!(!is_allowed_redirect_uri(
-            "https://callback.tootie.tv.evil.example/callback/dookie",
-            &[String::from("https://callback.tootie.tv/callback/*")]
+            "https://callback.example.com.evil.example/callback/node-a",
+            &[String::from("https://callback.example.com/callback/*")]
         ));
         assert!(!is_allowed_redirect_uri(
             "https://callback.example.com.evil.example/callback",
             &[String::from("https://callback.example.com*")]
+        ));
+    }
+
+    #[test]
+    fn native_app_scheme_redirect_uris_are_always_allowed() {
+        // Native-app redirects (RFC 8252 §7.1) like `com.raycast:/oauth` or
+        // `warp://mcp/oauth2callback` are scoped to whatever app the OS has
+        // registered for that private-use scheme, so — like loopback — they
+        // don't need a per-client allowlist entry.
+        assert!(is_allowed_redirect_uri("com.raycast:/oauth", &[]));
+        assert!(is_allowed_redirect_uri("warp://mcp/oauth2callback", &[]));
+        assert!(is_allowed_redirect_uri(
+            "com.raycast:/oauth",
+            &[String::from("https://callback.example.com/callback/*")]
+        ));
+    }
+
+    #[test]
+    fn script_executing_pseudo_schemes_are_never_auto_allowed() {
+        assert!(!is_allowed_redirect_uri("javascript:alert(1)", &[]));
+        assert!(!is_allowed_redirect_uri("data:text/html,evil", &[]));
+        assert!(!is_allowed_redirect_uri("file:///etc/passwd", &[]));
+    }
+
+    #[test]
+    fn https_redirects_still_require_the_allowlist() {
+        assert!(!is_allowed_redirect_uri(
+            "https://evil.example/callback",
+            &[String::from("https://callback.example.com/callback/*")]
+        ));
+        assert!(is_allowed_redirect_uri(
+            "https://callback.example.com/callback/node-a",
+            &[String::from("https://callback.example.com/callback/*")]
+        ));
+        assert!(is_allowed_redirect_uri(
+            "https://chatgpt.com/connector/oauth/test-callback-id",
+            &[String::from("https://chatgpt.com/connector/oauth/*")]
+        ));
+    }
+
+    #[test]
+    fn all_https_redirect_pattern_allows_any_https_callback_only() {
+        assert!(is_allowed_redirect_uri(
+            "https://gemini.google.com/mcp/oauth/callback",
+            &[String::from("https://*")]
+        ));
+        assert!(is_allowed_redirect_uri(
+            "https://example.deeply.nested.client.invalid/path/callback?state=ok",
+            &[String::from("https://*")]
+        ));
+        assert!(!is_allowed_redirect_uri(
+            "http://example.deeply.nested.client.invalid/path/callback",
+            &[String::from("https://*")]
         ));
     }
 
@@ -1022,6 +1440,46 @@ pub mod tests {
             .to_str()
             .unwrap();
         assert!(location.contains("accounts.google.com"));
+        assert!(location.contains("prompt=consent"));
+    }
+
+    #[tokio::test]
+    async fn authorize_omits_forced_consent_once_a_refresh_token_already_exists() {
+        let state = test_auth_state_with_registered_client().await;
+        state
+            .store
+            .upsert_refresh_token(crate::types::RefreshTokenRow {
+                refresh_token: "existing-refresh".to_string(),
+                client_id: "client".to_string(),
+                subject: "google-user".to_string(),
+                resource: "https://lab.example.com/mcp".to_string(),
+                scope: "lab".to_string(),
+                provider_refresh_token: None,
+                created_at: now_unix(),
+                expires_at: now_unix() + 3600,
+            })
+            .await
+            .unwrap();
+        let app = router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/authorize?response_type=code&client_id=client&redirect_uri=http://127.0.0.1:7777/callback&state=abc&scope=lab&code_challenge=pkce&code_challenge_method=S256")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let location = response
+            .headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("accounts.google.com"));
+        assert!(!location.contains("prompt="));
     }
 
     #[tokio::test]
@@ -1675,6 +2133,74 @@ pub mod tests {
         )
     }
 
+    /// Same mocked-Google harness as [`test_auth_state_with_mock_google`], but
+    /// the pending authorization request's `redirect_uri` is the server's own
+    /// `native_callback_endpoint` — exercising the native-flow branch of
+    /// `callback()` instead of the normal client-redirect branch.
+    async fn test_auth_state_with_mock_google_native() -> AuthState {
+        let state = test_auth_state().await;
+        let native_callback_endpoint = crate::metadata::native_callback_endpoint(&state);
+        state
+            .store
+            .register_client(RegisteredClient {
+                client_id: "native-client".to_string(),
+                redirect_uris: vec![native_callback_endpoint.clone()],
+                created_at: now_unix(),
+            })
+            .await
+            .unwrap();
+        let server = Box::leak(Box::new(MockServer::start().await));
+        Mock::given(method("POST"))
+            .and(path("/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "google-access-token",
+                "refresh_token": "refresh-token",
+                "expires_in": 3600,
+                "id_token": signed_test_id_token(),
+            })))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/certs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(test_jwks()))
+            .mount(server)
+            .await;
+        state
+            .store
+            .insert_authorization_request(AuthorizationRequestRow {
+                state: "native-good-state".to_string(),
+                client_id: "native-client".to_string(),
+                redirect_uri: native_callback_endpoint,
+                client_state: "native-client-state".to_string(),
+                resource: "https://lab.example.com/mcp".to_string(),
+                scope: "lab".to_string(),
+                provider_code_verifier: "provider-verifier".to_string(),
+                code_challenge: "challenge".to_string(),
+                code_challenge_method: "S256".to_string(),
+                created_at: now_unix(),
+                expires_at: now_unix() + 300,
+            })
+            .await
+            .unwrap();
+        let google = GoogleProvider::new(
+            "client-id".to_string(),
+            "client-secret".to_string(),
+            Url::parse("https://lab.example.com/auth/google/callback").unwrap(),
+        )
+        .unwrap()
+        .with_endpoints(
+            server.uri().parse::<Url>().unwrap(),
+            server.uri().parse::<Url>().unwrap().join("/token").unwrap(),
+        )
+        .with_jwks_endpoint(server.uri().parse::<Url>().unwrap().join("/certs").unwrap());
+        AuthState::for_tests(
+            (*state.config).clone(),
+            state.store.clone(),
+            (*state.signing_keys).clone(),
+            google,
+        )
+    }
+
     fn signed_test_id_token() -> String {
         let claims = json!({
             "iss": "https://accounts.google.com",
@@ -1976,77 +2502,6 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
             );
         }
 
-        /// RFC 9207: the authorization success response MUST carry the `iss`
-        /// parameter set to the authorization server's issuer identifier so the
-        /// client can detect authorization-server mix-up attacks.
-        #[tokio::test]
-        async fn oauth_client_callback_includes_rfc9207_iss_on_success() {
-            let mut config = test_auth_config();
-            config.admin_email = "admin@example.com".to_string();
-            let base_state = test_auth_state_with_config(config).await;
-
-            base_state
-                .store
-                .register_client(RegisteredClient {
-                    client_id: "client".to_string(),
-                    redirect_uris: vec!["http://127.0.0.1:7777/callback".to_string()],
-                    created_at: now_unix(),
-                })
-                .await
-                .unwrap();
-            base_state
-                .store
-                .add_allowed_user("user@example.com", "admin", now_unix())
-                .await
-                .unwrap();
-
-            let state = state_with_mock_google_from(&base_state).await;
-            state
-                .store
-                .insert_authorization_request(AuthorizationRequestRow {
-                    state: "oauth-state".to_string(),
-                    client_id: "client".to_string(),
-                    redirect_uri: "http://127.0.0.1:7777/callback".to_string(),
-                    client_state: "client-xyz".to_string(),
-                    resource: "https://lab.example.com/mcp".to_string(),
-                    scope: "lab".to_string(),
-                    provider_code_verifier: "provider-verifier".to_string(),
-                    code_challenge: "challenge".to_string(),
-                    code_challenge_method: "S256".to_string(),
-                    created_at: now_unix(),
-                    expires_at: now_unix() + 300,
-                })
-                .await
-                .unwrap();
-
-            let expected_iss = crate::metadata::public_base_url(&state);
-            let app = router(state);
-            let response = app
-                .oneshot(
-                    Request::builder()
-                        .uri("/auth/google/callback?state=oauth-state&code=upstream-code")
-                        .body(Body::empty())
-                        .unwrap(),
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(response.status(), StatusCode::SEE_OTHER);
-            let location = response
-                .headers()
-                .get(header::LOCATION)
-                .unwrap()
-                .to_str()
-                .unwrap();
-            let redirect = Url::parse(location).unwrap();
-            let params: std::collections::HashMap<_, _> = redirect.query_pairs().collect();
-            assert_eq!(
-                params.get("iss").map(|v| v.as_ref()),
-                Some(expected_iss.as_str()),
-                "RFC 9207 iss must equal the issuer identifier on success: {location}"
-            );
-        }
-
         /// Email not in admin or allowed_users must be rejected in the browser-login
         /// branch (401 Unauthorized).
         #[tokio::test]
@@ -2126,6 +2581,77 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
             // Must still succeed — dedup should not break the check.
             assert_eq!(response.status(), StatusCode::SEE_OTHER);
             assert!(response.headers().contains_key(header::SET_COOKIE));
+        }
+
+        /// RFC 9207: the authorization success response MUST carry the `iss`
+        /// parameter set to the authorization server's issuer identifier so the
+        /// client can detect authorization-server mix-up attacks.
+        #[tokio::test]
+        async fn oauth_client_callback_includes_rfc9207_iss_on_success() {
+            let mut config = test_auth_config();
+            config.admin_email = "admin@example.com".to_string();
+            let base_state = test_auth_state_with_config(config).await;
+
+            base_state
+                .store
+                .register_client(RegisteredClient {
+                    client_id: "client".to_string(),
+                    redirect_uris: vec!["http://127.0.0.1:7777/callback".to_string()],
+                    created_at: now_unix(),
+                })
+                .await
+                .unwrap();
+            base_state
+                .store
+                .add_allowed_user("user@example.com", "admin", now_unix())
+                .await
+                .unwrap();
+
+            let state = state_with_mock_google_from(&base_state).await;
+            state
+                .store
+                .insert_authorization_request(AuthorizationRequestRow {
+                    state: "oauth-state".to_string(),
+                    client_id: "client".to_string(),
+                    redirect_uri: "http://127.0.0.1:7777/callback".to_string(),
+                    client_state: "client-xyz".to_string(),
+                    resource: "https://lab.example.com/mcp".to_string(),
+                    scope: "lab".to_string(),
+                    provider_code_verifier: "provider-verifier".to_string(),
+                    code_challenge: "challenge".to_string(),
+                    code_challenge_method: "S256".to_string(),
+                    created_at: now_unix(),
+                    expires_at: now_unix() + 300,
+                })
+                .await
+                .unwrap();
+
+            let expected_iss = crate::metadata::public_base_url(&state);
+            let app = router(state);
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/auth/google/callback?state=oauth-state&code=upstream-code")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::SEE_OTHER);
+            let location = response
+                .headers()
+                .get(header::LOCATION)
+                .unwrap()
+                .to_str()
+                .unwrap();
+            let redirect = Url::parse(location).unwrap();
+            let params: std::collections::HashMap<_, _> = redirect.query_pairs().collect();
+            assert_eq!(
+                params.get("iss").map(|v| v.as_ref()),
+                Some(expected_iss.as_str()),
+                "RFC 9207 iss must equal the issuer identifier on success: {location}"
+            );
         }
     }
 

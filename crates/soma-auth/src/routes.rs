@@ -6,7 +6,9 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use std::time::Instant;
 
-use crate::authorize::{authorize, browser_login, callback, register_client};
+use crate::authorize::{
+    authorize, browser_login, callback, native_callback, native_poll, register_client,
+};
 use crate::error::AuthErrorKind;
 use crate::metadata::{authorization_server_metadata, jwks, protected_resource_metadata};
 use crate::state::AuthState;
@@ -31,6 +33,8 @@ pub fn router(state: AuthState) -> Router {
         .route("/authorize", get(authorize))
         .route("/auth/login", get(browser_login))
         .route("/auth/google/callback", get(callback))
+        .route("/native/callback", get(native_callback))
+        .route("/native/poll", get(native_poll))
         .route("/token", post(token));
     if enable_registration {
         app = app.route("/register", post(register_client));
@@ -39,7 +43,7 @@ pub fn router(state: AuthState) -> Router {
         .layer(middleware::from_fn(auth_dispatch_observability))
 }
 
-/// Bearer-only OAuth subset router for headless consumers (e.g. cortex).
+/// Bearer-only OAuth subset router for headless consumers.
 ///
 /// Mounts only the endpoints a non-browser MCP client needs to discover and
 /// exchange tokens — `/.well-known/*`, `/jwks`, `/authorize`,
@@ -50,7 +54,7 @@ pub fn router(state: AuthState) -> Router {
 ///   surface with no current consumer).
 /// - Any session-cookie endpoints.
 ///
-/// Use [`router`] for the full surface (lab itself).
+/// Use [`router`] for the full surface.
 pub fn bearer_only_router(state: AuthState) -> Router {
     Router::new()
         .route(
@@ -90,9 +94,15 @@ pub const BEARER_ONLY_ROUTER_PATHS: &[(&str, &str)] = &[
 ];
 
 /// Paths that must NOT be mounted by [`bearer_only_router`] — verified
-/// by the snapshot test.
-pub const BEARER_ONLY_ROUTER_FORBIDDEN_PATHS: &[(&str, &str)] =
-    &[("GET", "/auth/login"), ("POST", "/register")];
+/// by the snapshot test. Headless MCP clients have no browser to complete a
+/// native-app OAuth flow with, so `/native/callback`/`/native/poll` belong
+/// here alongside the browser-only/DCR-only endpoints.
+pub const BEARER_ONLY_ROUTER_FORBIDDEN_PATHS: &[(&str, &str)] = &[
+    ("GET", "/auth/login"),
+    ("POST", "/register"),
+    ("GET", "/native/callback"),
+    ("GET", "/native/poll"),
+];
 
 async fn auth_dispatch_observability(request: Request, next: Next) -> Response {
     let action = auth_dispatch_action(request.uri().path());
@@ -158,6 +168,8 @@ fn auth_dispatch_action(path: &str) -> &'static str {
         "/authorize" => "oauth.authorize",
         "/auth/login" => "oauth.browser_login",
         "/auth/google/callback" => "oauth.callback",
+        "/native/callback" => "oauth.native_callback",
+        "/native/poll" => "oauth.native_poll",
         "/token" => "oauth.token",
         _ if path.starts_with("/.well-known/oauth-authorization-server/") => {
             "oauth.metadata.authorization_server"

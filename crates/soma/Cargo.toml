@@ -36,7 +36,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 axum = { version = "0.8", optional = true }
 soma-runtime = { path = "../soma-runtime", default-features = false }
 soma-api = { path = "../soma-api", optional = true }
-soma-auth = { path = "../soma-auth", optional = true }
+soma-auth = { path = "../soma-auth", optional = true, features = ["http-axum"] }
 soma-cli = { path = "../soma-cli", optional = true }
 soma-contracts = { path = "../soma-contracts" }
 soma-mcp = { path = "../soma-mcp", optional = true }
