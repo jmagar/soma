@@ -19,6 +19,7 @@ pub use provider_registry::{
     ProviderRequestLimits, ProviderSurface, RegistrySnapshot,
 };
 pub use providers::filesystem::FileProviderSource;
+pub use providers::remote::RemoteCatalogProvider;
 pub use providers::static_rust::StaticRustProvider;
 pub use soma::SomaClient;
 
@@ -76,6 +77,18 @@ pub fn dynamic_provider_registry_from_dir(
         FileProviderSource::new(provider_dir),
     )
     .map_err(|error| anyhow!(error.to_string()))
+}
+
+pub async fn remote_provider_registry(service: SomaService) -> Result<ProviderRegistry> {
+    let report = service.provider_catalog().await?;
+    let providers = providers::remote::catalogs_from_inspection(&report)?
+        .into_iter()
+        .map(|catalog| {
+            std::sync::Arc::new(RemoteCatalogProvider::new(service.clone(), catalog))
+                as std::sync::Arc<dyn provider_registry::Provider>
+        })
+        .collect::<Vec<_>>();
+    ProviderRegistry::new(providers).map_err(|error| anyhow!(error.to_string()))
 }
 
 fn default_provider_dir() -> std::path::PathBuf {

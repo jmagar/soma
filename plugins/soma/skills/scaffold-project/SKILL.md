@@ -1,11 +1,12 @@
 ---
 name: scaffold-project
-description: Use this skill when the user wants to adapt soma for a new MCP server, especially after calling the scaffold_intent elicitation action. It turns the returned JSON intent into an approval-first implementation plan without directly mutating files.
+description: Use this skill when the user wants to plan a derivative Soma-shaped project/export for a new MCP server, especially after calling the scaffold_intent elicitation action. It turns the returned JSON intent into an approval-first implementation plan without directly mutating files.
 ---
 
 # Scaffold Project Skill
 
-Use this skill to turn scaffold intent JSON into a concrete, user-approved plan for adapting `soma` into a real server.
+Use this skill to turn scaffold intent JSON into a concrete, user-approved plan
+for exporting/adapting a Soma-shaped project into a real server.
 
 Canonical spec: `docs/specs/scaffold-intent-handoff.md`.
 Machine-readable contract: `docs/contracts/scaffold-intent.schema.json`.
@@ -15,7 +16,7 @@ Example payloads: `docs/contracts/examples/scaffold-intent-upstream-client.json`
 
 Use this skill when the user says they want to:
 
-- scaffold a new project from `soma`
+- scaffold/export a new project from `soma`
 - adapt Soma for a named service
 - decide whether a server should be MCP + CLI or API + CLI + MCP + Web
 - turn `scaffold_intent` JSON into an implementation plan
@@ -51,9 +52,9 @@ The tool returns an object like:
   "server_category": "upstream-client",
   "required_surfaces": ["mcp", "cli"],
   "project": {
-    "display_name": "Unraid MCP",
-    "crate_name": "unraid-mcp",
-    "binary_name": "unraid",
+    "display_name": "unraid-rmcp",
+    "crate_name": "unraid-rmcp",
+    "binary_name": "runraid",
     "service_name": "unraid",
     "env_prefix": "UNRAID"
   },
@@ -150,7 +151,7 @@ Use `runtime` to decide the server entrypoints and docs:
 | value | planning instruction |
 |---|---|
 | `binary_profile = "local-adapter"` | Plan a lightweight local binary for CLI + stdio MCP. |
-| `binary_profile = "server-full"` | Plan a full server binary for API + Web + HTTP MCP, with optional local adapter. |
+| `binary_profile = "server-full"` | Plan the canonical binary with full API + Web + HTTP MCP runtime features, plus optional local adapter behavior. |
 | `mcp_transport = "stdio"` | Plan child-process MCP only. HTTP routes may be omitted unless needed for health/ops. |
 | `mcp_transport = "http"` | Plan Streamable HTTP MCP on `runtime.host:runtime.port`. |
 | `mcp_transport = "dual"` | Plan both `mcp` stdio mode and HTTP `serve` mode. |
@@ -196,8 +197,8 @@ Always enforce the project surface policy:
 
 | Server category | Required surfaces | Examples |
 |---|---|---|
-| `upstream-client` | MCP + CLI | `unrust`, `rustifi`, `rustify`, `rustscale`, `apprise` |
-| `application-platform` | API + CLI + MCP + Web | `axon`, `lab`, `syslog` |
+| `upstream-client` | MCP + CLI | `unraid-rmcp`, `unifi-rmcp`, `gotify-rmcp`, `tailscale-rmcp`, `apprise-rmcp` |
+| `application-platform` | API + CLI + MCP + Web | `axon`, `labby`, `cortex` |
 
 For upstream-client servers, do **not** add or preserve REST/Web just because the upstream has an HTTP API. Recommend removing, ignoring, or feature-gating `apps/web` and REST handlers unless the user explicitly wants local dashboards/workflows/non-MCP consumers.
 

@@ -27,6 +27,7 @@ Generated from script header comments.
 | `scripts/generate-cli.sh` | Thin wrapper. Canonical implementation: cargo xtask generate-cli. |
 | `scripts/generate-docs.py` | Generate volatile docs and metadata from canonical Soma specs. |
 | `scripts/pre-release-check.sh` | Thin wrapper. Canonical implementation: cargo xtask pre-release-check. |
+| `scripts/readme_related_servers.py` | CUSTOMIZE: add a header comment describing this script. |
 | `scripts/refresh-docs.sh` | Thin wrapper. Canonical implementation: cargo xtask refresh-docs. |
 | `scripts/repair.sh` | Thin wrapper. Canonical implementation: cargo xtask repair. |
 | `scripts/run-ascii-check.sh` | Thin wrapper. Canonical implementation: cargo xtask run-ascii-check. |

@@ -233,12 +233,13 @@ just contract-audit
 
 ### `cargo xtask cargo-generate`
 
-Smoke-test real `cargo-generate` output plus the Rust post-generation rewrite.
-The command stages a clean Soma scaffold copy, generates both a simple server and a
-hyphenated-package server, lets the native Rhai hook record selected values,
-runs `cargo xtask cargo-generate-post` against each generated project, checks
-plugin/repository metadata, verifies scaffold-only files were removed, and runs
-`cargo check --workspace --all-targets` inside each generated project.
+Smoke-test the scaffold/export lane's `cargo-generate` output plus the Rust
+post-generation rewrite. The command stages a clean Soma scaffold copy,
+generates both a simple server and a hyphenated-package server, lets the native
+Rhai hook record selected values, runs `cargo xtask cargo-generate-post` against
+each generated project, checks plugin/repository metadata, verifies
+scaffold-only files were removed, and runs `cargo check --workspace
+--all-targets` inside each generated project.
 
 ```bash
 cargo xtask cargo-generate
@@ -250,7 +251,7 @@ generator.
 
 ### `cargo xtask scaffold`
 
-Plan, generate, or verify a new project from Soma.
+Plan, export, or verify a Soma-shaped generated project.
 
 ```bash
 cargo xtask scaffold --name myservice --category upstream-client --port auto --plan

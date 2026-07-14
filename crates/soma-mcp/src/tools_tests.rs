@@ -6,6 +6,7 @@ fn service() -> SomaService {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "test-key".to_owned(),
+        ..SomaConfig::default()
     })
     .expect("stub client should build");
     SomaService::new(client)
@@ -13,9 +14,9 @@ fn service() -> SomaService {
 
 fn upstream_input() -> ScaffoldIntentInput {
     ScaffoldIntentInput {
-        display_name: "Unraid MCP".to_owned(),
-        crate_name: "unraid-mcp".to_owned(),
-        binary_name: "unraid".to_owned(),
+        display_name: "unraid-rmcp".to_owned(),
+        crate_name: "unraid-rmcp".to_owned(),
+        binary_name: "runraid".to_owned(),
         server_category: "upstream-client".to_owned(),
         env_prefix: "unraid".to_owned(),
         auth_kind: "api key".to_owned(),

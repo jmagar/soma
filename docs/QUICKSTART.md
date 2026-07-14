@@ -14,7 +14,7 @@
 ```bash
 git clone https://github.com/jmagar/soma
 cd soma
-cargo run --bin soma-server -- serve
+cargo run --bin soma -- serve
 ```
 
 The server starts on `http://localhost:40060`. In another terminal:
@@ -74,7 +74,7 @@ openssl rand -hex 32
 Start with auth:
 
 ```bash
-SOMA_MCP_TOKEN=a3f2c1... cargo run --bin soma-server -- serve
+SOMA_MCP_TOKEN=a3f2c1... cargo run --bin soma -- serve
 ```
 
 Now all `/mcp` calls require `Authorization: Bearer a3f2c1...`:
@@ -146,7 +146,7 @@ Use this when creating a real service from soma:
 - [ ] Write `crates/soma/tests/mcporter/test-mcp.sh` with semantic validation
 - [ ] Update `plugins/<service>/skills/<service>/SKILL.md` with real API details
 - [ ] Write `install.sh` matching the GitHub release tarball names
-- [ ] Copy `.gitignore` and `.dockerignore` from syslog-mcp
+- [ ] Copy `.gitignore` and `.dockerignore` from cortex
 - [ ] Write `CHANGELOG.md`
 - [ ] Run `just symlink-docs` to create `AGENTS.md` and `GEMINI.md` symlinks
 - [ ] Write `server.json` for MCP registry

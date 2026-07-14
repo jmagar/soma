@@ -4,6 +4,7 @@ pub mod mcp;
 pub mod openapi;
 pub mod python;
 pub(crate) mod python_bridge;
+pub mod remote;
 pub(crate) mod sidecar;
 pub mod static_rust;
 pub mod wasm;

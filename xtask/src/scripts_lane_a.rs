@@ -115,14 +115,7 @@ pub fn repair() -> Result<()> {
     println!("==> Rebuilding release binary...");
     run_cmd(
         "cargo",
-        [
-            "build",
-            "--release",
-            "--bin",
-            "soma-server",
-            "--features",
-            "full",
-        ],
+        ["build", "--release", "--bin", "soma", "--features", "full"],
     )?;
 
     println!("==> Restarting...");
@@ -136,9 +129,9 @@ pub fn repair() -> Result<()> {
             [
                 "-m",
                 "755",
-                "target/release/soma-server",
+                "target/release/soma",
                 bin_dir
-                    .join("soma-server")
+                    .join("soma")
                     .to_str()
                     .context("non-UTF-8 install path")?,
             ],
@@ -150,7 +143,7 @@ pub fn repair() -> Result<()> {
         run_cmd("docker", ["compose", "up", "-d", "--force-recreate"])?;
         println!("    started docker compose service");
     } else {
-        println!("    no service manager detected; binary at target/release/soma-server");
+        println!("    no service manager detected; binary at target/release/soma");
     }
 
     println!("==> Done");

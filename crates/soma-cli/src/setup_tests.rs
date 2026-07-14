@@ -91,6 +91,7 @@ fn valid_config() -> Config {
         soma: SomaConfig {
             api_url: "https://example.test/api".into(),
             api_key: "secret with spaces".into(),
+            ..SomaConfig::default()
         },
         mcp: McpConfig {
             host: "127.0.0.1".into(),

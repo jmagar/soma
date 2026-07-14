@@ -1,7 +1,7 @@
 # cargo-generate
 
-`soma` can be used directly with `cargo-generate` while still staying a
-normal compileable Rust repository.
+Soma's scaffold/export lane can use `cargo-generate` while the repository stays
+a normal compileable Rust product.
 
 Soma avoids Liquid placeholders in live Rust and TOML files. Instead,
 `cargo-generate` copies the compileable repository, then the Rust `xtask`
@@ -46,7 +46,6 @@ cargo generate \
   --define package_name=myservice-mcp \
   --define crate_prefix=myservice \
   --define binary_name=myservice \
-  --define server_binary_name=myservice-server \
   --define service_slug=myservice \
   --define type_prefix=MyService \
   --define env_prefix=MYSERVICE \
@@ -90,7 +89,7 @@ upstream or platform implementation.
 
 ## Scaffold Verification
 
-When changing the generator, run the real cargo-generate smoke test:
+When changing scaffold/export behavior, run the cargo-generate lane smoke test:
 
 ```bash
 cargo xtask cargo-generate

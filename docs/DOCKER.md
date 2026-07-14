@@ -41,19 +41,19 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package soma --bin soma-server
+    cargo build --release --locked --package soma --bin soma
 
 # Build real binary
 COPY config/ config/
 COPY entrypoint.sh entrypoint.sh
 RUN --mount=type=cache,id=example-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=example-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked --package soma --bin soma-server --features full && \
-    cp target/release/soma-server /usr/local/bin/soma-server
+    cargo build --release --locked --package soma --bin soma --features full && \
+    cp target/release/soma /usr/local/bin/soma
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/local/bin/soma-server /usr/local/bin/soma-server
+COPY --from=builder /usr/local/bin/soma /usr/local/bin/soma
 RUN groupadd --gid 1000 example && \
     useradd --uid 1000 --gid example --no-create-home --shell /sbin/nologin example && \
     mkdir -p /data && chown example:example /data
@@ -62,7 +62,7 @@ EXPOSE 40060/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40060/health || exit 1
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["serve", "mcp"]
+CMD ["serve"]
 ```
 
 ## docker-compose.yml pattern

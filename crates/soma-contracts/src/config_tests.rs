@@ -203,3 +203,53 @@ fn auth_mode_rejects_bad_value() {
         "unknown auth mode should fail to deserialize"
     );
 }
+
+#[test]
+fn runtime_mode_auto_uses_api_url_as_compatibility_signal() {
+    let local = SomaConfig::default();
+    assert_eq!(local.effective_runtime_mode(), EffectiveRuntimeMode::Local);
+
+    let remote = SomaConfig {
+        api_url: "https://soma.example.test".into(),
+        ..SomaConfig::default()
+    };
+    assert_eq!(
+        remote.effective_runtime_mode(),
+        EffectiveRuntimeMode::Remote
+    );
+}
+
+#[test]
+fn runtime_mode_explicit_local_overrides_api_url() {
+    let config = SomaConfig {
+        api_url: "https://soma.example.test".into(),
+        runtime_mode: RuntimeMode::Local,
+        ..SomaConfig::default()
+    };
+
+    assert_eq!(config.effective_runtime_mode(), EffectiveRuntimeMode::Local);
+}
+
+#[test]
+fn runtime_mode_deserializes_remote() {
+    let mode: RuntimeMode = serde_json::from_str("\"remote\"").expect("remote should deserialize");
+    assert_eq!(mode, RuntimeMode::Remote);
+}
+
+#[test]
+#[serial]
+fn config_load_rejects_invalid_runtime_mode_env() {
+    let previous = std::env::var_os("SOMA_RUNTIME_MODE");
+    std::env::set_var("SOMA_RUNTIME_MODE", "sideways");
+
+    let result = Config::load();
+
+    match previous {
+        Some(value) => std::env::set_var("SOMA_RUNTIME_MODE", value),
+        None => std::env::remove_var("SOMA_RUNTIME_MODE"),
+    }
+    assert!(
+        result.is_err(),
+        "invalid runtime mode should fail config load"
+    );
+}

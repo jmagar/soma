@@ -41,7 +41,7 @@
       "provider_dir_env": "SOMA_PROVIDER_DIR",
       "repository": "https://github.com/jmagar/soma",
       "security_policy": "https://github.com/jmagar/soma/security/policy",
-      "server_binary": "soma-server",
+      "server_binary": "soma",
       "support_url": "https://github.com/jmagar/soma/issues",
       "surfaces": [
         "mcp",
@@ -129,7 +129,7 @@
           "isRequired": false,
           "isSecret": false,
           "name": "SOMA_API_URL",
-          "placeholder": "https://api.example.com/v1"
+          "placeholder": "https://api.example.com"
         },
         {
           "description": "Optional bearer token or upstream API key for provider-backed calls that use SomaClient. Keep secret.",

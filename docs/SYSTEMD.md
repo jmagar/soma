@@ -18,8 +18,8 @@ Soma supports user-level systemd deployments when a unit named `soma-mcp.service
 ## Install the binary
 
 ```bash
-cargo build --release --bin soma-server --features full
-install -m 755 target/release/soma-server ~/.local/bin/soma-server
+cargo build --release --bin soma --features full
+install -m 755 target/release/soma ~/.local/bin/soma
 ```
 
 Or use the install script:
@@ -44,7 +44,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/soma-server serve mcp
+ExecStart=%h/.local/bin/soma serve
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=%h/.example/.env
@@ -56,7 +56,9 @@ WantedBy=default.target
 Key points:
 - Use `EnvironmentFile` pointing at `~/.soma/.env` — never hardcode tokens in unit files.
 - `%h` expands to the user home directory.
-- `serve mcp` is the canonical Streamable HTTP mode (see `docs/DEPLOYMENT.md`).
+- `soma serve` is the canonical HTTP runtime mode. It owns the provider
+  registry, REST API, web fallback, health/status routes, and Streamable HTTP
+  MCP endpoint (see `docs/DEPLOYMENT.md`).
 
 ## Restart flow
 
@@ -75,7 +77,7 @@ systemctl --user status soma-mcp.service
 - optional `--expected-binary`
 
 ```bash
-scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/soma-server
+scripts/check-runtime-current.sh --mode systemd --expected-binary target/release/soma
 just runtime-current
 ```
 

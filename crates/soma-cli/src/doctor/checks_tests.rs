@@ -190,6 +190,7 @@ fn auth_config(host: &str) -> Config {
         soma: SomaConfig {
             api_url: "https://example.test".into(),
             api_key: "secret".into(),
+            ..SomaConfig::default()
         },
         mcp: McpConfig {
             host: host.into(),

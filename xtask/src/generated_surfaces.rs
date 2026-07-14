@@ -139,6 +139,7 @@ fn render_palette_manifest() -> Result<Value> {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
+        ..SomaConfig::default()
     })?;
     let service = SomaService::new(client);
     let registry = static_provider_registry(service)?;
@@ -165,6 +166,7 @@ fn render_provider_snapshot() -> Result<Value> {
     let client = SomaClient::new(&SomaConfig {
         api_url: String::new(),
         api_key: "xtask".to_owned(),
+        ..SomaConfig::default()
     })?;
     let service = SomaService::new(client);
     let registry = dynamic_provider_registry(service)?;
@@ -234,8 +236,8 @@ fn provider_summary(catalog: &ProviderCatalog) -> Value {
             "cli_flags": tool.cli.as_ref().map(|cli| cli.flags.clone()).unwrap_or_default(),
             "cli_default_output": tool.cli.as_ref().and_then(|cli| cli.default_output.clone()),
             "cli_usage": tool.meta.get("cli_usage").and_then(Value::as_str).map(ToOwned::to_owned),
-            "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
-            "rest_route": tool.rest.as_ref().filter(|rest| rest.enabled).map(|rest| format!("{} {}", rest.method.as_deref().unwrap_or("POST"), rest.path.clone().unwrap_or_else(|| format!("/v1/{}", tool.name)))).unwrap_or_else(|| "N/A".to_owned()),
+            "rest": rest_enabled(tool),
+            "rest_route": rest_route(tool),
             "examples": tool.examples,
             "meta": tool.meta,
         })).collect::<Vec<_>>(),
@@ -375,6 +377,9 @@ fn render_provider_skill(provider: &Value) -> Result<String> {
     render_primitive_section(&mut out, "Resources", &provider["resources"]);
     render_primitive_section(&mut out, "Tasks", &provider["tasks"]);
     render_primitive_section(&mut out, "Elicitation", &provider["elicitation"]);
+    while out.ends_with("\n\n") {
+        out.pop();
+    }
     Ok(out)
 }
 
@@ -676,7 +681,7 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
         },
         "binaries": {
             "cli": "soma",
-            "server": "soma-server"
+            "server": "soma"
         },
         "packages": {
             "npm": "soma-rmcp",
@@ -868,21 +873,33 @@ fn rest_routes(catalogs: &[ProviderCatalog]) -> Vec<String> {
     let mut routes = catalogs
         .iter()
         .flat_map(|catalog| catalog.tools.iter())
-        .filter_map(|tool| {
-            let rest = tool.rest.as_ref()?;
-            rest.enabled.then(|| {
-                format!(
-                    "{} {}",
-                    rest.method.as_deref().unwrap_or("POST"),
-                    rest.path
-                        .clone()
-                        .unwrap_or_else(|| format!("/v1/{}", tool.name))
-                )
-            })
-        })
+        .filter(|tool| rest_enabled(tool))
+        .map(rest_route)
         .collect::<Vec<_>>();
     routes.sort();
     routes
+}
+
+fn rest_enabled(tool: &soma_contracts::providers::ProviderTool) -> bool {
+    tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(true)
+}
+
+fn rest_route(tool: &soma_contracts::providers::ProviderTool) -> String {
+    let Some(rest) = tool.rest.as_ref().filter(|rest| rest.enabled) else {
+        return if rest_enabled(tool) {
+            format!("POST /v1/tools/{}", tool.name)
+        } else {
+            "N/A".to_owned()
+        };
+    };
+
+    format!(
+        "{} {}",
+        rest.method.as_deref().unwrap_or("POST"),
+        rest.path
+            .clone()
+            .unwrap_or_else(|| format!("/v1/tools/{}", tool.name))
+    )
 }
 
 fn cli_commands(catalogs: &[ProviderCatalog]) -> Vec<String> {
@@ -1057,6 +1074,10 @@ def python_add(a: int, b: int) -> int:
             "POST /v1/providers/weather-ts"
         ));
         assert!(contains_string(
+            &snapshot["surfaces"]["rest_routes"],
+            "POST /v1/tools/python_add"
+        ));
+        assert!(contains_string(
             &plugin["provider_files"],
             "providers/weather.tool.ts"
         ));
@@ -1092,6 +1113,20 @@ def python_add(a: int, b: int) -> int:
         assert!(skill.contains("## Action Reference"));
         assert!(skill.contains("Required args"));
         assert!(skill.contains("Output"));
+
+        let python_skill = render_provider_skill(
+            snapshot["providers"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|provider| provider["name"] == "python-math")
+                .unwrap(),
+        )
+        .expect("python skill");
+        assert!(python_skill.contains(
+            "| `python_add` | yes | yes | yes | `python_add` | `POST /v1/tools/python_add` |"
+        ));
+        assert!(python_skill.contains("- REST: `POST /v1/tools/python_add`"));
 
         let static_skill = render_provider_skill(
             snapshot["providers"]

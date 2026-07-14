@@ -83,12 +83,18 @@ pub async fn serve_http_mcp() -> Result<()> {
 pub async fn serve_stdio_mcp() -> Result<()> {
     let config = Config::load()?;
     let service = SomaService::new(SomaClient::new(&config.soma)?);
-    let provider_registry = soma_service::dynamic_provider_registry(service.clone())?;
+    let remote_adapter = config.soma.is_remote_adapter();
+    let provider_registry = if remote_adapter {
+        soma_service::remote_provider_registry(service.clone()).await?
+    } else {
+        soma_service::dynamic_provider_registry(service.clone())?
+    };
     let state = AppState {
         config: config.mcp,
         auth_policy: AuthPolicy::LoopbackDev,
         service,
         provider_registry,
+        remote_adapter,
         response_pages: Default::default(),
     };
     let svc = mcp::rmcp_server(state).serve(stdio()).await?;
@@ -135,6 +141,7 @@ async fn build_state(config: Config) -> Result<AppState> {
         auth_policy,
         service,
         provider_registry,
+        remote_adapter: false,
         response_pages: Default::default(),
     })
 }

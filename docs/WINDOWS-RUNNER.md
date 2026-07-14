@@ -20,9 +20,9 @@ setup used by repos derived from `soma`.
 Soma can run on GitHub-hosted runners, but this repo's Windows job is
 currently wired to the steamy self-hosted runner:
 
-- `build-linux`: `[self-hosted, tootie, rmcp-template]`, builds `target/release/soma` and `target/release/soma-server`
+- `build-linux`: `[self-hosted, tootie, rmcp-template]`, builds `target/release/soma` and `target/release/soma`
 - `build-windows`: `[self-hosted, Windows, rmcp-template, steamy]`, builds
-  `target/release/soma.exe` and `target/release/soma-server.exe`
+  `target/release/soma.exe` and `target/release/soma.exe`
 
 Both jobs are wired through `.github/workflows/ci.yml` and run when the
 path-aware `Changes` job marks native artifact checks as relevant. They upload

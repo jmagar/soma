@@ -37,7 +37,9 @@ Set `SOMA_MCP_TOKEN` in your environment or `.env` file. Clients authenticate wi
 Authorization: Bearer <token>
 ```
 
-That's all. The server validates the header on every mounted MCP and REST route, including `/mcp` and direct `/v1/*` business routes.
+That's all. The server validates the header on every mounted MCP and REST route,
+including `/mcp`, direct native `/v1/*` business routes, and provider-backed
+dynamic `/v1/*` routes.
 
 ---
 
@@ -94,7 +96,7 @@ For local development, disable auth entirely:
 
 ```bash
 just dev
-# equivalent to: SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo run --bin soma-server -- serve mcp
+# equivalent to: SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo run --bin soma -- serve
 ```
 
 `SOMA_MCP_NO_AUTH=true` is accepted only on a loopback bind. It sets the auth policy to `LoopbackDev`, removes the auth middleware, and requires no token for local calls.
@@ -138,4 +140,6 @@ Public endpoints (`/health`, `/status`) are never gated by auth, regardless of p
 
 ## CUSTOMIZE
 
-When you adapt Soma, replace all `SOMA_` prefixes with your service's prefix throughout `crates/soma-contracts/src/config.rs`, `crates/soma/src/main.rs`, and this document.
+When you adapt Soma, replace all `SOMA_` prefixes with your service's prefix
+throughout `crates/soma-contracts/src/config.rs`,
+`crates/soma/src/bin/soma.rs`, and this document.

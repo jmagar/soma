@@ -112,7 +112,7 @@ apps/web/
 
 When adapting for a real service:
 
-0. First decide whether the service should keep only MCP + CLI. If it is an upstream-client server like `unrust`, `rustifi`, `rustify`, `rustscale`, or `apprise`, remove/ignore `apps/web` unless there is a specific product need for API/Web.
+0. First decide whether the service should keep only MCP + CLI. If it is an upstream-client server like `unraid-rmcp`, `unifi-rmcp`, `gotify-rmcp`, `tailscale-rmcp`, or `apprise-rmcp`, remove/ignore `apps/web` unless there is a specific product need for API/Web.
 1. For application/platform servers, update `WEB_APP_CONFIG` in `lib/soma.ts` with your service name, display name, endpoints, and env var prefix.
 2. Update `ACTIONS` in `lib/soma.ts` to match your service's actions, parameters, scopes, and examples.
 3. Update `lib/api.ts` helper functions and response interfaces to match your service's action result shapes.

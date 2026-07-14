@@ -8,6 +8,11 @@ import re
 import sys
 from pathlib import Path
 
+from readme_related_servers import (
+    check_related_servers,
+    replace_related_servers_section,
+)
+
 
 REQUIRED_HEADINGS = [
     "Contents",
@@ -56,7 +61,6 @@ SECRET_ARGUMENT_WORDS = [
     "token",
 ]
 
-
 def normalize_heading(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
@@ -72,6 +76,15 @@ def collect_headings(text: str) -> set[str]:
 
 def line_number(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
+
+
+def write_related_servers(path: Path) -> bool:
+    text = path.read_text(encoding="utf-8")
+    updated = replace_related_servers_section(text, path)
+    if updated == text:
+        return False
+    path.write_text(updated, encoding="utf-8")
+    return True
 
 
 def check_readme(path: Path) -> list[str]:
@@ -98,6 +111,8 @@ def check_readme(path: Path) -> list[str]:
     if "generated" not in lower_text and "curated" not in lower_text:
         failures.append("name which docs are generated or curated")
 
+    failures.extend(check_related_servers(text, path))
+
     for match in re.finditer(r'"arguments"\s*:\s*\{(?P<body>.*?)\}', text, re.IGNORECASE | re.DOTALL):
         body = match.group("body").lower()
         found = [word for word in SECRET_ARGUMENT_WORDS if word in body]
@@ -110,6 +125,14 @@ def check_readme(path: Path) -> list[str]:
     return failures
 
 
+def check_related_only(path: Path) -> list[str]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [f"could not read file: {exc}"]
+    return check_related_servers(text, path)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Audit README files against docs/RMCP_README_GUIDE.md structural invariants."
@@ -120,6 +143,16 @@ def parse_args() -> argparse.Namespace:
         default=["README.md"],
         help="README paths to audit. Defaults to README.md.",
     )
+    parser.add_argument(
+        "--write-related-servers",
+        action="store_true",
+        help="Rewrite each README's Related Servers section from the canonical linked repo list before auditing.",
+    )
+    parser.add_argument(
+        "--related-only",
+        action="store_true",
+        help="Only validate the Related Servers section. Use for small npm package READMEs.",
+    )
     return parser.parse_args()
 
 
@@ -129,7 +162,22 @@ def main() -> int:
 
     for raw_path in args.paths:
         path = Path(raw_path)
-        failures = check_readme(path)
+        if args.write_related_servers:
+            try:
+                changed = write_related_servers(path)
+                if changed:
+                    print(f"WROTE: {path}")
+            except OSError as exc:
+                failed = True
+                print(f"FAIL: {path}")
+                print(f"  - could not write file: {exc}")
+                continue
+            except RuntimeError as exc:
+                failed = True
+                print(f"FAIL: {path}")
+                print(f"  - {exc}")
+                continue
+        failures = check_related_only(path) if args.related_only else check_readme(path)
         if failures:
             failed = True
             print(f"FAIL: {path}")

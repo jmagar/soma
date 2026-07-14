@@ -35,7 +35,7 @@ pub use setup::{apply_plugin_options, run_setup, SetupCommand};
 
 pub const USAGE: &str = "Usage:
   soma mcp              Start MCP stdio transport
-  soma-server [serve]   Start HTTP MCP + REST + Web server
+  soma serve            Start HTTP MCP + REST + Web server
 
   soma greet [--name NAME]       Greet NAME (or the world)
   soma echo --message MSG        Echo MSG back
@@ -217,6 +217,10 @@ where
 /// - All other commands get only `SomaConfig`; keep it that way.
 /// - Add `--json` support to each new command by forwarding a `json` flag.
 pub async fn run(cmd: Command, cfg: &SomaConfig) -> Result<()> {
+    if cfg.is_remote_adapter() && run_remote_adapter_command(&cmd, cfg).await? {
+        return Ok(());
+    }
+
     let client = SomaClient::new(cfg)?;
     let service = SomaService::new(client);
     let registry = dynamic_provider_registry(service.clone())?;
@@ -288,6 +292,25 @@ pub async fn run(cmd: Command, cfg: &SomaConfig) -> Result<()> {
 
     println!("{}", serde_json::to_string_pretty(&result)?);
     Ok(())
+}
+
+async fn run_remote_adapter_command(cmd: &Command, cfg: &SomaConfig) -> Result<bool> {
+    let client = SomaClient::new(cfg)?;
+    let remote_call = match cmd {
+        Command::Provider { command, json } => Some((command.as_str(), json.clone())),
+        Command::Providers(ProviderCommand::Test { action, json }) => {
+            Some((action.as_str(), json.clone()))
+        }
+        _ => service_action_from_command(cmd).map(|action| (action.name(), cli_params(&action))),
+    };
+
+    let Some((action, params)) = remote_call else {
+        return Ok(false);
+    };
+
+    let result = client.call_rest_action(action, params).await?;
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(true)
 }
 
 #[cfg(test)]

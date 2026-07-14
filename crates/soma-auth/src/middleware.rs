@@ -45,7 +45,7 @@ use crate::state::AuthState;
 /// Consumers that have a notion of an opaque actor identifier (lab uses an
 /// HMAC over the JWT subject for non-PII observability) build one and pass
 /// it through [`AuthLayer::with_actor_key_deriver`]. Consumers without this
-/// concept (e.g. syslog-mcp) leave it unset.
+/// concept (e.g. cortex) leave it unset.
 ///
 /// The closure receives the JWT `sub` (or `"static-bearer"` /
 /// browser-session subject) and returns a per-request [`Arc<str>`] key.

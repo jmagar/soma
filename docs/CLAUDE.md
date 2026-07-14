@@ -78,9 +78,9 @@ Do not treat seed transcripts or conversation context as sufficient evidence for
 
 ## Naming
 
-- Product identifiers are Soma-first: binaries are `soma` and `soma-server`,
+- Product identifiers are Soma-first: the canonical binary is `soma`,
   crates use the `soma-*` prefix, and runtime env vars use the `SOMA_*` prefix.
-- The pattern family is `rmcp-server`. Member servers include `lab`, `axon_rust`, `syslog-mcp`, `rustify`, `rustifi`, `apprise-mcp`, `rustscale`, `unrust`, and Soma.
+- The pattern family is `rmcp-server`. Member servers include `labby`, `axon`, `cortex`, `gotify-rmcp`, `unifi-rmcp`, `apprise-rmcp`, `tailscale-rmcp`, `unraid-rmcp`, and Soma.
 - Do not rewrite captured reference snapshots or upstream repopacks to match current naming. Those files preserve provenance.
 
 ---

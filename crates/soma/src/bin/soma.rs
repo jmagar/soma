@@ -1,9 +1,9 @@
 //! Local CLI + stdio MCP binary entry point.
 //!
-//! This is the lightweight plugin/local profile. It does not start the HTTP
-//! server; use `soma-server serve` for the full API/Web/HTTP MCP profile.
+//! The canonical Soma binary. It can run the HTTP server, stdio MCP transport,
+//! or CLI adapter depending on the explicit subcommand.
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use soma::{cli, runtime};
 
 #[tokio::main]
@@ -19,19 +19,26 @@ async fn main() -> Result<()> {
             println!("soma {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
-        [] | [_, ..] if is_http_server_request(&args) => {
-            bail!("HTTP server mode lives in `soma-server`; run `soma-server serve`")
-        }
         _ => {}
     }
 
     let stdio_mode = matches!(args.as_slice(), [c] if c == "mcp");
+    let serve_mode = is_http_server_request(&args);
     // Load ~/.soma/.env (or SOMA_HOME/.env) for local CLI/plugin runs before
     // any command loads typed config. Explicit process env still wins.
     soma::config::load_dotenv();
-    runtime::init_logging(stdio_mode, false);
+    runtime::init_logging(stdio_mode, serve_mode);
 
-    if stdio_mode {
+    if serve_mode {
+        #[cfg(feature = "mcp-http")]
+        {
+            runtime::serve_http_mcp().await
+        }
+        #[cfg(not(feature = "mcp-http"))]
+        {
+            anyhow::bail!("`soma serve` requires the `mcp-http` or `server` feature")
+        }
+    } else if stdio_mode {
         runtime::serve_stdio_mcp().await
     } else {
         runtime::run_cli().await
@@ -39,9 +46,7 @@ async fn main() -> Result<()> {
 }
 
 fn is_http_server_request(args: &[String]) -> bool {
-    args.is_empty()
-        || matches!(args, [c] if c == "serve")
-        || matches!(args, [a, b] if a == "serve" && b == "mcp")
+    matches!(args, [c] if c == "serve") || matches!(args, [a, b] if a == "serve" && b == "mcp")
 }
 
 #[cfg(test)]

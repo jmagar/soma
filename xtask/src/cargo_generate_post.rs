@@ -34,7 +34,6 @@ struct Values {
     crate_prefix: String,
     crate_prefix_snake: String,
     binary_name: String,
-    server_binary_name: String,
     service_slug: String,
     type_prefix: String,
     env_prefix: String,
@@ -53,7 +52,6 @@ struct GeneratedValues {
     package_name: String,
     crate_prefix: String,
     binary_name: String,
-    server_binary_name: String,
     service_slug: String,
     type_prefix: String,
     env_prefix: String,
@@ -98,7 +96,6 @@ impl Values {
         validate_slug("package_name", &input.package_name)?;
         validate_slug("crate_prefix", &input.crate_prefix)?;
         validate_slug("binary_name", &input.binary_name)?;
-        validate_slug("server_binary_name", &input.server_binary_name)?;
         validate_identifier("service_slug", &input.service_slug)?;
         validate_type_prefix(&input.type_prefix)?;
         validate_env_prefix(&input.env_prefix)?;
@@ -126,7 +123,6 @@ impl Values {
             crate_name: input.package_name,
             crate_prefix: input.crate_prefix,
             binary_name: input.binary_name,
-            server_binary_name: input.server_binary_name,
             service_slug: input.service_slug,
             type_prefix: input.type_prefix,
             env_prefix: input.env_prefix,
@@ -315,7 +311,28 @@ fn replacements(values: &Values) -> Vec<(String, String)> {
             "\"name\": \"soma-mcp\"".into(),
             format!("\"name\": \"{}\"", values.crate_name),
         ),
-        ("soma-server".into(), values.server_binary_name.clone()),
+        (
+            "[package]\nname = \"soma\"".into(),
+            format!("[package]\nname = \"{}\"", values.crate_name),
+        ),
+        (
+            "name = \"soma\"\npath = \"src/bin/soma.rs\"".into(),
+            format!(
+                "name = \"{}\"\npath = \"src/bin/{}.rs\"",
+                values.binary_name, values.binary_name
+            ),
+        ),
+        (
+            "soma = { path = \".\", package = \"soma\", features = [\"test-support\"] }".into(),
+            format!(
+                "{} = {{ path = \".\", package = \"{}\", features = [\"test-support\"] }}",
+                values.crate_name_snake, values.crate_name
+            ),
+        ),
+        (
+            "CARGO_BIN_EXE_soma".into(),
+            format!("CARGO_BIN_EXE_{}", values.binary_name),
+        ),
         (
             "default = [\"full\"]".into(),
             format!("default = [{}]", values.default_feature_array),
@@ -339,12 +356,11 @@ fn replacements(values: &Values) -> Vec<(String, String)> {
         ("SomaClient".into(), format!("{}Client", values.type_prefix)),
         ("SomaConfig".into(), format!("{}Config", values.type_prefix)),
         ("SomaAction".into(), format!("{}Action", values.type_prefix)),
-        ("soma-server".into(), values.server_binary_name.clone()),
         (
             "crates/soma/src/bin/soma.rs".into(),
             format!(
                 "crates/{}/src/bin/{}.rs",
-                values.crate_name, values.binary_name
+                values.crate_name_snake, values.binary_name
             ),
         ),
         ("soma:read".into(), format!("{}:read", values.scope_prefix)),
@@ -360,7 +376,6 @@ fn replacements(values: &Values) -> Vec<(String, String)> {
         ("40060".into(), values.default_port.clone()),
         ("40000".into(), values.default_port.clone()),
         ("MyService".into(), values.type_prefix.clone()),
-        ("myservice-server".into(), values.server_binary_name.clone()),
         ("myservice-mcp".into(), values.crate_name.clone()),
         ("myservice".into(), values.service_slug.clone()),
         ("MYSERVICE".into(), values.env_prefix.clone()),
@@ -434,18 +449,23 @@ fn rename_path_segment(path: &Path, values: &Values) -> String {
         "soma" if path_parent_name(path).is_some_and(|parent| parent == "skills") => {
             values.binary_name.clone()
         }
+        "soma" if path_parent_name(path).is_some_and(|parent| parent == "crates") => {
+            values.crate_name_snake.clone()
+        }
         "soma" => values.crate_name.clone(),
-        "soma.rs" => format!("{}.rs", values.binary_name),
-        "soma-server" => values.server_binary_name.clone(),
+        "soma.rs" if path_parent_name(path).is_some_and(|parent| parent == "bin") => {
+            format!("{}.rs", values.binary_name)
+        }
+        "soma.rs" => format!("{}.rs", values.crate_name_snake),
         "soma-rmcp" => values.crate_name.clone(),
         "soma-rmcp.js" => format!("{}.js", values.crate_name),
-        "soma-mcp" => values.mcp_surface_crate.clone(),
-        "soma_mcp" => values.mcp_surface_crate_snake.clone(),
+        "soma-mcp" => format!("{}-mcp", values.crate_name_snake),
+        "soma_mcp" => format!("{}_mcp", values.crate_name_snake),
         _ if name.starts_with("soma-") => {
-            format!("{}-{}", values.crate_prefix, &name["soma-".len()..])
+            format!("{}-{}", values.crate_name_snake, &name["soma-".len()..])
         }
         _ if name.starts_with("soma_") => {
-            format!("{}_{}", values.crate_prefix_snake, &name["soma_".len()..])
+            format!("{}_{}", values.crate_name_snake, &name["soma_".len()..])
         }
         _ => name.to_owned(),
     }
@@ -580,7 +600,6 @@ mod tests {
             crate_prefix: "myservice".to_owned(),
             crate_prefix_snake: "myservice".to_owned(),
             binary_name: "myservice".to_owned(),
-            server_binary_name: "myservice-server".to_owned(),
             service_slug: "myservice".to_owned(),
             type_prefix: "MyService".to_owned(),
             env_prefix: "MYSERVICE".to_owned(),
@@ -618,15 +637,15 @@ mod tests {
 
         assert!(fixture
             .path()
-            .join("crates/myservice-mcp/Cargo.toml")
+            .join("crates/myservice_mcp/Cargo.toml")
             .exists());
         assert!(fixture
             .path()
-            .join("crates/myservice-mcp/src/bin/myservice.rs")
+            .join("crates/myservice_mcp/src/bin/myservice.rs")
             .exists());
         assert!(fixture
             .path()
-            .join("crates/myservice-api/Cargo.toml")
+            .join("crates/myservice_mcp-api/Cargo.toml")
             .exists());
         assert!(fixture
             .path()

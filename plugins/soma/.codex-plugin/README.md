@@ -7,8 +7,9 @@
 ## What this is
 
 `plugin.json` is the Codex plugin manifest — the Codex equivalent of the Claude Code
-`.claude-plugin/plugin.json`. Both files live next to each other in `plugins/<service>/`
-and share the same MCP server connection config (`.mcp.json`).
+`.claude-plugin/plugin.json`. Both files live next to each other in
+`plugins/<service>/`; MCP registration is supplied by the client or gateway and
+should run `soma mcp` for stdio mode.
 
 ## File structure
 
@@ -19,7 +20,6 @@ plugins/soma/
   .codex-plugin/
     plugin.json     ← Codex plugin manifest (this file's sibling)
     README.md       ← You are here
-  .mcp.json         ← Shared MCP server connection config (both plugins use this)
   hooks/            ← Claude Code hooks (Claude-specific, not used by Codex)
   skills/           ← Shared skills (both Claude Code and Codex can load these)
 ```
@@ -29,14 +29,13 @@ plugins/soma/
 | Field | Description |
 |---|---|
 | `name` | CUSTOMIZE: Unique plugin identifier. Convention: `<service>-mcp`. |
-| `version` | CUSTOMIZE: Semver; keep in sync with `Cargo.toml` and `server.json`. |
 | `description` | CUSTOMIZE: One-line description for registries and `--help` output. |
 | `homepage` | CUSTOMIZE: Your project's GitHub URL. |
 | `repository` | CUSTOMIZE: Same as homepage for GitHub-hosted projects. |
 | `license` | Keep `"MIT"` unless you chose a different license. |
 | `keywords` | CUSTOMIZE: 3–6 tags for registry search. |
 | `skills` | Path to shared skills directory. Do not change — convention is `"./skills/"`. |
-| `mcpServers` | Path to shared `.mcp.json`. Do not change — both plugins use the same file. |
+| `mcpServers` | Omitted for this package; configure stdio MCP externally as `soma mcp`. |
 | `interface.displayName` | CUSTOMIZE: Human-readable name shown in Codex UI. |
 | `interface.shortDescription` | CUSTOMIZE: 50-char tagline shown in plugin listings. |
 | `interface.longDescription` | CUSTOMIZE: Full description for the detail page. |
@@ -68,11 +67,11 @@ These fields must stay in sync across files:
 
 | Field | plugin.json | Cargo.toml | server.json |
 |---|---|---|---|
-| `version` | `version` | `version` | `version` + `packages[0].version` |
 | `homepage` / `repository` | both fields | `homepage` | `repository.url` |
 
-The `scripts/check-version-sync.sh` script validates these automatically. Run it
-before tagging a release.
+Plugin manifests intentionally stay versionless. The marketplace derives plugin
+version from the git commit SHA; release version parity is checked through the
+Rust crate, release metadata, generated docs, and MCP registry files.
 
 ## brandColor choices
 

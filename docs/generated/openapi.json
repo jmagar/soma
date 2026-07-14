@@ -589,6 +589,37 @@
         ]
       }
     },
+    "/v1/providers": {
+      "get": {
+        "operationId": "getProviders",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Live provider catalog, including dropped provider tools and MCP primitives"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {}
+        ],
+        "summary": "Live provider inventory",
+        "tags": [
+          "provider-tools"
+        ]
+      }
+    },
     "/v1/status": {
       "get": {
         "description": "Direct REST route over the shared service layer.",
@@ -628,6 +659,79 @@
           "direct-rest"
         ]
       }
+    },
+    "/v1/tools/{action}": {
+      "post": {
+        "description": "Generic REST route for dropped provider tools. Tools with custom REST overlays may also expose dedicated direct routes.",
+        "operationId": "runProviderTool",
+        "parameters": [
+          {
+            "description": "Provider tool action name",
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Provider tool response"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown action or surface not exposed"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          },
+          {}
+        ],
+        "summary": "Run a provider tool",
+        "tags": [
+          "provider-tools"
+        ]
+      }
     }
   },
   "servers": [
@@ -658,6 +762,10 @@
     {
       "description": "Typed REST routes",
       "name": "direct-rest"
+    },
+    {
+      "description": "Dynamic provider inventory and generic tool execution",
+      "name": "provider-tools"
     }
   ],
   "x-soma": {
@@ -740,7 +848,7 @@
       "help"
     ],
     "security_policy": "https://github.com/jmagar/soma/security/policy",
-    "server_binary": "soma-server",
+    "server_binary": "soma",
     "source": "scripts/check-openapi.py",
     "support": "https://github.com/jmagar/soma/issues",
     "surfaces": [

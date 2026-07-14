@@ -24,7 +24,7 @@ Soma exposes fast, redacted status surfaces for humans, agents, and deployment a
 | `GET /health` | Public | Fast liveness + upstream connectivity. |
 | `GET /status` | Public | Local redacted runtime metadata. |
 | `/mcp` | Auth policy | MCP Streamable HTTP endpoint. |
-| `/v1/*` | Auth policy | Direct REST business routes. |
+| `/v1/*` | Auth policy | Direct native REST routes plus provider-backed dynamic REST routes. |
 
 `/health` must remain fast (no database calls). Return HTTP 200 even when upstream is down — use `"status": "degraded"` to signal partial failure.
 
@@ -73,7 +73,7 @@ file logging support, but dual console+file logging is not wired by default.
 Use `RUST_LOG` to control log level:
 
 ```bash
-RUST_LOG=info,rmcp=warn soma-server serve
+RUST_LOG=info,rmcp=warn soma serve
 ```
 
 Log file: one file, 10 MB cap. On overflow, truncate and restart. Never multiple files.

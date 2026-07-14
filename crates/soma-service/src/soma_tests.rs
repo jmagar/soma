@@ -25,12 +25,12 @@
 use super::*;
 use axum::{
     extract::State,
-    http::HeaderMap,
+    http::{HeaderMap, Uri},
     routing::{get, post},
     Json, Router,
 };
 use serde_json::{json, Value};
-use soma_contracts::config::SomaConfig;
+use soma_contracts::config::{RuntimeMode, SomaConfig};
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 
@@ -42,6 +42,7 @@ fn stub_config() -> SomaConfig {
         // CUSTOMIZE: Replace with your service's config struct fields.
         api_url: String::new(),
         api_key: "test-key".to_string(),
+        ..SomaConfig::default()
     }
 }
 
@@ -132,6 +133,7 @@ fn test_client_builds_with_empty_config() {
     let config = SomaConfig {
         api_url: String::new(),
         api_key: String::new(),
+        ..SomaConfig::default()
     };
     let result = SomaClient::new(&config);
     // CUSTOMIZE: Change to assert!(result.is_err()) once you add real validation
@@ -169,6 +171,7 @@ async fn test_client_forwards_actions_to_deployed_api_when_configured() {
     let client = SomaClient::new(&SomaConfig {
         api_url: base_url,
         api_key: "secret-token".to_string(),
+        ..SomaConfig::default()
     })
     .expect("remote client should build");
 
@@ -202,6 +205,88 @@ async fn test_client_forwards_actions_to_deployed_api_when_configured() {
     assert!(observed[2].body.is_null());
 }
 
+#[tokio::test]
+async fn explicit_local_runtime_mode_ignores_configured_api_url() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        runtime_mode: RuntimeMode::Local,
+    })
+    .expect("local client should build");
+
+    let greeting = client
+        .greet(Some("Ada"))
+        .await
+        .expect("local greet should use stub");
+
+    handle.abort();
+
+    assert_eq!(greeting["target"], "Ada");
+    assert_eq!(greeting["server"], "");
+    assert!(
+        observed
+            .lock()
+            .expect("observed requests should lock")
+            .is_empty(),
+        "explicit local mode must not call the configured API URL"
+    );
+}
+
+#[tokio::test]
+async fn remote_provider_action_uses_catalog_generic_route() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        runtime_mode: RuntimeMode::Remote,
+    })
+    .expect("remote client should build");
+
+    let output = client
+        .call_rest_action("weather-current", json!({"city": "Paris"}))
+        .await
+        .expect("remote provider action should succeed");
+
+    handle.abort();
+
+    assert_eq!(output["ok"], true);
+    let observed = observed.lock().expect("observed requests should lock");
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].path, "/v1/tools/weather_current");
+    assert_eq!(observed[0].body["city"], "Paris");
+}
+
+#[tokio::test]
+async fn remote_provider_action_uses_catalog_custom_route() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        runtime_mode: RuntimeMode::Remote,
+    })
+    .expect("remote client should build");
+
+    let output = client
+        .call_rest_action("ai-sdk-brief", json!({"text": "hello"}))
+        .await
+        .expect("remote provider action should succeed");
+
+    handle.abort();
+
+    assert_eq!(output["ok"], true);
+    let observed = observed.lock().expect("observed requests should lock");
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].path, "/v1/providers/ai-sdk-brief");
+    assert_eq!(observed[0].body["text"], "hello");
+}
+
 #[derive(Debug, Clone)]
 struct ObservedRequest {
     path: String,
@@ -218,6 +303,9 @@ async fn mock_deployed_api(
         .route("/v1/greet", post(mock_greet))
         .route("/v1/echo", post(mock_echo))
         .route("/v1/status", get(mock_status))
+        .route("/v1/providers", get(mock_provider_catalog))
+        .route("/v1/tools/weather_current", post(mock_provider_tool))
+        .route("/v1/providers/ai-sdk-brief", post(mock_provider_tool))
         .with_state(observed);
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -251,6 +339,74 @@ async fn mock_echo(
 async fn mock_status(State(observed): State<ObservedRequests>, headers: HeaderMap) -> Json<Value> {
     push_observed(&observed, &headers, "/v1/status", Value::Null);
     Json(json!({ "status": "remote-ok" }))
+}
+
+async fn mock_provider_catalog() -> Json<Value> {
+    Json(json!({
+        "schema_version": 1,
+        "providers": [{
+            "name": "remote-tools",
+            "kind": "ai-sdk",
+            "enabled": true,
+            "tools": [
+                {
+                    "name": "weather_current",
+                    "description": "Fetch current weather.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "city": { "type": "string" }
+                        }
+                    },
+                    "surfaces": { "mcp": true, "rest": true, "cli": true },
+                    "cli": { "enabled": true, "command": "weather-current" },
+                    "generic_rest": {
+                        "enabled": true,
+                        "method": "POST",
+                        "path": "/v1/tools/weather_current"
+                    }
+                },
+                {
+                    "name": "ai_sdk_brief",
+                    "description": "Create a brief.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": { "type": "string" }
+                        }
+                    },
+                    "surfaces": { "mcp": true, "rest": true, "cli": true },
+                    "cli": { "enabled": true, "command": "ai-sdk-brief" },
+                    "rest": {
+                        "enabled": true,
+                        "method": "POST",
+                        "path": "/v1/providers/ai-sdk-brief",
+                        "tags": [],
+                        "deprecated": false,
+                        "path_params": {},
+                        "query_params": {}
+                    },
+                    "generic_rest": {
+                        "enabled": true,
+                        "method": "POST",
+                        "path": "/v1/tools/ai_sdk_brief"
+                    }
+                }
+            ],
+            "prompts": [],
+            "resources": []
+        }]
+    }))
+}
+
+async fn mock_provider_tool(
+    State(observed): State<ObservedRequests>,
+    uri: Uri,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Json<Value> {
+    push_observed(&observed, &headers, uri.path(), body.clone());
+    Json(json!({ "ok": true }))
 }
 
 fn push_observed(observed: &ObservedRequests, headers: &HeaderMap, path: &str, body: Value) {

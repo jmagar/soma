@@ -8,7 +8,7 @@
 
 [soma]
 # Set SOMA_API_URL and SOMA_API_KEY in .env instead of committing them.
-# api_url = "https://api.example.com/v1"
+# api_url = "https://api.example.com"
 # api_key = ""
 
 [mcp]
