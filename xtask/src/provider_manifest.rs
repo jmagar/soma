@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
-use jsonschema::JSONSchema;
+use jsonschema::Validator;
 use serde_json::Value;
 use std::{fs, path::Path};
 
@@ -24,8 +24,8 @@ pub fn check() -> Result<()> {
     let root = std::env::current_dir().context("failed to read cwd")?;
     let schema_path = root.join("docs/contracts/provider-manifest.schema.json");
     let schema = load_json(&schema_path)?;
-    let compiled = JSONSchema::options()
-        .compile(&schema)
+    let compiled = jsonschema::options()
+        .build(&schema)
         .map_err(|error| anyhow!("failed to compile {}: {error}", schema_path.display()))?;
     let fixtures = root.join("docs/contracts/examples/provider-manifests");
 
@@ -70,12 +70,13 @@ fn load_json(path: &Path) -> Result<Value> {
     serde_json::from_slice(&raw).with_context(|| format!("failed to parse {}", path.display()))
 }
 
-fn validate_schema(compiled: &JSONSchema, payload: &Value, path: &Path) -> Result<()> {
-    if let Err(errors) = compiled.validate(payload) {
-        let details = errors
-            .map(|error| format!("{}: {}", error.instance_path, error))
-            .collect::<Vec<_>>()
-            .join("; ");
+fn validate_schema(compiled: &Validator, payload: &Value, path: &Path) -> Result<()> {
+    let errors = compiled
+        .iter_errors(payload)
+        .map(|error| format!("{}: {}", error.instance_path(), error))
+        .collect::<Vec<_>>();
+    if !errors.is_empty() {
+        let details = errors.join("; ");
         bail!(
             "{} failed JSON Schema validation: {}",
             path.display(),

@@ -127,6 +127,16 @@ async fn call_stdio(
     result
 }
 
+/// rmcp's streamable HTTP transport (reqwest 0.13) panics when the process has
+/// no rustls crypto provider installed; install ring once, tolerating a
+/// provider some embedder installed earlier.
+fn ensure_rustls_crypto_provider() {
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+    INSTALL.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
 async fn call_http(
     catalog: &ProviderCatalog,
     call: &ProviderCall,
@@ -134,6 +144,7 @@ async fn call_http(
     upstream: &UpstreamTool,
     params: Map<String, Value>,
 ) -> Result<rmcp::model::CallToolResult, ProviderError> {
+    ensure_rustls_crypto_provider();
     let mut config = StreamableHttpClientTransportConfig::with_uri(runtime.url.clone());
     if !runtime.headers.is_empty() {
         config = config.custom_headers(runtime.headers.clone());
