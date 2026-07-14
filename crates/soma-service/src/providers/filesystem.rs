@@ -86,22 +86,9 @@ impl FileProviderSource {
             });
         }
 
-        let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
-            path: self.root.clone(),
-            message: format!("failed to read provider directory: {source}"),
-        })?;
         let mut files = Vec::new();
 
-        for entry in entries {
-            let entry = entry.map_err(|source| FileProviderLoadError {
-                path: self.root.clone(),
-                message: format!("failed to read provider directory entry: {source}"),
-            })?;
-            let path = entry.path();
-            if !path.is_file() || !is_provider_file(&path) || is_wasm_sidecar_manifest(&path) {
-                continue;
-            }
-
+        for path in self.provider_paths()? {
             let file_name = path
                 .file_name()
                 .and_then(|name| name.to_str())

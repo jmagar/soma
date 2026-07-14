@@ -153,10 +153,13 @@ fn parses_providers_list_with_dir_and_json() {
         .expect("parse command")
         .expect("command");
 
-    assert!(matches!(
+    assert_eq!(
         command,
-        Command::Providers(ProviderCommand::List { .. })
-    ));
+        Command::Providers(ProviderCommand::List {
+            dir: Some(std::path::PathBuf::from("/tmp/providers")),
+            json: true,
+        })
+    );
 }
 
 #[test]
@@ -165,10 +168,13 @@ fn parses_providers_lint_with_dir_and_json() {
         .expect("parse command")
         .expect("command");
 
-    assert!(matches!(
+    assert_eq!(
         command,
-        Command::Providers(ProviderCommand::Lint { .. })
-    ));
+        Command::Providers(ProviderCommand::Lint {
+            dir: Some(std::path::PathBuf::from("/tmp/providers")),
+            json: true,
+        })
+    );
 }
 
 #[test]
@@ -177,10 +183,13 @@ fn parses_providers_status_with_dir_and_json() {
         .expect("parse command")
         .expect("command");
 
-    assert!(matches!(
+    assert_eq!(
         command,
-        Command::Providers(ProviderCommand::Status { .. })
-    ));
+        Command::Providers(ProviderCommand::Status {
+            dir: Some(std::path::PathBuf::from("/tmp/providers")),
+            json: true,
+        })
+    );
 }
 
 #[test]

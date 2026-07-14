@@ -34,6 +34,7 @@ pub fn run_providers_command(command: ProviderCommand) -> Result<()> {
     }
 
     if matches!(command, ProviderCommand::Lint { .. }) && report.providers_invalid > 0 {
+        let _ = std::io::Write::flush(&mut std::io::stdout());
         std::process::exit(1);
     }
 
