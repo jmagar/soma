@@ -31,7 +31,10 @@ jobs:
         # the Node this run actually uses.
         run: |
           openwiki_pkg="$(mise where npm:openwiki)/lib/node_modules/openwiki"
-          (cd "$openwiki_pkg" && npm rebuild better-sqlite3)
+          # npm rebuild silently skips install scripts not covered by npm's
+          # allowScripts policy, so run the package's install script directly
+          # (prebuild-install fetches the binding for the current Node ABI).
+          (cd "$openwiki_pkg/node_modules/better-sqlite3" && npm run install --foreground-scripts)
 
       - name: Run OpenWiki
         run: openwiki --update --print
