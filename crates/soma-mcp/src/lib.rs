@@ -30,6 +30,7 @@ mod testing {
         let client = SomaClient::new(&SomaConfig {
             api_url: String::new(),
             api_key: "test".into(),
+            ..SomaConfig::default()
         })
         .expect("stub client should always build");
         let service = SomaService::new(client);
@@ -40,6 +41,7 @@ mod testing {
             auth_policy: AuthPolicy::LoopbackDev,
             service,
             provider_registry,
+            remote_adapter: false,
             response_pages: Default::default(),
         }
     }

@@ -146,7 +146,7 @@ pub fn check_binary_in_path(binary: &str) -> DoctorCheck {
 ///
 /// # CUSTOMIZE
 /// Call this once per required variable. Add entries for every var that must be
-/// set before `soma-server serve` will work.
+/// set before `soma serve` will work.
 pub fn check_required_var(var_name: &str, value: &str) -> DoctorCheck {
     if !value.is_empty() {
         let display = redact(value);
@@ -262,12 +262,12 @@ pub async fn check_upstream(base_url: &str) -> DoctorCheck {
 
 /// Check that the configured MCP port is available (not already in use).
 ///
-/// Binding on a port that is already taken causes `soma-server serve` to fail at
+/// Binding on a port that is already taken causes `soma serve` to fail at
 /// startup. This check catches that problem before the server starts.
 ///
 /// # CUSTOMIZE
 /// Port 3000 is Soma default. Your service's port is in config.toml
-/// `[mcp] port` (e.g. 6970 for unrust, 9158 for rustify).
+/// `[mcp] port` (e.g. 6970 for unraid-rmcp, 9158 for gotify-rmcp).
 pub fn check_port_available(host: &str, port: u16) -> DoctorCheck {
     let bind = format!("{host}:{port}");
     match TcpListener::bind((host, port)) {

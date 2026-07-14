@@ -25,7 +25,7 @@ last_reviewed: "2026-06-18"
 | `just doctor` | Pre-flight environment/connectivity checks (`soma doctor`). |
 | `just build` / `just build-release` | Debug/release Rust builds. |
 | `just build-local` / `just build-local-release` | Build only the lightweight `soma` CLI + stdio MCP binary. |
-| `just build-server-release` | Build only the full `soma-server` API + Web + HTTP MCP binary. |
+| `just build-server-release` | Build only the full `soma` API + Web + HTTP MCP binary. |
 | `just build-web` | Build static Next.js web assets (`apps/web/out`). |
 | `just web-check` | Run frontend lint, typecheck, tests, and static build. |
 | `just build-full` | Build web assets then the full server release binary (CI/Docker use). |
@@ -108,7 +108,7 @@ soma-mcp v0.1.0 — environment check
   ✓ Upstream reachable: https://example.internal/api → 200 OK (42 ms)
 
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1 issue found. Fix it before running: soma-server serve
+  1 issue found. Fix it before running: soma serve
 ```
 
 Exit code 0 = ready. Exit code 1 = issues found.

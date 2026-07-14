@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, path::Path};
 
-use super::{ProviderSurface, RegistrySnapshot};
+use super::{provider_tool_surface_enabled, ProviderSurface, RegistrySnapshot};
 
 pub(super) struct ProviderRefreshEvent {
     fingerprint: String,
@@ -58,32 +58,7 @@ fn surface_actions(snapshot: &RegistrySnapshot, surface: ProviderSurface) -> Vec
         .action_index
         .iter()
         .filter_map(|(action, entry)| {
-            let allowed = match surface {
-                ProviderSurface::Mcp => entry
-                    .tool
-                    .mcp
-                    .as_ref()
-                    .map(|mcp| mcp.enabled)
-                    .unwrap_or(true),
-                ProviderSurface::Rest => entry
-                    .tool
-                    .rest
-                    .as_ref()
-                    .map(|rest| rest.enabled)
-                    .unwrap_or(false),
-                ProviderSurface::Cli => entry
-                    .tool
-                    .cli
-                    .as_ref()
-                    .map(|cli| cli.enabled)
-                    .unwrap_or(false),
-                ProviderSurface::Palette => entry
-                    .tool
-                    .palette
-                    .as_ref()
-                    .map(|palette| palette.enabled)
-                    .unwrap_or(true),
-            };
+            let allowed = provider_tool_surface_enabled(&entry.tool, surface);
             allowed.then(|| action.clone())
         })
         .collect::<Vec<_>>();

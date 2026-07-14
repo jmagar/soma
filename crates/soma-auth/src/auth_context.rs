@@ -15,7 +15,7 @@ pub struct AuthContext {
     /// Optional opaque actor key (lab-specific observability hook); produced
     /// by the [`crate::middleware::ActorKeyDeriver`] closure when one is
     /// installed on the layer. Consumers without an actor-key concept
-    /// (syslog-mcp etc.) leave this `None`.
+    /// (cortex etc.) leave this `None`.
     pub actor_key: Option<Arc<str>>,
     /// Effective scopes for this request.
     pub scopes: Vec<String>,

@@ -9,11 +9,11 @@ audience:
 scope: "soma"
 source_of_truth: true
 upstream_refs:
-  - "plugins/soma/.mcp.json"
+  - "plugins/soma/.claude-plugin/plugin.json"
+  - "plugins/soma/.codex-plugin/plugin.json"
   - "plugins/soma/gemini-extension.json"
   - "crates/soma-service/src/soma.rs"
   - "crates/soma/src/bin/soma.rs"
-  - "crates/soma/src/main.rs"
 last_reviewed: "2026-05-26"
 ---
 
@@ -23,17 +23,18 @@ This contract records the behavior required by
 [`ADR 0001`](../adr/0001-stdio-first-plugin-adapter.md). It is the stable
 checklist for Soma adopters and for services scaffolded from this repo.
 
-## Required profiles
+## Required runtime modes
 
-| Profile | Binary | Required surfaces | Intended use |
+| Mode | Command | Required surfaces | Intended use |
 |---|---|---|---|
-| Local adapter | `example` | CLI + stdio MCP | Plugin installs, local scripting, parity tests |
-| Full server | `soma-server` | REST API + Web + Streamable HTTP MCP + health/auth | Docker, systemd, gateway, remote clients |
+| Local adapter | `soma mcp` and `soma <command>` | CLI + stdio MCP | Plugin installs, local scripting, parity tests |
+| HTTP runtime | `soma serve` | REST API + Web + Streamable HTTP MCP + health/auth | Docker, systemd, gateway, remote clients |
 
 ## Plugin MCP config
 
-Claude Code and Codex share `plugins/soma/.mcp.json`. The default MCP server
-entry must be stdio-first:
+Claude Code and Codex package metadata lives in their platform manifests; live
+MCP registration is supplied by the client or gateway. The default MCP server
+entry must be stdio-first when configured:
 
 ```json
 {
@@ -72,7 +73,7 @@ The local adapter resolves its runtime mode from `SOMA_API_URL`:
 
 | `SOMA_API_URL` | Behavior |
 |---|---|
-| empty | Offline offline stub mode. Used for local smoke tests and scaffold examples. |
+| empty | Local provider/static dispatch. Used for local smoke tests and scaffold examples. |
 | set | Forward local CLI and stdio MCP business actions to the deployed API. |
 
 When forwarding, the adapter must:
@@ -115,7 +116,7 @@ transport docs:
 
 ```bash
 cargo check --bin soma --no-default-features --features local-adapter
-cargo check --bin soma-server --features full
+cargo check --bin soma --features full
 bash scripts/check-plugin-stdio-smoke.sh
 bash scripts/validate-plugin-layout.sh
 cargo test --test plugin_contract

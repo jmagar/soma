@@ -292,7 +292,7 @@ struct HttpServerGuard {
 
 impl HttpServerGuard {
     async fn spawn(cwd: &std::path::Path, port: u16) -> anyhow::Result<Self> {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_soma-server"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_soma"))
             .arg("serve")
             .current_dir(cwd)
             .env("HOME", cwd)

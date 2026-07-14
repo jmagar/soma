@@ -21,8 +21,136 @@
       "soma.provider custom section"
     ]
   },
-  "provider_fingerprint": "sha256:3be19b2149cbe295823a623c7ec548fce543d0761d7909eb9f06d402666b756b",
+  "provider_fingerprint": "sha256:15886cdadcb08343b54cdcf065b2fcb6d164a5ca76b9df464139b8ef25399e80",
   "providers": [
+    {
+      "description": "Self-contained AI SDK sidecar tools for Soma provider smoke tests.",
+      "elicitation": [],
+      "kind": "ai-sdk",
+      "name": "local-ai-sdk-tools",
+      "prompts": [],
+      "resources": [],
+      "tasks": [],
+      "title": "Local AI SDK Tools",
+      "tools": [
+        {
+          "cli": true,
+          "cli_aliases": [],
+          "cli_command": "ai-sdk-brief",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cli_usage": null,
+          "cost": null,
+          "description": "Create a compact brief from text through Soma's AI SDK sidecar runtime.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "max_words": {
+                "default": 18,
+                "description": "Maximum words in the generated brief.",
+                "maximum": 40,
+                "minimum": 4,
+                "type": "integer"
+              },
+              "text": {
+                "description": "Text to condense.",
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "mcp": true,
+          "meta": null,
+          "name": "ai_sdk_brief",
+          "output_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "brief": {
+                "type": "string"
+              },
+              "input_chars": {
+                "type": "integer"
+              },
+              "runtime": {
+                "type": "string"
+              },
+              "word_count": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "brief",
+              "word_count",
+              "input_chars",
+              "runtime"
+            ],
+            "type": "object"
+          },
+          "requires_admin": false,
+          "rest": true,
+          "rest_route": "POST /v1/providers/ai-sdk-brief",
+          "scope": null
+        }
+      ],
+      "when_to_use": null
+    },
+    {
+      "description": "Self-contained Python sidecar tools for Soma provider smoke tests.",
+      "elicitation": [],
+      "kind": "python",
+      "name": "local-python-tools",
+      "prompts": [],
+      "resources": [],
+      "tasks": [],
+      "title": "Local Python Tools",
+      "tools": [
+        {
+          "cli": true,
+          "cli_aliases": [],
+          "cli_command": "python_runtime_check",
+          "cli_default_output": null,
+          "cli_flags": [],
+          "cli_usage": null,
+          "cost": null,
+          "description": "Return a compact proof that the Python sidecar executed the provider.",
+          "destructive": false,
+          "env": [],
+          "examples": [],
+          "input_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "repeat": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "mcp": true,
+          "meta": {
+            "python": {
+              "adapter": "python"
+            }
+          },
+          "name": "python_runtime_check",
+          "output_schema": null,
+          "requires_admin": false,
+          "rest": true,
+          "rest_route": "POST /v1/tools/python_runtime_check",
+          "scope": null
+        }
+      ],
+      "when_to_use": null
+    },
     {
       "description": "Native service actions compiled into Soma.",
       "elicitation": [],
@@ -409,27 +537,35 @@
   "surfaces": {
     "claude_marketplace": ".claude-plugin/marketplace.json",
     "cli_actions": [
+      "ai_sdk_brief",
       "echo",
       "greet",
       "help",
+      "python_runtime_check",
       "status"
     ],
     "cli_commands": [
+      "ai-sdk-brief",
       "echo",
       "greet",
       "help",
+      "python_runtime_check",
       "status"
     ],
     "codex_marketplace": ".agents/plugins/marketplace.json",
     "docs": "docs/generated/provider-surfaces.md",
     "generated_skills": [
+      "docs/generated/skills/local-ai-sdk-tools/SKILL.md",
+      "docs/generated/skills/local-python-tools/SKILL.md",
       "docs/generated/skills/static-rust/SKILL.md"
     ],
     "mcp_actions": [
+      "ai_sdk_brief",
       "echo",
       "elicit_name",
       "greet",
       "help",
+      "python_runtime_check",
       "scaffold_intent",
       "status"
     ],
@@ -437,12 +573,17 @@
     "palette": "deferred until Axon tauri-palette port lands",
     "plugin": "docs/generated/plugin.json",
     "provider_dir": "providers",
-    "provider_files": [],
+    "provider_files": [
+      "providers/ai-sdk-brief.ts",
+      "providers/python-runtime-check.py"
+    ],
     "rest_routes": [
       "GET /v1/help",
       "GET /v1/status",
       "POST /v1/echo",
-      "POST /v1/greet"
+      "POST /v1/greet",
+      "POST /v1/providers/ai-sdk-brief",
+      "POST /v1/tools/python_runtime_check"
     ]
   }
 }

@@ -64,6 +64,7 @@ pub mod testing {
         let client = SomaClient::new(&SomaConfig {
             api_url: String::new(),
             api_key: "test".into(),
+            ..SomaConfig::default()
         })
         .expect("stub client should always build");
         SomaService::new(client)
@@ -80,6 +81,7 @@ pub mod testing {
             auth_policy: AuthPolicy::LoopbackDev,
             service,
             provider_registry,
+            remote_adapter: false,
             response_pages: Default::default(),
         }
     }
@@ -97,6 +99,7 @@ pub mod testing {
             auth_policy: mounted_test_policy(),
             service,
             provider_registry,
+            remote_adapter: false,
             response_pages: Default::default(),
         }
     }
@@ -121,6 +124,7 @@ pub mod testing {
             },
             service,
             provider_registry,
+            remote_adapter: false,
             response_pages: Default::default(),
         }
     }

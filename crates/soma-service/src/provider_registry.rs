@@ -206,6 +206,7 @@ struct ToolEntry {
     tool: ProviderTool,
     capabilities: HostCapabilities,
     input_validator: Arc<JSONSchema>,
+    output_validator: Option<Arc<JSONSchema>>,
 }
 
 #[derive(Clone)]
@@ -388,6 +389,7 @@ impl ProviderRegistry {
             tracing::warn!(provider, action, code, "provider call failed");
         })?;
         enforce_response_limit(&entry, &call, &output)?;
+        enforce_output_schema(&entry, &output)?;
         Ok(output)
     }
 }
@@ -430,6 +432,20 @@ fn build_snapshot(
                     )
                 })?);
             compiled_validator_count += 1;
+            let output_validator = match &tool.output_schema {
+                Some(output_schema) => {
+                    let validator =
+                        Arc::new(JSONSchema::compile(output_schema).map_err(|error| {
+                            ProviderValidationError::new(
+                                "output_schema_invalid",
+                                format!("tool `{}` has invalid output_schema: {error}", tool.name),
+                            )
+                        })?);
+                    compiled_validator_count += 1;
+                    Some(validator)
+                }
+                None => None,
+            };
             let action = tool.name.clone();
             let entry = ToolEntry {
                 provider: catalog.provider.name.clone(),
@@ -437,6 +453,7 @@ fn build_snapshot(
                 tool: tool.clone(),
                 capabilities: catalog.capabilities.clone(),
                 input_validator,
+                output_validator,
             };
             if action_index.insert(action.clone(), entry).is_some() {
                 return Err(ProviderValidationError::new(
@@ -563,6 +580,48 @@ fn openapi_paths_from_rest_index(rest_index: &HashMap<(String, String), String>)
             }
         }),
     );
+    paths.insert(
+        "/v1/providers".to_owned(),
+        json!({
+            "get": {
+                "summary": "Inspect live providers",
+                "operationId": "v1Providers",
+                "responses": {
+                    "200": {"description": "Live provider catalog and runtime inventory"}
+                }
+            }
+        }),
+    );
+    paths.insert(
+        "/v1/tools/{action}".to_owned(),
+        json!({
+            "post": {
+                "summary": "Run a provider tool",
+                "operationId": "runProviderTool",
+                "parameters": [{
+                    "name": "action",
+                    "in": "path",
+                    "required": true,
+                    "schema": {"type": "string"},
+                    "description": "Provider tool action name"
+                }],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {"type": "object", "additionalProperties": true}
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {"description": "Provider action response"},
+                    "400": {"description": "Provider validation error"},
+                    "403": {"description": "Provider authorization error"},
+                    "404": {"description": "Unknown action or surface not exposed"}
+                }
+            }
+        }),
+    );
 
     let mut routes = rest_index
         .iter()
@@ -627,32 +686,7 @@ fn enforce_call(
 }
 
 fn enforce_surface(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    let allowed = match call.surface {
-        ProviderSurface::Mcp => entry
-            .tool
-            .mcp
-            .as_ref()
-            .map(|mcp| mcp.enabled)
-            .unwrap_or(true),
-        ProviderSurface::Rest => entry
-            .tool
-            .rest
-            .as_ref()
-            .map(|rest| rest.enabled)
-            .unwrap_or(false),
-        ProviderSurface::Cli => entry
-            .tool
-            .cli
-            .as_ref()
-            .map(|cli| cli.enabled)
-            .unwrap_or(false),
-        ProviderSurface::Palette => entry
-            .tool
-            .palette
-            .as_ref()
-            .map(|palette| palette.enabled)
-            .unwrap_or(true),
-    };
+    let allowed = provider_tool_surface_enabled(&entry.tool, call.surface);
     if allowed {
         return Ok(());
     }
@@ -665,6 +699,19 @@ fn enforce_surface(entry: &ToolEntry, call: &ProviderCall) -> Result<(), Provide
             entry.action, call.surface
         ),
     ))
+}
+
+pub(super) fn provider_tool_surface_enabled(tool: &ProviderTool, surface: ProviderSurface) -> bool {
+    match surface {
+        ProviderSurface::Mcp => tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
+        ProviderSurface::Rest => tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(true),
+        ProviderSurface::Cli => tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
+        ProviderSurface::Palette => tool
+            .palette
+            .as_ref()
+            .map(|palette| palette.enabled)
+            .unwrap_or(true),
+    }
 }
 
 fn enforce_scope(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
@@ -782,4 +829,25 @@ fn enforce_response_limit(
         format!("provider response exceeded {max} bytes"),
         "Reduce the response size or add paging before exposing this provider action.",
     ))
+}
+
+fn enforce_output_schema(entry: &ToolEntry, output: &ProviderOutput) -> Result<(), ProviderError> {
+    let Some(output_validator) = &entry.output_validator else {
+        return Ok(());
+    };
+    if let Err(errors) = output_validator.validate(&output.value) {
+        let details = errors
+            .map(|error| format!("{}: {}", error.instance_path, error))
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(ProviderError::new(
+            "output_schema_failed",
+            &entry.provider,
+            Some(entry.action.clone()),
+            details,
+            "Fix the provider output or its declared output_schema, then retry.",
+        )
+        .with_phase("output_validation"));
+    }
+    Ok(())
 }

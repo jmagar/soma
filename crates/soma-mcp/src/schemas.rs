@@ -15,6 +15,8 @@ use soma_contracts::providers::{ProviderCatalog, ProviderTool};
 #[cfg(test)]
 use soma_service::StaticRustProvider;
 
+use crate::response_paging::ACTION_DISCRIMINATOR_FIELD;
+
 /// Cached JSON schema definitions (static data, built once at first call).
 #[cfg(test)]
 static TOOL_DEFINITIONS: OnceLock<Vec<Value>> = OnceLock::new();
@@ -97,6 +99,10 @@ fn action_metadata(catalogs: &[ProviderCatalog]) -> Vec<Value> {
 }
 
 fn structured_output_schema(catalogs: &[ProviderCatalog]) -> Value {
+    let action_tools = catalogs
+        .iter()
+        .flat_map(|catalog| catalog.tools.iter())
+        .collect::<Vec<_>>();
     let action_output_schemas = catalogs
         .iter()
         .flat_map(|catalog| catalog.tools.iter())
@@ -109,12 +115,133 @@ fn structured_output_schema(catalogs: &[ProviderCatalog]) -> Value {
             })
         })
         .collect::<Vec<_>>();
+    let mut output_variants = action_tools
+        .iter()
+        .map(|tool| action_output_variant_schema(tool))
+        .collect::<Vec<_>>();
+    output_variants.push(response_page_output_schema());
+    output_variants.push(tool_error_output_schema());
 
     json!({
         "type": "object",
-        "description": "Structured JSON object returned in CallToolResult.structuredContent. Exact fields vary by action; inspect x-soma-action-output-schemas and x-soma-action-metadata for per-action contracts.",
+        "description": "Structured JSON object returned in CallToolResult.structuredContent. Successful action results include _soma_action as the MCP adapter discriminator; inspect oneOf, x-soma-action-output-schemas, and x-soma-action-metadata for per-action contracts.",
         "additionalProperties": true,
+        "properties": {
+            "_soma_action": {
+                "type": "string",
+                "description": "MCP adapter discriminator identifying the invoked Soma action for successful non-paged tool results."
+            },
+            "kind": {
+                "type": "string",
+                "description": "Envelope kind for adapter responses such as paged output."
+            }
+        },
+        "oneOf": output_variants,
+        "x-soma-action-discriminator": ACTION_DISCRIMINATOR_FIELD,
         "x-soma-action-output-schemas": action_output_schemas,
+    })
+}
+
+fn action_output_variant_schema(tool: &ProviderTool) -> Value {
+    let Some(mut schema) = tool.output_schema.clone() else {
+        return loose_action_output_schema(&tool.name);
+    };
+    if add_action_discriminator_to_schema(&mut schema, &tool.name) {
+        schema
+    } else {
+        loose_action_output_schema(&tool.name)
+    }
+}
+
+fn add_action_discriminator_to_schema(schema: &mut Value, action: &str) -> bool {
+    let Some(schema_object) = schema.as_object_mut() else {
+        return false;
+    };
+    let properties = schema_object
+        .entry("properties")
+        .or_insert_with(|| Value::Object(Map::new()));
+    let Some(properties) = properties.as_object_mut() else {
+        return false;
+    };
+    properties.insert(
+        ACTION_DISCRIMINATOR_FIELD.to_owned(),
+        json!({
+            "const": action,
+            "description": format!("MCP adapter discriminator for action `{action}`."),
+        }),
+    );
+    let required = schema_object
+        .entry("required")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Some(required) = required.as_array_mut() else {
+        return false;
+    };
+    if !required
+        .iter()
+        .any(|value| value.as_str() == Some(ACTION_DISCRIMINATOR_FIELD))
+    {
+        required.push(Value::String(ACTION_DISCRIMINATOR_FIELD.to_owned()));
+    }
+    true
+}
+
+fn loose_action_output_schema(action: &str) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": true,
+        "required": [ACTION_DISCRIMINATOR_FIELD],
+        "properties": {
+            "_soma_action": {
+                "const": action,
+                "description": format!("MCP adapter discriminator for action `{action}`."),
+            }
+        }
+    })
+}
+
+fn response_page_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": true,
+        "not": { "required": [ACTION_DISCRIMINATOR_FIELD] },
+        "required": ["kind", "schema_version", "code", "content", "page"],
+        "properties": {
+            "kind": { "const": "mcp_response_page" },
+            "schema_version": { "type": "integer" },
+            "code": { "const": "response_page" },
+            "message": { "type": "string" },
+            "serialized_bytes": { "type": "integer" },
+            "max_response_bytes": { "type": "integer" },
+            "content_format": { "const": "application/json-fragment" },
+            "content": { "type": "string" },
+            "page": { "type": "object" },
+            "continuation": {
+                "type": ["object", "null"]
+            }
+        }
+    })
+}
+
+fn tool_error_output_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": true,
+        "not": { "required": [ACTION_DISCRIMINATOR_FIELD] },
+        "required": ["kind", "schema_version", "code", "message"],
+        "properties": {
+            "kind": { "const": "mcp_tool_error" },
+            "schema_version": { "type": "integer" },
+            "code": { "type": "string" },
+            "tool": { "type": "string" },
+            "provider": { "type": "string" },
+            "action": { "type": ["string", "null"] },
+            "message": { "type": "string" },
+            "retryable": { "type": "boolean" },
+            "remediation": { "type": "string" },
+            "provider_error_kind": { "type": "string" },
+            "serialized_bytes": { "type": "integer" },
+            "max_response_bytes": { "type": "integer" }
+        }
     })
 }
 

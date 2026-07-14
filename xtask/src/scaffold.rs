@@ -200,10 +200,6 @@ impl ScaffoldPlan {
         defines.insert("package_name".to_owned(), package_name.clone());
         defines.insert("crate_prefix".to_owned(), crate_prefix.clone());
         defines.insert("binary_name".to_owned(), crate_prefix.clone());
-        defines.insert(
-            "server_binary_name".to_owned(),
-            format!("{crate_prefix}-server"),
-        );
         defines.insert("service_slug".to_owned(), service_slug.clone());
         defines.insert("type_prefix".to_owned(), pascal_case(&service_slug));
         defines.insert("env_prefix".to_owned(), env_prefix(&service_slug));
@@ -267,10 +263,6 @@ impl ScaffoldPlan {
         defines.insert(
             "binary_name".to_owned(),
             payload.project.binary_name.clone(),
-        );
-        defines.insert(
-            "server_binary_name".to_owned(),
-            format!("{}-server", payload.project.binary_name),
         );
         defines.insert("service_slug".to_owned(), service_slug.clone());
         defines.insert("type_prefix".to_owned(), pascal_case(&service_slug));
@@ -1231,8 +1223,8 @@ mod tests {
           "server_category": "upstream-client",
           "required_surfaces": ["mcp", "cli"],
           "project": {
-            "display_name": "Unraid MCP",
-            "crate_name": "unraid-mcp",
+            "display_name": "unraid-rmcp",
+            "crate_name": "unraid-rmcp",
             "binary_name": "runraid",
             "service_name": "unraid",
             "env_prefix": "UNRAID"
@@ -1268,13 +1260,9 @@ mod tests {
 
         let plan = ScaffoldPlan::from_intent_json(intent).expect("plan");
 
-        assert_eq!(plan.defines.get("package_name").unwrap(), "unraid-mcp");
-        assert_eq!(plan.defines.get("crate_prefix").unwrap(), "unraid");
+        assert_eq!(plan.defines.get("package_name").unwrap(), "unraid-rmcp");
+        assert_eq!(plan.defines.get("crate_prefix").unwrap(), "unraid-rmcp");
         assert_eq!(plan.defines.get("binary_name").unwrap(), "runraid");
-        assert_eq!(
-            plan.defines.get("server_binary_name").unwrap(),
-            "runraid-server"
-        );
         assert_eq!(
             plan.defines.get("default_features").unwrap(),
             "local-adapter"

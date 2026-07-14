@@ -129,6 +129,16 @@ impl SomaService {
         self.client.status().await
     }
 
+    /// Call one direct REST action on a remote Soma HTTP server.
+    pub async fn call_rest_action(&self, action: &str, params: Value) -> Result<Value> {
+        self.client.call_rest_action(action, params).await
+    }
+
+    /// Read the live provider catalog from a remote Soma HTTP server.
+    pub async fn provider_catalog(&self) -> Result<Value> {
+        self.client.provider_catalog().await
+    }
+
     /// Readiness probe: `Ok(())` when the upstream dependency is reachable.
     /// Backs the `/readyz` route. Delegates to the client; no business logic.
     pub async fn ready(&self) -> Result<()> {
@@ -289,7 +299,7 @@ fn validate_kebab_identifier(field: &str, value: &str) -> Result<()> {
             "invalid_identifier",
             Some(leak_field_name(field)),
             format!("`{field}` must match ^[a-z][a-z0-9-]*$"),
-            "Use a lowercase kebab-case identifier such as `unraid-mcp`.",
+            "Use a lowercase kebab-case identifier such as `unraid-rmcp`.",
         )
         .with_expected_pattern("^[a-z][a-z0-9-]*$")
         .into());

@@ -104,11 +104,15 @@ async fn dispatch_non_elicitation_action(
     principal: ProviderPrincipal,
     auth_mode: ProviderAuthMode,
 ) -> anyhow::Result<Value> {
+    let params = strip_action_arg(args);
+    if state.remote_adapter {
+        return state.service.call_rest_action(action, params).await;
+    }
+
     state
         .provider_registry
         .refresh_file_providers()
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    let params = strip_action_arg(args);
     let call = ProviderCall {
         provider: String::new(),
         action: action.to_owned(),
@@ -160,11 +164,11 @@ rmcp::elicit_safe!(NameInput);
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 struct ScaffoldIntentInput {
-    /// Human-readable project name, e.g. "Unraid MCP" or "Lab Gateway"
+    /// Human-readable project name, e.g. "unraid-rmcp" or "Lab Gateway"
     display_name: String,
-    /// Cargo package name, e.g. "unraid-mcp"
+    /// Cargo package name, e.g. "unraid-rmcp"
     crate_name: String,
-    /// Binary/tool name, e.g. "unraid"
+    /// Binary/tool name, e.g. "runraid"
     binary_name: String,
     /// Server category: "upstream-client" or "application-platform"
     server_category: String,

@@ -9,10 +9,10 @@ normative Markdown checklists backed by tests and validators.
 - Contract: `plugin-stdio-adapter.md`
 - Decision record: `../adr/0001-stdio-first-plugin-adapter.md`
 
-The local plugin default is a bundled stdio MCP adapter (`soma mcp`) that can
-target a deployed platform API through `SOMA_API_URL`. The full server binary
-keeps REST API, Web, Streamable HTTP MCP, health, and auth surfaces for
-Docker/systemd/gateway deployments.
+The local plugin default is the stdio MCP adapter (`soma mcp`) that can target a
+deployed platform API through `SOMA_API_URL`. The `soma serve` runtime keeps REST
+API, Web, Streamable HTTP MCP, health, and auth surfaces for Docker, systemd, and
+gateway deployments.
 
 Validate with:
 

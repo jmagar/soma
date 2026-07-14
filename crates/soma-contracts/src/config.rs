@@ -23,7 +23,7 @@ pub struct Config {
 /// Config for the Soma runtime or deployed platform API.
 ///
 /// For application/platform servers, the local CLI + stdio MCP adapter uses
-/// `api_url` as the deployed `soma-server` API base URL. For upstream-client
+/// `api_url` as the deployed `soma serve` API base URL. For upstream-client
 /// servers, replace this with config for the actual upstream service.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -33,6 +33,41 @@ pub struct SomaConfig {
     pub api_url: String,
     /// API key or bearer token (SOMA_API_KEY).
     pub api_key: String,
+    /// Runtime adapter mode (SOMA_RUNTIME_MODE).
+    pub runtime_mode: RuntimeMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RuntimeMode {
+    /// Preserve compatibility: remote when SOMA_API_URL is set, otherwise local.
+    #[default]
+    Auto,
+    /// Execute business actions in this process.
+    Local,
+    /// Treat this binary as a client adapter for a running HTTP server.
+    Remote,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectiveRuntimeMode {
+    Local,
+    Remote,
+}
+
+impl SomaConfig {
+    pub fn effective_runtime_mode(&self) -> EffectiveRuntimeMode {
+        match self.runtime_mode {
+            RuntimeMode::Auto if self.api_url.trim().is_empty() => EffectiveRuntimeMode::Local,
+            RuntimeMode::Auto => EffectiveRuntimeMode::Remote,
+            RuntimeMode::Local => EffectiveRuntimeMode::Local,
+            RuntimeMode::Remote => EffectiveRuntimeMode::Remote,
+        }
+    }
+
+    pub fn is_remote_adapter(&self) -> bool {
+        self.effective_runtime_mode() == EffectiveRuntimeMode::Remote
+    }
 }
 
 /// MCP HTTP server configuration.
@@ -340,6 +375,21 @@ impl Config {
         // Upstream service config
         env_str("SOMA_API_URL", &mut config.soma.api_url);
         env_str("SOMA_API_KEY", &mut config.soma.api_key);
+        if let Ok(v) = std::env::var("SOMA_RUNTIME_MODE") {
+            if !v.is_empty() {
+                config.soma.runtime_mode = match v.to_lowercase().as_str() {
+                    "auto" => RuntimeMode::Auto,
+                    "local" => RuntimeMode::Local,
+                    "remote" | "api" => RuntimeMode::Remote,
+                    other => {
+                        return Err(anyhow::anyhow!(
+                            "invalid SOMA_RUNTIME_MODE {:?}: must be \"auto\", \"local\", or \"remote\"",
+                            other
+                        ));
+                    }
+                };
+            }
+        }
 
         Ok(config)
     }

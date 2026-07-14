@@ -22,7 +22,7 @@ const REQUIRED_PATTERN_FILES: &[&str] = &[
     "crates/soma-mcp/src/prompts.rs",
     "crates/soma-contracts/src/config.rs",
     "crates/soma-cli/src/lib.rs",
-    "crates/soma/src/main.rs",
+    "crates/soma/src/bin/soma.rs",
     "crates/soma/src/lib.rs",
     "crates/soma/tests/tool_dispatch.rs",
     "config.soma.toml",

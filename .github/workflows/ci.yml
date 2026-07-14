@@ -270,8 +270,8 @@ jobs:
       - name: cargo build local binary
         run: cargo build --release --locked --bin soma --no-default-features --features local-adapter
 
-      - name: cargo build server binary
-        run: cargo build --release --locked --bin soma-server --features full
+      - name: cargo build full binary
+        run: cargo build --release --locked --bin soma --features full
 
       - name: Upload Linux binary
         uses: actions/upload-artifact@v7
@@ -384,7 +384,7 @@ jobs:
 
           exit $process.ExitCode
 
-      - name: cargo build server binary
+      - name: cargo build full binary
         shell: pwsh
         env:
           RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
@@ -392,14 +392,14 @@ jobs:
           $ErrorActionPreference = "Stop"
           $process = Start-Process `
             -FilePath cargo `
-            -ArgumentList @("build", "--release", "--locked", "--bin", "soma-server", "--features", "full") `
+            -ArgumentList @("build", "--release", "--locked", "--bin", "soma", "--features", "full") `
             -NoNewWindow `
             -PassThru
 
           while (-not $process.HasExited) {
             Start-Sleep -Seconds 60
             if (-not $process.HasExited) {
-              Write-Host "Windows server binary build still running at $(Get-Date -Format o)"
+              Write-Host "Windows full binary build still running at $(Get-Date -Format o)"
             }
           }
 
@@ -450,8 +450,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
 
-      - name: Build Soma server binary
-        run: cargo build --locked --bin soma-server --features full
+      - name: Build Soma full binary
+        run: cargo build --locked --bin soma --features full
 
       - name: Start MCP server
         env:
@@ -461,7 +461,7 @@ jobs:
           RUST_LOG: info,rmcp=warn
         run: |
           set -euo pipefail
-          ./target/debug/soma-server serve mcp > /tmp/soma-mcp.log 2>&1 &
+          ./target/debug/soma serve > /tmp/soma-mcp.log 2>&1 &
           echo "$!" > /tmp/soma-mcp.pid
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:40123/health >/dev/null 2>&1; then

@@ -369,6 +369,14 @@ fn render_openapi(root: &Path) -> Result<Value> {
         "/v1/capabilities".to_owned(),
         json!({"get":{"tags":["capabilities"],"summary":"Direct REST route inventory","operationId":"getCapabilities","security":[{"BearerAuth":[]},{}],"responses":{"200":{"description":"Supported direct REST routes and metadata","content":{"application/json":{"schema":schema_ref("CapabilitiesResponse")}}},"401":{"$ref":"#/components/responses/Unauthorized"}}}}),
     );
+    paths.insert(
+        "/v1/providers".to_owned(),
+        json!({"get":{"tags":["provider-tools"],"summary":"Live provider inventory","operationId":"getProviders","security":[{"BearerAuth":[]},{}],"responses":{"200":{"description":"Live provider catalog, including dropped provider tools and MCP primitives","content":{"application/json":{"schema":{"type":"object","additionalProperties":true}}}},"401":{"$ref":"#/components/responses/Unauthorized"}}}}),
+    );
+    paths.insert(
+        "/v1/tools/{action}".to_owned(),
+        json!({"post":{"tags":["provider-tools"],"summary":"Run a provider tool","description":"Generic REST route for dropped provider tools. Tools with custom REST overlays may also expose dedicated direct routes.","operationId":"runProviderTool","security":[{"BearerAuth":[]},{}],"parameters":[{"name":"action","in":"path","required":true,"description":"Provider tool action name","schema":{"type":"string"}}],"requestBody":{"required":false,"content":{"application/json":{"schema":{"type":"object","additionalProperties":true}}}},"responses":{"200":{"description":"Provider tool response","content":{"application/json":{"schema":{"type":"object","additionalProperties":true}}}},"400":{"$ref":"#/components/responses/BadRequest"},"401":{"$ref":"#/components/responses/Unauthorized"},"403":{"$ref":"#/components/responses/Forbidden"},"404":{"description":"Unknown action or surface not exposed","content":{"application/json":{"schema":schema_ref("ErrorResponse")}}},"500":{"$ref":"#/components/responses/InternalError"}}}}),
+    );
 
     for action in &rest_actions {
         let Some((request_schema, response_schema)) = rest_schemas(&action.name) else {
@@ -468,7 +476,8 @@ fn render_openapi(root: &Path) -> Result<Value> {
         "tags": [
             {"name":"health","description":"Unauthenticated runtime probes"},
             {"name":"capabilities","description":"REST route inventory"},
-            {"name":"direct-rest","description":"Typed REST routes"}
+            {"name":"direct-rest","description":"Typed REST routes"},
+            {"name":"provider-tools","description":"Dynamic provider inventory and generic tool execution"}
         ],
         "paths": paths,
         "components": {
@@ -511,7 +520,7 @@ fn render_openapi(root: &Path) -> Result<Value> {
             "action_metadata": "crates/soma-contracts/src/actions.rs",
             "preferred_rest_style": "direct_routes",
             "binary": "soma",
-            "server_binary": "soma-server",
+            "server_binary": "soma",
             "node_package": "soma-rmcp",
             "oci_image": format!("ghcr.io/jmagar/soma:{version}"),
             "mcp_registry": "server.json",
@@ -1431,6 +1440,8 @@ fn required_openapi_paths(root: &Path) -> Result<Vec<String>> {
         "/openapi.json".to_owned(),
         "/status".to_owned(),
         "/v1/capabilities".to_owned(),
+        "/v1/providers".to_owned(),
+        "/v1/tools/{action}".to_owned(),
     ];
     paths.extend(
         action_entries(root)?

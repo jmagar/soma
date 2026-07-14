@@ -108,7 +108,7 @@ Full release confidence comes from `cargo xtask pre-release-check`, not from blo
 
 ## .gitignore rules
 
-Use the canonical `.gitignore` from syslog-mcp as the base:
+Use the canonical `.gitignore` from cortex as the base:
 
 - `.env` and `.env.*` ignored, `.env.example` committed
 - `target/` ignored

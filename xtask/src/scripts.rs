@@ -61,6 +61,7 @@ pub fn check_coupled_files(args: &[String]) -> Result<()> {
     }
     if changed_path(&changed, "crates/soma-mcp/src/schemas.rs")
         && !changed_path(&changed, "docs/MCP_SCHEMA.md")
+        && crate::scripts_lane_d::check_schema_docs(&["--check".to_owned()]).is_err()
     {
         issues.push("crates/soma-mcp/src/schemas.rs changed but docs/MCP_SCHEMA.md did not; run scripts/check-schema-docs.py --write.");
     }

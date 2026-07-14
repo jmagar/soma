@@ -125,4 +125,3 @@ Show the action reference.
 - MCP: `soma(action="help")`
 - CLI: `soma help`
 - REST: `GET /v1/help`
-

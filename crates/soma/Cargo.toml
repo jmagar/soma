@@ -1,8 +1,8 @@
 # =============================================================================
 # Cargo.toml — Facade and binary crate for the Soma project
 #
-# This crate owns the public facade plus the soma and
-# soma-server entrypoints. Implementation lives in sibling crates.
+# This crate owns the public facade plus the canonical soma entrypoint.
+# Implementation lives in sibling crates.
 # =============================================================================
 
 [package]
@@ -11,7 +11,7 @@ version = "0.4.7"
 edition = "2021"
 rust-version = "1.96"
 authors.workspace = true
-description = "Batteries-included RMCP runtime and scaffold for provider-backed Rust MCP servers with CLI, REST, HTTP MCP, and plugins."
+description = "Product-first RMCP runtime for provider-backed agent capabilities with CLI, REST, HTTP MCP, plugins, and derivative scaffold support."
 homepage.workspace = true
 keywords = ["mcp", "rmcp", "providers", "runtime", "scaffold"]
 categories = ["command-line-utilities", "development-tools"]
@@ -26,12 +26,7 @@ name = "soma"
 [[bin]]
 name = "soma"
 path = "src/bin/soma.rs"
-required-features = ["local-adapter"]
-
-[[bin]]
-name = "soma-server"
-path = "src/main.rs"
-required-features = ["server"]
+required-features = ["cli", "mcp-stdio"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -91,6 +86,7 @@ test-support = ["soma-mcp?/test-support"]
 
 [dev-dependencies]
 async-trait = "0.1"
+axum = "0.8"
 soma = { path = ".", package = "soma", features = ["test-support"] }
 soma-contracts = { path = "../soma-contracts" }
 soma-service = { path = "../soma-service" }

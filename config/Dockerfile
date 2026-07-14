@@ -3,15 +3,15 @@
 # Dockerfile — Soma RMCP server image
 #
 # CUSTOMIZE: Replace all customization placeholders with your binary name.
-#           The server binary name must match Cargo.toml [[bin]] name = "soma-server".
+#           The binary name must match Cargo.toml [[bin]] name = "soma".
 #
 # Key substitutions:
-#   "soma-server"     → your server binary name (e.g. "myservice-server")
+#   "soma"     → your binary name (e.g. "myservice")
 #   "soma-cargo-*"      → your cache mount IDs (e.g. "myservice-cargo-*")
 #   "soma"          → your systemd/Docker service name
 #   EXPOSE 40060            → your port (must match config.toml [mcp] port)
 #   HEALTHCHECK port 40060  → same as EXPOSE
-#   CMD ["serve", "mcp"]   → default args passed to the server binary
+#   CMD ["serve"]          → default args passed to the binary
 #
 # Build stages:
 #   builder  — Rust compilation with BuildKit cache mounts (fast incremental builds)
@@ -63,8 +63,8 @@ COPY --from=web /app/apps/web/out/ apps/web/out/
 RUN --mount=type=cache,id=soma-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=soma-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=soma-cargo-target,target=/app/target,sharing=locked \
-    cargo build --release --locked -p soma --bin soma-server --features full && \
-    cp target/release/soma-server /usr/local/bin/soma-server
+    cargo build --release --locked -p soma --bin soma --features full && \
+    cp target/release/soma /usr/local/bin/soma
 
 # ── Stage 3: Runtime ──────────────────────────────────────────────────────────
 # Minimal Debian image — no Rust toolchain, no build tools.
@@ -86,8 +86,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
-# CUSTOMIZE: Replace "soma-server" with your server binary name in both COPY and target path.
-COPY --from=builder /usr/local/bin/soma-server /usr/local/bin/soma-server
+# CUSTOMIZE: Replace "soma" with your binary name in both COPY and target path.
+COPY --from=builder /usr/local/bin/soma /usr/local/bin/soma
 
 # Wire in the entrypoint.
 # CUSTOMIZE: entrypoint.sh lives at the repo root. It runs as root, fixes /data
@@ -137,6 +137,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # Entrypoint handles permission setup and privilege drop.
 # CMD is the default argument passed to entrypoint.sh.
-# CUSTOMIZE: Replace "soma-server" with your server binary name in entrypoint.sh.
+# CUSTOMIZE: Replace "soma" with your binary name in entrypoint.sh.
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["serve", "mcp"]
+CMD ["serve"]

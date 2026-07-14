@@ -21,12 +21,12 @@ Soma supports three deployment modes:
 
 ## Deployment profile choice
 
-Choose the binary profile from the server category:
+Choose the runtime shape from the server category:
 
 | Server kind | Preferred deployment |
 |---|---|
 | Upstream-client MCP server | Installed local binary that exposes CLI + stdio MCP and calls the upstream API directly. |
-| Application/platform server | Docker/systemd server binary that exposes API + Web + HTTP MCP, with optional local CLI/stdio adapter. |
+| Application/platform server | Docker/systemd deployment that runs `soma serve` for API + Web + HTTP MCP, with optional local CLI/stdio adapter behavior. |
 | Gateway-shared tool | HTTP MCP deployment retained for gateway/catalog access. |
 
 Do not add a local REST/Web mirror only because an upstream service has an HTTP
@@ -40,15 +40,15 @@ for the deployable profile contract.
 
 ## Binary command surface
 
-The all-in-one Soma binary exposes two server modes and a CLI. If a derived
-server splits local and server profiles, keep the command names stable on the
-profile where they apply:
+The all-in-one Soma binary exposes explicit runtime modes. If a derived server
+uses narrower feature sets, keep the command names stable on the profile where
+they apply:
 
 | Command | Mode | Description |
 |---|---|---|
 | `soma mcp` | stdio MCP | For Claude Code `~/.claude/settings.json` stdio servers |
-| `soma-server serve` | Streamable HTTP MCP | For Docker/remote deployment |
-| `soma [subcommand]` | CLI | Local adapter. With `SOMA_API_URL` set, targets the deployed `soma-server` REST API; otherwise uses offline stub responses. |
+| `soma serve` | HTTP runtime | Owns the provider registry, REST `/v1/*`, web UI, health/status, auth, and Streamable HTTP MCP at `/mcp`. |
+| `soma [subcommand]` | CLI/API adapter | Uses local provider/static dispatch by default. With remote mode or `SOMA_API_URL` set, targets the deployed `soma` REST API. |
 | `soma doctor` | Pre-flight check | Validates environment and config |
 | `soma --help` | Help | Print usage |
 | `soma --version` | Version | Print version |
@@ -143,8 +143,8 @@ The binary must be in `$PATH`. The plugin hook (`<binary> setup plugin-hook`) se
 - `/health` is public and fast.
 - `/status` is public but redacted.
 - `/mcp` is the Streamable HTTP MCP endpoint.
-- `/v1/*` direct business routes are the preferred REST API for platform servers.
-- REST uses direct `/v1/*` business routes. MCP keeps action dispatch behind the single `/mcp` tool surface.
+- `/v1/*` includes direct native business routes and provider-backed dynamic REST routes.
+- REST supports native direct routes, `POST /v1/tools/{action}`, provider inventory routes, and provider-declared dynamic paths. MCP keeps action dispatch behind the single `/mcp` tool surface.
 
 ## Port assignments
 
@@ -152,14 +152,14 @@ Each service in the rmcp family uses a fixed port to avoid collisions:
 
 | Service | MCP Port | Binary name |
 |---|---|---|
-| lab | 8765 | `labby` |
-| axon_rust | 8001 | `axon` |
-| syslog-mcp | 3100 | `syslog` |
-| unraid-mcp (unrust) | 6970 | `unraid` |
-| gotify-mcp (rustify) | 9158 | `gotify` |
-| unifi-mcp (rustifi) | 7474 | `unifi` |
-| tailscale-mcp (rustscale) | 7575 | `tailscale` |
-| apprise-mcp | 8765 | `apprise` |
+| labby | 8765 | `labby` |
+| axon | 8001 | `axon` |
+| cortex | 3100 | `cortex` |
+| unraid-rmcp | 6970 | `runraid` |
+| gotify-rmcp | 9158 | `rgotify` |
+| unifi-rmcp | 7474 | `runifi` |
+| tailscale-rmcp | 7575 | `rtailscale` |
+| apprise-rmcp | 8765 | `rapprise` |
 | soma | 40060 | `soma` |
 
 Set the port via `SOMA_MCP_PORT` or in `config.toml`. Update `EXPOSE` in the Dockerfile and the port mapping in `docker-compose.yml` to match.

@@ -1128,9 +1128,9 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
         .unwrap_or_else(|| root.clone());
     Ok(vec![
         PluginServer {
-            name: "syslog".to_owned(),
-            repo: workspace.join("syslog-mcp"),
-            binary: "syslog".to_owned(),
+            name: "cortex".to_owned(),
+            repo: workspace.join("cortex"),
+            binary: "cortex".to_owned(),
             hook: Some("scripts/plugin-setup.sh".into()),
             plugin_root: Some(".".into()),
             check_plugin_layout: true,
@@ -1142,9 +1142,9 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
         },
         PluginServer {
             name: "gotify".to_owned(),
-            repo: workspace.join("rustify"),
-            binary: "gotify".to_owned(),
-            hook: Some("plugins/gotify/hooks/plugin-setup.sh".into()),
+            repo: workspace.join("gotify-rmcp"),
+            binary: "rgotify".to_owned(),
+            hook: Some("plugins/gotify/scripts/plugin-setup.sh".into()),
             plugin_root: None,
             check_plugin_layout: true,
             package_args: Vec::new(),
@@ -1155,9 +1155,9 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
         },
         PluginServer {
             name: "unifi".to_owned(),
-            repo: workspace.join("rustifi"),
-            binary: "unifi".to_owned(),
-            hook: Some("plugins/unifi/hooks/plugin-setup.sh".into()),
+            repo: workspace.join("unifi-rmcp"),
+            binary: "runifi".to_owned(),
+            hook: Some("plugins/unifi/scripts/plugin-setup.sh".into()),
             plugin_root: None,
             check_plugin_layout: true,
             package_args: Vec::new(),
@@ -1168,9 +1168,9 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
         },
         PluginServer {
             name: "tailscale".to_owned(),
-            repo: workspace.join("rustscale"),
-            binary: "tailscale".to_owned(),
-            hook: Some("plugins/tailscale/hooks/plugin-setup.sh".into()),
+            repo: workspace.join("tailscale-rmcp"),
+            binary: "rtailscale".to_owned(),
+            hook: Some("plugins/tailscale/scripts/plugin-setup.sh".into()),
             plugin_root: None,
             check_plugin_layout: true,
             package_args: Vec::new(),
@@ -1181,9 +1181,9 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
         },
         PluginServer {
             name: "apprise".to_owned(),
-            repo: workspace.join("apprise-mcp"),
-            binary: "apprise".to_owned(),
-            hook: Some("plugins/apprise/hooks/plugin-setup.sh".into()),
+            repo: workspace.join("apprise-rmcp"),
+            binary: "rapprise".to_owned(),
+            hook: Some("plugins/apprise/scripts/plugin-setup.sh".into()),
             plugin_root: None,
             check_plugin_layout: true,
             package_args: Vec::new(),
@@ -1197,9 +1197,9 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
         },
         PluginServer {
             name: "unraid".to_owned(),
-            repo: workspace.join("unrust"),
-            binary: "unraid".to_owned(),
-            hook: Some("plugins/unraid/hooks/plugin-setup.sh".into()),
+            repo: workspace.join("unraid-rmcp"),
+            binary: "runraid".to_owned(),
+            hook: Some("plugins/unraid/scripts/plugin-setup.sh".into()),
             plugin_root: None,
             check_plugin_layout: true,
             package_args: Vec::new(),
@@ -1230,7 +1230,7 @@ fn default_plugin_servers() -> Result<Vec<PluginServer>> {
             make_appdata: true,
         },
         PluginServer {
-            name: "lab".to_owned(),
+            name: "labby".to_owned(),
             repo: workspace.join("lab"),
             binary: "labby".to_owned(),
             hook: None,
@@ -1269,8 +1269,13 @@ fn check_hook_delegation(server: &PluginServer) -> Result<()> {
 
 fn validate_hook_text(server: &PluginServer, text: &str) -> Result<()> {
     let expected = format!("{} setup plugin-hook \"$@\"", server.binary);
-    if !text.contains(&expected) {
-        bail!("{}: hook must delegate with `{expected}`", server.name);
+    let delegates_via_resolved_binary =
+        text.contains("}\" setup plugin-hook \"$@\"") && text.contains("command -v");
+    if !text.contains(&expected) && !delegates_via_resolved_binary {
+        bail!(
+            "{}: hook must delegate with `{expected}` or a command-v-resolved binary",
+            server.name
+        );
     }
     let mut found = Vec::new();
     for token in [

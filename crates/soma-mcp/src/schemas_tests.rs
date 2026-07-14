@@ -115,10 +115,21 @@ fn schema_advertises_structured_output_contract() {
 
     assert_eq!(output_schema["type"], "object");
     assert_eq!(output_schema["additionalProperties"], true);
+    assert_eq!(output_schema["x-soma-action-discriminator"], "_soma_action");
     assert!(output_schema["description"]
         .as_str()
         .expect("output schema should describe structured content")
         .contains("structuredContent"));
+    assert!(output_schema["oneOf"]
+        .as_array()
+        .expect("output schema should include exact variants")
+        .iter()
+        .any(|variant| variant["properties"]["kind"]["const"] == "mcp_response_page"));
+    assert!(output_schema["oneOf"]
+        .as_array()
+        .expect("output schema should include error variants")
+        .iter()
+        .any(|variant| variant["properties"]["kind"]["const"] == "mcp_tool_error"));
 }
 
 #[test]
@@ -143,29 +154,54 @@ fn schema_preserves_provider_action_output_schemas() {
             version: None,
             enabled: Some(true),
         },
-        tools: vec![ProviderTool {
-            name: "weather".to_owned(),
-            description: "Fetch weather".to_owned(),
-            title: None,
-            input_schema: json!({
-                "type": "object",
-                "properties": { "city": { "type": "string" } }
-            }),
-            output_schema: Some(output_schema.clone()),
-            scope: Some("soma:read".to_owned()),
-            destructive: false,
-            requires_admin: false,
-            cost: Some("cheap".to_owned()),
-            env: Vec::new(),
-            limits: None,
-            mcp: None,
-            rest: None,
-            cli: None,
-            palette: None,
-            ui: None,
-            examples: Vec::new(),
-            meta: json!({}),
-        }],
+        tools: vec![
+            ProviderTool {
+                name: "weather".to_owned(),
+                description: "Fetch weather".to_owned(),
+                title: None,
+                input_schema: json!({
+                    "type": "object",
+                    "properties": { "city": { "type": "string" } }
+                }),
+                output_schema: Some(output_schema.clone()),
+                scope: Some("soma:read".to_owned()),
+                destructive: false,
+                requires_admin: false,
+                cost: Some("cheap".to_owned()),
+                env: Vec::new(),
+                limits: None,
+                mcp: None,
+                rest: None,
+                cli: None,
+                palette: None,
+                ui: None,
+                examples: Vec::new(),
+                meta: json!({}),
+            },
+            ProviderTool {
+                name: "opaque_weather".to_owned(),
+                description: "Fetch opaque weather".to_owned(),
+                title: None,
+                input_schema: json!({
+                    "type": "object",
+                    "properties": { "city": { "type": "string" } }
+                }),
+                output_schema: None,
+                scope: Some("soma:read".to_owned()),
+                destructive: false,
+                requires_admin: false,
+                cost: Some("cheap".to_owned()),
+                env: Vec::new(),
+                limits: None,
+                mcp: None,
+                rest: None,
+                cli: None,
+                palette: None,
+                ui: None,
+                examples: Vec::new(),
+                meta: json!({}),
+            },
+        ],
         prompts: Vec::new(),
         resources: Vec::new(),
         tasks: Vec::new(),
@@ -188,4 +224,28 @@ fn schema_preserves_provider_action_output_schemas() {
     assert_eq!(action_outputs[0]["action"], "weather");
     assert_eq!(action_outputs[0]["outputSchema"], output_schema);
     assert_eq!(metadata[0]["output_schema"], output_schema);
+    assert_eq!(metadata[1]["output_schema"], serde_json::Value::Null);
+
+    let variants = tools[0]["outputSchema"]["oneOf"]
+        .as_array()
+        .expect("aggregate output schema should include discriminated variants");
+    let weather_variant = variants
+        .iter()
+        .find(|variant| variant["properties"]["_soma_action"]["const"] == "weather")
+        .expect("weather output schema should be discriminated by action");
+    assert!(weather_variant["required"]
+        .as_array()
+        .expect("weather variant should declare required fields")
+        .contains(&json!("_soma_action")));
+    assert_eq!(weather_variant["properties"]["forecast"]["type"], "string");
+
+    let opaque_variant = variants
+        .iter()
+        .find(|variant| variant["properties"]["_soma_action"]["const"] == "opaque_weather")
+        .expect("actions without output schemas should still get discriminator branches");
+    assert_eq!(opaque_variant["additionalProperties"], true);
+    assert!(opaque_variant["required"]
+        .as_array()
+        .expect("opaque variant should require the discriminator")
+        .contains(&json!("_soma_action")));
 }

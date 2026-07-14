@@ -154,6 +154,7 @@ pub struct AppState {
     pub auth_policy: AuthPolicy,
     pub service: SomaService,
     pub provider_registry: ProviderRegistry,
+    pub remote_adapter: bool,
     pub response_pages: ResponsePageStore,
 }
 

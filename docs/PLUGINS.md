@@ -31,7 +31,6 @@ plugins/soma/
   .codex-plugin/
     plugin.json          # Codex manifest
     README.md            # Codex manifest field reference
-  .mcp.json              # Shared Claude/Codex MCP connection config
   gemini-extension.json  # Gemini CLI extension manifest
   hooks/
     hooks.json           # Claude lifecycle hook declarations (call the binary directly)
@@ -97,7 +96,7 @@ Codex uses `plugins/soma/.codex-plugin/plugin.json`.
 Responsibilities:
 
 - identifies the plugin for Codex listings
-- points at shared `skills` and `.mcp.json`
+- points at shared `skills`
 - describes the interface shown in Codex UI
 - declares read/write capabilities
 - provides example prompts
@@ -169,8 +168,8 @@ The validator checks:
 
 - Claude, Codex, and Gemini manifests are valid JSON
 - plugin manifests do not contain a `version` field
-- manifests point to the shared `.mcp.json`, hooks, and skills paths
-- shared MCP config launches `soma mcp`
+- manifests point to hooks and skills paths
+- documented stdio MCP registration launches `soma mcp`
 - Gemini config launches `soma mcp`
 - HTTP MCP remains available as a documented fallback for remote/gateway deployments
 - hook config runs `<binary> setup plugin-hook` directly
@@ -181,9 +180,10 @@ Use `PLUGIN_ROOT=plugins/<service>` when validating an adapted service package.
 For release checks, `just pre-release` includes this validator and the other
 Soma gates.
 
-## Shared MCP Config
+## Stdio MCP Config
 
-Claude Code and Codex share `plugins/soma/.mcp.json`:
+When registering Soma with an MCP client, use stdio mode through the installed
+binary:
 
 ```json
 {
@@ -310,7 +310,8 @@ When creating a real server from Soma:
 
 1. Rename `example`, `Example`, and `EXAMPLE` across plugin files.
 2. Update all three manifests with the real repository, description, author, keywords, and capability claims.
-3. Keep credential names aligned across Claude `userConfig`, Codex shared `.mcp.json`, and Gemini `settings`.
+3. Keep credential names aligned across Claude `userConfig`, Codex plugin
+   settings, and Gemini `settings`.
 4. Replace upstream credential fields such as `soma_api_url` and `soma_api_key`.
 5. Update `apply_plugin_options()` in `crates/soma-cli/src/setup.rs` to map service-specific plugin options into env vars.
 6. Implement `<binary> setup plugin-hook`, `--no-repair`, `check`, and `repair`.

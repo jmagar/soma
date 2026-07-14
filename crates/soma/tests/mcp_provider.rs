@@ -196,7 +196,7 @@ struct HttpServerGuard {
 impl HttpServerGuard {
     async fn spawn(port: u16) -> anyhow::Result<Self> {
         let home = tempfile::tempdir()?;
-        let mut child = Command::new(env!("CARGO_BIN_EXE_soma-server"))
+        let mut child = Command::new(env!("CARGO_BIN_EXE_soma"))
             .arg("serve")
             .env("HOME", home.path())
             .env("SOMA_HOME", home.path())

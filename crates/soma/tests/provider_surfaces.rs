@@ -47,3 +47,25 @@ async fn static_provider_help_is_public_and_rest_exposed() {
 
     assert_eq!(output.value["preferred_rest_style"], "direct_routes");
 }
+
+#[tokio::test]
+async fn static_provider_mcp_interactive_actions_are_not_rest_exposed() {
+    let state = loopback_state();
+    let error = state
+        .provider_registry
+        .dispatch(ProviderCall {
+            provider: String::new(),
+            action: "elicit_name".to_owned(),
+            params: json!({}),
+            principal: ProviderPrincipal::loopback_dev(),
+            auth_mode: ProviderAuthMode::LoopbackDev,
+            surface: ProviderSurface::Rest,
+            destructive_confirmed: false,
+            limits: ProviderRequestLimits::default(),
+            snapshot_id: String::new(),
+        })
+        .await
+        .expect_err("elicitation should remain MCP-only");
+
+    assert_eq!(&*error.code, "surface_not_exposed");
+}

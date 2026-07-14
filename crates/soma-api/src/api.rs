@@ -81,6 +81,20 @@ pub const REST_ROUTES: &[RestRoute] = &[
         description: "Direct REST route inventory and server metadata.",
     },
     RestRoute {
+        method: "GET",
+        path: "/v1/providers",
+        action: None,
+        auth: "mounted auth policy",
+        description: "Live provider catalog, including dropped provider tools and MCP primitives.",
+    },
+    RestRoute {
+        method: "POST",
+        path: "/v1/tools/{action}",
+        action: None,
+        auth: "mounted auth policy; requires the provider tool scope when scoped",
+        description: "Generic REST execution route for provider-backed tools.",
+    },
+    RestRoute {
         method: "POST",
         path: "/v1/greet",
         action: Some("greet"),
@@ -145,6 +159,13 @@ pub async fn v1_capabilities() -> impl IntoResponse {
     })
 }
 
+pub async fn v1_providers(State(state): State<AppState>) -> axum::response::Response {
+    if let Some(response) = refresh_file_providers(&state) {
+        return response;
+    }
+    Json(state.provider_registry.snapshot().inspection_report()).into_response()
+}
+
 pub async fn v1_greet(
     State(state): State<AppState>,
     auth: Option<Extension<AuthContext>>,
@@ -203,6 +224,27 @@ pub async fn v1_help(
         auth.as_ref().map(|Extension(auth)| auth),
         Ok(SomaAction::Help),
         "help",
+    )
+    .await
+}
+
+pub async fn v1_provider_tool_action(
+    State(state): State<AppState>,
+    auth: Option<Extension<AuthContext>>,
+    Path(action): Path<String>,
+    body: Result<Json<Value>, JsonRejection>,
+) -> axum::response::Response {
+    let params = match body {
+        Ok(Json(value)) => value,
+        Err(JsonRejection::MissingJsonContentType(_)) => json!({}),
+        Err(error) => return rest_json_rejection_response(error),
+    };
+
+    run_provider_rest_action(
+        state,
+        auth.as_ref().map(|Extension(auth)| auth),
+        action,
+        params,
     )
     .await
 }

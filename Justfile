@@ -4,7 +4,7 @@
 # CUSTOMIZE: Soma is the product binary; internal crate names still use soma in this compatibility pass.
 #           Replace port 40060 with your service's port if different.
 #
-# Usage: just <recipe>   (install just: cargo install just)
+# Usage: just <recipe>
 # =============================================================================
 
 # List all available recipes
@@ -13,10 +13,17 @@ default:
 
 # ── Development ───────────────────────────────────────────────────────────────
 
+# Install project toolchain and helper CLIs managed by mise
+install-tools:
+    mise install
+
+# Bootstrap a local checkout for development
+bootstrap: install-tools install-hooks
+
 # Run the MCP server in development mode (HTTP transport 40060, no auth)
 # WARNING: SOMA_MCP_NO_AUTH=true is safe only because HOST is 127.0.0.1 (loopback)
 dev:
-    SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo run --bin soma-server -- serve mcp
+    SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo run --bin soma -- serve
 
 # Run in stdio MCP transport mode (for Claude Desktop or direct pipe)
 mcp:
@@ -50,14 +57,14 @@ build-local-release:
 
 # Compile the full server release binary only
 build-server-release:
-    cargo build --release --bin soma-server --features full
+    cargo build --release --bin soma --features full
 
 # Build the Next.js web UI static export (required before cargo build embeds it)
 # Output lands in apps/web/out/ and is baked into the binary via the `web` feature
 build-web:
     cargo xtask build-web
 
-# Watch apps/web for changes and rebuild on save (requires watchexec: cargo install watchexec-cli)
+# Watch apps/web for changes and rebuild on save (requires watchexec from mise)
 web-watch:
     cargo xtask web-watch
 
@@ -82,7 +89,6 @@ fmt-check:
     cargo fmt -- --check
 
 # Run the full test suite using cargo-nextest (faster, better output than cargo test)
-# Install nextest: cargo install cargo-nextest
 test:
     cargo nextest run
 
@@ -103,7 +109,7 @@ fix:
     cargo fmt
     cargo clippy --fix --all-targets --allow-dirty --allow-staged
 
-# Format all TOML files (requires taplo: cargo install taplo-cli)
+# Format all TOML files (requires taplo from mise)
 fmt-toml:
     taplo format
 
@@ -111,11 +117,11 @@ fmt-toml:
 check-toml:
     taplo check
 
-# Run license, vulnerability, and source checks (requires cargo-deny: cargo install cargo-deny)
+# Run license, vulnerability, and source checks (requires cargo-deny from mise)
 deny:
     cargo deny check
 
-# Watch Rust checks interactively (requires bacon: cargo install bacon)
+# Watch Rust checks interactively (requires bacon from mise)
 watch:
     bacon
 
@@ -264,27 +270,6 @@ symlink-docs-inline:
 check-env:
     cargo xtask check-env
 
-# Install common development tools used by this Justfile
-install-tools:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    if ! command -v cargo-binstall >/dev/null 2>&1; then
-        cargo install cargo-binstall
-    fi
-    cargo binstall cargo-nextest --quiet --no-confirm
-    cargo binstall taplo-cli --quiet --no-confirm
-    cargo binstall cargo-deny --quiet --no-confirm
-    cargo binstall bacon --quiet --no-confirm
-    cargo binstall cargo-llvm-cov --quiet --no-confirm
-    cargo binstall lefthook --quiet --no-confirm
-    cargo binstall cargo-audit --quiet --no-confirm
-    if [ -d apps/web ]; then
-        (cd apps/web && pnpm install)
-    fi
-
-# Alias for install-tools, matching the other Rust workspace convention
-bootstrap: install-tools
-
 # Install lefthook git hooks
 install-hooks:
     lefthook install
@@ -340,7 +325,7 @@ docker-rebuild:
 # Uses the `release-fast` profile (release opts, no LTO, many codegen units) so
 # the binary behaves like release while compiling in a fraction of the time.
 build-fast:
-    cargo build --profile release-fast --bin soma-server --features full
+    cargo build --profile release-fast --bin soma --features full
 
 # Fast "edit → rebuild image → check in browser" loop.
 # Unlike docker-rebuild's --no-cache full build, this reuses BuildKit layer and
@@ -374,13 +359,13 @@ health:
 
 # Verify that the running Docker/systemd service matches the current artifact
 runtime-current:
-    cargo xtask check-runtime-current --expected-binary target/release/soma-server
+    cargo xtask check-runtime-current --expected-binary target/release/soma
 
 # Smoke-test the protected MCP HTTP auth path (requires running bearer-auth server)
 auth-smoke:
     cargo xtask test-mcp-auth
 
-# Call the status action via the REST API (requires SOMA_MCP_TOKEN in env)
+# Call the status action through the protected MCP HTTP path (requires SOMA_MCP_TOKEN in env)
 status:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -461,11 +446,11 @@ conformance suite="active" port="41060":
         exit 1
     fi
     echo "Building server (default features)..."
-    cargo build --bin soma-server
+    cargo build --bin soma
     echo "Starting loopback no-auth server on ${PORT}..."
     SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_PORT=${PORT} SOMA_MCP_NO_AUTH=true \
         SOMA_MCP_CONFORMANCE_FIXTURES=true \
-        ./target/debug/soma-server serve mcp >/tmp/soma-conformance-server.log 2>&1 &
+        ./target/debug/soma serve >/tmp/soma-conformance-server.log 2>&1 &
     SERVER_PID=$!
     trap 'kill ${SERVER_PID} 2>/dev/null || true' EXIT
     echo "Waiting for /health on ${PORT}..."

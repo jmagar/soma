@@ -112,7 +112,7 @@ impl SigningKeys {
     /// need RFC 7519 issuer validation MUST use
     /// [`Self::validate_access_token_with_issuer`] instead. This entry
     /// point is preserved for the lab consumer, which performs its own
-    /// post-decode `iss` check. New consumers (syslog-mcp et al.) should
+    /// post-decode `iss` check. New consumers (cortex et al.) should
     /// always use the issuer-enforcing variant.
     #[deprecated(note = "Use `validate_access_token_with_issuer` for RFC 7519 §4.1.1 compliance")]
     pub fn validate_access_token(

@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-use super::RegistrySnapshot;
+use super::{provider_tool_surface_enabled, ProviderSurface, RegistrySnapshot};
 
 impl RegistrySnapshot {
     pub fn validation_summary(&self) -> Value {
@@ -26,20 +26,68 @@ impl RegistrySnapshot {
                     .tools
                     .iter()
                     .map(|tool| {
+                        let rest_enabled =
+                            provider_tool_surface_enabled(tool, ProviderSurface::Rest);
+                        let generic_rest = rest_enabled.then(|| {
+                            json!({
+                                "enabled": true,
+                                "method": "POST",
+                                "path": format!("/v1/tools/{}", tool.name),
+                            })
+                        });
                         json!({
                             "name": tool.name.clone(),
+                            "title": tool.title.clone(),
                             "description": tool.description.clone(),
+                            "input_schema": tool.input_schema.clone(),
+                            "output_schema": tool.output_schema.clone(),
                             "scope": tool.scope.clone(),
                             "destructive": tool.destructive,
                             "requires_admin": tool.requires_admin,
                             "surfaces": {
-                                "mcp": tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
-                                "rest": tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(false),
-                                "cli": tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
-                                "palette": tool.palette.as_ref().map(|palette| palette.enabled).unwrap_or(true)
+                                "mcp": provider_tool_surface_enabled(tool, ProviderSurface::Mcp),
+                                "rest": rest_enabled,
+                                "cli": provider_tool_surface_enabled(tool, ProviderSurface::Cli),
+                                "palette": provider_tool_surface_enabled(tool, ProviderSurface::Palette)
                             },
+                            "rest": tool.rest.clone(),
+                            "cli": tool.cli.clone(),
+                            "generic_rest": generic_rest,
                             "limits": tool.limits.clone(),
                             "env": tool.env.clone(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let prompts = catalog
+                    .prompts
+                    .iter()
+                    .map(|prompt| {
+                        json!({
+                            "name": prompt.name.clone(),
+                            "description": prompt.description.clone(),
+                            "arguments_schema": prompt.arguments_schema.clone(),
+                            "scope": prompt.scope.clone(),
+                            "surfaces": {
+                                "mcp": prompt.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true)
+                            },
+                            "examples": prompt.examples.clone(),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let resources = catalog
+                    .resources
+                    .iter()
+                    .map(|resource| {
+                        json!({
+                            "name": resource.name.clone(),
+                            "uri_template": resource.uri_template.clone(),
+                            "description": resource.description.clone(),
+                            "mime_type": resource.mime_type.clone(),
+                            "scope": resource.scope.clone(),
+                            "surfaces": {
+                                "mcp": resource.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true)
+                            },
+                            "annotations": resource.annotations.clone(),
                         })
                     })
                     .collect::<Vec<_>>();
@@ -53,6 +101,8 @@ impl RegistrySnapshot {
                     "declared_capabilities": catalog.capabilities.clone(),
                     "runtime_security": provider_runtime_security(kind),
                     "tools": tools,
+                    "prompts": prompts,
+                    "resources": resources,
                 })
             })
             .collect::<Vec<_>>();

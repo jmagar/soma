@@ -32,4 +32,4 @@ roadmaps, and temporary migration notes. They complement the topic docs under
 - [0008: Use semver with workspace-first extraction and git tags](./0008-versioning-and-distribution.md)
 - [0009: Execute extraction with isolated lanes and integration ownership](./0009-extraction-execution-lanes.md)
 - [0010: Require boundary and generated-client verification](./0010-extraction-verification-gates.md)
-
+- [0011: Keep Soma product-first and template-second](./0011-product-first-template-second.md)

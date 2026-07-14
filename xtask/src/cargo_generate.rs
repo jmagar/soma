@@ -29,7 +29,7 @@ pub(crate) fn run(args: &[String]) -> Result<()> {
     }
 
     if !command_exists("cargo-generate") {
-        bail!("cargo-generate is not installed; run `cargo install cargo-generate`");
+        bail!("cargo-generate is not installed; run `mise install cargo:cargo-generate`");
     }
 
     let repo = std::env::current_dir().context("failed to read current directory")?;
@@ -54,7 +54,6 @@ fn cases() -> Vec<Case> {
                 ("package_name", "myservice-mcp"),
                 ("crate_prefix", "myservice"),
                 ("binary_name", "myservice"),
-                ("server_binary_name", "myservice-server"),
                 ("service_slug", "myservice"),
                 ("type_prefix", "MyService"),
                 ("env_prefix", "MYSERVICE"),
@@ -79,7 +78,6 @@ fn cases() -> Vec<Case> {
                 ("package_name", "foo-bar-mcp"),
                 ("crate_prefix", "foo-bar"),
                 ("binary_name", "foo-bar"),
-                ("server_binary_name", "foo-bar-server"),
                 ("service_slug", "foo_bar"),
                 ("type_prefix", "FooBar"),
                 ("env_prefix", "FOOBAR"),
@@ -103,7 +101,6 @@ fn cases() -> Vec<Case> {
                 ("package_name", "lean-mcp"),
                 ("crate_prefix", "lean"),
                 ("binary_name", "lean"),
-                ("server_binary_name", "lean-server"),
                 ("service_slug", "lean"),
                 ("type_prefix", "Lean"),
                 ("env_prefix", "LEAN"),
@@ -286,7 +283,7 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
         bail!("generated README points at the internal MCP surface crate repo");
     }
 
-    let package_crate = format!("crates/{}", value(case, "package_name")?);
+    let package_crate = format!("crates/{}", value(case, "package_name")?.replace('-', "_"));
     let manifest = read_to_string(project.join(&package_crate).join("Cargo.toml"))?;
     let expected_default = format!(
         "default = [{}]",
@@ -301,7 +298,10 @@ fn assert_generated_shape(project: &Path, case: &Case) -> Result<()> {
         bail!("generated Cargo.toml does not contain {expected_default}");
     }
 
-    let web_crate = format!("crates/{}-web", value(case, "crate_prefix")?);
+    let web_crate = format!(
+        "crates/{}-web",
+        value(case, "package_name")?.replace('-', "_")
+    );
     for bundled_source in [
         "assets/source/package.json",
         "assets/source/components/aurora.css",

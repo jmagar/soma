@@ -66,28 +66,29 @@ action gates, runtime-surface honesty, and distribution/version contracts.
 
 | Source README | Pattern to reuse |
 |---|---|
-| `unifi-rmcp` | Explain upstream API families before listing actions; separate official/generated/internal/hybrid action groups; include live-smoke guidance. |
-| `tailscale-rmcp` | Teach one required domain concept early; include a clear naming table, transport table, auth modes, and destructive interlock. |
-| `unraid-rmcp` | Use an architecture diagram, first raw MCP call, transport table, action parameters, pagination behavior, and config precedence. |
-| `apprise-rmcp` | Keep a compact "what it does" section and show simple tool-call examples before deeper reference material. |
-| `gotify-rmcp` | Document upstream token types, raw JSON-RPC examples, CLI parity, destructive safety, and HTTP endpoint auth. |
-| `arcane-rmcp` | Add a `Surfaces` table, group action/subaction domains, and state that credentials are config/env only. |
-| `yarr-rmcp` | Include a product boundary, install/distribution matrix, generated-vs-curated operation split, tool-mode explanation, and credential-rejection rules. |
-| `ytdl-mcp` | Lead with capabilities, distribution forms, self-contained runtime behavior, detailed env table, bootstrap trust model, and "how it works" steps. |
-| `synapse` | State porting/parity claims directly, list known gaps, and document multiple MCP tools without hiding REST/web status. |
-| `cortex` | Link full schema docs for large action surfaces; document prompts/resources/MCP Apps; include security, storage, deployment, and verification sections. |
-| `axon` | Separate current production contract from future pipeline goals; document setup flow, Docker stack, config home, notable capabilities, and troubleshooting. |
-| `lab` | Treat topic docs and generated catalogs as authoritative; include a contents map and do not hand-maintain generated action/env inventories in the README. |
-| `agentcast` | Separate current implementation from target contract; document product boundaries and trust assumptions for untrusted MCP metadata. |
-| `soma` | Include scaffold profiles, generated action table, auth policies, adaptation checklist, docs map, and verification gates. |
+| [unifi-rmcp](https://github.com/jmagar/unifi-rmcp) | Explain upstream API families before listing actions; separate official/generated/internal/hybrid action groups; include live-smoke guidance. |
+| [tailscale-rmcp](https://github.com/jmagar/tailscale-rmcp) | Teach one required domain concept early; include a clear naming table, transport table, auth modes, and destructive interlock. |
+| [unraid-rmcp](https://github.com/jmagar/unraid-rmcp) | Use an architecture diagram, first raw MCP call, transport table, action parameters, pagination behavior, and config precedence. |
+| [apprise-rmcp](https://github.com/jmagar/apprise-rmcp) | Keep a compact "what it does" section and show simple tool-call examples before deeper reference material. |
+| [gotify-rmcp](https://github.com/jmagar/gotify-rmcp) | Document upstream token types, raw JSON-RPC examples, CLI parity, destructive safety, and HTTP endpoint auth. |
+| [arcane-rmcp](https://github.com/jmagar/arcane-rmcp) | Add a `Surfaces` table, group action/subaction domains, and state that credentials are config/env only. |
+| [yarr](https://github.com/jmagar/yarr) | Include a product boundary, install/distribution matrix, generated-vs-curated operation split, tool-mode explanation, and credential-rejection rules. |
+| [ytdl-rmcp](https://github.com/jmagar/ytdl-rmcp) | Lead with capabilities, distribution forms, self-contained runtime behavior, detailed env table, bootstrap trust model, and "how it works" steps. |
+| [synapse-rmcp](https://github.com/jmagar/synapse-rmcp) | State porting/parity claims directly, list known gaps, and document multiple MCP tools without hiding REST/web status. |
+| [cortex](https://github.com/jmagar/cortex) | Link full schema docs for large action surfaces; document prompts/resources/MCP Apps; include security, storage, deployment, and verification sections. |
+| [axon](https://github.com/jmagar/axon) | Separate current production contract from future pipeline goals; document setup flow, Docker stack, config home, notable capabilities, and troubleshooting. |
+| [labby](https://github.com/jmagar/labby) | Treat topic docs and generated catalogs as authoritative; include a contents map and do not hand-maintain generated action/env inventories in the README. |
+| [agentcast](https://github.com/jmagar/agentcast) | Separate current implementation from target contract; document product boundaries and trust assumptions for untrusted MCP metadata. |
+| [soma](https://github.com/jmagar/soma) | Include scaffold profiles, generated action table, auth policies, adaptation checklist, docs map, and verification gates. |
 
 ## Golden Example
 
-`gotify-rmcp` is the first focused upstream-client pilot for this guide. Use its
-root README as the minimal filled-in example when aligning the rest of the RMCP
-family: compact domain intro, explicit token model, install matrix, safe
-CLI/MCP calls, client configuration, curated-vs-generated docs split,
-destructive confirmation, and distribution contract.
+[gotify-rmcp](https://github.com/jmagar/gotify-rmcp) is the first focused
+upstream-client pilot for this guide. Use its root README as the minimal
+filled-in example when aligning the rest of the RMCP family: compact domain
+intro, explicit token model, install matrix, safe CLI/MCP calls, client
+configuration, curated-vs-generated docs split, destructive confirmation, and
+distribution contract.
 
 Do not treat the pilot as the only valid shape. It is a small Gotify bridge, so
 larger repos should preserve their own product boundaries while keeping the
@@ -123,7 +124,8 @@ same operator experience goals.
   packages, GitHub Release binaries, Docker images, MCP registry metadata,
   plugin manifests, or release-please metadata.
 - Mark maturity honestly: production, experimental, live-tested, read-only,
-  destructive-capable, generated surface, or scaffold/runtime template.
+  destructive-capable, generated surface, or runtime product with scaffold/export
+  lane.
 - Always include verification commands that prove the binary, transport, and
   tool call path work.
 
@@ -143,8 +145,9 @@ long architecture tour before they know the command that proves the server works
 
 ## RMCP README Shape
 
-Copy the section below into the generated project's root `README.md`, then
-replace bracketed placeholders and delete optional sections that do not apply.
+Use the section below as product-first README adaptation guidance. For generated
+projects, copy it into the root `README.md`, then replace bracketed placeholders
+and delete optional sections that do not apply.
 
 ---
 
@@ -161,7 +164,7 @@ main transport in this paragraph.]
 **30-second path:** [Install/run command] -> [safe CLI command] -> [safe MCP
 tool call]. Keep this to one line or one compact sentence.
 
-**Status:** [production | beta | experimental | scaffold/runtime template].
+**Status:** [production | beta | experimental | runtime product with scaffold/export lane].
 [Read-only | write-capable | destructive actions gated]. [Live-tested against
 upstream | fixture-only | generated provider surface].
 
@@ -750,21 +753,23 @@ versioning is derived from git/package metadata.
 ## Related Servers
 
 Keep this section short: one line per sibling server or adjacent project, and
-omit the current repo. Use product names rather than implementation trivia.
+omit the current repo. Use linked product or repository names rather than
+implementation trivia.
 
-- `unifi-rmcp` / `rustifi` - UniFi controller REST API bridge.
-- `tailscale-rmcp` / `rustscale` - Tailscale API bridge for devices, users, and tailnet operations.
-- `unraid-rmcp` / `unrust` - Unraid GraphQL bridge for NAS and server management.
-- `apprise-rmcp` - Apprise notification fan-out bridge for many delivery backends.
-- `gotify-rmcp` - Gotify push notification bridge for sends, messages, apps, and clients.
-- `arcane-rmcp` - Arcane Docker management bridge for containers and related resources.
-- `yarr-rmcp` - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
-- `ytdl-mcp` - Media download and metadata workflow server.
-- `synapse` - Local Synapse workflow server for scout and flux actions.
-- `cortex` - Syslog and homelab log aggregation MCP server.
-- `axon` - RAG, crawl, scrape, extract, and semantic search project.
-- `lab` - Homelab control plane and Labby gateway project.
-- `soma` - RMCP scaffold/runtime template for new provider-backed servers.
+- [soma](https://github.com/jmagar/soma) - RMCP runtime for provider-backed MCP servers.
+- [unifi-rmcp](https://github.com/jmagar/unifi-rmcp) - UniFi controller REST API bridge.
+- [tailscale-rmcp](https://github.com/jmagar/tailscale-rmcp) - Tailscale API bridge for devices, users, and tailnet operations.
+- [unraid-rmcp](https://github.com/jmagar/unraid-rmcp) - Unraid GraphQL bridge for NAS and server management.
+- [apprise-rmcp](https://github.com/jmagar/apprise-rmcp) - Apprise notification fan-out bridge for many delivery backends.
+- [gotify-rmcp](https://github.com/jmagar/gotify-rmcp) - Gotify push notification bridge for sends, messages, apps, and clients.
+- [arcane-rmcp](https://github.com/jmagar/arcane-rmcp) - Arcane Docker management bridge for containers and related resources.
+- [yarr](https://github.com/jmagar/yarr) - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
+- [ytdl-rmcp](https://github.com/jmagar/ytdl-rmcp) - Media download and metadata workflow server.
+- [synapse-rmcp](https://github.com/jmagar/synapse-rmcp) - Local Synapse workflow server for scout and flux actions.
+- [cortex](https://github.com/jmagar/cortex) - Syslog and homelab log aggregation MCP server.
+- [axon](https://github.com/jmagar/axon) - RAG, crawl, scrape, extract, and semantic search project.
+- [labby](https://github.com/jmagar/labby) - Homelab control plane and MCP gateway project.
+- [lumen](https://github.com/jmagar/lumen) - Local semantic code search MCP server.
 
 ## Documentation
 
