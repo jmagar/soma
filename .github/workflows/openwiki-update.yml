@@ -23,22 +23,19 @@ jobs:
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
         with:
           install_args: node npm:openwiki
-          cache: true
+          # No cache: cached installs kept resurrecting a better-sqlite3
+          # binding compiled against an older Node ABI, in ways that survived
+          # targeted rebuilds. A daily job can afford the fresh install.
+          cache: false
 
-      - name: Rebuild openwiki native bindings
-        # The mise cache can restore an openwiki install whose better-sqlite3
-        # binding was compiled against an older Node ABI; rebuild it against
-        # the Node this run actually uses.
+      - name: Build openwiki native bindings
+        # npm 11's allowScripts policy blocks better-sqlite3's install script
+        # during the fresh install, so run it explicitly and prove the binding
+        # loads before openwiki does.
         run: |
-          openwiki_pkg="$(mise where npm:openwiki)/lib/node_modules/openwiki"
-          # npm rebuild silently skips install scripts not covered by npm's
-          # allowScripts policy, and prebuild-install exits 0 without touching
-          # an already-present binary — so drop the stale build output and run
-          # the install script directly, forcing a fetch for the current ABI.
-          cd "$openwiki_pkg/node_modules/better-sqlite3"
-          rm -rf build prebuilds
-          npm run install --foreground-scripts
-          node -e "require('$openwiki_pkg/node_modules/better-sqlite3')" \
+          sqlite_pkg="$(mise where npm:openwiki)/lib/node_modules/openwiki/node_modules/better-sqlite3"
+          (cd "$sqlite_pkg" && rm -rf build prebuilds && npm run install --foreground-scripts)
+          node -e "require('$sqlite_pkg')" \
             && echo "better-sqlite3 binding loads under $(node --version)"
 
       - name: Run OpenWiki
