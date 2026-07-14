@@ -61,6 +61,16 @@ name, same action/tool name, same REST route, same CLI command/alias, same
 MCP primitive name) — the live registry rejects that combination too. Either
 kind of failure is reported `invalid`, and `lint` fails on it.
 
+A REST route can also be unreachable for a reason the provider registry
+itself doesn't check: `crates/soma/src/routes.rs` wires `/v1/capabilities`,
+`/v1/providers`, and `/v1/tools/{action}` directly, ahead of the dynamic
+`/v1/{*path}` fallback that dispatches to provider-declared routes. None of
+those three have a corresponding `ACTION_SPECS` entry, so nothing in the
+live registry reserves them — but Axum still matches the literal/pattern
+route first, silently shadowing a provider that declares the same path.
+`lint` reserves `/v1/capabilities`, `/v1/providers`, and any literal
+`/v1/tools/<single-segment>` path to catch this before it ships.
+
 **Python providers are never inspected this way.** Extracting a `.py`
 provider's catalog requires importing (and thus executing) the module — there
 is no metadata-only path for Python. Non-executing inspection reports `.py`

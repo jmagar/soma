@@ -43,6 +43,9 @@ pub(super) fn apply_directory_wide_checks(
         &crate::providers::static_rust::StaticRustProvider::catalog_static(),
         BUILTIN_PROVIDER_LABEL,
     );
+    for (method, path) in RESERVED_INFRASTRUCTURE_ROUTES {
+        namespace.reserve_route(method, path, INFRASTRUCTURE_ROUTE_LABEL);
+    }
 
     for index in 0..files.len() {
         let Some(catalog) = &loaded_catalogs[index] else {
@@ -61,6 +64,20 @@ pub(super) fn apply_directory_wide_checks(
 }
 
 const BUILTIN_PROVIDER_LABEL: &str = "the built-in `static-rust` provider";
+
+/// Fixed routes wired directly in `crates/soma/src/routes.rs`, registered
+/// before the `/v1/{*path}` dynamic-provider fallback, that have no
+/// corresponding `ACTION_SPECS` entry — `/v1/greet`, `/v1/echo`,
+/// `/v1/status`, and `/v1/help` *do* have one (their `rest_path` is set),
+/// so they're already reserved via the built-in `static-rust` catalog seed
+/// above. These two are pure infrastructure with nothing else to reserve
+/// them, so a drop-in provider declaring the same path would be silently
+/// shadowed at runtime (Axum matches the literal route, never the dynamic
+/// fallback) even though every other check here passes.
+const RESERVED_INFRASTRUCTURE_ROUTES: &[(&str, &str)] =
+    &[("GET", "/v1/capabilities"), ("GET", "/v1/providers")];
+
+const INFRASTRUCTURE_ROUTE_LABEL: &str = "Soma's built-in HTTP infrastructure routes";
 
 /// Tracks provider/action/REST-route/CLI-command/MCP-primitive names already
 /// claimed in this directory (plus the built-in catalog), each mapped to a
@@ -91,8 +108,15 @@ impl DirectoryNamespace {
             if let Some(rest) = &tool.rest {
                 if rest.enabled {
                     let key = rest_route_key(tool.name.as_str(), rest);
+                    let label = format!("{} {}", key.0, key.1);
+                    if is_shadowed_by_generic_tools_route(&key.1) {
+                        return Some(conflict_message(
+                            "REST route",
+                            &label,
+                            "Soma's built-in `/v1/tools/{action}` dispatch route",
+                        ));
+                    }
                     if let Some(other) = self.rest_routes.get(&key) {
-                        let label = format!("{} {}", key.0, key.1);
                         return Some(conflict_message("REST route", &label, other));
                     }
                 }
@@ -145,6 +169,21 @@ impl DirectoryNamespace {
             self.primitives.insert(name, owner.to_owned());
         }
     }
+
+    fn reserve_route(&mut self, method: &str, path: &str, owner: &str) {
+        self.rest_routes
+            .insert((method.to_owned(), path.to_owned()), owner.to_owned());
+    }
+}
+
+/// `/v1/tools/{action}` (`crates/soma/src/routes.rs`) is a wildcard route
+/// matching exactly one path segment after `/v1/tools/` — a provider
+/// declaring a literal path shaped like that is shadowed by it regardless of
+/// what's registered where, so this isn't an exact-match reservation like
+/// the others; it's checked as a pattern.
+fn is_shadowed_by_generic_tools_route(path: &str) -> bool {
+    path.strip_prefix("/v1/tools/")
+        .is_some_and(|rest| !rest.is_empty() && !rest.contains('/'))
 }
 
 fn conflict_message(kind: &str, name: &str, owner: &str) -> String {
