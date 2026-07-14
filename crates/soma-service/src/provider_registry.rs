@@ -794,14 +794,16 @@ fn enforce_input_limit(entry: &ToolEntry, call: &ProviderCall) -> Result<(), Pro
     ))
 }
 
-fn enforce_schema(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    let errors = entry
-        .input_validator
-        .iter_errors(&call.params)
+fn schema_error_details(validator: &Validator, value: &Value) -> Option<String> {
+    let errors = validator
+        .iter_errors(value)
         .map(|error| format!("{}: {}", error.instance_path(), error))
         .collect::<Vec<_>>();
-    if !errors.is_empty() {
-        let details = errors.join("; ");
+    (!errors.is_empty()).then(|| errors.join("; "))
+}
+
+fn enforce_schema(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
+    if let Some(details) = schema_error_details(&entry.input_validator, &call.params) {
         return Err(ProviderError::validation(
             &entry.provider,
             &entry.action,
@@ -842,12 +844,7 @@ fn enforce_output_schema(entry: &ToolEntry, output: &ProviderOutput) -> Result<(
     let Some(output_validator) = &entry.output_validator else {
         return Ok(());
     };
-    let errors = output_validator
-        .iter_errors(&output.value)
-        .map(|error| format!("{}: {}", error.instance_path(), error))
-        .collect::<Vec<_>>();
-    if !errors.is_empty() {
-        let details = errors.join("; ");
+    if let Some(details) = schema_error_details(output_validator, &output.value) {
         return Err(ProviderError::new(
             "output_schema_failed",
             &entry.provider,
