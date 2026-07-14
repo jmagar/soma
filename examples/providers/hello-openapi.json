@@ -24,7 +24,7 @@
       "rest": {
         "enabled": true,
         "method": "POST",
-        "path": "/hello"
+        "path": "/v1/hello"
       },
       "meta": {
         "openapi": {

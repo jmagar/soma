@@ -240,6 +240,85 @@ fn inspect_marks_uncompilable_input_schema_as_invalid() {
         .contains("input_schema"));
 }
 
+#[test]
+fn inspect_marks_invalid_when_rest_path_does_not_match_the_v1_prefix_schema_constraint() {
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+
+    // Deserializes fine and passes validate_provider_manifest (which checks
+    // structural rules, not schema patterns), but docs/contracts/
+    // provider-manifest.schema.json requires rest.path to match
+    // ^/v1(/.*)?$ — the HTTP router only mounts custom provider routes
+    // under /v1/{*path}, so a path outside that pattern is unreachable at
+    // runtime even though the manifest looks fine to every other check.
+    fs::write(
+        providers.join("bad-route.json"),
+        r#"{
+          "schema_version": 1,
+          "provider": { "name": "bad-route", "kind": "static-rust", "version": "0.1.0" },
+          "tools": [
+            {
+              "name": "bad_route_tool",
+              "description": "rest.path outside /v1",
+              "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+              "output_schema": { "type": "object", "properties": {}, "additionalProperties": true },
+              "rest": { "enabled": true, "method": "POST", "path": "/hello" }
+            }
+          ]
+        }"#,
+    )
+    .expect("write provider with an unreachable REST route");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_invalid, 1);
+    assert_eq!(report.providers_loaded, 0);
+    assert_eq!(
+        report.files[0].status,
+        ProviderFileInspectionStatus::Invalid
+    );
+    assert!(report.files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("rest/path"));
+}
+
+#[test]
+fn inspect_does_not_false_positive_on_manifests_that_omit_optional_fields() {
+    // Regression guard: an earlier implementation validated the schema
+    // against a re-serialized ProviderCatalog, which turns every omitted
+    // #[serde(default)] field into an explicit JSON `null` — and the schema
+    // rejects `null` where it expects an absent key or a real value. That
+    // false-flagged every well-formed, minimal manifest as invalid.
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+    fs::write(
+        providers.join("minimal.json"),
+        r#"{
+          "schema_version": 1,
+          "provider": { "name": "minimal", "kind": "static-rust" },
+          "tools": [
+            {
+              "name": "minimal_tool",
+              "description": "only required fields",
+              "input_schema": { "type": "object", "properties": {}, "additionalProperties": false }
+            }
+          ]
+        }"#,
+    )
+    .expect("write minimal provider");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_loaded, 1, "errors: {:?}", report.files);
+    assert_eq!(report.providers_invalid, 0);
+}
+
 fn tool_manifest(provider_name: &str, tool_name: &str, cli_command: Option<&str>) -> String {
     let cli = match cli_command {
         Some(command) => format!(r#", "cli": {{ "enabled": true, "command": "{command}" }}"#),

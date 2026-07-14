@@ -5,10 +5,10 @@ use std::{
 };
 
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use soma_contracts::{
-    provider_validation::validate_provider_manifest,
+    provider_validation::{validate_manifest_schema, validate_provider_manifest},
     providers::{ProviderCatalog, ProviderKind},
 };
 
@@ -129,8 +129,14 @@ impl FileProviderSource {
 
             match load_catalog(&path) {
                 Ok(catalog) => {
-                    let semantic_check = validate_provider_manifest(&catalog)
+                    let semantic_check = load_catalog_value(&path)
                         .map_err(|error| error.to_string())
+                        .and_then(|value| {
+                            validate_manifest_schema(&value).map_err(|error| error.to_string())
+                        })
+                        .and_then(|()| {
+                            validate_provider_manifest(&catalog).map_err(|error| error.to_string())
+                        })
                         .and_then(|()| compile_tool_schemas(&catalog));
                     match semantic_check {
                         Ok(()) => {
@@ -495,18 +501,13 @@ fn fingerprint_file(
 fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
     let extension = path.extension().and_then(|extension| extension.to_str());
     let catalog = match extension {
-        Some("json") => {
-            serde_json::from_slice(&fs::read(path).map_err(|source| FileProviderLoadError {
-                path: path.to_path_buf(),
-                message: format!("failed to read provider manifest: {source}"),
-            })?)
-            .map_err(|source| FileProviderLoadError {
+        Some("json") | Some("ts") | Some("wasm") => {
+            let value = load_catalog_value(path)?;
+            serde_json::from_value(value).map_err(|source| FileProviderLoadError {
                 path: path.to_path_buf(),
                 message: format!("invalid provider manifest JSON: {source}"),
             })?
         }
-        Some("ts") => load_ts_catalog(path)?,
-        Some("wasm") => load_wasm_catalog(path)?,
         Some("py") => load_python_catalog(path).map_err(|source| FileProviderLoadError {
             path: path.to_path_buf(),
             message: format!("invalid Python provider: {source}"),
@@ -522,7 +523,36 @@ fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
     Ok(catalog)
 }
 
-fn load_ts_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
+/// Parses a JSON/TS/WASM-sidecar provider file to a raw `Value`, one step
+/// short of `load_catalog`'s typed `ProviderCatalog`. Used by non-executing
+/// inspection to validate against `provider-manifest.schema.json` (schema-only
+/// constraints like `rest.path`'s pattern) before that information is lost to
+/// `#[serde(default)]` fields round-tripping through `Option::None` as JSON
+/// `null`, which the schema — correctly — does not accept in place of an
+/// absent key.
+fn load_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
+    let extension = path.extension().and_then(|extension| extension.to_str());
+    match extension {
+        Some("json") => {
+            serde_json::from_slice(&fs::read(path).map_err(|source| FileProviderLoadError {
+                path: path.to_path_buf(),
+                message: format!("failed to read provider manifest: {source}"),
+            })?)
+            .map_err(|source| FileProviderLoadError {
+                path: path.to_path_buf(),
+                message: format!("invalid provider manifest JSON: {source}"),
+            })
+        }
+        Some("ts") => load_ts_catalog_value(path),
+        Some("wasm") => load_wasm_catalog_value(path),
+        _ => Err(FileProviderLoadError {
+            path: path.to_path_buf(),
+            message: "unsupported provider file extension".to_owned(),
+        }),
+    }
+}
+
+fn load_ts_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
     let text = fs::read_to_string(path).map_err(|source| FileProviderLoadError {
         path: path.to_path_buf(),
         message: format!("failed to read TypeScript provider: {source}"),
@@ -573,7 +603,7 @@ fn extract_ts_manifest(text: &str) -> Option<&str> {
     None
 }
 
-fn load_wasm_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
+fn load_wasm_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
     let sidecar_path = wasm_sidecar_manifest_path(path);
     if sidecar_path.is_file() {
         return serde_json::from_slice(&fs::read(&sidecar_path).map_err(|source| {
