@@ -370,12 +370,12 @@ dependencies = [
 name = "codex-app-server-client"
 version = "0.1.0"
 dependencies = [
- "futures-util",
  "prettyplease",
  "schemars 0.8.22",
  "serde",
  "serde_json",
  "syn",
+ "tempfile",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -3270,6 +3270,7 @@ version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -4929,7 +4930,9 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "fancy-regex",
  "jsonschema",
+ "schemars 0.8.22",
  "semver",
  "serde",
  "serde_json",
@@ -4938,6 +4941,7 @@ dependencies = [
  "soma-service",
  "tempfile",
  "toml",
+ "typify",
  "walkdir",
 ]
 

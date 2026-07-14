@@ -70,3 +70,4 @@ pub use client::{
     SERVER_NOTIFICATION_METHODS,
 };
 pub use error::{Error, Result};
+pub use transport::MAX_LINE_BYTES;

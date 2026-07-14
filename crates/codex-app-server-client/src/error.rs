@@ -1,7 +1,11 @@
-use crate::protocol::RequestId;
-
 /// Errors returned by [`crate::CodexAppServerClient`].
+///
+/// `#[non_exhaustive]` because this crate expects to grow new failure modes
+/// over time (see the README's schema-regeneration workflow) - matching
+/// exhaustively on this enum today would make every future variant addition
+/// a breaking change for downstream crates.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error("failed to spawn `{command}`: {source}")]
     Spawn {
@@ -28,12 +32,6 @@ pub enum Error {
         message: String,
         data: Option<serde_json::Value>,
     },
-
-    #[error("received a response for unknown or already-resolved request id {0:?}")]
-    UnknownRequestId(RequestId),
-
-    #[error("child process exited before initialize completed")]
-    ChildExited,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

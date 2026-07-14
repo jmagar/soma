@@ -17,9 +17,19 @@ publish = false
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["process", "io-util", "io-std", "sync", "rt", "macros", "time"] }
-tokio-util = { version = "0.7", features = ["codec"] }
-futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+tokio = { version = "1", features = [
+  "process",
+  "io-util",
+  "io-std",
+  "sync",
+  "rt",
+  "macros",
+  "time",
+] }
+# Only `tokio_util::sync::CancellationToken` is used (for coordinated
+# connection shutdown); that module has no feature gate, so no features are
+# needed here.
+tokio-util = { version = "0.7", default-features = false }
 tracing = "0.1"
 
 [target.'cfg(unix)'.dependencies]
@@ -35,6 +45,7 @@ syn = { version = "2", features = ["full"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3"
 
 [[example]]
 name = "basic"

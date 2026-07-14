@@ -85,17 +85,20 @@ where
     writer.flush().await
 }
 
-/// Reads one `\n`-terminated line into `buf` (cleared first), enforcing
-/// [`MAX_LINE_BYTES`]. Returns the number of bytes read (0 on clean EOF with
-/// nothing left to read), or an error if the line is invalid UTF-8 or would
-/// exceed the cap - in either case the caller should treat the connection as
-/// dead rather than try to resynchronize mid-line.
+/// Reads one `\n`-terminated line into `buf` (cleared first, but its
+/// allocation is reused rather than replaced - callers keep one persistent
+/// `buf` across the whole read loop so this stays allocation-free after the
+/// first few calls), enforcing [`MAX_LINE_BYTES`]. Returns the number of
+/// bytes read (0 on clean EOF with nothing left to read), or an error if the
+/// line is invalid UTF-8 or would exceed the cap - in either case the caller
+/// should treat the connection as dead rather than try to resynchronize
+/// mid-line.
 pub(crate) async fn read_line<R>(reader: &mut R, buf: &mut String) -> std::io::Result<usize>
 where
     R: tokio::io::AsyncBufRead + Unpin,
 {
-    buf.clear();
-    let mut bytes: Vec<u8> = Vec::new();
+    let mut bytes = std::mem::take(buf).into_bytes();
+    bytes.clear(); // drops content, keeps the allocated capacity
     loop {
         let available = reader.fill_buf().await?;
         if available.is_empty() {

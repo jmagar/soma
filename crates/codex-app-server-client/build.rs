@@ -3,30 +3,81 @@
 //! 1. `protocol.schema.json` (660 JSON Schema definitions) -> Rust types via `typify`.
 //!    Written to `$OUT_DIR/protocol_generated.rs`, included by `src/protocol.rs`.
 //! 2. `methods.json` (per-method name/params-type/response-type metadata, derived
-//!    from the same schema by `schema/build_combined_schema.py`) -> ergonomic
-//!    per-method wrapper functions. Written to `$OUT_DIR/methods_generated.rs`,
-//!    included by `src/client.rs`.
+//!    from the same schema by `cargo xtask codex-schema regen`) -> ergonomic
+//!    per-method wrapper functions plus a small `impl ServerRequest` accessor
+//!    block. Written to `$OUT_DIR/methods_generated.rs`, included by `src/client.rs`.
+//!    Only the parts that genuinely vary per schema entry are generated here;
+//!    static types built on top of them (e.g. `PendingServerRequest`) are
+//!    hand-written in `src/client.rs` so they get normal Rust tooling
+//!    (rustfmt, doc links, "jump to definition").
 //!
 //! Regenerating the schema assets (after bumping the installed `codex` CLI):
-//! see `schema/build_combined_schema.py`'s module docstring and this crate's README.
+//! run `cargo xtask codex-schema regen <dir>` - see this crate's README
+//! "Regenerating the schema" section for the full workflow. This build script
+//! also does a best-effort staleness check (below): if a `codex` binary is on
+//! `PATH` and its `--version` doesn't match the version stamped in
+//! `schema/CODEX_VERSION.txt` at the last regen, it emits a non-fatal
+//! `cargo:warning` - never a build failure, and never attempts to
+//! regenerate anything itself.
 
 use std::collections::BTreeSet;
 use std::env;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 use serde_json::Value;
 
 fn main() {
     println!("cargo:rerun-if-changed=schema/protocol.schema.json");
     println!("cargo:rerun-if-changed=schema/methods.json");
+    println!("cargo:rerun-if-changed=schema/CODEX_VERSION.txt");
 
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR set by cargo");
     let out_dir = Path::new(&out_dir);
 
     generate_protocol_types(out_dir);
     generate_method_wrappers(out_dir);
+    check_codex_staleness();
+}
+
+/// Best-effort, non-fatal staleness check: if `codex` is on `PATH` and its
+/// reported version doesn't match `schema/CODEX_VERSION.txt` (stamped by the
+/// last `cargo xtask codex-schema regen` run), warn that the vendored schema
+/// may be out of date. This crate is a normal library dependency and must
+/// build fine on machines/CI without `codex` installed at all, so a missing
+/// binary (or any other lookup failure) is silently treated as "nothing to
+/// warn about" - never a build failure, and no network/subprocess-driven
+/// auto-regeneration is attempted here.
+fn check_codex_staleness() {
+    let Ok(installed) = Command::new("codex").arg("--version").output() else {
+        return;
+    };
+    if !installed.status.success() {
+        return;
+    }
+    let Ok(installed_version) = String::from_utf8(installed.stdout) else {
+        return;
+    };
+    let installed_version = installed_version.trim();
+    if installed_version.is_empty() {
+        return;
+    }
+
+    let Ok(stamped) = fs::read_to_string("schema/CODEX_VERSION.txt") else {
+        // No stamp yet (e.g. a checkout predating staleness tracking) -
+        // nothing to compare against.
+        return;
+    };
+    let stamped = stamped.trim();
+    if stamped.is_empty() || stamped == installed_version {
+        return;
+    }
+
+    println!(
+        "cargo:warning=vendored codex-app-server-client schema was generated from `{stamped}`, but the installed `codex` CLI reports `{installed_version}`. The vendored schema may be stale - see README.md's 'Regenerating the schema' section (`cargo xtask codex-schema regen <dir>`)."
+    );
 }
 
 fn generate_protocol_types(out_dir: &Path) {
@@ -35,18 +86,44 @@ fn generate_protocol_types(out_dir: &Path) {
     let schema: schemars::schema::RootSchema = serde_json::from_str(&content)
         .expect("parse protocol.schema.json as a JSON Schema document");
 
-    let settings = typify::TypeSpaceSettings::default();
+    let mut settings = typify::TypeSpaceSettings::default();
+    // `RequestId` (the JSON-RPC id, `string | int64`) is the one generated
+    // type this crate needs to use as a `HashMap`/`HashSet` key - e.g. to
+    // correlate in-flight server->client requests by id. Its variant
+    // payloads (`String`, `i64`) are both natively `Eq`/`Hash`, so patching
+    // in these derives *just* for this type is sound. A blanket
+    // `.with_derive(...)` across all ~660 generated types would not be safe:
+    // several of them embed `serde_json::Value` or `f64`, neither of which
+    // implement `Eq`/`Hash`, and would fail to compile.
+    let mut request_id_patch = typify::TypeSpacePatch::default();
+    request_id_patch
+        .with_derive("PartialEq")
+        .with_derive("Eq")
+        .with_derive("Hash");
+    settings.with_patch("RequestId", &request_id_patch);
+
     let mut type_space = typify::TypeSpace::new(&settings);
     type_space
         .add_root_schema(schema)
         .expect("typify: convert protocol.schema.json to Rust types");
 
     let tokens = type_space.to_stream();
-    let file: syn::File = syn::parse2(tokens).expect("parse typify output as a Rust file");
-    let formatted = prettyplease::unparse(&file);
+    write_formatted_rust(out_dir, "protocol_generated.rs", &tokens.to_string());
+}
 
-    fs::write(out_dir.join("protocol_generated.rs"), formatted)
-        .expect("write protocol_generated.rs");
+/// Parses `source` as a complete Rust file and pretty-prints it via
+/// `prettyplease` before writing, matching typify's own discipline (see
+/// `generate_protocol_types`) - a malformed manifest or template bug fails
+/// loudly here, at generation time, rather than producing an unformatted
+/// `.rs` file whose syntax errors only surface once `rustc` compiles the
+/// `include!`d fragment deep inside `src/client.rs`.
+fn write_formatted_rust(out_dir: &Path, file_name: &str, source: &str) {
+    let file: syn::File = syn::parse_str(source).unwrap_or_else(|err| {
+        panic!("generated {file_name} is not valid Rust: {err}\n\n---\n{source}\n---")
+    });
+    let formatted = prettyplease::unparse(&file);
+    fs::write(out_dir.join(file_name), formatted)
+        .unwrap_or_else(|err| panic!("write {file_name}: {err}"));
 }
 
 struct MethodEntry {
@@ -58,7 +135,12 @@ struct MethodEntry {
     response_type: Option<String>,
 }
 
-fn parse_entries(value: &Value, with_response: bool) -> Vec<MethodEntry> {
+// `server_notifications` entries never have a "response_type" key at all -
+// indexing a missing key on a `serde_json::Value::Object` yields `Value::Null`
+// (serde_json's `Index` impl, not a panic), and `.as_str()` on `Value::Null`
+// is `None` regardless - so reading `response_type` unconditionally already
+// produces the right answer for every section without needing a flag.
+fn parse_entries(value: &Value) -> Vec<MethodEntry> {
     value
         .as_array()
         .expect("methods.json section is an array")
@@ -69,22 +151,42 @@ fn parse_entries(value: &Value, with_response: bool) -> Vec<MethodEntry> {
             fn_name: e["fn_name"].as_str().unwrap().to_string(),
             params_type: e["params_type"].as_str().map(str::to_string),
             params_optional: e["params_optional"].as_bool().unwrap_or(false),
-            response_type: if with_response {
-                e["response_type"].as_str().map(str::to_string)
-            } else {
-                None
-            },
+            response_type: e["response_type"].as_str().map(str::to_string),
         })
         .collect()
+}
+
+/// One (parameter signature, argument expression) pair, shared by every
+/// per-method wrapper regardless of its response shape.
+fn params_fragment(entry: &MethodEntry) -> (String, &'static str) {
+    match (&entry.params_type, entry.params_optional) {
+        (Some(pt), false) => (format!(", params: crate::protocol::{pt}"), "params"),
+        (Some(pt), true) => (format!(", params: Option<crate::protocol::{pt}>"), "params"),
+        (None, _) => (String::new(), "params: ()"),
+    }
+}
+
+/// One (return type, body-tail expression) pair, shared by every per-method
+/// wrapper regardless of its params shape.
+fn response_fragment(entry: &MethodEntry) -> (String, &'static str) {
+    match &entry.response_type {
+        Some(rt) => (
+            format!("crate::Result<crate::protocol::{rt}>"),
+            "Ok(serde_json::from_value(value)?)",
+        ),
+        None => ("crate::Result<()>".to_string(), "Ok(())"),
+    }
 }
 
 fn generate_method_wrappers(out_dir: &Path) {
     let content = fs::read_to_string("schema/methods.json").expect("read schema/methods.json");
     let manifest: Value = serde_json::from_str(&content).expect("parse methods.json");
 
-    let client_requests = parse_entries(&manifest["client_requests"], true);
-    let server_requests = parse_entries(&manifest["server_requests"], true);
-    let server_notifications = parse_entries(&manifest["server_notifications"], false);
+    let client_requests = parse_entries(&manifest["client_requests"]);
+    let server_requests = parse_entries(&manifest["server_requests"]);
+    let server_notifications = parse_entries(&manifest["server_notifications"]);
+
+    assert_client_notifications_unchanged(&manifest["client_notifications"]);
 
     let mut out = String::new();
     writeln!(
@@ -94,130 +196,56 @@ fn generate_method_wrappers(out_dir: &Path) {
     .unwrap();
 
     // -------- ergonomic per-method wrappers on CodexAppServerClient --------
+    // One template for all 122 client-request methods: params/response shape
+    // only ever varies along the two independent axes captured by
+    // `params_fragment`/`response_fragment`, so there is exactly one place
+    // to change wrapper behavior for every method at once (see the review
+    // that flagged the prior 6-arm hand-duplicated version for drift risk -
+    // two of those six arms weren't even reachable by the current schema).
     writeln!(out, "impl CodexAppServerClient {{").unwrap();
     for e in &client_requests {
         let doc = format!("Calls the `{}` app-server method.", e.method);
-        match (&e.params_type, e.params_optional, &e.response_type) {
-            (Some(pt), false, Some(rt)) => {
-                writeln!(
-                    out,
-                    r#"    #[doc = {doc:?}]
-    pub async fn {fn_name}(&self, params: crate::protocol::{pt}) -> crate::Result<crate::protocol::{rt}> {{
-        let value = self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, params }}).await?;
-        Ok(serde_json::from_value(value)?)
+        let (param_sig, param_pass) = params_fragment(e);
+        let (ret_ty, ret_tail) = response_fragment(e);
+        // When there's a response, `call_request(...).await?` binds to
+        // `value`, which `ret_tail` (`Ok(serde_json::from_value(value)?)`)
+        // consumes; when there isn't, the call is just awaited for its error
+        // and `ret_tail` is a bare `Ok(())`.
+        let value_binding = if e.response_type.is_some() {
+            "let value = "
+        } else {
+            ""
+        };
+        let call_expr = format!(
+            "{value_binding}self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, {param_pass} }}).await?;",
+            variant = e.variant_name,
+        );
+        writeln!(
+            out,
+            r#"    #[doc = {doc:?}]
+    pub async fn {fn_name}(&self{param_sig}) -> {ret_ty} {{
+        {call_expr}
+        {ret_tail}
     }}"#,
-                    doc = doc,
-                    fn_name = e.fn_name,
-                    pt = pt,
-                    rt = rt,
-                    variant = e.variant_name,
-                )
-                .unwrap();
-            }
-            (Some(pt), true, Some(rt)) => {
-                writeln!(
-                    out,
-                    r#"    #[doc = {doc:?}]
-    pub async fn {fn_name}(&self, params: Option<crate::protocol::{pt}>) -> crate::Result<crate::protocol::{rt}> {{
-        let value = self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, params }}).await?;
-        Ok(serde_json::from_value(value)?)
-    }}"#,
-                    doc = doc,
-                    fn_name = e.fn_name,
-                    pt = pt,
-                    rt = rt,
-                    variant = e.variant_name,
-                )
-                .unwrap();
-            }
-            (None, _, Some(rt)) => {
-                writeln!(
-                    out,
-                    r#"    #[doc = {doc:?}]
-    pub async fn {fn_name}(&self) -> crate::Result<crate::protocol::{rt}> {{
-        let value = self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, params: () }}).await?;
-        Ok(serde_json::from_value(value)?)
-    }}"#,
-                    doc = doc,
-                    fn_name = e.fn_name,
-                    rt = rt,
-                    variant = e.variant_name,
-                )
-                .unwrap();
-            }
-            (Some(pt), false, None) => {
-                // config/mcpServer/reload: has params but no response payload.
-                writeln!(
-                    out,
-                    r#"    #[doc = {doc:?}]
-    pub async fn {fn_name}(&self, params: crate::protocol::{pt}) -> crate::Result<()> {{
-        self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, params }}).await?;
-        Ok(())
-    }}"#,
-                    doc = doc,
-                    fn_name = e.fn_name,
-                    pt = pt,
-                    variant = e.variant_name,
-                )
-                .unwrap();
-            }
-            (Some(pt), true, None) => {
-                writeln!(
-                    out,
-                    r#"    #[doc = {doc:?}]
-    pub async fn {fn_name}(&self, params: Option<crate::protocol::{pt}>) -> crate::Result<()> {{
-        self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, params }}).await?;
-        Ok(())
-    }}"#,
-                    doc = doc,
-                    fn_name = e.fn_name,
-                    pt = pt,
-                    variant = e.variant_name,
-                )
-                .unwrap();
-            }
-            (None, _, None) => {
-                writeln!(
-                    out,
-                    r#"    #[doc = {doc:?}]
-    pub async fn {fn_name}(&self) -> crate::Result<()> {{
-        self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, params: () }}).await?;
-        Ok(())
-    }}"#,
-                    doc = doc,
-                    fn_name = e.fn_name,
-                    variant = e.variant_name,
-                )
-                .unwrap();
-            }
-        }
+            doc = doc,
+            fn_name = e.fn_name,
+        )
+        .unwrap();
     }
     writeln!(out, "}}").unwrap();
 
-    // -------- typed server->client request enum + reply helpers --------
+    // -------- schema-derived accessors on ServerRequest --------
+    // Only the two genuinely per-variant pieces (`id`, `method_name`) are
+    // generated; `PendingServerRequest` itself (which wraps a `ServerRequest`
+    // plus a reply channel, and exposes `respond`/`respond_error` on top of
+    // these two accessors) is hand-written in `src/client.rs`.
     writeln!(
         out,
         r#"
-/// A server->client request the app-server sent us (approvals, elicitation, etc.),
-/// paired with a one-shot reply channel. Obtain these from
-/// [`EventStream::recv`](crate::EventStream::recv) as an [`Event::Request`](crate::Event::Request).
-pub struct PendingServerRequest {{
-    pub request: crate::protocol::ServerRequest,
-    pub(crate) reply_tx: tokio::sync::oneshot::Sender<crate::transport::OutgoingReply>,
-}}
-
-impl std::fmt::Debug for PendingServerRequest {{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{
-        f.debug_struct("PendingServerRequest")
-            .field("request", &self.request)
-            .finish_non_exhaustive()
-    }}
-}}
-
-impl PendingServerRequest {{
+impl crate::protocol::ServerRequest {{
     /// The `RequestId` the app-server expects echoed back in the reply.
-    pub fn id(&self) -> &crate::protocol::RequestId {{
-        match &self.request {{"#
+    pub(crate) fn id(&self) -> &crate::protocol::RequestId {{
+        match self {{"#
     )
     .unwrap();
     for e in &server_requests {
@@ -233,30 +261,9 @@ impl PendingServerRequest {{
         r#"        }}
     }}
 
-    /// Send a successful reply. `result` must serialize to the response shape
-    /// the app-server expects for this specific method (see the matching
-    /// `*Response` type for the method named by [`Self::method_name`]).
-    pub fn respond(self, result: impl serde::Serialize) -> crate::Result<()> {{
-        let id = self.id().clone();
-        let value = serde_json::to_value(result)?;
-        let _ = self.reply_tx.send(crate::transport::OutgoingReply::Result {{ id, result: value }});
-        Ok(())
-    }}
-
-    /// Send an error reply.
-    pub fn respond_error(self, code: i64, message: impl Into<String>, data: Option<serde_json::Value>) {{
-        let id = self.id().clone();
-        let _ = self.reply_tx.send(crate::transport::OutgoingReply::Error {{
-            id,
-            code,
-            message: message.into(),
-            data,
-        }});
-    }}
-
     /// The wire method name, e.g. `"execCommandApproval"`.
-    pub fn method_name(&self) -> &'static str {{
-        match &self.request {{"#
+    pub(crate) fn method_name(&self) -> &'static str {{
+        match self {{"#
     )
     .unwrap();
     for e in &server_requests {
@@ -265,6 +272,35 @@ impl PendingServerRequest {{
             "            crate::protocol::ServerRequest::{variant} {{ .. }} => {method:?},",
             variant = e.variant_name,
             method = e.method,
+        )
+        .unwrap();
+    }
+    writeln!(
+        out,
+        r#"        }}
+    }}
+
+    /// The name of the `crate::protocol` type `PendingServerRequest::respond`'s
+    /// `result` must serialize to for this specific request. Not always
+    /// `PascalCase(method_name) + "Response"` - a few methods need an
+    /// irregular name (see `RESPONSE_OVERRIDES` in
+    /// `schema/build_combined_schema.py`) - so prefer this accessor over
+    /// guessing the name yourself.
+    pub(crate) fn expected_response_type_name(&self) -> &'static str {{
+        match self {{"#
+    )
+    .unwrap();
+    for e in &server_requests {
+        let response_type = e.response_type.as_deref().unwrap_or_else(|| {
+            panic!(
+                "server request {} has no response type - every ServerRequest must expect a reply",
+                e.method
+            )
+        });
+        writeln!(
+            out,
+            "            crate::protocol::ServerRequest::{variant} {{ .. }} => {response_type:?},",
+            variant = e.variant_name,
         )
         .unwrap();
     }
@@ -291,5 +327,32 @@ impl PendingServerRequest {{
     )
     .unwrap();
 
-    fs::write(out_dir.join("methods_generated.rs"), out).expect("write methods_generated.rs");
+    write_formatted_rust(out_dir, "methods_generated.rs", &out);
+}
+
+/// `client_notifications` (client->server, fire-and-forget messages) has
+/// exactly one entry today - `"initialized"` - which is hand-sent by
+/// `CodexAppServerClient::send_initialized` in `src/client.rs` (bypassing the
+/// generated `ClientNotification` type, which typify represents oddly for a
+/// single-variant `oneOf`; see that method's doc comment). If a future
+/// `codex` schema version adds a second client notification, this manifest
+/// section would silently grow with no wrapper method and no way to send it -
+/// fail the build loudly instead so a maintainer notices and adds a
+/// hand-written sender for it (mirroring `send_initialized`), then updates
+/// this assertion.
+fn assert_client_notifications_unchanged(client_notifications: &Value) {
+    let methods: Vec<&str> = client_notifications
+        .as_array()
+        .expect("methods.json client_notifications is an array")
+        .iter()
+        .map(|e| e["method"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        methods,
+        vec!["initialized"],
+        "schema/methods.json's client_notifications changed from the one expected entry \
+         (\"initialized\"). This crate has no generic way to send client notifications - add a \
+         hand-written sender in src/client.rs for the new method (see send_initialized), then \
+         update this assertion in build.rs to match the new expected list."
+    );
 }
