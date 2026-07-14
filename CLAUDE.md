@@ -57,6 +57,10 @@ subcommands select HTTP server, stdio MCP, or CLI adapter mode.
 
 If you find yourself computing, filtering, transforming, or validating data in `tools.rs` or `cli.rs`, stop and move it to `app.rs`.
 
+Dynamic providers load from `./providers` by default or `SOMA_PROVIDER_DIR`. Two distinct CLI surfaces inspect them:
+- `soma providers validate|inspect|test` — dispatches through the *live, loaded* `ProviderRegistry`; executes handlers.
+- `soma providers list|lint|status` — non-executing filesystem inspection via `soma_service::providers::filesystem::FileProviderSource::inspect()`; never loads the registry or runs TS/WASM/MCP/OpenAPI handlers. Use `soma providers lint` before committing provider examples or runtime docs.
+
 ## How to add an action
 
 1. **`crates/soma-service/src/soma.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).

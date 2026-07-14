@@ -148,6 +148,42 @@ fn dynamic_provider_command_accepts_flat_flags_without_json() {
 }
 
 #[test]
+fn parses_providers_list_with_dir_and_json() {
+    let command = parse_args_from(["providers", "list", "--dir", "/tmp/providers", "--json"])
+        .expect("parse command")
+        .expect("command");
+
+    assert!(matches!(
+        command,
+        Command::Providers(ProviderCommand::List { .. })
+    ));
+}
+
+#[test]
+fn parses_providers_lint_with_dir_and_json() {
+    let command = parse_args_from(["providers", "lint", "--dir", "/tmp/providers", "--json"])
+        .expect("parse command")
+        .expect("command");
+
+    assert!(matches!(
+        command,
+        Command::Providers(ProviderCommand::Lint { .. })
+    ));
+}
+
+#[test]
+fn parses_providers_status_with_dir_and_json() {
+    let command = parse_args_from(["providers", "status", "--dir", "/tmp/providers", "--json"])
+        .expect("parse command")
+        .expect("command");
+
+    assert!(matches!(
+        command,
+        Command::Providers(ProviderCommand::Status { .. })
+    ));
+}
+
+#[test]
 fn providers_validate_and_inspect_parse_as_management_commands() {
     assert_eq!(
         parse_args_from(["providers", "validate"]).unwrap().unwrap(),

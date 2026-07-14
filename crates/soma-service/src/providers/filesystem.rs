@@ -26,6 +26,34 @@ pub struct FileProviderSource {
     root: PathBuf,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderDirectoryInspection {
+    pub root: PathBuf,
+    pub exists: bool,
+    pub files: Vec<ProviderFileInspection>,
+    pub providers_loaded: usize,
+    pub providers_disabled: usize,
+    pub providers_invalid: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderFileInspection {
+    pub path: PathBuf,
+    pub file_name: String,
+    pub status: ProviderFileInspectionStatus,
+    pub provider_id: Option<String>,
+    pub provider_kind: Option<String>,
+    pub actions: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderFileInspectionStatus {
+    Loaded,
+    Disabled,
+    Invalid,
+}
+
 impl FileProviderSource {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
@@ -33,6 +61,101 @@ impl FileProviderSource {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Non-executing inspection of the provider directory: parses manifests
+    /// (JSON/TS/WASM sidecar/Python) but never runs handler code, calls MCP,
+    /// or fetches OpenAPI — safe to run before the runtime loads providers.
+    pub fn inspect(&self) -> Result<ProviderDirectoryInspection, FileProviderLoadError> {
+        if !self.root.exists() {
+            return Ok(ProviderDirectoryInspection {
+                root: self.root.clone(),
+                exists: false,
+                files: Vec::new(),
+                providers_loaded: 0,
+                providers_disabled: 0,
+                providers_invalid: 0,
+            });
+        }
+
+        let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
+            path: self.root.clone(),
+            message: format!("failed to read provider directory: {source}"),
+        })?;
+        let mut files = Vec::new();
+
+        for entry in entries {
+            let entry = entry.map_err(|source| FileProviderLoadError {
+                path: self.root.clone(),
+                message: format!("failed to read provider directory entry: {source}"),
+            })?;
+            let path = entry.path();
+            if !path.is_file() || !is_provider_file(&path) || is_wasm_sidecar_manifest(&path) {
+                continue;
+            }
+
+            let file_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("<unknown>")
+                .to_owned();
+
+            match load_catalog(&path) {
+                Ok(catalog) => {
+                    let status = if catalog.provider.enabled == Some(false) {
+                        ProviderFileInspectionStatus::Disabled
+                    } else {
+                        ProviderFileInspectionStatus::Loaded
+                    };
+                    let actions = catalog
+                        .tools
+                        .iter()
+                        .map(|tool| tool.name.clone())
+                        .collect::<Vec<_>>();
+                    files.push(ProviderFileInspection {
+                        path,
+                        file_name,
+                        status,
+                        provider_id: Some(catalog.provider.name),
+                        provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
+                        actions,
+                        error: None,
+                    });
+                }
+                Err(error) => files.push(ProviderFileInspection {
+                    path,
+                    file_name,
+                    status: ProviderFileInspectionStatus::Invalid,
+                    provider_id: None,
+                    provider_kind: None,
+                    actions: Vec::new(),
+                    error: Some(error.to_string()),
+                }),
+            }
+        }
+
+        files.sort_by(|left, right| left.file_name.cmp(&right.file_name));
+        let providers_loaded = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Loaded)
+            .count();
+        let providers_disabled = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Disabled)
+            .count();
+        let providers_invalid = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Invalid)
+            .count();
+
+        Ok(ProviderDirectoryInspection {
+            root: self.root.clone(),
+            exists: true,
+            files,
+            providers_loaded,
+            providers_disabled,
+            providers_invalid,
+        })
     }
 
     pub fn load(&self) -> Result<Vec<std::sync::Arc<dyn Provider>>, FileProviderLoadError> {
