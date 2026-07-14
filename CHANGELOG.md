@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Restored clean-build compatibility with the dependency versions already
+  pinned in `Cargo.lock`: ported schema validation to the jsonschema 0.47
+  `Validator` API, hex-encoded sha2 0.11 digests explicitly, bumped
+  `sse-stream` to 0.2.4 for rmcp 2.2, and installed a rustls crypto provider
+  before building the rmcp streamable HTTP client transport (reqwest 0.13
+  panics without one). Warm CI caches had masked all four breakages.
+
 ## [0.4.7]
 
 ### Added

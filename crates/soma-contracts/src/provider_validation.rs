@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use jsonschema::JSONSchema;
+use jsonschema::Validator;
 use serde_json::Value;
 
 use crate::providers::{HostCapabilities, ProviderKind, ProviderManifest};
@@ -56,15 +56,18 @@ pub fn validate_provider_manifest_value(
 pub fn validate_manifest_schema(value: &Value) -> Result<(), ProviderValidationError> {
     let schema: Value = serde_json::from_str(SCHEMA)
         .map_err(|error| ProviderValidationError::new("schema_parse_failed", error.to_string()))?;
-    let compiled = JSONSchema::options().compile(&schema).map_err(|error| {
+    let compiled: Validator = jsonschema::options().build(&schema).map_err(|error| {
         ProviderValidationError::new("schema_compile_failed", error.to_string())
     })?;
-    if let Err(errors) = compiled.validate(value) {
-        let details = errors
-            .map(|error| format!("{}: {}", error.instance_path, error))
-            .collect::<Vec<_>>()
-            .join("; ");
-        return Err(ProviderValidationError::new("json_schema_failed", details));
+    let details = compiled
+        .iter_errors(value)
+        .map(|error| format!("{}: {}", error.instance_path(), error))
+        .collect::<Vec<_>>();
+    if !details.is_empty() {
+        return Err(ProviderValidationError::new(
+            "json_schema_failed",
+            details.join("; "),
+        ));
     }
     Ok(())
 }

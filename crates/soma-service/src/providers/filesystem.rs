@@ -52,7 +52,11 @@ impl FileProviderSource {
         for path in self.fingerprint_paths()? {
             fingerprint_file(&mut hasher, &self.root, &path)?;
         }
-        Ok(format!("{:x}", hasher.finalize()))
+        Ok(hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>())
     }
 
     fn fingerprint_paths(&self) -> Result<Vec<PathBuf>, FileProviderLoadError> {
