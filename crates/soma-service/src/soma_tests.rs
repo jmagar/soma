@@ -214,7 +214,6 @@ async fn explicit_local_runtime_mode_ignores_configured_api_url() {
         api_url: base_url,
         api_key: "secret-token".to_string(),
         runtime_mode: RuntimeMode::Local,
-        ..SomaConfig::default()
     })
     .expect("local client should build");
 
@@ -245,7 +244,6 @@ async fn remote_provider_action_uses_catalog_generic_route() {
         api_url: base_url,
         api_key: "secret-token".to_string(),
         runtime_mode: RuntimeMode::Remote,
-        ..SomaConfig::default()
     })
     .expect("remote client should build");
 
@@ -272,7 +270,6 @@ async fn remote_provider_action_uses_catalog_custom_route() {
         api_url: base_url,
         api_key: "secret-token".to_string(),
         runtime_mode: RuntimeMode::Remote,
-        ..SomaConfig::default()
     })
     .expect("remote client should build");
 
