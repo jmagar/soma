@@ -35,7 +35,7 @@ Self-contained Python sidecar tools for Soma provider smoke tests.
 
 | tool | MCP | CLI | REST | purpose |
 |---|---:|---:|---:|---|
-| `python_runtime_check` | yes | yes | no | Return a compact proof that the Python sidecar executed the provider. |
+| `python_runtime_check` | yes | yes | yes | Return a compact proof that the Python sidecar executed the provider. |
 
 ### `static-rust` (static-rust)
 

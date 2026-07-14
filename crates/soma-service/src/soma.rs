@@ -16,7 +16,7 @@ use anyhow::Context;
 use anyhow::Result;
 use serde_json::{json, Value};
 
-use soma_contracts::config::SomaConfig;
+use soma_contracts::config::{EffectiveRuntimeMode, SomaConfig};
 
 #[cfg(feature = "client")]
 use reqwest::{header, Url};
@@ -61,8 +61,7 @@ impl SomaClient {
     /// tests and first-run scaffolds work without a deployed service. If it is
     /// set, operations are forwarded to direct `{SOMA_API_URL}/v1/*` routes.
     pub fn new(cfg: &SomaConfig) -> Result<Self> {
-        let api_url = cfg.api_url.trim();
-        let target = build_target(api_url, &cfg.api_key)?;
+        let target = build_target(cfg)?;
 
         #[cfg(feature = "client")]
         {
@@ -131,17 +130,19 @@ impl SomaClient {
     /// manifests to execute provider-backed actions.
     pub async fn call_rest_action(&self, action: &str, params: Value) -> Result<Value> {
         validate_action_path_segment(action)?;
-        let relative_path = format!("v1/{action}");
-        let body = if remote_action_uses_get(action, &params) {
-            None
-        } else {
-            Some(params)
-        };
-        self.call_deployed_api(action, &relative_path, body)
+        let call = self.resolve_remote_rest_call(action, &params).await?;
+        self.call_deployed_api_method(action, &call.method, &call.relative_path, call.body)
             .await?
             .ok_or_else(|| {
                 anyhow::anyhow!("SOMA_API_URL is required for remote runtime mode action={action}")
             })
+    }
+
+    /// Fetch the live provider catalog from a deployed Soma HTTP server.
+    pub async fn provider_catalog(&self) -> Result<Value> {
+        self.get_deployed_api("providers", "v1/providers")
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("SOMA_API_URL is required to read remote providers"))
     }
 
     /// Readiness probe of the upstream dependency.
@@ -202,9 +203,21 @@ impl SomaClient {
         relative_path: &str,
         body: Option<Value>,
     ) -> Result<Option<Value>> {
+        let method = if body.is_some() { "POST" } else { "GET" };
+        self.call_deployed_api_method(action, method, relative_path, body)
+            .await
+    }
+
+    async fn call_deployed_api_method(
+        &self,
+        action: &str,
+        method: &str,
+        relative_path: &str,
+        body: Option<Value>,
+    ) -> Result<Option<Value>> {
         #[cfg(not(feature = "client"))]
         {
-            let _ = (action, relative_path, body);
+            let _ = (action, method, relative_path, body);
             Ok(None)
         }
         #[cfg(feature = "client")]
@@ -218,11 +231,12 @@ impl SomaClient {
             };
 
             let url = api_url(base_url, relative_path)?;
-            let mut request = if let Some(body) = body {
-                self.client.post(url).json(&body)
-            } else {
-                self.client.get(url)
-            };
+            let method = reqwest::Method::from_bytes(method.as_bytes())
+                .with_context(|| format!("invalid remote REST method action={action}"))?;
+            let mut request = self.client.request(method, url);
+            if let Some(body) = body {
+                request = request.json(&body);
+            }
             if let Some(token) = bearer_token {
                 request = request.header(header::AUTHORIZATION, format!("Bearer {token}"));
             }
@@ -248,14 +262,64 @@ impl SomaClient {
     }
 }
 
+#[derive(Debug)]
+struct RemoteRestCall {
+    method: String,
+    relative_path: String,
+    body: Option<Value>,
+}
+
+impl SomaClient {
+    async fn resolve_remote_rest_call(
+        &self,
+        action: &str,
+        params: &Value,
+    ) -> Result<RemoteRestCall> {
+        if remote_action_uses_get(action, params) {
+            return Ok(RemoteRestCall {
+                method: "GET".to_owned(),
+                relative_path: format!("v1/{action}"),
+                body: None,
+            });
+        }
+
+        if matches!(action, "greet" | "echo") {
+            return Ok(RemoteRestCall {
+                method: "POST".to_owned(),
+                relative_path: format!("v1/{action}"),
+                body: Some(params.clone()),
+            });
+        }
+
+        let catalog = self.provider_catalog().await?;
+        if let Some(route) = remote_provider_route(&catalog, action)? {
+            return Ok(RemoteRestCall {
+                method: route.method,
+                relative_path: route.relative_path,
+                body: Some(params.clone()),
+            });
+        }
+
+        Ok(RemoteRestCall {
+            method: "POST".to_owned(),
+            relative_path: format!("v1/tools/{action}"),
+            body: Some(params.clone()),
+        })
+    }
+}
+
 #[cfg(feature = "client")]
-fn build_target(api_url: &str, api_key: &str) -> Result<SomaTarget> {
+fn build_target(cfg: &SomaConfig) -> Result<SomaTarget> {
+    if cfg.effective_runtime_mode() == EffectiveRuntimeMode::Local {
+        return Ok(SomaTarget::Stub);
+    }
+    let api_url = cfg.api_url.trim();
     if api_url.is_empty() {
         return Ok(SomaTarget::Stub);
     }
     let base_url =
         Url::parse(api_url).with_context(|| format!("invalid SOMA_API_URL: {api_url}"))?;
-    let bearer_token = non_empty(api_key);
+    let bearer_token = non_empty(&cfg.api_key);
     Ok(SomaTarget::DeployedApi {
         base_url,
         bearer_token,
@@ -263,8 +327,8 @@ fn build_target(api_url: &str, api_key: &str) -> Result<SomaTarget> {
 }
 
 #[cfg(not(feature = "client"))]
-fn build_target(api_url: &str, _api_key: &str) -> Result<SomaTarget> {
-    if !api_url.is_empty() {
+fn build_target(cfg: &SomaConfig) -> Result<SomaTarget> {
+    if cfg.effective_runtime_mode() == EffectiveRuntimeMode::Remote && !cfg.api_url.is_empty() {
         anyhow::bail!("soma-service was built without the `client` feature");
     }
     Ok(SomaTarget::Stub)
@@ -296,6 +360,89 @@ fn non_empty(value: &str) -> Option<String> {
 fn remote_action_uses_get(action: &str, params: &Value) -> bool {
     params.as_object().is_some_and(|object| object.is_empty())
         && matches!(action, "status" | "help")
+}
+
+#[derive(Debug)]
+struct RemoteProviderRoute {
+    method: String,
+    relative_path: String,
+}
+
+fn remote_provider_route(catalog: &Value, action: &str) -> Result<Option<RemoteProviderRoute>> {
+    let Some(providers) = catalog.get("providers").and_then(Value::as_array) else {
+        return Ok(None);
+    };
+    for provider in providers {
+        let Some(tools) = provider.get("tools").and_then(Value::as_array) else {
+            continue;
+        };
+        for tool in tools {
+            if !remote_tool_matches_action(tool, action) {
+                continue;
+            }
+            if tool
+                .get("surfaces")
+                .and_then(|surfaces| surfaces.get("rest"))
+                .and_then(Value::as_bool)
+                == Some(false)
+            {
+                anyhow::bail!("remote provider action `{action}` is not REST-exposed");
+            }
+            let canonical = tool
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("remote provider catalog tool missing name"))?;
+            if let Some(rest) = tool.get("rest") {
+                if let Some(path) = rest.get("path").and_then(Value::as_str) {
+                    return Ok(Some(RemoteProviderRoute {
+                        method: rest_method(rest),
+                        relative_path: trim_relative_rest_path(path),
+                    }));
+                }
+            }
+            if let Some(rest) = tool.get("generic_rest") {
+                if let Some(path) = rest.get("path").and_then(Value::as_str) {
+                    return Ok(Some(RemoteProviderRoute {
+                        method: rest_method(rest),
+                        relative_path: trim_relative_rest_path(path),
+                    }));
+                }
+            }
+            return Ok(Some(RemoteProviderRoute {
+                method: "POST".to_owned(),
+                relative_path: format!("v1/tools/{canonical}"),
+            }));
+        }
+    }
+    Ok(None)
+}
+
+fn rest_method(rest: &Value) -> String {
+    rest.get("method")
+        .and_then(Value::as_str)
+        .unwrap_or("POST")
+        .to_ascii_uppercase()
+}
+
+fn remote_tool_matches_action(tool: &Value, action: &str) -> bool {
+    if tool.get("name").and_then(Value::as_str) == Some(action) {
+        return true;
+    }
+    let Some(cli) = tool.get("cli") else {
+        return false;
+    };
+    if cli.get("command").and_then(Value::as_str) == Some(action) {
+        return true;
+    }
+    cli.get("aliases")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .any(|alias| alias.as_str() == Some(action))
+}
+
+fn trim_relative_rest_path(path: &str) -> String {
+    path.trim_start_matches('/').to_owned()
 }
 
 fn validate_action_path_segment(action: &str) -> Result<()> {

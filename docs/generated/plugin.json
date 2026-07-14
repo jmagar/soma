@@ -176,8 +176,8 @@
           "name": "python_runtime_check",
           "output_schema": null,
           "requires_admin": false,
-          "rest": false,
-          "rest_route": "N/A",
+          "rest": true,
+          "rest_route": "POST /v1/tools/python_runtime_check",
           "scope": null
         }
       ],
@@ -639,7 +639,8 @@
       "GET /v1/status",
       "POST /v1/echo",
       "POST /v1/greet",
-      "POST /v1/providers/ai-sdk-brief"
+      "POST /v1/providers/ai-sdk-brief",
+      "POST /v1/tools/python_runtime_check"
     ]
   },
   "title": "Soma",

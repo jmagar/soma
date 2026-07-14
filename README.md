@@ -17,8 +17,9 @@ Provider manifests also carry MCP-native prompt, resource, task, and elicitation
 metadata for the registry contract. Scaffolding is the path for creating a new
 distributable repo with the same locked-in runtime.
 
-**30-second path:** `npx -y soma-rmcp mcp` -> `soma status` -> call the
-`soma` MCP tool through `tools/call` with `{"action":"status"}`.
+**30-second path:** install the `soma` binary -> `soma status` ->
+`npx -y soma-rmcp mcp` from an MCP client -> call the `soma` MCP tool through
+`tools/call` with `{"action":"status"}`.
 
 **Status:** production RMCP runtime. Write-capable provider actions are
 allowed only when the provider declares them and destructive actions are gated.
@@ -96,7 +97,9 @@ not turn provider manifests into an unrestricted remote execution boundary.
 
 ## Install
 
-Use the npm launcher when an MCP client expects an `npx` command:
+Use the npm launcher when an MCP client expects an `npx` command. The package is
+a launcher for the Rust binary; install `soma` first or set `SOMA_BIN` to its
+absolute path.
 
 ```bash
 npx -y soma-rmcp mcp
@@ -445,7 +448,8 @@ HTTP routes in the server profile:
 | `/metrics` | Prometheus metrics when built with `observability`. |
 | `/v1/capabilities` | REST route inventory. |
 | `/v1/greet`, `/v1/echo`, `/v1/status`, `/v1/help` | Direct REST business routes. |
-| `/v1/{provider-route}` | Dynamic provider REST routes when a provider tool opts in with a REST overlay. |
+| `/v1/tools/{action}` | Generic REST execution route for dropped provider tools. |
+| `/v1/{provider-route}` | Optional provider-declared REST route when a tool supplies a custom REST overlay. |
 | `/mcp/.well-known/*` | OAuth metadata when OAuth is enabled. |
 | `/*` | Embedded web UI fallback when built with `web`. |
 
@@ -475,10 +479,14 @@ protocol reason they cannot. `elicit_name` and `scaffold_intent` are MCP-only
 because they rely on MCP elicitation. `serve`, `mcp`, `doctor`, `watch`, `setup`,
 and `package` are CLI operator commands, not business actions.
 
-Dropped provider tools are MCP-enabled by default. CLI and REST exposure are
-opt-in through each tool's `cli` and `rest` overlays. Provider prompts,
-resources, tasks, and elicitation forms are part of the provider manifest
-contract and registry index; they are not mirrored to CLI or REST by default.
+Dropped provider tools are MCP-enabled by default and REST-executable through
+`POST /v1/tools/{action}` unless the tool explicitly sets
+`rest.enabled=false`. A `rest` overlay can add a custom route, method, and
+OpenAPI metadata; the generic route remains the web/adapter-safe execution
+shape. CLI exposure is opt-in through each tool's `cli` overlay. Provider
+prompts, resources, tasks, and elicitation forms are part of the provider
+manifest contract and registry index; they are not mirrored to CLI or REST by
+default.
 
 ## CLI Reference
 

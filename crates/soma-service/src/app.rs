@@ -134,6 +134,11 @@ impl SomaService {
         self.client.call_rest_action(action, params).await
     }
 
+    /// Read the live provider catalog from a remote Soma HTTP server.
+    pub async fn provider_catalog(&self) -> Result<Value> {
+        self.client.provider_catalog().await
+    }
+
     /// Readiness probe: `Ok(())` when the upstream dependency is reachable.
     /// Backs the `/readyz` route. Delegates to the client; no business logic.
     pub async fn ready(&self) -> Result<()> {

@@ -3,7 +3,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use axum::{extract::State, http::HeaderMap, routing::post, Json, Router};
+use axum::{
+    extract::State,
+    http::{HeaderMap, Uri},
+    routing::{get, post},
+    Json, Router,
+};
 use rmcp::{
     model::CallToolRequestParams,
     transport::{ConfigureCommandExt, TokioChildProcess},
@@ -37,11 +42,23 @@ async fn remote_stdio_mcp_provider_action_posts_to_server_api() -> anyhow::Resul
         .spawn()?;
     let service = ().serve(transport).await?;
 
+    let tools = service.list_tools(Default::default()).await?;
+    let action_enum = tools.tools[0].input_schema["properties"]["action"]["enum"]
+        .as_array()
+        .expect("action enum should be present")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    assert!(
+        action_enum.contains(&"weather_current"),
+        "remote stdio schema should include remote provider action: {action_enum:?}"
+    );
+
     let result = service
         .call_tool(
             CallToolRequestParams::new("soma").with_arguments(
                 json!({
-                    "action": "weather-current",
+                    "action": "weather_current",
                     "city": "Paris",
                     "units": "metric"
                 })
@@ -57,7 +74,7 @@ async fn remote_stdio_mcp_provider_action_posts_to_server_api() -> anyhow::Resul
     assert_eq!(result.structured_content.unwrap()["ok"], true);
     let observed = observed.lock().expect("observed requests should lock");
     assert_eq!(observed.len(), 1);
-    assert_eq!(observed[0].path, "/v1/weather-current");
+    assert_eq!(observed[0].path, "/v1/tools/weather_current");
     assert_eq!(observed[0].bearer, "Bearer remote-secret");
     assert_eq!(observed[0].body["city"], "Paris");
     assert_eq!(observed[0].body["units"], "metric");
@@ -77,7 +94,8 @@ async fn mock_api(
     observed: ObservedRequests,
 ) -> anyhow::Result<(String, tokio::task::JoinHandle<std::io::Result<()>>)> {
     let app = Router::new()
-        .route("/v1/weather-current", post(mock_weather))
+        .route("/v1/providers", get(mock_provider_catalog))
+        .route("/v1/tools/weather_current", post(mock_weather))
         .with_state(observed);
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
@@ -87,6 +105,7 @@ async fn mock_api(
 
 async fn mock_weather(
     State(observed): State<ObservedRequests>,
+    uri: Uri,
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Json<Value> {
@@ -99,7 +118,7 @@ async fn mock_weather(
         .lock()
         .expect("observed requests should lock")
         .push(ObservedRequest {
-            path: "/v1/weather-current".to_owned(),
+            path: uri.path().to_owned(),
             bearer,
             body: body.clone(),
         });
@@ -107,5 +126,37 @@ async fn mock_weather(
         "ok": true,
         "city": body["city"],
         "units": body["units"]
+    }))
+}
+
+async fn mock_provider_catalog() -> Json<Value> {
+    Json(json!({
+        "schema_version": 1,
+        "providers": [{
+            "name": "remote-weather",
+            "kind": "ai-sdk",
+            "enabled": true,
+            "tools": [{
+                "name": "weather_current",
+                "description": "Fetch weather.",
+                "input_schema": {
+                    "type": "object",
+                    "required": ["city"],
+                    "properties": {
+                        "city": { "type": "string" },
+                        "units": { "type": "string" }
+                    }
+                },
+                "surfaces": { "mcp": true, "rest": true, "cli": true },
+                "cli": { "enabled": true, "command": "weather-current" },
+                "generic_rest": {
+                    "enabled": true,
+                    "method": "POST",
+                    "path": "/v1/tools/weather_current"
+                }
+            }],
+            "prompts": [],
+            "resources": []
+        }]
     }))
 }

@@ -85,7 +85,7 @@ pub async fn serve_stdio_mcp() -> Result<()> {
     let service = SomaService::new(SomaClient::new(&config.soma)?);
     let remote_adapter = config.soma.is_remote_adapter();
     let provider_registry = if remote_adapter {
-        soma_service::static_provider_registry(service.clone())?
+        soma_service::remote_provider_registry(service.clone()).await?
     } else {
         soma_service::dynamic_provider_registry(service.clone())?
     };

@@ -217,10 +217,8 @@ where
 /// - All other commands get only `SomaConfig`; keep it that way.
 /// - Add `--json` support to each new command by forwarding a `json` flag.
 pub async fn run(cmd: Command, cfg: &SomaConfig) -> Result<()> {
-    if cfg.is_remote_adapter() {
-        if run_remote_adapter_command(&cmd, cfg).await? {
-            return Ok(());
-        }
+    if cfg.is_remote_adapter() && run_remote_adapter_command(&cmd, cfg).await? {
+        return Ok(());
     }
 
     let client = SomaClient::new(cfg)?;

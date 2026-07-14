@@ -89,4 +89,14 @@ describe("provider catalog client", () => {
       body: JSON.stringify({ text: "hello" }),
     });
   });
+
+  it("serializes GET action params into the query string", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+
+    await expect(
+      callRestAction({ id: "lookup", method: "GET", path: "/v1/lookup" }, { q: "hello world" }),
+    ).resolves.toEqual({ data: { ok: true } });
+    expect(fetch).toHaveBeenCalledWith("/v1/lookup?q=hello+world", undefined);
+  });
 });

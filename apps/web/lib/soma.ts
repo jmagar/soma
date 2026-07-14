@@ -22,13 +22,15 @@ export type ActionParam = {
   description: string;
 };
 
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
 export type ActionSpec = {
   id: string;
   label: string;
   description: string;
   scope: string;
   transport: "rest" | "mcp-only";
-  method?: "GET" | "POST";
+  method?: HttpMethod;
   path?: string;
   params: readonly ActionParam[];
   example: {
@@ -176,8 +178,8 @@ function providerToolToRestAction(
     description: tool.description,
     scope: tool.scope ?? "public",
     transport: "rest",
-    method: normalizeMethod(tool.rest?.method ?? tool.generic_rest?.method),
-    path: tool.rest?.path ?? tool.generic_rest?.path ?? `/v1/${tool.name}`,
+    method: normalizeMethod(tool.generic_rest?.method ?? tool.rest?.method),
+    path: tool.generic_rest?.path ?? tool.rest?.path ?? `/v1/tools/${tool.name}`,
     params: paramsFromSchema(tool.input_schema),
     example: {
       action: tool.name,
@@ -190,8 +192,18 @@ function providerToolToRestAction(
   };
 }
 
-function normalizeMethod(method?: string | null): "GET" | "POST" {
-  return method?.toUpperCase() === "GET" ? "GET" : "POST";
+function normalizeMethod(method?: string | null): HttpMethod {
+  const normalized = method?.toUpperCase();
+  if (
+    normalized === "GET" ||
+    normalized === "POST" ||
+    normalized === "PUT" ||
+    normalized === "PATCH" ||
+    normalized === "DELETE"
+  ) {
+    return normalized;
+  }
+  return "POST";
 }
 
 function paramsFromSchema(schema: unknown): ActionParam[] {

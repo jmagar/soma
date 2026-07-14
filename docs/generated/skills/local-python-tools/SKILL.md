@@ -24,7 +24,7 @@ Use when working with `local-python-tools` provider actions such as python_runti
 
 | tool | MCP | CLI | REST | CLI command | REST route | purpose |
 |---|---:|---:|---:|---|---|---|
-| `python_runtime_check` | yes | yes | no | `python_runtime_check` | `N/A` | Return a compact proof that the Python sidecar executed the provider. |
+| `python_runtime_check` | yes | yes | yes | `python_runtime_check` | `POST /v1/tools/python_runtime_check` | Return a compact proof that the Python sidecar executed the provider. |
 
 ## Action Reference
 
@@ -41,4 +41,4 @@ Return a compact proof that the Python sidecar executed the provider.
 - Output: `unspecified`
 - MCP: `soma(action="python_runtime_check")`
 - CLI: `soma python_runtime_check`
-- REST: `N/A` - do not invent an HTTP route.
+- REST: `POST /v1/tools/python_runtime_check`

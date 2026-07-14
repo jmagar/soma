@@ -94,13 +94,23 @@ export function callRestAction<T = unknown>(
   }
   const method = action.method ?? "POST";
   if (method === "GET") {
-    return apiFetch<T>(endpoint(action.path));
+    return apiFetch<T>(endpoint(pathWithQuery(action.path, params)));
   }
   return apiFetch<T>(endpoint(action.path), {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
+}
+
+function pathWithQuery(path: string, params: Record<string, unknown>): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    query.set(key, String(value));
+  }
+  const queryString = query.toString();
+  return queryString ? `${path}?${queryString}` : path;
 }
 
 /** Dispatch a Soma REST action through its direct route. */

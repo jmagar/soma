@@ -43,8 +43,7 @@ subcommands select HTTP server, stdio MCP, or CLI adapter mode.
 | `crates/soma-cli/src/watch.rs` | Polls `/health` and emits state-change lines for plugin monitor |
 | `crates/soma-mcp/src/transport.rs` | Streamable HTTP transport wiring and session lifecycle |
 | `crates/soma-contracts/src/token_limit.rs` | Token budget enforcement for MCP response payloads |
-| `crates/soma/src/main.rs` | Full server binary mode dispatch |
-| `crates/soma/src/bin/soma.rs` | Local CLI + stdio MCP binary dispatch |
+| `crates/soma/src/bin/soma.rs` | Canonical binary dispatcher for `serve`, `mcp`, and CLI modes |
 | `crates/soma/src/lib.rs` | Public facade + `testing` helpers for integration tests |
 | `crates/soma/tests/cli_parse.rs` | CLI argument parsing tests |
 | `crates/soma/tests/tool_dispatch.rs` | MCP tool dispatch tests (service-layer, no real credentials) |

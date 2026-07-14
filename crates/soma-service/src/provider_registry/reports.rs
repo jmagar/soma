@@ -51,6 +51,7 @@ impl RegistrySnapshot {
                                 "palette": provider_tool_surface_enabled(tool, ProviderSurface::Palette)
                             },
                             "rest": tool.rest.clone(),
+                            "cli": tool.cli.clone(),
                             "generic_rest": generic_rest,
                             "limits": tool.limits.clone(),
                             "env": tool.env.clone(),

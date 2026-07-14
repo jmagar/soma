@@ -99,6 +99,7 @@ describe("provider catalog conversion", () => {
             },
             surfaces: { mcp: true, rest: true },
             rest: { enabled: true, method: "POST", path: "/v1/providers/summarize" },
+            generic_rest: { enabled: true, method: "POST", path: "/v1/tools/summarize" },
           },
           {
             name: "mcp_only",
@@ -128,7 +129,7 @@ describe("provider catalog conversion", () => {
     const actions = mergeProviderRestActions(REST_ACTIONS, inspection);
     const action = actions.find((item) => item.id === "summarize");
 
-    expect(action?.path).toBe("/v1/providers/summarize");
+    expect(action?.path).toBe("/v1/tools/summarize");
     expect(action?.params.map((param) => [param.name, param.type, param.required])).toEqual([
       ["text", "text", true],
       ["max_words", "number", false],
