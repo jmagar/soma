@@ -40,6 +40,7 @@ allow = [
   "Zlib",                           # foldhash (via hashbrown → rusqlite → lab-auth)
   "MPL-2.0",                        # option-ext (via dirs-sys → dirs)
   "CDLA-Permissive-2.0",            # webpki-roots / webpki-root-certs (via reqwest → rustls)
+  "MIT-0",                          # borrow-or-share (via fluent-uri → referencing → jsonschema)
 ]
 # Confidence threshold for license text detection (0.0–1.0)
 confidence-threshold = 0.8

@@ -63,7 +63,7 @@ fn release_please_uses_ci_gated_release_pr_flow() {
     );
     assert!(
         release_please
-            .contains("googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5"),
+            .contains("googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071"),
         "release-please action should be pinned to the documented SHA"
     );
     assert!(

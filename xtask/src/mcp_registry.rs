@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::Draft;
+
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
@@ -97,18 +98,19 @@ fn validate_manifest(schema: &Value, manifest: &Value) -> Result<()> {
         );
     }
 
-    let compiled = JSONSchema::options()
+    let compiled = jsonschema::options()
         .with_draft(Draft::Draft7)
-        .compile(schema)
+        .build(schema)
         .map_err(|error| anyhow!("failed to compile MCP registry schema: {error}"))?;
-    if let Err(errors) = compiled.validate(manifest) {
-        let messages = errors
-            .map(|error| {
-                let path = error.instance_path.to_string();
-                let path = if path.is_empty() { "<root>" } else { &path };
-                format!("{path}: {error}")
-            })
-            .collect::<Vec<_>>();
+    let messages = compiled
+        .iter_errors(manifest)
+        .map(|error| {
+            let path = error.instance_path().to_string();
+            let path = if path.is_empty() { "<root>" } else { &path };
+            format!("{path}: {error}")
+        })
+        .collect::<Vec<_>>();
+    if !messages.is_empty() {
         bail!(
             "server.json does not validate against the MCP registry schema:\n{}",
             messages.join("\n")

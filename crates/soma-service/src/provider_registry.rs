@@ -4,7 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use jsonschema::JSONSchema;
+use jsonschema::Validator;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -205,8 +205,8 @@ struct ToolEntry {
     action: String,
     tool: ProviderTool,
     capabilities: HostCapabilities,
-    input_validator: Arc<JSONSchema>,
-    output_validator: Option<Arc<JSONSchema>>,
+    input_validator: Arc<Validator>,
+    output_validator: Option<Arc<Validator>>,
 }
 
 #[derive(Clone)]
@@ -424,18 +424,19 @@ fn build_snapshot(
         let catalog = provider.catalog();
         validate_provider_manifest(&catalog)?;
         for tool in &catalog.tools {
-            let input_validator =
-                Arc::new(JSONSchema::compile(&tool.input_schema).map_err(|error| {
+            let input_validator = Arc::new(jsonschema::validator_for(&tool.input_schema).map_err(
+                |error| {
                     ProviderValidationError::new(
                         "input_schema_invalid",
                         format!("tool `{}` has invalid input_schema: {error}", tool.name),
                     )
-                })?);
+                },
+            )?);
             compiled_validator_count += 1;
             let output_validator = match &tool.output_schema {
                 Some(output_schema) => {
                     let validator =
-                        Arc::new(JSONSchema::compile(output_schema).map_err(|error| {
+                        Arc::new(jsonschema::validator_for(output_schema).map_err(|error| {
                             ProviderValidationError::new(
                                 "output_schema_invalid",
                                 format!("tool `{}` has invalid output_schema: {error}", tool.name),
@@ -667,7 +668,11 @@ fn insert_primitive(
 fn fingerprint_catalogs(catalogs: &[ProviderCatalog]) -> String {
     let canonical = serde_json::to_vec(catalogs).expect("catalogs serialize");
     let digest = Sha256::digest(canonical);
-    format!("sha256:{digest:x}")
+    let hex = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("sha256:{hex}")
 }
 
 fn enforce_call(
@@ -789,12 +794,16 @@ fn enforce_input_limit(entry: &ToolEntry, call: &ProviderCall) -> Result<(), Pro
     ))
 }
 
+fn schema_error_details(validator: &Validator, value: &Value) -> Option<String> {
+    let errors = validator
+        .iter_errors(value)
+        .map(|error| format!("{}: {}", error.instance_path(), error))
+        .collect::<Vec<_>>();
+    (!errors.is_empty()).then(|| errors.join("; "))
+}
+
 fn enforce_schema(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    if let Err(errors) = entry.input_validator.validate(&call.params) {
-        let details = errors
-            .map(|error| format!("{}: {}", error.instance_path, error))
-            .collect::<Vec<_>>()
-            .join("; ");
+    if let Some(details) = schema_error_details(&entry.input_validator, &call.params) {
         return Err(ProviderError::validation(
             &entry.provider,
             &entry.action,
@@ -835,11 +844,7 @@ fn enforce_output_schema(entry: &ToolEntry, output: &ProviderOutput) -> Result<(
     let Some(output_validator) = &entry.output_validator else {
         return Ok(());
     };
-    if let Err(errors) = output_validator.validate(&output.value) {
-        let details = errors
-            .map(|error| format!("{}: {}", error.instance_path, error))
-            .collect::<Vec<_>>()
-            .join("; ");
+    if let Some(details) = schema_error_details(output_validator, &output.value) {
         return Err(ProviderError::new(
             "output_schema_failed",
             &entry.provider,

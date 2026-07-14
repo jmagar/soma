@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: true
 
@@ -31,7 +31,10 @@ jobs:
         # the Node this run actually uses.
         run: |
           openwiki_pkg="$(mise where npm:openwiki)/lib/node_modules/openwiki"
-          (cd "$openwiki_pkg" && npm rebuild better-sqlite3)
+          # npm rebuild silently skips install scripts not covered by npm's
+          # allowScripts policy, so run the package's install script directly
+          # (prebuild-install fetches the binding for the current Node ABI).
+          (cd "$openwiki_pkg/node_modules/better-sqlite3" && npm run install --foreground-scripts)
 
       - name: Run OpenWiki
         run: openwiki --update --print
@@ -42,7 +45,7 @@ jobs:
           OPENWIKI_MODEL_ID: claude-opus-4.8
 
       - name: Create OpenWiki update pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           add-paths: openwiki
           branch: openwiki/update
