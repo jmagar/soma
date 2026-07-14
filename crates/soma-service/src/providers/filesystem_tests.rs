@@ -287,6 +287,49 @@ fn inspect_marks_invalid_when_rest_path_does_not_match_the_v1_prefix_schema_cons
 }
 
 #[test]
+fn inspect_accepts_a_rest_overlay_using_path_params_query_params_and_request_body_schema() {
+    // Regression guard: RestOverlay (the Rust struct) has always accepted
+    // path_params/query_params/request_body_schema and the live registry
+    // deserializes them fine, but provider-manifest.schema.json's
+    // restOverlay definition didn't list them, so a manifest that
+    // legitimately used them passed soma providers validate/runtime
+    // loading while failing this lint's schema check — the schema was
+    // stale, not the manifest.
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+    fs::write(
+        providers.join("full-rest.json"),
+        r#"{
+          "schema_version": 1,
+          "provider": { "name": "full-rest", "kind": "static-rust", "version": "0.1.0" },
+          "tools": [
+            {
+              "name": "full_rest_tool",
+              "description": "uses the full rest overlay",
+              "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+              "rest": {
+                "enabled": true,
+                "method": "POST",
+                "path": "/v1/full-rest",
+                "path_params": { "id": { "type": "string" } },
+                "query_params": { "limit": { "type": "integer" } },
+                "request_body_schema": { "type": "object" }
+              }
+            }
+          ]
+        }"#,
+    )
+    .expect("write provider using the full rest overlay");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_loaded, 1, "errors: {:?}", report.files);
+    assert_eq!(report.providers_invalid, 0);
+}
+
+#[test]
 fn inspect_does_not_false_positive_on_manifests_that_omit_optional_fields() {
     // Regression guard: an earlier implementation validated the schema
     // against a re-serialized ProviderCatalog, which turns every omitted
