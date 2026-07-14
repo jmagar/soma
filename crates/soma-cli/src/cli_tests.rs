@@ -193,6 +193,22 @@ fn parses_providers_status_with_dir_and_json() {
 }
 
 #[test]
+fn parses_providers_dir_rejects_a_flag_token_as_the_value() {
+    // `--dir --json` must not silently treat "--json" as a directory path —
+    // that would make an inspection of a nonexistent directory (which is a
+    // valid, empty, zero-invalid report) look like a clean lint run.
+    let error =
+        parse_args_from(["providers", "lint", "--dir", "--json"]).expect_err("missing --dir value");
+    assert!(error.to_string().contains("--dir requires a value"));
+}
+
+#[test]
+fn parses_providers_dir_rejects_missing_trailing_value() {
+    let error = parse_args_from(["providers", "lint", "--dir"]).expect_err("missing --dir value");
+    assert!(error.to_string().contains("--dir requires a value"));
+}
+
+#[test]
 fn providers_validate_and_inspect_parse_as_management_commands() {
     assert_eq!(
         parse_args_from(["providers", "validate"]).unwrap().unwrap(),

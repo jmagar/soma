@@ -569,6 +569,9 @@ fn parse_providers_dir_flags(command: &str, args: &[String]) -> Result<(Option<P
                 let value = args
                     .get(index + 1)
                     .ok_or_else(|| anyhow!("providers {command} --dir requires a value"))?;
+                if value.starts_with("--") {
+                    return Err(anyhow!("providers {command} --dir requires a value"));
+                }
                 dir = Some(PathBuf::from(value));
                 index += 2;
             }
