@@ -2,8 +2,9 @@
 # lefthook.yml — Fast local hooks
 #
 # CUSTOMIZE: Copy this file unchanged to any new server repo.
-#           Install: cargo install lefthook   OR   mise use lefthook
-#           Enable:  lefthook install
+#           Install tools: just install-tools
+#           Enable hooks: just install-hooks
+#           Bootstrap both: just bootstrap
 #
 # Philosophy (Pattern §30):
 #   Pre-commit hooks MUST be fast and NON-BLOCKING for developer flow.
