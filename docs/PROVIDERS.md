@@ -63,13 +63,17 @@ kind of failure is reported `invalid`, and `lint` fails on it.
 
 A REST route can also be unreachable for a reason the provider registry
 itself doesn't check: `crates/soma/src/routes.rs` wires `/v1/capabilities`,
-`/v1/providers`, and `/v1/tools/{action}` directly, ahead of the dynamic
-`/v1/{*path}` fallback that dispatches to provider-declared routes. None of
-those three have a corresponding `ACTION_SPECS` entry, so nothing in the
-live registry reserves them — but Axum still matches the literal/pattern
-route first, silently shadowing a provider that declares the same path.
-`lint` reserves `/v1/capabilities`, `/v1/providers`, and any literal
-`/v1/tools/<single-segment>` path to catch this before it ships.
+`/v1/providers`, `/v1/greet`, `/v1/echo`, `/v1/status`, `/v1/help`, and
+`/v1/tools/{action}` directly on the same router, ahead of the dynamic
+`/v1/{*path}` fallback that dispatches to provider-declared routes. Axum
+resolves by path first — once a request matches one of these, a method that
+route doesn't handle gets a 405 from *that* route, not a fallthrough to the
+dynamic dispatcher. So **any** method on one of these paths is unreachable
+for a provider, not just Soma's own method for it (a provider declaring
+`GET /v1/greet` is exactly as dead as one declaring `POST /v1/greet`,
+despite Soma's own `/v1/greet` being a POST). `lint` reserves all seven
+paths — method-independent for the literal six, and pattern-matched for any
+literal `/v1/tools/<single-segment>` path — to catch this before it ships.
 
 **Python providers are never inspected this way.** Extracting a `.py`
 provider's catalog requires importing (and thus executing) the module — there

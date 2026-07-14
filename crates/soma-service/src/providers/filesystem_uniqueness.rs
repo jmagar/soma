@@ -43,9 +43,6 @@ pub(super) fn apply_directory_wide_checks(
         &crate::providers::static_rust::StaticRustProvider::catalog_static(),
         BUILTIN_PROVIDER_LABEL,
     );
-    for (method, path) in RESERVED_INFRASTRUCTURE_ROUTES {
-        namespace.reserve_route(method, path, INFRASTRUCTURE_ROUTE_LABEL);
-    }
 
     for index in 0..files.len() {
         let Some(catalog) = &loaded_catalogs[index] else {
@@ -65,17 +62,27 @@ pub(super) fn apply_directory_wide_checks(
 
 const BUILTIN_PROVIDER_LABEL: &str = "the built-in `static-rust` provider";
 
-/// Fixed routes wired directly in `crates/soma/src/routes.rs`, registered
-/// before the `/v1/{*path}` dynamic-provider fallback, that have no
-/// corresponding `ACTION_SPECS` entry — `/v1/greet`, `/v1/echo`,
-/// `/v1/status`, and `/v1/help` *do* have one (their `rest_path` is set),
-/// so they're already reserved via the built-in `static-rust` catalog seed
-/// above. These two are pure infrastructure with nothing else to reserve
-/// them, so a drop-in provider declaring the same path would be silently
-/// shadowed at runtime (Axum matches the literal route, never the dynamic
-/// fallback) even though every other check here passes.
-const RESERVED_INFRASTRUCTURE_ROUTES: &[(&str, &str)] =
-    &[("GET", "/v1/capabilities"), ("GET", "/v1/providers")];
+/// Literal paths wired directly in `crates/soma/src/routes.rs`, registered
+/// on the same router as — and ahead of — the `/v1/{*path}` dynamic-provider
+/// fallback. Axum resolves a request by *path* first; once the path matches
+/// one of these, a method that path's own handler doesn't support gets a 405
+/// from that route directly, not a fallthrough to the dynamic dispatcher. So
+/// **any** method on one of these paths is shadowed, not just the specific
+/// method Soma itself registers for it — a provider declaring `GET
+/// /v1/greet` is exactly as unreachable as one declaring `POST /v1/greet`
+/// despite Soma's own `/v1/greet` being a POST. `/v1/greet`, `/v1/echo`,
+/// `/v1/status`, and `/v1/help` also have an `ACTION_SPECS` entry and so are
+/// *additionally* reserved via the built-in `static-rust` catalog seed
+/// above (for their specific action/method/path) — this list is what
+/// reserves the path itself, method-independent, for all six.
+const RESERVED_INFRASTRUCTURE_PATHS: &[&str] = &[
+    "/v1/capabilities",
+    "/v1/providers",
+    "/v1/greet",
+    "/v1/echo",
+    "/v1/status",
+    "/v1/help",
+];
 
 const INFRASTRUCTURE_ROUTE_LABEL: &str = "Soma's built-in HTTP infrastructure routes";
 
@@ -114,6 +121,13 @@ impl DirectoryNamespace {
                             "REST route",
                             &label,
                             "Soma's built-in `/v1/tools/{action}` dispatch route",
+                        ));
+                    }
+                    if RESERVED_INFRASTRUCTURE_PATHS.contains(&key.1.as_str()) {
+                        return Some(conflict_message(
+                            "REST route",
+                            &label,
+                            INFRASTRUCTURE_ROUTE_LABEL,
                         ));
                     }
                     if let Some(other) = self.rest_routes.get(&key) {
@@ -168,11 +182,6 @@ impl DirectoryNamespace {
         for name in primitive_names(catalog) {
             self.primitives.insert(name, owner.to_owned());
         }
-    }
-
-    fn reserve_route(&mut self, method: &str, path: &str, owner: &str) {
-        self.rest_routes
-            .insert((method.to_owned(), path.to_owned()), owner.to_owned());
     }
 }
 

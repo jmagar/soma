@@ -104,6 +104,69 @@ fn apply_directory_wide_checks_rejects_a_reserved_infrastructure_route() {
 }
 
 #[test]
+fn apply_directory_wide_checks_rejects_a_different_method_on_a_reserved_infrastructure_path() {
+    // Axum resolves /v1/providers by path first — a POST to it still hits
+    // that route's own MethodRouter (which only handles GET) and gets a
+    // 405, never falling through to the dynamic dispatcher. So POST is
+    // exactly as shadowed as GET, even though Soma itself only uses GET.
+    let mut files = vec![ProviderFileInspection {
+        path: "a.json".into(),
+        file_name: "a.json".to_owned(),
+        status: ProviderFileInspectionStatus::Loaded,
+        provider_id: Some("provider-a".to_owned()),
+        provider_kind: Some("static-rust".to_owned()),
+        actions: vec!["submit_provider".to_owned()],
+        error: None,
+    }];
+    let catalogs = vec![Some(rest_tool_catalog(
+        "provider-a",
+        "submit_provider",
+        "POST",
+        "/v1/providers",
+    ))];
+
+    apply_directory_wide_checks(&mut files, &catalogs);
+
+    assert_eq!(files[0].status, ProviderFileInspectionStatus::Invalid);
+    assert!(files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("infrastructure"));
+}
+
+#[test]
+fn apply_directory_wide_checks_rejects_a_different_method_on_greet() {
+    // /v1/greet is a literal route too (Soma registers POST), not routed
+    // through the dynamic dispatcher — a provider declaring GET /v1/greet
+    // is just as shadowed as one declaring POST /v1/greet.
+    let mut files = vec![ProviderFileInspection {
+        path: "a.json".into(),
+        file_name: "a.json".to_owned(),
+        status: ProviderFileInspectionStatus::Loaded,
+        provider_id: Some("provider-a".to_owned()),
+        provider_kind: Some("static-rust".to_owned()),
+        actions: vec!["read_greet".to_owned()],
+        error: None,
+    }];
+    let catalogs = vec![Some(rest_tool_catalog(
+        "provider-a",
+        "read_greet",
+        "GET",
+        "/v1/greet",
+    ))];
+
+    apply_directory_wide_checks(&mut files, &catalogs);
+
+    assert_eq!(files[0].status, ProviderFileInspectionStatus::Invalid);
+    assert!(files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("infrastructure"));
+}
+
+#[test]
 fn apply_directory_wide_checks_rejects_a_path_shadowed_by_the_generic_tools_route() {
     // /v1/tools/{action} is a wildcard matching exactly one segment — any
     // literal /v1/tools/<x> path is shadowed the same way, not just an
