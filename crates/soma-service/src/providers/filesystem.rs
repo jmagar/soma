@@ -477,114 +477,131 @@ fn compile_tool_schemas(catalog: &ProviderCatalog) -> Result<(), String> {
 /// `Disabled`/`Invalid`/`Skipped` files are excluded, matching `load()`,
 /// which never registers a disabled provider in the first place.
 ///
+/// The namespace is seeded with the built-in `static-rust` catalog first —
+/// `dynamic_provider_registry_from_dir()` always loads it alongside drop-in
+/// files (see `crate::dynamic_provider_registry_from_dir`), so a drop-in file
+/// reusing a built-in provider name or action (e.g. `status`) collides at
+/// real registry construction even though no *other drop-in file* is
+/// involved. Lint has to reserve those names too.
+///
 /// On the first file to reuse an already-claimed name, that file (not the
-/// original) is marked `Invalid`, mirroring the live registry's
+/// original owner) is marked `Invalid`, mirroring the live registry's
 /// insert-into-a-map-fails-on-second-entry semantics.
 fn apply_directory_wide_checks(
     files: &mut [ProviderFileInspection],
     loaded_catalogs: &[Option<ProviderCatalog>],
 ) {
-    let mut provider_names: HashMap<String, usize> = HashMap::new();
-    let mut action_names: HashMap<String, usize> = HashMap::new();
-    let mut rest_routes: HashMap<(String, String), usize> = HashMap::new();
-    let mut cli_commands: HashMap<String, usize> = HashMap::new();
-    let mut primitives: HashMap<String, usize> = HashMap::new();
+    let mut namespace = DirectoryNamespace::default();
+    namespace.register(
+        &crate::providers::static_rust::StaticRustProvider::catalog_static(),
+        BUILTIN_PROVIDER_LABEL,
+    );
 
     for index in 0..files.len() {
         let Some(catalog) = &loaded_catalogs[index] else {
             continue;
         };
 
-        let conflict = find_directory_wide_conflict(
-            catalog,
-            &provider_names,
-            &action_names,
-            &rest_routes,
-            &cli_commands,
-            &primitives,
-        )
-        .map(|(kind, name, other)| conflict_message(kind, &name, &files[other].file_name));
-
-        if let Some(message) = conflict {
+        if let Some(message) = namespace.find_conflict(catalog) {
             files[index].status = ProviderFileInspectionStatus::Invalid;
             files[index].actions = Vec::new();
             files[index].error = Some(message);
             continue;
         }
 
-        provider_names.insert(catalog.provider.name.clone(), index);
+        namespace.register(catalog, &files[index].file_name);
+    }
+}
+
+const BUILTIN_PROVIDER_LABEL: &str = "the built-in `static-rust` provider";
+
+/// Tracks provider/action/REST-route/CLI-command/MCP-primitive names already
+/// claimed in this directory (plus the built-in catalog), each mapped to a
+/// human-readable label identifying the owner — a file name, or
+/// [`BUILTIN_PROVIDER_LABEL`].
+#[derive(Default)]
+struct DirectoryNamespace {
+    provider_names: HashMap<String, String>,
+    action_names: HashMap<String, String>,
+    rest_routes: HashMap<(String, String), String>,
+    cli_commands: HashMap<String, String>,
+    primitives: HashMap<String, String>,
+}
+
+impl DirectoryNamespace {
+    /// Returns an error message for the first collision found, checking in
+    /// the same order `provider_registry::{provider_map, build_snapshot}`
+    /// does. Does not mutate — call `register` separately once the caller
+    /// has decided this catalog is conflict-free.
+    fn find_conflict(&self, catalog: &ProviderCatalog) -> Option<String> {
+        if let Some(other) = self.provider_names.get(&catalog.provider.name) {
+            return Some(conflict_message("provider", &catalog.provider.name, other));
+        }
         for tool in &catalog.tools {
-            action_names.insert(tool.name.clone(), index);
+            if let Some(other) = self.action_names.get(&tool.name) {
+                return Some(conflict_message("action", &tool.name, other));
+            }
             if let Some(rest) = &tool.rest {
                 if rest.enabled {
-                    rest_routes.insert(rest_route_key(tool.name.as_str(), rest), index);
+                    let key = rest_route_key(tool.name.as_str(), rest);
+                    if let Some(other) = self.rest_routes.get(&key) {
+                        let label = format!("{} {}", key.0, key.1);
+                        return Some(conflict_message("REST route", &label, other));
+                    }
                 }
             }
             if let Some(cli) = &tool.cli {
                 if cli.enabled {
-                    cli_commands.insert(cli_command(tool.name.as_str(), cli), index);
+                    let command = cli_command(tool.name.as_str(), cli);
+                    if let Some(other) = self.cli_commands.get(&command) {
+                        return Some(conflict_message("CLI command", &command, other));
+                    }
                     for alias in &cli.aliases {
-                        cli_commands.insert(alias.clone(), index);
+                        if let Some(other) = self.cli_commands.get(alias) {
+                            return Some(conflict_message("CLI alias", alias, other));
+                        }
                     }
                 }
             }
         }
         for name in primitive_names(catalog) {
-            primitives.insert(name, index);
-        }
-    }
-}
-
-/// Returns `(kind, name, index-of-the-file-that-already-claimed-it)` for the
-/// first collision found, checking in the same order
-/// `provider_registry::{provider_map, build_snapshot}` does.
-fn find_directory_wide_conflict(
-    catalog: &ProviderCatalog,
-    provider_names: &HashMap<String, usize>,
-    action_names: &HashMap<String, usize>,
-    rest_routes: &HashMap<(String, String), usize>,
-    cli_commands: &HashMap<String, usize>,
-    primitives: &HashMap<String, usize>,
-) -> Option<(&'static str, String, usize)> {
-    if let Some(&other) = provider_names.get(&catalog.provider.name) {
-        return Some(("provider", catalog.provider.name.clone(), other));
-    }
-    for tool in &catalog.tools {
-        if let Some(&other) = action_names.get(&tool.name) {
-            return Some(("action", tool.name.clone(), other));
-        }
-        if let Some(rest) = &tool.rest {
-            if rest.enabled {
-                let key = rest_route_key(tool.name.as_str(), rest);
-                if let Some(&other) = rest_routes.get(&key) {
-                    return Some(("REST route", format!("{} {}", key.0, key.1), other));
-                }
+            if let Some(other) = self.primitives.get(&name) {
+                return Some(conflict_message("MCP primitive", &name, other));
             }
         }
-        if let Some(cli) = &tool.cli {
-            if cli.enabled {
-                let command = cli_command(tool.name.as_str(), cli);
-                if let Some(&other) = cli_commands.get(&command) {
-                    return Some(("CLI command", command, other));
+        None
+    }
+
+    fn register(&mut self, catalog: &ProviderCatalog, owner: &str) {
+        self.provider_names
+            .insert(catalog.provider.name.clone(), owner.to_owned());
+        for tool in &catalog.tools {
+            self.action_names
+                .insert(tool.name.clone(), owner.to_owned());
+            if let Some(rest) = &tool.rest {
+                if rest.enabled {
+                    self.rest_routes
+                        .insert(rest_route_key(tool.name.as_str(), rest), owner.to_owned());
                 }
-                for alias in &cli.aliases {
-                    if let Some(&other) = cli_commands.get(alias) {
-                        return Some(("CLI alias", alias.clone(), other));
+            }
+            if let Some(cli) = &tool.cli {
+                if cli.enabled {
+                    self.cli_commands
+                        .insert(cli_command(tool.name.as_str(), cli), owner.to_owned());
+                    for alias in &cli.aliases {
+                        self.cli_commands.insert(alias.clone(), owner.to_owned());
                     }
                 }
             }
         }
-    }
-    for name in primitive_names(catalog) {
-        if let Some(&other) = primitives.get(&name) {
-            return Some(("MCP primitive", name, other));
+        for name in primitive_names(catalog) {
+            self.primitives.insert(name, owner.to_owned());
         }
     }
-    None
 }
 
-fn conflict_message(kind: &str, name: &str, other_file_name: &str) -> String {
-    format!("duplicate {kind} `{name}` (already defined in {other_file_name})")
+fn conflict_message(kind: &str, name: &str, owner: &str) -> String {
+    format!("duplicate {kind} `{name}` (already claimed by {owner})")
 }
 
 fn rest_route_key(

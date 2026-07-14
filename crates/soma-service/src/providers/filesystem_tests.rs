@@ -389,6 +389,75 @@ fn inspect_marks_second_file_invalid_on_duplicate_cli_command_across_files() {
 }
 
 #[test]
+fn inspect_marks_invalid_when_provider_name_collides_with_the_builtin_static_rust_provider() {
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+
+    // "static-rust" is the built-in provider name every soma binary loads
+    // alongside drop-in files (see dynamic_provider_registry_from_dir). A
+    // drop-in file reusing it collides at real registry construction even
+    // though it's the only file in the directory.
+    fs::write(
+        providers.join("clashes.json"),
+        tool_manifest("static-rust", "some_action", None),
+    )
+    .expect("write provider colliding with the built-in provider name");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_loaded, 0);
+    assert_eq!(report.providers_invalid, 1);
+    assert_eq!(
+        report.files[0].status,
+        ProviderFileInspectionStatus::Invalid
+    );
+    assert!(report.files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("duplicate provider"));
+    assert!(report.files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("built-in"));
+}
+
+#[test]
+fn inspect_marks_invalid_when_action_collides_with_a_builtin_action() {
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+
+    // "status" is one of ACTION_SPECS' built-in action names. A drop-in
+    // provider under a different provider name can still collide on action
+    // name alone, same as the live registry's action_index.
+    fs::write(
+        providers.join("clashes.json"),
+        tool_manifest("my-provider", "status", None),
+    )
+    .expect("write provider colliding with a built-in action name");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_loaded, 0);
+    assert_eq!(report.providers_invalid, 1);
+    assert!(report.files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("duplicate action"));
+    assert!(report.files[0]
+        .error
+        .as_deref()
+        .unwrap_or_default()
+        .contains("built-in"));
+}
+
+#[test]
 fn wasm_sidecar_manifest_is_loaded_as_the_wasm_provider_manifest() {
     let temp = tempdir().expect("tempdir");
     let wasm_path = temp.path().join("edge.wasm");

@@ -53,12 +53,13 @@ check a directory you're about to point `SOMA_PROVIDER_DIR` at.
 Each file is checked against the same semantic manifest validation the live
 registry runs (duplicate tool names within a file, reserved CLI commands,
 schema shape, capability declarations, ...) — not just "does it deserialize."
-On top of that, files are also checked *against each other*: two files can
-each be individually valid and still collide once loaded together (same
-provider name, same action/tool name, same REST route, same CLI
-command/alias, same MCP primitive name) — the live registry rejects that
-combination too. Either kind of failure is reported `invalid`, and `lint`
-fails on it.
+On top of that, files are also checked *against each other* and *against the
+built-in `static-rust` provider* every `soma` binary loads alongside drop-in
+files: two files (or a file and a built-in action, e.g. `status`) can each be
+individually valid and still collide once loaded together (same provider
+name, same action/tool name, same REST route, same CLI command/alias, same
+MCP primitive name) — the live registry rejects that combination too. Either
+kind of failure is reported `invalid`, and `lint` fails on it.
 
 **Python providers are never inspected this way.** Extracting a `.py`
 provider's catalog requires importing (and thus executing) the module — there
