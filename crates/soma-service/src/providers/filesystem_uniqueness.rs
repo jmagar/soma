@@ -187,3 +187,7 @@ fn primitive_names(catalog: &ProviderCatalog) -> Vec<String> {
         )
         .collect()
 }
+
+#[cfg(test)]
+#[path = "filesystem_uniqueness_tests.rs"]
+mod tests;

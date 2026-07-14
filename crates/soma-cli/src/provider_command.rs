@@ -164,3 +164,7 @@ fn parse_providers_dir_flags(command: &str, args: &[String]) -> Result<(Option<P
     }
     Ok((dir, json))
 }
+
+#[cfg(test)]
+#[path = "provider_command_tests.rs"]
+mod tests;
