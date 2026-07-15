@@ -5,6 +5,14 @@ use std::sync::{Mutex, OnceLock};
 
 use super::runner_exe::{resolve_runner_exe, resolve_runner_exe_from};
 
+fn expected_runner_binary_name() -> &'static str {
+    if cfg!(windows) {
+        "soma-codemode-runner.exe"
+    } else {
+        "soma-codemode-runner"
+    }
+}
+
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -21,7 +29,7 @@ fn make_executable(path: &Path) {
 #[test]
 fn uses_current_exe_when_it_is_usable() {
     let temp = tempfile::tempdir().unwrap();
-    let current = temp.path().join("soma-codemode-runner");
+    let current = temp.path().join(expected_runner_binary_name());
     std::fs::write(&current, b"binary").unwrap();
     #[cfg(unix)]
     make_executable(&current);
@@ -35,7 +43,7 @@ fn uses_current_exe_when_it_is_usable() {
 fn finds_runner_next_to_non_runner_current_exe() {
     let temp = tempfile::tempdir().unwrap();
     let current = temp.path().join("soma");
-    let runner = temp.path().join("soma-codemode-runner");
+    let runner = temp.path().join(expected_runner_binary_name());
     std::fs::write(&current, b"service").unwrap();
     std::fs::write(&runner, b"runner").unwrap();
     #[cfg(unix)]
@@ -56,7 +64,7 @@ fn finds_runner_above_cargo_deps_test_binary() {
     let deps_dir = debug_dir.join("deps");
     std::fs::create_dir_all(&deps_dir).unwrap();
     let current = deps_dir.join("soma_codemode_tests-1234");
-    let runner = debug_dir.join("soma-codemode-runner");
+    let runner = debug_dir.join(expected_runner_binary_name());
     std::fs::write(&current, b"test").unwrap();
     std::fs::write(&runner, b"runner").unwrap();
     #[cfg(unix)]
@@ -179,7 +187,7 @@ fn old_lab_env_name_is_not_preferred() {
     let _guard = env_lock().lock().unwrap();
     let legacy_env = concat!("LAB", "BY_CODE_MODE_RUNNER_EXE");
     let temp = tempfile::tempdir().unwrap();
-    let current = temp.path().join("soma-codemode-runner");
+    let current = temp.path().join(expected_runner_binary_name());
     let legacy = temp.path().join("legacy-runner");
     std::fs::write(&current, b"current").unwrap();
     std::fs::write(&legacy, b"legacy").unwrap();
