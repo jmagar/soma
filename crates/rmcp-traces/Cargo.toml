@@ -1,0 +1,22 @@
+[package]
+name = "rmcp-traces"
+version = "0.4.7"
+edition = "2021"
+rust-version = "1.96"
+authors.workspace = true
+description = "Bounded, log-safe W3C trace metadata helpers for RMCP."
+homepage.workspace = true
+license = "MIT"
+repository.workspace = true
+readme = "README.md"
+keywords = ["mcp", "rmcp", "trace", "trace-context", "baggage"]
+categories = ["development-tools", "network-programming"]
+
+[features]
+default = []
+http = ["dep:http"]
+
+[dependencies]
+http = { version = "1", optional = true }
+rmcp = { version = "=2.2.0", default-features = false }
+serde_json = "1"

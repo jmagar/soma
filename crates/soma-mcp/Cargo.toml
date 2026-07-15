@@ -22,12 +22,13 @@ test-support = []
 anyhow = "1"
 axum = { version = "0.8", optional = true }
 http = "1"
-rmcp = { version = "2.1.0", default-features = false, features = [
+rmcp = { version = "=2.2.0", default-features = false, features = [
   "server",
   "macros",
   "elicitation",
   "schemars",
 ] }
+rmcp-traces = { path = "../rmcp-traces" }
 soma-auth = { path = "../soma-auth", optional = true, features = ["http-axum"] }
 soma-contracts = { path = "../soma-contracts" }
 soma-runtime = { path = "../soma-runtime", default-features = false }
@@ -38,3 +39,12 @@ serde_json = "1"
 tokio = { version = "1", features = ["io-std", "macros"] }
 tracing = "0.1"
 url = "2"
+
+[dev-dependencies]
+rmcp = { version = "=2.2.0", default-features = false, features = [
+  "client",
+  "transport-io",
+] }
+soma-test-support = { path = "../soma-test-support" }
+tokio = { version = "1", features = ["io-util", "macros", "rt"] }
+tracing-subscriber = { version = "0.3", features = ["fmt"] }

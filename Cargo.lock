@@ -2932,6 +2932,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rmcp-traces"
+version = "0.4.7"
+dependencies = [
+ "http",
+ "rmcp",
+ "serde_json",
+]
+
+[[package]]
 name = "rsa"
 version = "0.9.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3609,6 +3618,7 @@ dependencies = [
  "axum",
  "http",
  "rmcp",
+ "rmcp-traces",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -3616,8 +3626,10 @@ dependencies = [
  "soma-contracts",
  "soma-runtime",
  "soma-service",
+ "soma-test-support",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -3816,7 +3828,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",

@@ -2,6 +2,8 @@ use serde_json::json;
 
 use soma_contracts::token_limit::MAX_RESPONSE_BYTES;
 
+use crate::assert_result_has_no_meta;
+
 use super::{response_page_request, tool_result_from_json, ResponsePageRequest};
 
 fn result_text(result: &rmcp::model::CallToolResult) -> &str {
@@ -28,6 +30,7 @@ fn tool_result_from_json_adds_action_discriminator() {
     let parsed: serde_json::Value =
         serde_json::from_str(text).expect("tool text should remain valid JSON");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(parsed["status"], "ok");
     assert_eq!(parsed["_soma_action"], "status");
     assert_eq!(result.structured_content.as_ref(), Some(&parsed));
@@ -51,6 +54,7 @@ fn tool_result_from_json_returns_scrollable_page_envelope() {
     let parsed: serde_json::Value =
         serde_json::from_str(text).expect("paged text should remain valid JSON");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(parsed["kind"], "mcp_response_page");
     assert_eq!(parsed["schema_version"], 1);
     assert_eq!(parsed["code"], "response_page");
@@ -111,6 +115,8 @@ fn tool_result_from_json_returns_requested_continuation_page() {
     .expect("second page should serialize");
     let second_payload: serde_json::Value = serde_json::from_str(result_text(&second)).unwrap();
 
+    assert_result_has_no_meta(&first);
+    assert_result_has_no_meta(&second);
     assert_eq!(second_payload["kind"], "mcp_response_page");
     assert_eq!(second_payload["page"]["offset"], next_offset);
     assert_eq!(second_payload["page"]["page_bytes"], 1024);
@@ -182,6 +188,8 @@ fn response_page_cursor_handles_out_of_range_offsets() {
     .expect("out of range continuation should serialize");
     let payload: serde_json::Value = serde_json::from_str(result_text(&result)).unwrap();
 
+    assert_result_has_no_meta(&first);
+    assert_result_has_no_meta(&result);
     assert_eq!(payload["kind"], "mcp_response_page");
     assert_eq!(payload["page"]["offset"], serialized_bytes);
     assert_eq!(payload["page"]["has_more"], false);
@@ -209,6 +217,7 @@ fn response_page_continuation_preserves_original_arguments() {
     .expect("tool result should serialize");
     let parsed: serde_json::Value = serde_json::from_str(result_text(&result)).unwrap();
 
+    assert_result_has_no_meta(&result);
     assert_eq!(parsed["continuation"]["arguments"]["action"], "echo");
     assert_eq!(
         parsed["continuation"]["arguments"]["message"],
@@ -234,6 +243,21 @@ fn response_page_request_rejects_offset_without_cursor() {
     let data = error.data.expect("error should include structured data");
     assert_eq!(data["kind"], "mcp_protocol_error");
     assert_eq!(data["code"], "missing_response_cursor");
+    assert_eq!(data["field"], "_response_cursor");
+}
+
+#[test]
+fn response_page_request_rejects_oversized_cursor_before_cloning() {
+    let args = serde_json::Map::from_iter([
+        ("action".to_owned(), json!("status")),
+        ("_response_cursor".to_owned(), json!("x".repeat(257))),
+        ("_response_offset".to_owned(), json!(1)),
+    ]);
+
+    let error = response_page_request(Some(&args)).expect_err("cursor cap should be enforced");
+    let data = error.data.expect("error should include structured data");
+    assert_eq!(data["kind"], "mcp_protocol_error");
+    assert_eq!(data["code"], "response_cursor_too_long");
     assert_eq!(data["field"], "_response_cursor");
 }
 
