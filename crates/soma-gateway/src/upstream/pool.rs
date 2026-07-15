@@ -129,7 +129,7 @@ impl UpstreamPool {
     pub fn register_config(&self, config: UpstreamConfig) -> Result<(), UpstreamError> {
         let transport = transport_for_config(&config);
         let health = if config.enabled {
-            health_for_transport(config.name.as_str(), transport)
+            health_for_config(config.name.as_str(), transport)
         } else {
             UpstreamHealth::Disabled
         };
@@ -249,13 +249,21 @@ fn transport_for_config(config: &UpstreamConfig) -> TransportKind {
     TransportKind::InProcess
 }
 
-fn health_for_transport(name: &str, transport: TransportKind) -> UpstreamHealth {
-    if matches!(transport, TransportKind::WebSocketUnsupported) {
-        return UpstreamHealth::Unsupported {
+fn health_for_config(name: &str, transport: TransportKind) -> UpstreamHealth {
+    match transport {
+        TransportKind::InProcess => UpstreamHealth::Unsupported {
+            reason: format!("configured upstream `{name}` has no live in-process connector"),
+        },
+        TransportKind::HttpJson | TransportKind::HttpSse => UpstreamHealth::Unsupported {
+            reason: format!("live HTTP/SSE upstream `{name}` is not implemented in this build"),
+        },
+        TransportKind::Stdio => UpstreamHealth::Unsupported {
+            reason: format!("live stdio upstream `{name}` is not implemented in this build"),
+        },
+        TransportKind::WebSocketUnsupported => UpstreamHealth::Unsupported {
             reason: format!("websocket upstream `{name}` is not supported by soma-gateway yet"),
-        };
+        },
     }
-    UpstreamHealth::Connected
 }
 
 #[cfg(test)]

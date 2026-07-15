@@ -2,9 +2,34 @@ use super::*;
 
 #[test]
 fn proxy_resources_and_prompts_default_true() {
-    let cfg: UpstreamConfig = toml::from_str(r#"name = "axon""#).unwrap();
+    let cfg: UpstreamConfig = toml::from_str(
+        r#"
+name = "axon"
+url = "https://example.com/mcp"
+"#,
+    )
+    .unwrap();
     assert!(cfg.proxy_resources);
     assert!(cfg.proxy_prompts);
+}
+
+#[test]
+fn validate_rejects_missing_or_ambiguous_transport() {
+    assert!(UpstreamConfig {
+        name: "missing".to_owned(),
+        ..UpstreamConfig::default()
+    }
+    .validate()
+    .is_err());
+
+    assert!(UpstreamConfig {
+        name: "both".to_owned(),
+        url: Some("https://example.com/mcp".to_owned()),
+        command: Some("node".to_owned()),
+        ..UpstreamConfig::default()
+    }
+    .validate()
+    .is_err());
 }
 
 #[test]

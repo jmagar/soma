@@ -23,12 +23,13 @@ impl GatewayProjection {
             .iter()
             .map(|snapshot| snapshot.tools.len())
             .sum::<usize>();
+        let exposed_tool_count = manager.exposed_tool_count()?;
         let likely_stale_count = snapshots.iter().filter(|snapshot| snapshot.stale).count();
         Ok(Self {
             upstream_count,
             connected_count,
             discovered_tool_count,
-            exposed_tool_count: discovered_tool_count,
+            exposed_tool_count,
             likely_stale_count,
         })
     }

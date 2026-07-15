@@ -16,7 +16,11 @@ use soma_contracts::scopes::has_admin_scope;
 use soma_gateway::gateway::dispatch::{
     dispatch_gateway_action, GatewayAccess, GatewayDispatchError,
 };
+use soma_gateway::gateway::manager::GatewayManagerError;
+use soma_gateway::upstream::UpstreamError;
 use soma_runtime::server::{AppState, AuthPolicy};
+
+use crate::responses::cap_json_response;
 
 pub async fn v1_gateway_action(
     State(state): State<AppState>,
@@ -37,7 +41,7 @@ pub async fn v1_gateway_action(
     );
 
     match dispatch_gateway_action(&state.gateway, access, &action, params) {
-        Ok(value) => Json(value).into_response(),
+        Ok(value) => Json(cap_gateway_response(value)).into_response(),
         Err(error) => gateway_error_response(&action, error),
     }
 }
@@ -60,14 +64,47 @@ pub fn gateway_access_from_scopes(policy: &AuthPolicy, scopes: &[String]) -> Gat
 }
 
 fn gateway_error_response(action: &str, error: GatewayDispatchError) -> axum::response::Response {
-    let status = match error {
+    let status = match &error {
         GatewayDispatchError::AdminRequired => StatusCode::FORBIDDEN,
         GatewayDispatchError::Params(_) | GatewayDispatchError::SpawnValidation => {
             StatusCode::BAD_REQUEST
         }
-        GatewayDispatchError::Manager(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        GatewayDispatchError::UnknownAction => StatusCode::NOT_FOUND,
+        GatewayDispatchError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
+        GatewayDispatchError::Manager(error) => manager_error_status(error),
     };
     (status, Json(error.structured(action).to_json())).into_response()
+}
+
+fn manager_error_status(error: &GatewayManagerError) -> StatusCode {
+    match error {
+        GatewayManagerError::Config(_)
+        | GatewayManagerError::UpstreamExists(_)
+        | GatewayManagerError::Upstream(UpstreamError::ParamsMustBeObject) => {
+            StatusCode::BAD_REQUEST
+        }
+        GatewayManagerError::UpstreamMissing(_)
+        | GatewayManagerError::Upstream(UpstreamError::UnknownUpstream { .. }) => {
+            StatusCode::NOT_FOUND
+        }
+        GatewayManagerError::Upstream(UpstreamError::NotExposed { .. }) => StatusCode::FORBIDDEN,
+        GatewayManagerError::Upstream(UpstreamError::Unsupported { .. }) => {
+            StatusCode::NOT_IMPLEMENTED
+        }
+        GatewayManagerError::Upstream(UpstreamError::ResponseTooLarge { .. }) => {
+            StatusCode::PAYLOAD_TOO_LARGE
+        }
+        GatewayManagerError::GatewayReloading
+        | GatewayManagerError::StoreNotMounted
+        | GatewayManagerError::Upstream(UpstreamError::NotRoutable { .. }) => {
+            StatusCode::SERVICE_UNAVAILABLE
+        }
+    }
+}
+
+fn cap_gateway_response(value: Value) -> Value {
+    cap_json_response(value, "Use a narrower gateway action or filter.")
+        .unwrap_or_else(|_| json!({"error": "internal server error"}))
 }
 
 fn json_rejection_response(error: JsonRejection) -> axum::response::Response {

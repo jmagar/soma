@@ -15,13 +15,27 @@ use std::{
 use anyhow::Result;
 
 use soma_contracts::config::{AuthMode, Config, McpConfig};
-use soma_gateway::{config::GatewayConfig, gateway::manager::GatewayManager};
+use soma_gateway::{
+    config::{GatewayConfig, GatewayPaths},
+    gateway::{config_store::FsGatewayConfigStore, manager::GatewayManager},
+};
 use soma_service::{ProviderRegistry, SomaService};
 
 pub type GatewayProductState = Arc<GatewayManager>;
 
 pub fn gateway_product_state_from_config(config: GatewayConfig) -> Result<GatewayProductState> {
     Ok(Arc::new(GatewayManager::new(config)?))
+}
+
+pub fn gateway_product_state_from_env() -> Result<GatewayProductState> {
+    let paths = GatewayPaths::from_env()?;
+    gateway_product_state_from_store(FsGatewayConfigStore::from_paths(paths))
+}
+
+pub fn gateway_product_state_from_store(
+    store: FsGatewayConfigStore,
+) -> Result<GatewayProductState> {
+    Ok(Arc::new(GatewayManager::from_store(store)?))
 }
 
 #[must_use]

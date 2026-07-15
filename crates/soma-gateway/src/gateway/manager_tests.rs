@@ -10,6 +10,7 @@ fn manager_builds_from_gateway_config() {
     let manager = GatewayManager::new(GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "mock".to_owned(),
+            url: Some("https://example.com/mcp".to_owned()),
             ..UpstreamConfig::default()
         }],
         ..GatewayConfig::default()
@@ -18,6 +19,33 @@ fn manager_builds_from_gateway_config() {
 
     assert_eq!(manager.lifecycle(), GatewayLifecycle::Ready);
     assert_eq!(manager.discover().unwrap()[0].name, "mock");
+}
+
+#[test]
+fn manager_add_update_and_remove_mutate_config() {
+    let manager = GatewayManager::new(GatewayConfig::default()).unwrap();
+
+    manager
+        .add_upstream(UpstreamConfig {
+            name: "mock".to_owned(),
+            url: Some("https://example.com/mcp".to_owned()),
+            ..UpstreamConfig::default()
+        })
+        .unwrap();
+    assert_eq!(manager.discover().unwrap().len(), 1);
+
+    manager
+        .update_upstream(UpstreamConfig {
+            name: "mock".to_owned(),
+            url: Some("https://example.com/updated".to_owned()),
+            ..UpstreamConfig::default()
+        })
+        .unwrap();
+    let rendered = serde_json::to_string(&manager.config_view()).unwrap();
+    assert!(rendered.contains("example.com/updated"));
+
+    manager.remove_upstream("mock").unwrap();
+    assert!(manager.discover().unwrap().is_empty());
 }
 
 #[test]

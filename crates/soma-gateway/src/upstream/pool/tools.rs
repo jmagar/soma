@@ -50,6 +50,22 @@ impl super::UpstreamPool {
             Ok(tools)
         })
     }
+
+    pub fn exposed_tool_count(&self) -> usize {
+        self.entries
+            .read()
+            .expect("upstream pool lock poisoned")
+            .values()
+            .map(|entry| {
+                entry
+                    .snapshot
+                    .tools
+                    .iter()
+                    .filter(|tool| matches_filter(entry.config.expose_tools.as_deref(), &tool.name))
+                    .count()
+            })
+            .sum()
+    }
 }
 
 #[cfg(test)]

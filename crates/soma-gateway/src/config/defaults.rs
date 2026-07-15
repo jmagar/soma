@@ -15,7 +15,7 @@ impl GatewayPaths {
 
     pub fn from_env() -> Result<Self, ConfigError> {
         let home = std::env::var_os("SOMA_HOME")
-            .map(PathBuf::from)
+            .map(|path| normalize_env_soma_home(PathBuf::from(path)))
             .unwrap_or_else(default_soma_home);
         Self::new(home)
     }
@@ -41,6 +41,14 @@ fn default_soma_home() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".soma")
+}
+
+fn normalize_env_soma_home(path: PathBuf) -> PathBuf {
+    if path.file_name().and_then(|name| name.to_str()) == Some(".soma") {
+        path
+    } else {
+        path.join(".soma")
+    }
 }
 
 fn validate_soma_home(path: &Path) -> Result<(), ConfigError> {

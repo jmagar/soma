@@ -8,6 +8,7 @@ fn list_view_contains_counts_not_backend_state() {
     let manager = GatewayManager::new(GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "mock".to_owned(),
+            url: Some("https://example.com/mcp".to_owned()),
             ..UpstreamConfig::default()
         }],
         ..GatewayConfig::default()

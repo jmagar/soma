@@ -49,9 +49,11 @@ fn redaction_corpus_masks_urls_headers_oauth_and_split_flags() {
 fn json_redaction_masks_nested_secret_values() {
     let raw = json!({
         "oauth": {"client_secret": "secret", "redirect": "https://example.com/cb"},
+        "header": "Bearer abc123",
         "items": [{"token": "secret"}, {"name": "safe"}],
     });
     let rendered = redact_json_value(&raw).to_string();
     assert!(!rendered.contains(r#":"secret""#));
+    assert!(!rendered.contains("abc123"));
     assert!(rendered.contains("safe"));
 }

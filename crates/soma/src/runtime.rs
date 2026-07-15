@@ -22,7 +22,7 @@ use soma_cli as cli;
 #[cfg(feature = "mcp-stdio")]
 use soma_mcp as mcp;
 #[cfg(any(feature = "mcp-stdio", feature = "mcp-http"))]
-use soma_runtime::server::empty_gateway_product_state;
+use soma_runtime::server::gateway_product_state_from_env;
 #[cfg(feature = "mcp-http")]
 use soma_runtime::server::{resolve_auth_policy_kind, AuthPolicyKind};
 #[cfg(all(feature = "mcp", not(feature = "mcp-stdio")))]
@@ -96,7 +96,7 @@ pub async fn serve_stdio_mcp() -> Result<()> {
         auth_policy: AuthPolicy::LoopbackDev,
         service,
         provider_registry,
-        gateway: empty_gateway_product_state(),
+        gateway: gateway_product_state_from_env()?,
         remote_adapter,
         response_pages: Default::default(),
     };
@@ -144,7 +144,7 @@ async fn build_state(config: Config) -> Result<AppState> {
         auth_policy,
         service,
         provider_registry,
-        gateway: empty_gateway_product_state(),
+        gateway: gateway_product_state_from_env()?,
         remote_adapter: false,
         response_pages: Default::default(),
     })

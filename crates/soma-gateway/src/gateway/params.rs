@@ -9,8 +9,14 @@ use crate::config::UpstreamConfig;
 pub enum ParamsError {
     #[error("params must be a JSON object")]
     MustBeObject,
+    #[error("field `{0}` is required")]
+    MissingField(&'static str),
     #[error("field `{0}` must be a string")]
     StringField(&'static str),
+    #[error("field `{0}` must be an array of strings")]
+    StringArrayField(&'static str),
+    #[error("field `{0}` must be an object with string values")]
+    StringMapField(&'static str),
 }
 
 pub fn object_params(params: &Value) -> Result<&Map<String, Value>, ParamsError> {
@@ -34,36 +40,84 @@ pub fn string_param(
 
 pub fn upstream_config_from_params(params: &Value) -> Result<UpstreamConfig, ParamsError> {
     let params = object_params(params)?;
+    let mut config = parsed_upstream_config(params, required_string_param(params, "name")?)?;
+    config.proxy_resources = params
+        .get("proxy_resources")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    config.proxy_prompts = params
+        .get("proxy_prompts")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    Ok(config)
+}
+
+pub fn test_upstream_config_from_params(params: &Value) -> Result<UpstreamConfig, ParamsError> {
+    let params = object_params(params)?;
+    let name = string_param(params, "name")?.unwrap_or_else(|| "test".to_owned());
+    parsed_upstream_config(params, name)
+}
+
+fn parsed_upstream_config(
+    params: &Map<String, Value>,
+    name: String,
+) -> Result<UpstreamConfig, ParamsError> {
     Ok(UpstreamConfig {
-        name: string_param(params, "name")?.unwrap_or_else(|| "pending".to_owned()),
+        name,
         url: string_param(params, "url")?,
         command: string_param(params, "command")?,
-        env: env_param(params),
-        proxy_resources: params
-            .get("proxy_resources")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
-        proxy_prompts: params
-            .get("proxy_prompts")
-            .and_then(Value::as_bool)
-            .unwrap_or(true),
+        args: string_array_param(params, "args")?.unwrap_or_default(),
+        env: env_param(params)?,
         ..UpstreamConfig::default()
     })
 }
 
-fn env_param(params: &Map<String, Value>) -> BTreeMap<String, String> {
+pub fn required_string_param(
+    params: &Map<String, Value>,
+    field: &'static str,
+) -> Result<String, ParamsError> {
+    string_param(params, field)?.ok_or(ParamsError::MissingField(field))
+}
+
+fn string_array_param(
+    params: &Map<String, Value>,
+    field: &'static str,
+) -> Result<Option<Vec<String>>, ParamsError> {
+    params
+        .get(field)
+        .map(|value| {
+            value
+                .as_array()
+                .ok_or(ParamsError::StringArrayField(field))?
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(ToOwned::to_owned)
+                        .ok_or(ParamsError::StringArrayField(field))
+                })
+                .collect()
+        })
+        .transpose()
+}
+
+fn env_param(params: &Map<String, Value>) -> Result<BTreeMap<String, String>, ParamsError> {
     params
         .get("env")
-        .and_then(Value::as_object)
-        .map(|object| {
-            object
+        .map(|value| {
+            value
+                .as_object()
+                .ok_or(ParamsError::StringMapField("env"))?
                 .iter()
-                .filter_map(|(key, value)| {
-                    value.as_str().map(|value| (key.clone(), value.to_owned()))
+                .map(|(key, value)| {
+                    value
+                        .as_str()
+                        .map(|value| (key.clone(), value.to_owned()))
+                        .ok_or(ParamsError::StringMapField("env"))
                 })
-                .collect::<BTreeMap<_, _>>()
+                .collect()
         })
-        .unwrap_or_default()
+        .transpose()
+        .map(|value| value.unwrap_or_default())
 }
 
 #[cfg(test)]

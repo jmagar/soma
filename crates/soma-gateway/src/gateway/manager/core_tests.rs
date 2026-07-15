@@ -1,4 +1,5 @@
 use crate::config::{GatewayConfig, UpstreamConfig};
+use crate::gateway::manager::GatewayLifecycle;
 
 use super::*;
 
@@ -9,6 +10,7 @@ fn reload_builds_fresh_pool_and_swaps_config() {
         .reload(GatewayConfig {
             upstream: vec![UpstreamConfig {
                 name: "fresh".to_owned(),
+                url: Some("https://example.com/mcp".to_owned()),
                 ..UpstreamConfig::default()
             }],
             ..GatewayConfig::default()
@@ -25,6 +27,7 @@ fn invalid_reload_restores_ready_lifecycle_without_replacing_config() {
     let result = manager.reload(GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "bad name".to_owned(),
+            url: Some("https://example.com/mcp".to_owned()),
             ..UpstreamConfig::default()
         }],
         ..GatewayConfig::default()

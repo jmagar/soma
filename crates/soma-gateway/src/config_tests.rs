@@ -46,3 +46,24 @@ fn redacted_view_excludes_raw_env_and_secret_values() {
     assert!(!rendered.contains("user:pass"));
     assert!(rendered.contains("[redacted]"));
 }
+
+#[test]
+fn redacted_view_hides_protected_route_backend_url() {
+    let cfg = GatewayConfig {
+        protected_mcp_routes: vec![ProtectedMcpRouteConfig {
+            name: "public".to_owned(),
+            public_host: "mcp.example.com".to_owned(),
+            public_path: "/axon".to_owned(),
+            backend_url: "http://10.0.0.2:4000/mcp".to_owned(),
+            ..ProtectedMcpRouteConfig::default()
+        }],
+        ..GatewayConfig::default()
+    };
+
+    let view = serde_json::to_value(cfg.redacted_view()).unwrap();
+    let rendered = view.to_string();
+    assert_eq!(view["protected_mcp_routes"][0]["has_backend_url"], true);
+    assert!(!rendered.contains("10.0.0.2"));
+    assert!(!rendered.contains("127.0.0.1"));
+    assert!(!rendered.contains("\"backend_url\""));
+}

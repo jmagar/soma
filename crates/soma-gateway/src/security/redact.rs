@@ -159,6 +159,13 @@ fn redact_query_pairs(query: &str) -> String {
 }
 
 fn redact_secret_like_segments(value: &str) -> String {
+    if value
+        .trim_start()
+        .to_ascii_lowercase()
+        .starts_with("bearer ")
+    {
+        return REDACTED.to_owned();
+    }
     value
         .split_whitespace()
         .map(|segment| {

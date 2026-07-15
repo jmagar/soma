@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
+use crate::process::guard::SpawnGuard;
+use crate::process::stdio::StdioProcessSpec;
 use crate::security::redact::{is_sensitive_key, redact_stdio_args, redact_url};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -104,6 +106,7 @@ impl Default for UpstreamConfig {
 impl UpstreamConfig {
     pub fn validate(&self) -> Result<(), ConfigError> {
         validate_name(&self.name)?;
+        validate_transport_shape(self)?;
         if let Some(name) = self.bearer_token_env.as_deref() {
             validate_bearer_token_env(name)?;
         }
@@ -160,6 +163,44 @@ impl UpstreamConfig {
             expose_prompts: self.expose_prompts.clone(),
         }
     }
+}
+
+fn validate_transport_shape(config: &UpstreamConfig) -> Result<(), ConfigError> {
+    let has_url = config
+        .url
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|url| !url.is_empty());
+    let has_command = config
+        .command
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|command| !command.is_empty());
+    match (has_url, has_command) {
+        (true, true) => {
+            return Err(ConfigError::invalid(
+                "transport",
+                "must specify either url or command, not both",
+            ));
+        }
+        (false, false) => {
+            return Err(ConfigError::invalid(
+                "transport",
+                "must specify exactly one of url or command",
+            ));
+        }
+        _ => {}
+    }
+    if has_command {
+        let spec = StdioProcessSpec {
+            command: config.command.clone().unwrap_or_default(),
+            args: config.args.clone(),
+            env: config.env.clone(),
+        };
+        spec.validate(&SpawnGuard::default())
+            .map_err(|_| ConfigError::invalid("command", "stdio command is not allowed"))?;
+    }
+    Ok(())
 }
 
 impl GatewayUpstreamOauthConfig {

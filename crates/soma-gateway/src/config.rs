@@ -83,7 +83,11 @@ impl GatewayConfig {
                 .iter()
                 .map(UpstreamConfig::redacted_view)
                 .collect(),
-            protected_mcp_routes: self.protected_mcp_routes.clone(),
+            protected_mcp_routes: self
+                .protected_mcp_routes
+                .iter()
+                .map(ProtectedMcpRouteConfigView::from)
+                .collect(),
             virtual_servers: self.virtual_servers.clone(),
         }
     }
@@ -92,8 +96,33 @@ impl GatewayConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GatewayConfigView {
     pub upstream: Vec<UpstreamConfigView>,
-    pub protected_mcp_routes: Vec<ProtectedMcpRouteConfig>,
+    pub protected_mcp_routes: Vec<ProtectedMcpRouteConfigView>,
     pub virtual_servers: Vec<VirtualServerConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProtectedMcpRouteConfigView {
+    pub name: String,
+    pub enabled: bool,
+    pub public_host: String,
+    pub public_path: String,
+    pub upstream: Option<String>,
+    pub has_backend_url: bool,
+    pub target: Option<ProtectedGatewaySubsetTarget>,
+}
+
+impl From<&ProtectedMcpRouteConfig> for ProtectedMcpRouteConfigView {
+    fn from(route: &ProtectedMcpRouteConfig) -> Self {
+        Self {
+            name: route.name.clone(),
+            enabled: route.enabled,
+            public_host: route.public_host.clone(),
+            public_path: route.public_path.clone(),
+            upstream: route.upstream.clone(),
+            has_backend_url: !route.backend_url.trim().is_empty(),
+            target: route.target.clone(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -22,5 +22,7 @@ fn manager_projects_virtual_servers() {
     let projection = manager.virtual_server_projections();
 
     assert_eq!(projection[0].id, "agent");
-    assert!(projection[0].connected);
+    assert!(projection[0].enabled);
+    assert!(projection[0].mcp_enabled);
+    assert!(!projection[0].connected);
 }

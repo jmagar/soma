@@ -3673,6 +3673,7 @@ dependencies = [
  "soma-contracts",
  "soma-gateway",
  "soma-service",
+ "tempfile",
  "tracing",
  "url",
 ]

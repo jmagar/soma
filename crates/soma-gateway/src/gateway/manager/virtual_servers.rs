@@ -7,7 +7,7 @@ impl GatewayManager {
         config
             .virtual_servers
             .iter()
-            .map(|server| project_virtual_server(server, server.enabled))
+            .map(|server| project_virtual_server(server, false))
             .collect()
     }
 }

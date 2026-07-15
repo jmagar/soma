@@ -23,3 +23,6 @@ soma-gateway = { path = "../soma-gateway" }
 soma-service = { path = "../soma-service", default-features = false }
 tracing = "0.1"
 url = "2"
+
+[dev-dependencies]
+tempfile = "3"
