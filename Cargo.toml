@@ -8,6 +8,7 @@
 [workspace]
 members = [
   "crates/codex-app-server-client",
+  "crates/rmcp-traces",
   "crates/soma",
   "crates/soma-api",
   "crates/soma-auth",
