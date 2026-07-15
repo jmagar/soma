@@ -43,6 +43,13 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 /// approval/elicitation flows that can legitimately take a while.
 const PENDING_SERVER_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 
+/// Capacity of the internal channel from the reader task to [`EventStream`].
+/// Bounded (rather than unbounded) so a stalled or absent consumer grows
+/// memory by a fixed amount, not without bound, if events keep arriving
+/// faster than [`EventStream::recv`] is called - see that type's doc comment
+/// for the drop policy once this fills up.
+const EVENTS_CHANNEL_CAPACITY: usize = 1024;
+
 type PendingSender = oneshot::Sender<std::result::Result<serde_json::Value, Error>>;
 type PendingMap = Arc<Mutex<HashMap<i64, PendingSender>>>;
 
@@ -61,12 +68,20 @@ pub enum Event {
 /// Receives [`Event`]s from one app-server connection.
 ///
 /// Own exactly one `EventStream` per connection and keep draining it (even if
-/// you only care about requests, not notifications) - the reader task pushes
-/// into an unbounded channel, so a stalled consumer only grows memory, but an
-/// abandoned one means you'll never see incoming approval/elicitation requests
-/// (which then leak, per the caveat on [`PendingServerRequest`]).
+/// you only care about requests, not notifications). The channel between the
+/// reader task and this stream is bounded (see [`EVENTS_CHANNEL_CAPACITY`]):
+/// a slow consumer just grows a fixed-size backlog, but a consumer that stops
+/// draining entirely will eventually cause the reader task to drop events
+/// once that backlog fills. Drop policy when full:
+/// - [`Event::Notification`]: dropped and logged - fire-and-forget by design.
+/// - [`Event::Request`]: **not** silently dropped - this crate sends a
+///   fallback error reply on the app-server's behalf first (so it isn't left
+///   hanging), then drops the event.
+/// - [`Event::Closed`]: dropped and logged, but harmless - once the reader
+///   task ends it drops its sender, so [`Self::recv`] still observes the
+///   connection closing (as `None`) even without the explicit event.
 pub struct EventStream {
-    rx: mpsc::UnboundedReceiver<Event>,
+    rx: mpsc::Receiver<Event>,
 }
 
 impl EventStream {
@@ -82,9 +97,11 @@ impl EventStream {
 /// Every `PendingServerRequest` you receive must eventually be resolved via
 /// [`Self::respond`] or [`Self::respond_error`] - dropping one without
 /// responding resolves its internal forwarding task immediately (no leak),
-/// but leaves the app-server waiting for a reply until
-/// `PENDING_SERVER_REQUEST_TIMEOUT` elapses and this crate sends a fallback
-/// error on your behalf. Don't rely on that backstop; respond promptly.
+/// but the app-server then gets **no reply at all**, ever; the
+/// `PENDING_SERVER_REQUEST_TIMEOUT` fallback error only covers the different
+/// case of a caller holding onto one indefinitely without ever dropping or
+/// responding to it. Always call [`Self::respond`] or [`Self::respond_error`]
+/// - even to report "not handled" - rather than dropping.
 pub struct PendingServerRequest {
     pub request: ServerRequest,
     pub(crate) reply_tx: oneshot::Sender<OutgoingReply>,
@@ -248,7 +265,7 @@ impl CodexAppServerClient {
         W: AsyncWrite + Unpin + Send + 'static,
     {
         let (write_tx, mut write_rx) = mpsc::unbounded_channel::<String>();
-        let (events_tx, events_rx) = mpsc::unbounded_channel::<Event>();
+        let (events_tx, events_rx) = mpsc::channel::<Event>(EVENTS_CHANNEL_CAPACITY);
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
         let cancel = CancellationToken::new();
 
@@ -330,7 +347,14 @@ impl CodexAppServerClient {
                 }
             }
             pending_reader.lock().unwrap().clear(); // drops senders -> pending calls see TransportClosed
-            let _ = events_tx.send(Event::Closed);
+            if let Err(err) = events_tx.try_send(Event::Closed) {
+                // Harmless: dropping `events_tx` below (end of this task)
+                // still makes `EventStream::recv` observe closure as `None`.
+                tracing::debug!(
+                    ?err,
+                    "event channel full/closed while sending Event::Closed"
+                );
+            }
             // Proactively tear down the writer task (and reap a spawned child)
             // the moment we know the connection is dead, rather than waiting
             // for the caller to notice `Event::Closed` and drop the client, or
@@ -443,7 +467,7 @@ fn line_preview(line: &str) -> String {
 fn dispatch_incoming_line(
     line: &str,
     pending: &PendingMap,
-    events_tx: &mpsc::UnboundedSender<Event>,
+    events_tx: &mpsc::Sender<Event>,
     write_tx: &mpsc::UnboundedSender<String>,
 ) {
     let value: serde_json::Value = match serde_json::from_str(line) {
@@ -505,8 +529,32 @@ fn dispatch_incoming_line(
                                 }
                             }
                         });
-                        let _ = events_tx
-                            .send(Event::Request(PendingServerRequest { request, reply_tx }));
+                        if let Err(err) = events_tx
+                            .try_send(Event::Request(PendingServerRequest { request, reply_tx }))
+                        {
+                            // The consumer isn't draining EventStream fast enough (Full) or
+                            // has dropped it entirely (Closed). Either way, letting `psr`
+                            // fall out of scope here would silently drop `reply_tx`, which
+                            // resolves the forwarding task immediately with *no* reply ever
+                            // sent (see `PendingServerRequest`'s doc comment on bare drops) -
+                            // leaving the app-server waiting forever. Reply explicitly
+                            // instead of a silent hang.
+                            let Event::Request(psr) = err.into_inner() else {
+                                unreachable!("we always send Event::Request here")
+                            };
+                            tracing::warn!(
+                                method = psr.method_name(),
+                                "event channel unavailable (full or EventStream dropped); \
+                                 replying with a fallback error instead of leaving this \
+                                 server->client request unanswered"
+                            );
+                            psr.respond_error(
+                                -32000,
+                                "codex-app-server-client: event channel unavailable, request \
+                                 could not be delivered",
+                                None,
+                            );
+                        }
                     }
                     Err(err) => {
                         // The app-server expects a reply for every request it
@@ -533,7 +581,18 @@ fn dispatch_incoming_line(
             None => {
                 match serde_json::from_value::<ServerNotification>(serde_json::Value::Object(map)) {
                     Ok(notification) => {
-                        let _ = events_tx.send(Event::Notification(notification));
+                        // Fire-and-forget: unlike Event::Request, nothing on the other end
+                        // is waiting for a reply, so it's safe to just drop this under
+                        // backpressure rather than block the reader task. Deliberately not
+                        // logging the notification payload itself (could be arbitrarily
+                        // large, e.g. a big diff) - just that one was dropped.
+                        if let Err(err) = events_tx.try_send(Event::Notification(notification)) {
+                            let cause = match err {
+                                mpsc::error::TrySendError::Full(_) => "channel full",
+                                mpsc::error::TrySendError::Closed(_) => "EventStream dropped",
+                            };
+                            tracing::warn!(cause, "dropping a server notification");
+                        }
                     }
                     Err(err) => {
                         // Notifications never expect a reply, so there's nothing

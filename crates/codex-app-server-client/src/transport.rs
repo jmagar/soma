@@ -97,6 +97,20 @@ pub(crate) async fn read_line<R>(reader: &mut R, buf: &mut String) -> std::io::R
 where
     R: tokio::io::AsyncBufRead + Unpin,
 {
+    read_line_capped(reader, buf, MAX_LINE_BYTES).await
+}
+
+/// [`read_line`]'s implementation, parameterized over the cap so tests can
+/// exercise the boundary condition without allocating [`MAX_LINE_BYTES`]
+/// worth of memory.
+async fn read_line_capped<R>(
+    reader: &mut R,
+    buf: &mut String,
+    max_bytes: usize,
+) -> std::io::Result<usize>
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
     let mut bytes = std::mem::take(buf).into_bytes();
     bytes.clear(); // drops content, keeps the allocated capacity
     loop {
@@ -105,16 +119,29 @@ where
             break; // EOF
         }
         if let Some(pos) = available.iter().position(|&b| b == b'\n') {
+            // The cap must be enforced here too: `bytes` can already be close
+            // to max_bytes from prior chunks (each individually under the
+            // cap), and this chunk - up to one BufReader-internal-buffer's
+            // worth of bytes - could push the *line-terminated* total over it
+            // even though a newline was found. Without this check the cap
+            // could be overshot by up to one buffer's worth per line.
+            if bytes.len() + pos + 1 > max_bytes {
+                reader.consume(pos + 1);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("NDJSON line exceeded the {max_bytes}-byte cap"),
+                ));
+            }
             bytes.extend_from_slice(&available[..=pos]);
             reader.consume(pos + 1);
             break;
         }
         let n = available.len();
-        if bytes.len() + n > MAX_LINE_BYTES {
+        if bytes.len() + n > max_bytes {
             reader.consume(n);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("NDJSON line exceeded the {MAX_LINE_BYTES}-byte cap"),
+                format!("NDJSON line exceeded the {max_bytes}-byte cap"),
             ));
         }
         bytes.extend_from_slice(available);
@@ -141,4 +168,43 @@ pub(crate) fn split_unix_stream(
 ) {
     let (read_half, write_half) = stream.into_split();
     (write_half, BufReader::new(read_half))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::BufReader;
+
+    /// Finding #3 regression: a chunk that both crosses `max_bytes` *and*
+    /// contains the terminating newline must still be rejected. Before the
+    /// fix, only the no-newline-found branch checked the cap, so a
+    /// newline-terminated final chunk could overshoot it by up to one
+    /// `fill_buf` chunk's worth of bytes.
+    #[tokio::test]
+    async fn read_line_capped_rejects_an_oversized_line_even_when_newline_terminated() {
+        let mut reader = BufReader::new(b"0123456789\n".as_slice());
+        let mut buf = String::new();
+
+        let err = read_line_capped(&mut reader, &mut buf, 5)
+            .await
+            .expect_err("an 11-byte line must be rejected under a 5-byte cap");
+
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(err.to_string().contains("5-byte cap"), "{err}");
+    }
+
+    /// A newline-terminated line at exactly the cap is still accepted (the
+    /// check is `>`, not `>=`).
+    #[tokio::test]
+    async fn read_line_capped_accepts_a_line_exactly_at_the_cap() {
+        let mut reader = BufReader::new(b"01234\n".as_slice());
+        let mut buf = String::new();
+
+        let n = read_line_capped(&mut reader, &mut buf, 6)
+            .await
+            .expect("a 6-byte line (including the newline) fits a 6-byte cap");
+
+        assert_eq!(n, 6);
+        assert_eq!(buf, "01234\n");
+    }
 }

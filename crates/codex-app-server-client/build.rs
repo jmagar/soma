@@ -137,21 +137,43 @@ struct MethodEntry {
 
 // `server_notifications` entries never have a "response_type" key at all -
 // indexing a missing key on a `serde_json::Value::Object` yields `Value::Null`
-// (serde_json's `Index` impl, not a panic), and `.as_str()` on `Value::Null`
-// is `None` regardless - so reading `response_type` unconditionally already
-// produces the right answer for every section without needing a flag.
+// (serde_json's `Index` impl, not a panic) - so a missing key and an explicit
+// `null` (the `xtask/codex-schema`-generated shape for a genuinely
+// void-response request, see `RequestEntry` in `xtask/src/codex_schema/merge.rs`)
+// are indistinguishable and both legitimately mean "no response". Anything
+// else (a number, bool, array, or object) can only mean the manifest is
+// malformed - fail the build loudly instead of silently treating it the same
+// as "no response", which would generate a wrapper method that quietly
+// discards the app-server's actual reply.
+fn response_type_of(method: &str, e: &Value) -> Option<String> {
+    match e.get("response_type") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(other) => panic!(
+            "schema/methods.json entry for method {method:?} has a non-string, non-null \
+             \"response_type\": {other} - this indicates a corrupt or hand-edited \
+             methods.json (the generator, `cargo xtask codex-schema regen`, only ever emits \
+             a string or null/absent here). Regenerate the schema rather than editing \
+             methods.json by hand."
+        ),
+    }
+}
+
 fn parse_entries(value: &Value) -> Vec<MethodEntry> {
     value
         .as_array()
         .expect("methods.json section is an array")
         .iter()
-        .map(|e| MethodEntry {
-            method: e["method"].as_str().unwrap().to_string(),
-            variant_name: e["variant_name"].as_str().unwrap().to_string(),
-            fn_name: e["fn_name"].as_str().unwrap().to_string(),
-            params_type: e["params_type"].as_str().map(str::to_string),
-            params_optional: e["params_optional"].as_bool().unwrap_or(false),
-            response_type: e["response_type"].as_str().map(str::to_string),
+        .map(|e| {
+            let method = e["method"].as_str().unwrap().to_string();
+            MethodEntry {
+                variant_name: e["variant_name"].as_str().unwrap().to_string(),
+                fn_name: e["fn_name"].as_str().unwrap().to_string(),
+                params_type: e["params_type"].as_str().map(str::to_string),
+                params_optional: e["params_optional"].as_bool().unwrap_or(false),
+                response_type: response_type_of(&method, e),
+                method,
+            }
         })
         .collect()
 }
