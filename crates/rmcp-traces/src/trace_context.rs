@@ -120,6 +120,7 @@ impl TraceContext {
         let tracestate =
             bounded_optional_meta_string(meta, TRACESTATE_KEY, limits.max_tracestate_len)?;
         let baggage = bounded_optional_meta_string(meta, BAGGAGE_KEY, limits.max_baggage_len)?;
+        validate_baggage_member_count(baggage.as_deref(), limits.max_baggage_members)?;
         Ok(Some(Self {
             traceparent,
             tracestate,
@@ -212,6 +213,10 @@ pub enum TraceParseError {
         actual: usize,
         max: usize,
     },
+    TooManyBaggageMembers {
+        actual: usize,
+        max: usize,
+    },
     InvalidTraceParentLength {
         actual: usize,
     },
@@ -228,6 +233,9 @@ impl TraceParseError {
             Self::NonStringMeta { field } => format!("{field} was not a string"),
             Self::ValueTooLong { field, actual, max } => {
                 format!("{field} exceeded {max} bytes (actual {actual})")
+            }
+            Self::TooManyBaggageMembers { actual, max } => {
+                format!("baggage exceeded {max} members (actual at least {actual})")
             }
             Self::InvalidTraceParentLength { actual } => {
                 format!("traceparent length was {actual}, expected 55")
@@ -344,6 +352,28 @@ fn summarize_baggage(baggage: Option<&str>) -> (usize, usize) {
         }
     }
     (total, sensitive)
+}
+
+fn validate_baggage_member_count(baggage: Option<&str>, max: usize) -> Result<(), TraceParseError> {
+    let Some(baggage) = baggage else {
+        return Ok(());
+    };
+    let mut total = 0;
+    for member in baggage.split(',') {
+        let key = member
+            .split_once('=')
+            .map(|(key, _)| key)
+            .unwrap_or(member)
+            .trim();
+        if key.is_empty() {
+            continue;
+        }
+        total += 1;
+        if total > max {
+            return Err(TraceParseError::TooManyBaggageMembers { actual: total, max });
+        }
+    }
+    Ok(())
 }
 
 fn is_sensitive_key(key: &str) -> bool {

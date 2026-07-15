@@ -1,5 +1,5 @@
 use rmcp::model::Meta;
-use rmcp_traces::{TraceContext, TraceLimits, TraceParent, TraceTrust};
+use rmcp_traces::{TraceContext, TraceLimits, TraceParent, TraceParseError, TraceTrust};
 use serde_json::json;
 
 const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
@@ -61,6 +61,25 @@ fn oversized_values_are_rejected_before_parsing() {
         ..TraceLimits::default()
     };
     assert!(TraceContext::from_meta_with_limits(&meta, TraceTrust::Untrusted, limits).is_err());
+}
+
+#[test]
+fn excessive_baggage_member_count_is_rejected() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_baggage("a=1,b=2,c=3");
+    let limits = TraceLimits {
+        max_baggage_members: 2,
+        ..TraceLimits::default()
+    };
+    let error = TraceContext::from_meta_with_limits(&meta, TraceTrust::Untrusted, limits)
+        .expect_err("baggage member cap should be enforced");
+
+    assert!(matches!(
+        error,
+        TraceParseError::TooManyBaggageMembers { actual: 3, max: 2 }
+    ));
+    assert!(!error.safe_reason().contains("a=1"));
 }
 
 #[test]
