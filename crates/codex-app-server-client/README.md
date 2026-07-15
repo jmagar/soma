@@ -27,9 +27,9 @@ copied into another project wholesale and will keep working.
   and JSON-RPC error mapping.
 - Provides batteries-included helpers on top of the generated protocol:
   `CodexSession` for one-call handshakes, builder constructors for common
-  params, `ApprovalHandler` policies for server requests, `EventCollector`
-  for streamed turn output, `CodexDaemon` socket helpers, and
-  `CompatibilityReport` for schema/version diagnostics.
+  params, one-call text-turn helpers, `ApprovalHandler` policies for server
+  requests, `EventCollector` for streamed turn output, `CodexDaemon` socket
+  helpers, and `CompatibilityReport` for schema/version diagnostics.
 
 ## What it deliberately doesn't do
 
@@ -45,27 +45,20 @@ copied into another project wholesale and will keep working.
 ## Quick start
 
 ```rust,no_run
-use codex_app_server_client::protocol::{ThreadStartParams, TurnStartParams};
-use codex_app_server_client::{
-    CodexSession, DenyAllApprovalHandler, EventCollector, SessionOptions,
-};
+use codex_app_server_client::{CodexSession, DenyAllApprovalHandler, SessionOptions};
 
 #[tokio::main]
 async fn main() -> codex_app_server_client::Result<()> {
     let mut session = CodexSession::spawn(SessionOptions::new("my_integration", "0.1.0")).await?;
-    let thread = session
-        .start_thread(ThreadStartParams::new().model("gpt-5.4"))
-        .await?;
-    let turn = session
-        .send_turn(TurnStartParams::text(&thread.thread.id, "Say hello in one sentence."))
-        .await?;
-
-    let mut collector = EventCollector::for_turn(&thread.thread.id, &turn.turn.id);
-    session
-        .collect_until_complete(&mut collector, &DenyAllApprovalHandler::default())
+    let result = session
+        .run_text_turn_with_model_and_handler(
+            "gpt-5.4",
+            "Say hello in one sentence.",
+            &DenyAllApprovalHandler::default(),
+        )
         .await?;
 
-    println!("{}", collector.agent_message());
+    println!("{}", result.agent_message());
     Ok(())
 }
 ```
@@ -73,8 +66,9 @@ async fn main() -> codex_app_server_client::Result<()> {
 See:
 
 - `examples/basic.rs` for a no-auth/no-turn smoke using `CodexSession`.
-- `examples/session_turn.rs` for a complete thread + text turn + stream collector.
-- `examples/approval_handler.rs` for routing server requests through a policy.
+- `examples/session_turn.rs` for the one-call text-turn helper.
+- `examples/approval_handler.rs` for routing server requests through a custom
+  policy; use the documented preset handlers when they fit.
 - `examples/daemon.rs` for Unix socket connection helpers.
 - `examples/compatibility.rs` for schema/version diagnostics.
 - `tests/smoke.rs` for a live integration test against the real binary
@@ -88,14 +82,35 @@ The generated low-level methods are still available directly through
 - `SessionOptions` + `CodexSession::spawn(...)`: spawn, initialize, send
   `initialized`, keep the client and event stream together, and expose helpers
   for starting threads, sending turns, and draining events.
+- `CodexSession::run_text_turn(prompt)`: start a default thread, send one text
+  turn, drain events until completion, and return a `TextTurnResult`. It uses
+  `DenyAllApprovalHandler`, so it is best for read-only/smoke prompts.
+- `CodexSession::run_text_turn_with_model_and_handler(model, prompt, handler)`:
+  the same one-shot text flow with an explicit model and approval policy.
+- `CodexSession::start_thread_with_model(model)`: start a thread without
+  manually building `ThreadStartParams` when the only override is the model.
+- `CodexSession::send_text_turn(thread_id, prompt)`: send a single text
+  `UserInput` to an existing thread.
+- `CodexSession::wait_for_turn_completed(thread_id, turn_id, handler)`: drain
+  notifications for one turn and return the populated `EventCollector`.
+- `CodexSession::collect_agent_message(thread_id, turn_id, handler)`: drain a
+  turn and return only the concatenated assistant message text.
+- `TextTurnResult`: bundles the `thread/start` response, `turn/start`
+  response, and collected events; convenience accessors expose
+  `agent_message()`, `latest_diff()`, and `errors()`.
 - `ClientInfo::new`, `InitializeParams::for_client`,
   `ThreadStartParams::new`, `TurnStartParams::text`, `UserInput::text`,
   `ConfigReadParams::for_cwd`: common constructors that avoid ad hoc JSON for
   the first mile.
-- `ApprovalHandler`, `DenyAllApprovalHandler`, `FnApprovalHandler`, and
-  `ServerRequestReply`: one place to make approval/elicitation/tool-call
-  policy explicit. Dropped requests still receive fallback errors, but a real
-  integration should handle every request intentionally.
+- `ApprovalHandler`, `ServerRequestReply`, and policy helpers:
+  `DenyAllApprovalHandler` rejects every server request with a JSON-RPC error;
+  `ReadOnlyApprovalHandler` answers `currentTime/read` and declines
+  command/file-change prompts; `AllowAllApprovalHandler` approves command,
+  file-change, legacy command/patch, and permission-profile approval requests;
+  `FnApprovalHandler` lets you route each typed `ServerRequest` through custom
+  logic. Preset handlers intentionally return clear errors for dynamic tool
+  calls, auth refreshes, and other app-specific requests they cannot answer
+  safely.
 - `EventCollector`: collect streamed agent text, latest diff, completion, and
   turn errors from `ServerNotification`s.
 - `CodexDaemon`: build real `codex app-server --listen unix://...` args and

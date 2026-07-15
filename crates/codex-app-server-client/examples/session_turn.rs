@@ -3,10 +3,7 @@
 //! This can consume model credits, so run it deliberately:
 //! `cargo run -p codex-app-server-client --example session_turn -- "say hi"`
 
-use codex_app_server_client::protocol::{ThreadStartParams, TurnStartParams};
-use codex_app_server_client::{
-    CodexSession, DenyAllApprovalHandler, EventCollector, SessionOptions,
-};
+use codex_app_server_client::{CodexSession, DenyAllApprovalHandler, SessionOptions};
 
 #[tokio::main]
 async fn main() -> codex_app_server_client::Result<()> {
@@ -19,18 +16,10 @@ async fn main() -> codex_app_server_client::Result<()> {
     ))
     .await?;
 
-    let thread = session
-        .start_thread(ThreadStartParams::new().model("gpt-5"))
-        .await?;
-    let turn = session
-        .send_turn(TurnStartParams::text(&thread.thread.id, prompt))
+    let result = session
+        .run_text_turn_with_model_and_handler("gpt-5", prompt, &DenyAllApprovalHandler::default())
         .await?;
 
-    let mut collector = EventCollector::for_turn(&thread.thread.id, &turn.turn.id);
-    session
-        .collect_until_complete(&mut collector, &DenyAllApprovalHandler::default())
-        .await?;
-
-    println!("{}", collector.agent_message());
+    println!("{}", result.agent_message());
     Ok(())
 }

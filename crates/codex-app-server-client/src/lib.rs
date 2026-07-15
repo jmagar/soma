@@ -14,25 +14,18 @@
 //! # Quick start
 //!
 //! ```no_run
-//! use codex_app_server_client::protocol::{ThreadStartParams, TurnStartParams};
-//! use codex_app_server_client::{
-//!     CodexSession, DenyAllApprovalHandler, EventCollector, SessionOptions,
-//! };
+//! use codex_app_server_client::{CodexSession, DenyAllApprovalHandler, SessionOptions};
 //!
 //! # async fn run() -> codex_app_server_client::Result<()> {
 //! let mut session = CodexSession::spawn(SessionOptions::new("my_integration", "0.1.0")).await?;
-//! let thread = session
-//!     .start_thread(ThreadStartParams::new().model("gpt-5.4"))
+//! let result = session
+//!     .run_text_turn_with_model_and_handler(
+//!         "gpt-5.4",
+//!         "Say hello in one sentence.",
+//!         &DenyAllApprovalHandler::default(),
+//!     )
 //!     .await?;
-//! let turn = session
-//!     .send_turn(TurnStartParams::text(&thread.thread.id, "Say hello in one sentence."))
-//!     .await?;
-//!
-//! let mut collector = EventCollector::for_turn(&thread.thread.id, &turn.turn.id);
-//! session
-//!     .collect_until_complete(&mut collector, &DenyAllApprovalHandler::default())
-//!     .await?;
-//! println!("{}", collector.agent_message());
+//! println!("{}", result.agent_message());
 //! # Ok(())
 //! # }
 //! ```
@@ -52,7 +45,8 @@ mod session;
 mod transport;
 
 pub use approvals::{
-    ApprovalHandler, DenyAllApprovalHandler, FnApprovalHandler, ServerRequestReply,
+    AllowAllApprovalHandler, ApprovalHandler, DenyAllApprovalHandler, FnApprovalHandler,
+    ReadOnlyApprovalHandler, ServerRequestReply,
 };
 pub use client::{
     CodexAppServerClient, Event, EventStream, PendingServerRequest, DEFAULT_CALL_TIMEOUT,
@@ -66,5 +60,5 @@ pub use compat::{
 pub use daemon::CodexDaemon;
 pub use error::{Error, Result};
 pub use events::EventCollector;
-pub use session::{CodexSession, SessionOptions};
+pub use session::{CodexSession, SessionOptions, TextTurnResult};
 pub use transport::MAX_LINE_BYTES;
