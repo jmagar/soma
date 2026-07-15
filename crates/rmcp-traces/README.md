@@ -24,3 +24,15 @@ This crate targets `rmcp 2.2.0`. RMCP owns wire serialization for `_meta`; this 
 Never log raw baggage. Baggage may contain PII or credentials. `TraceContext` debug formatting delegates to `TraceSummary` and does not print raw baggage values.
 
 Upstream RMCP debug logs can include raw request values before an application receives `RequestContext.meta`. Avoid broad `rmcp=debug` logging for untrusted production traffic.
+
+## Soma Integration
+
+Soma reads `RequestContext.meta` in `crates/soma-mcp/src/rmcp_server.rs` after auth context is available. It logs only `TraceSummary` fields: short trace/span identifiers, sampled flag, trust label, tracestate presence, baggage member count, and sensitive baggage member count.
+
+Soma does not attach result `_meta` in v1. This prevents trace metadata from bypassing response paging or `MAX_RESPONSE_BYTES`.
+
+## Future Work
+
+- HTTP propagation behind an app-level trust policy.
+- Result `_meta` helpers with one serialized budget across every result path.
+- Detailed Lab, Cortex, and Axon migrations after the Soma proof is stable.
