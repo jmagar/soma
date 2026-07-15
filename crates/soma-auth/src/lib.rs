@@ -5,6 +5,8 @@ pub mod at_rest;
 pub mod auth_context;
 #[cfg(feature = "http-axum")]
 pub mod authorize;
+#[cfg(feature = "http-axum")]
+pub mod cimd;
 pub mod config;
 pub mod error;
 pub mod google;
