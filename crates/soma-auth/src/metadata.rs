@@ -25,6 +25,9 @@ pub async fn authorization_server_metadata(
         // soma-auth always echoes `iss` on authorization redirects (RFC 9207 §2),
         // so this capability flag is a static `true`, not config-dependent.
         authorization_response_iss_parameter_supported: true,
+        // soma-auth supports CIMD unconditionally alongside DCR (see
+        // crate::cimd and authorize::resolve_client_redirect_uris).
+        client_id_metadata_document_supported: true,
     })
 }
 
@@ -105,6 +108,7 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["token_endpoint"], "https://lab.example.com/token");
         assert_eq!(json["authorization_response_iss_parameter_supported"], true);
+        assert_eq!(json["client_id_metadata_document_supported"], true);
     }
 
     #[tokio::test]

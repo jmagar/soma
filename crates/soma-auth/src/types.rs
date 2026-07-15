@@ -19,6 +19,10 @@ pub struct AuthorizationServerMetadata {
     /// the `iss` parameter in authorization responses (soma-auth always does, in
     /// `authorize::callback`). Always emitted, never conditional.
     pub authorization_response_iss_parameter_supported: bool,
+    /// Advertises OAuth Client ID Metadata Document support at `/authorize`
+    /// (see `crate::cimd`). Always `true` — soma-auth supports CIMD
+    /// unconditionally alongside DCR.
+    pub client_id_metadata_document_supported: bool,
 }
 
 /// Query params for `GET /native/callback` and `GET /native/poll` — the
