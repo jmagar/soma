@@ -1,9 +1,14 @@
+pub mod budget;
 pub mod call_tool;
 pub mod discovery;
 pub mod internal;
+pub mod proxy;
 pub mod result;
 pub mod runner;
+pub mod tool_dispatch;
 
+#[cfg(test)]
+mod budget_tests;
 #[cfg(test)]
 mod call_tool_tests;
 #[cfg(test)]
@@ -11,9 +16,13 @@ mod discovery_tests;
 #[cfg(test)]
 mod internal_tests;
 #[cfg(test)]
+mod proxy_tests;
+#[cfg(test)]
 mod result_tests;
 #[cfg(test)]
 mod runner_tests;
+#[cfg(test)]
+mod tool_dispatch_tests;
 
 use std::sync::Arc;
 

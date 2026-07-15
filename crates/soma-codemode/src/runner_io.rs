@@ -56,9 +56,12 @@ pub async fn write_runner_input<W: AsyncWriteExt + Unpin>(
         .map_err(|err| ToolError::internal_message(format!("failed to flush runner input: {err}")))
 }
 
-pub async fn terminate_code_mode_runner(child: &mut tokio::process::Child, child_pid: Option<u32>) {
+pub async fn terminate_code_mode_runner(
+    child: &mut tokio::process::Child,
+    _child_pid: Option<u32>,
+) {
     #[cfg(unix)]
-    if let Some(pid) = child_pid {
+    if let Some(pid) = _child_pid {
         use nix::sys::signal::Signal;
         use nix::unistd::Pid;
         let _ = nix::sys::signal::killpg(Pid::from_raw(pid as i32), Signal::SIGKILL);

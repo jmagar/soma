@@ -147,6 +147,16 @@ pub(crate) fn max_calltool_per_run() -> u64 {
         })
 }
 
+pub(crate) fn effective_max_calltool_per_run(config: &CodeModeConfig) -> u64 {
+    crate::home::env_non_empty("SOMA_CODE_MODE_MAX_CALLS_PER_RUN")
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .or(config.max_calls_per_run.filter(|value| *value > 0))
+        .map_or_else(max_calltool_per_run, |value| {
+            value.min(MAX_CALLTOOL_PER_RUN_CEILING)
+        })
+}
+
 pub(crate) fn calltool_result_max_bytes() -> usize {
     let default_bytes = CALLTOOL_RESULT_MAX_MIB_CONFIG_DEFAULT
         .get()
@@ -160,6 +170,15 @@ pub(crate) fn calltool_result_max_bytes() -> usize {
         .filter(|mib| *mib > 0)
         .map(|mib| mib.saturating_mul(1024 * 1024))
         .unwrap_or(default_bytes)
+}
+
+pub(crate) fn effective_calltool_result_max_bytes(config: &CodeModeConfig) -> usize {
+    crate::home::env_non_empty("SOMA_CODE_MODE_CALLTOOL_RESULT_MAX_MIB")
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|mib| *mib > 0)
+        .or(config.calltool_result_max_mib.filter(|mib| *mib > 0))
+        .map(|mib| mib.saturating_mul(1024 * 1024))
+        .unwrap_or_else(calltool_result_max_bytes)
 }
 
 fn default_true() -> bool {

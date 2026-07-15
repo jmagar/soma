@@ -5,12 +5,14 @@ use crate::execute::{
     CodeModeExecutionOutcome,
 };
 use crate::host::CodeModeHost;
+use crate::pool::{PoolConfig, RunnerPool, RunnerSpawn};
 use crate::types::{CodeModeCaller, CodeModeExecutionResponse, CodeModeSurface, ToolScope, UiLink};
 use crate::{CodeModeConfig, ToolError};
 
 pub struct CodeModeBroker<'a, H: CodeModeHost> {
     pub(crate) host: Option<&'a H>,
     pub(crate) ui_capture: Arc<std::sync::Mutex<Option<UiLink>>>,
+    runner_pool: tokio::sync::OnceCell<Arc<RunnerPool>>,
 }
 
 impl<'a, H: CodeModeHost> CodeModeBroker<'a, H> {
@@ -19,6 +21,7 @@ impl<'a, H: CodeModeHost> CodeModeBroker<'a, H> {
         Self {
             host,
             ui_capture: Arc::new(std::sync::Mutex::new(None)),
+            runner_pool: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -46,8 +49,18 @@ impl<'a, H: CodeModeHost> CodeModeBroker<'a, H> {
         scope: ToolScope,
         execution_id: Option<Arc<str>>,
     ) -> Result<CodeModeExecutionOutcome, ToolError> {
+        let runner_pool = self
+            .runner_pool
+            .get_or_try_init(|| async {
+                Ok::<_, ToolError>(Arc::new(RunnerPool::new(
+                    PoolConfig::from_env(),
+                    RunnerSpawn::current_exe()?,
+                )))
+            })
+            .await?;
         execute_in_subprocess(SubprocessExecution {
             host: self.host,
+            runner_pool: Some(runner_pool.as_ref()),
             code,
             caller,
             surface,

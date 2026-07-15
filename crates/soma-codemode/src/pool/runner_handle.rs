@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
-use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
+use futures::StreamExt;
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{Mutex, Notify};
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -170,9 +170,16 @@ fn spawn_stderr_drain(
     tokio::spawn(async move {
         const CAP_ENTRIES: usize = 100_000;
         const CAP_BYTES: usize = 8 * 1024 * 1024;
-        let mut lines = TokioBufReader::new(stderr).lines();
+        let mut lines = FramedRead::new(
+            stderr,
+            LinesCodec::new_with_max_length(MAX_STDIO_LINE_BYTES),
+        );
         let mut total_bytes = 0usize;
-        while let Ok(Some(line)) = lines.next_line().await {
+        while let Some(line) = lines.next().await {
+            let line = match line {
+                Ok(line) => line,
+                Err(_) => "[soma] runner stderr truncated".to_string(),
+            };
             total_bytes = total_bytes.saturating_add(line.len() + 1);
             let mut buf = buffer.lines.lock().await;
             if buf.len() < CAP_ENTRIES && total_bytes <= CAP_BYTES {

@@ -30,11 +30,13 @@ impl JobGuard {
         };
 
         let Some(pid) = pid else {
-            return Self { job: 0 };
+            return Self {
+                job: std::ptr::null_mut(),
+            };
         };
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-            if job == 0 {
+            if job.is_null() {
                 return Self { job };
             }
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
@@ -46,7 +48,7 @@ impl JobGuard {
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             );
             let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
-            if process != 0 {
+            if !process.is_null() {
                 let _ = AssignProcessToJobObject(job, process);
                 windows_sys::Win32::Foundation::CloseHandle(process);
             }
@@ -58,7 +60,7 @@ impl JobGuard {
 #[cfg(windows)]
 impl Drop for JobGuard {
     fn drop(&mut self) {
-        if self.job != 0 {
+        if !self.job.is_null() {
             unsafe {
                 windows_sys::Win32::Foundation::CloseHandle(self.job);
             }

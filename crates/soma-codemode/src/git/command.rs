@@ -31,6 +31,17 @@ impl GitCommand {
             .output()
             .await
             .map_err(|err| ToolError::internal_message(format!("git failed: {err}")))?;
+        if !output.status.success() {
+            let stderr = cap_output(&output.stderr, 8 * 1024);
+            return Err(ToolError::Sdk {
+                sdk_kind: "upstream_error".to_string(),
+                message: if stderr.trim().is_empty() {
+                    format!("git exited with status {}", output.status)
+                } else {
+                    format!("git exited with status {}: {stderr}", output.status)
+                },
+            });
+        }
         Ok(cap_output(&output.stdout, 64 * 1024))
     }
 

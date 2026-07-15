@@ -246,9 +246,13 @@ fn javy_main_promise_state(runtime: &crate::javy::Runtime) -> Result<JavyMainPro
                     Ok(None) => Ok(JavyMainPromiseState::Rejected(
                         "Code Mode result must be JSON-serializable".to_string(),
                     )),
-                    Err(err) => Ok(JavyMainPromiseState::Rejected(javy_error_message(err))),
+                    Err(err) => Ok(JavyMainPromiseState::Rejected(javy_caught_error_message(
+                        &cx, err,
+                    ))),
                 },
-                Some(Err(err)) => Ok(JavyMainPromiseState::Rejected(javy_error_message(err))),
+                Some(Err(err)) => Ok(JavyMainPromiseState::Rejected(javy_caught_error_message(
+                    &cx, err,
+                ))),
             }
         })
         .map_err(javy_error_message)
@@ -425,4 +429,19 @@ fn runner_read_input() -> Result<CodeModeRunnerInput, RunnerReadError> {
 
 fn javy_error_message(error: crate::javy::quickjs::Error) -> String {
     error.to_string()
+}
+
+fn javy_caught_error_message(
+    cx: &crate::javy::quickjs::Ctx<'_>,
+    error: crate::javy::quickjs::Error,
+) -> String {
+    match crate::javy::quickjs::CaughtError::from_error(cx, error) {
+        crate::javy::quickjs::CaughtError::Exception(exception) => {
+            exception.message().unwrap_or_else(|| exception.to_string())
+        }
+        crate::javy::quickjs::CaughtError::Value(value) => {
+            crate::javy::val_to_string(cx, value).unwrap_or_else(|err| err.to_string())
+        }
+        crate::javy::quickjs::CaughtError::Error(error) => error.to_string(),
+    }
 }

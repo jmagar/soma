@@ -7,22 +7,20 @@ use serde_json::Value;
 
 use crate::artifacts::ArtifactStore;
 use crate::host::{CodeModeHost, ExecCtx, StepDecision};
-use crate::local_provider::{dispatch_local_provider, parse_local_provider_call};
-use crate::preamble::{
-    generate_discovery_js, generate_js_proxy_from_catalog, generate_local_provider_js,
-};
+use crate::pool::{PoolConfig, RunnerDisposition, RunnerPool, RunnerSpawn};
 use crate::protocol::{CodeModeRunnerInput, CodeModeRunnerOutput};
 use crate::runner_io::{decode_runner_output, terminate_code_mode_runner, write_runner_input};
-use crate::types::{
-    CodeModeCaller, CodeModeExecutedCall, CodeModeExecutionResponse, CodeModeSurface,
-    ToolDescriptor, ToolScope, UiLink,
-};
+use crate::types::{CodeModeCaller, CodeModeExecutionResponse, CodeModeSurface, ToolScope, UiLink};
 use crate::{normalize_user_code, CodeModeConfig, ToolError};
 
+use super::budget::RunBudget;
+use super::proxy::{build_proxy, load_entries};
+use super::tool_dispatch::{handle_tool_call, ToolCallContext};
 use super::{finish_response, CodeModeExecutionOutcome};
 
 pub(crate) struct SubprocessExecution<'a, H: CodeModeHost> {
     pub(crate) host: Option<&'a H>,
+    pub(crate) runner_pool: Option<&'a RunnerPool>,
     pub(crate) code: &'a str,
     pub(crate) caller: CodeModeCaller,
     pub(crate) surface: CodeModeSurface,
@@ -30,17 +28,6 @@ pub(crate) struct SubprocessExecution<'a, H: CodeModeHost> {
     pub(crate) scope: ToolScope,
     pub(crate) execution_id: Option<Arc<str>>,
     pub(crate) ui_capture: Arc<std::sync::Mutex<Option<UiLink>>>,
-}
-
-struct ToolCallContext<'a, H: CodeModeHost> {
-    host: Option<&'a H>,
-    entries: &'a [ToolDescriptor],
-    caller: &'a CodeModeCaller,
-    surface: CodeModeSurface,
-    scope: &'a ToolScope,
-    execution_id: &'a Option<Arc<str>>,
-    ui_capture: &'a Arc<std::sync::Mutex<Option<UiLink>>>,
-    calls: &'a mut Vec<CodeModeExecutedCall>,
 }
 
 pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
@@ -54,11 +41,26 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
     )
     .await?;
     let config = request.config;
+    let mut budget = RunBudget::new(&config);
     let proxy = build_proxy(&entries, config.semantic_search.blend_weight)?;
-    let mut runner = crate::pool::RunnerHandle::spawn(&crate::pool::RunnerSpawn::current_exe()?)?;
+    let fallback_pool;
+    let pool = if let Some(pool) = request.runner_pool {
+        pool
+    } else {
+        fallback_pool = RunnerPool::new(
+            PoolConfig {
+                size: 0,
+                recycle_after: 1,
+                max_overflow: 1,
+            },
+            RunnerSpawn::current_exe()?,
+        );
+        &fallback_pool
+    };
+    let mut lease = pool.checkout().await?;
     let deadline = tokio::time::Instant::now() + Duration::from_millis(config.timeout_ms.max(1));
     write_with_deadline(
-        &mut runner.stdin,
+        &mut lease.handle_mut()?.stdin,
         &CodeModeRunnerInput::Start {
             code: normalize_user_code(request.code),
             proxy,
@@ -75,7 +77,10 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
         .as_deref()
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| ulid::Ulid::new().to_string());
-    let artifact_store = ArtifactStore::new(artifact_run_id);
+    let artifact_store = ArtifactStore::new(artifact_run_id)?;
+    crate::artifacts::prune::prune_old_runs(&crate::soma_home().join("code-mode-artifacts"), 256)
+        .await
+        .map_err(|err| ToolError::internal_message(format!("prune artifacts: {err}")))?;
     let mut tool_ctx = ToolCallContext {
         host: request.host,
         entries: &entries,
@@ -88,11 +93,11 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
     };
 
     loop {
-        let output = next_output(&mut runner, deadline).await?;
+        let output = next_output(lease.handle_mut()?, deadline).await?;
         match output {
             CodeModeRunnerOutput::ToolCall { seq, id, params } => {
-                let result = handle_tool_call(&mut tool_ctx, seq, id, params).await;
-                settle(seq, result, &mut runner.stdin, deadline).await?;
+                let result = handle_tool_call(&mut tool_ctx, &mut budget, seq, id, params).await;
+                settle(seq, result, &mut lease.handle_mut()?.stdin, deadline).await?;
             }
             CodeModeRunnerOutput::ArtifactWrite {
                 seq,
@@ -100,27 +105,39 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
                 content,
                 content_type,
             } => {
-                let result = artifact_store
-                    .write_text(&path, &content, content_type.as_deref())
-                    .await
-                    .and_then(to_value);
-                settle(seq, result, &mut runner.stdin, deadline).await?;
+                let result = match budget.record_operation("artifact write") {
+                    Ok(()) => artifact_store
+                        .write_text(&path, &content, content_type.as_deref())
+                        .await
+                        .and_then(to_value),
+                    Err(error) => Err(error),
+                };
+                settle(seq, result, &mut lease.handle_mut()?.stdin, deadline).await?;
             }
             CodeModeRunnerOutput::SnippetResolve { seq, name, input } => {
-                let result = resolve_snippet(request.host, name, input).await;
+                let result = match budget.record_operation("snippet resolve") {
+                    Ok(()) => resolve_snippet(request.host, name, input).await,
+                    Err(error) => Err(error),
+                };
                 match result {
                     Ok((code, input)) => {
                         write_with_deadline(
-                            &mut runner.stdin,
+                            &mut lease.handle_mut()?.stdin,
                             &CodeModeRunnerInput::SnippetResolved { seq, code, input },
                             deadline,
                         )
                         .await?;
                     }
-                    Err(error) => write_error(seq, error, &mut runner.stdin, deadline).await?,
+                    Err(error) => {
+                        write_error(seq, error, &mut lease.handle_mut()?.stdin, deadline).await?
+                    }
                 }
             }
             CodeModeRunnerOutput::StepBegin { seq, name } => {
+                if let Err(error) = budget.record_operation("step") {
+                    write_error(seq, error, &mut lease.handle_mut()?.stdin, deadline).await?;
+                    continue;
+                }
                 let ordinal = next_step_ordinal;
                 next_step_ordinal = next_step_ordinal.saturating_add(1);
                 step_ordinals.insert(seq, (ordinal, name.clone()));
@@ -135,7 +152,7 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
                 match decision {
                     StepDecision::Replay(value) => {
                         write_with_deadline(
-                            &mut runner.stdin,
+                            &mut lease.handle_mut()?.stdin,
                             &CodeModeRunnerInput::StepDecision {
                                 seq,
                                 replay: Some(value),
@@ -146,7 +163,7 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
                     }
                     StepDecision::Execute => {
                         write_with_deadline(
-                            &mut runner.stdin,
+                            &mut lease.handle_mut()?.stdin,
                             &CodeModeRunnerInput::StepDecision { seq, replay: None },
                             deadline,
                         )
@@ -154,7 +171,7 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
                     }
                     StepDecision::Error { kind, message } => {
                         write_with_deadline(
-                            &mut runner.stdin,
+                            &mut lease.handle_mut()?.stdin,
                             &CodeModeRunnerInput::ToolError { seq, kind, message },
                             deadline,
                         )
@@ -174,19 +191,22 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
                 match result {
                     Ok(()) => {
                         write_with_deadline(
-                            &mut runner.stdin,
+                            &mut lease.handle_mut()?.stdin,
                             &CodeModeRunnerInput::StepRecorded { seq },
                             deadline,
                         )
                         .await?;
                     }
-                    Err(error) => write_error(seq, error, &mut runner.stdin, deadline).await?,
+                    Err(error) => {
+                        write_error(seq, error, &mut lease.handle_mut()?.stdin, deadline).await?
+                    }
                 }
             }
             CodeModeRunnerOutput::Done { result, logs } => {
-                runner.stderr.flush_settle().await;
+                lease.handle_mut()?.stderr.flush_settle().await;
                 let mut logs = logs;
-                logs.extend(runner.stderr.take_since_and_clear(0).await);
+                logs.extend(lease.handle_mut()?.stderr.take_since_and_clear(0).await);
+                let logs = budget.cap_logs(logs);
                 let raw = CodeModeExecutionResponse {
                     result: result.into_response_result(),
                     calls,
@@ -198,7 +218,15 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
                         .ok()
                         .and_then(|guard| guard.clone()),
                 };
-                return finish_response(raw, &config);
+                let response = finish_response(raw, &config);
+                let handle = lease.handle_mut()?;
+                handle.success_count = handle.success_count.saturating_add(1);
+                let disposition = RunnerDisposition::from_success_count(
+                    handle.success_count,
+                    pool.config().recycle_after,
+                );
+                pool.release(lease, disposition).await;
+                return response;
             }
             CodeModeRunnerOutput::Error { kind, message } => {
                 return Err(ToolError::Sdk {
@@ -208,143 +236,6 @@ pub(crate) async fn execute_in_subprocess<H: CodeModeHost>(
             }
         }
     }
-}
-
-async fn load_entries<H: CodeModeHost>(
-    host: Option<&H>,
-    caller: &CodeModeCaller,
-    surface: CodeModeSurface,
-    scope: &ToolScope,
-) -> Result<Vec<ToolDescriptor>, ToolError> {
-    match host {
-        Some(host) => Ok(host
-            .list_tools(caller, surface, scope, true, true)
-            .await?
-            .entries
-            .iter()
-            .filter(|entry| scope.allows(&entry.id))
-            .cloned()
-            .collect()),
-        None => Ok(Vec::new()),
-    }
-}
-
-pub(crate) fn build_proxy(
-    entries: &[ToolDescriptor],
-    blend_weight: f32,
-) -> Result<String, ToolError> {
-    let values = entries
-        .iter()
-        .map(|entry| serde_json::to_value(entry).map_err(serialize_error))
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut proxy = String::new();
-    proxy.push_str(generate_local_provider_js());
-    proxy.push_str(
-        &generate_discovery_js(&values, blend_weight).map_err(ToolError::internal_message)?,
-    );
-    proxy.push_str(&generate_js_proxy_from_catalog(entries).map_err(ToolError::internal_message)?);
-    proxy.push_str(
-        r#"
-codemode.run = (name, input = {}) => globalThis.__somaRunSnippet(name, input);
-codemode.step = (name, fn) => globalThis.__somaCodemodeStep(name, fn);
-codemode.search = async (query = "") => {
-  const q = String(query || "").toLowerCase();
-  return globalThis.__codemodeDiscovery.filter((entry) => JSON.stringify(entry).toLowerCase().includes(q));
-};
-codemode.describe = async (query = "") => ({
-  tools: (await codemode.search(query)).map((entry) => ({
-    id: entry.id,
-    signature: entry.signature,
-    dts: entry.dts,
-    description: entry.description
-  }))
-});
-"#,
-    );
-    Ok(proxy)
-}
-
-async fn handle_tool_call<H: CodeModeHost>(
-    ctx: &mut ToolCallContext<'_, H>,
-    seq: u64,
-    id: String,
-    params: Value,
-) -> Result<Value, ToolError> {
-    let result = if let Some(call) = parse_local_provider_call(&id, params.clone())? {
-        if !local_providers_allowed(ctx.caller, ctx.scope) {
-            Err(ToolError::Forbidden {
-                message: format!("Code Mode local provider `{id}` is not available in this scope"),
-                required_scopes: vec!["soma:admin".to_string()],
-            })
-        } else {
-            dispatch_local_provider(call).await
-        }
-    } else {
-        let host = ctx.host.ok_or_else(|| unknown_tool(&id, ctx.entries))?;
-        let descriptor = ctx
-            .entries
-            .iter()
-            .find(|entry| entry.id == id)
-            .ok_or_else(|| unknown_tool(&id, ctx.entries))?;
-        let outcome = call_host_tool_with_ctx(
-            host,
-            descriptor,
-            params.clone(),
-            ctx.caller,
-            ctx.surface,
-            ctx.scope,
-            ExecCtx {
-                seq,
-                execution_id: ctx.execution_id.clone(),
-                step_ordinal: None,
-            },
-        )
-        .await?;
-        if let Some(ui) = outcome.ui.clone() {
-            if let Ok(mut guard) = ctx.ui_capture.lock() {
-                *guard = Some(ui);
-            }
-        }
-        Ok(outcome.value)
-    };
-    match &result {
-        Ok(value) => ctx.calls.push(CodeModeExecutedCall {
-            id,
-            params: Some(params),
-            result: Some(value.clone()),
-        }),
-        Err(_) => ctx.calls.push(CodeModeExecutedCall {
-            id,
-            params: Some(params),
-            result: None,
-        }),
-    }
-    result
-}
-
-async fn call_host_tool_with_ctx<H: CodeModeHost>(
-    host: &H,
-    descriptor: &ToolDescriptor,
-    params: Value,
-    caller: &CodeModeCaller,
-    surface: CodeModeSurface,
-    scope: &ToolScope,
-    ctx: ExecCtx,
-) -> Result<crate::host::ToolCallOutcome, ToolError> {
-    if !scope.allows(&descriptor.id) {
-        return Err(ToolError::Forbidden {
-            message: format!("Code Mode scope does not allow `{}`", descriptor.id),
-            required_scopes: vec![descriptor.namespace.clone()],
-        });
-    }
-    crate::schema::validate_code_mode_params_against_schema(&params, descriptor.schema.as_ref())?;
-    host.call_tool(&descriptor.id, params, caller, surface, scope, ctx)
-        .await
-}
-
-pub(crate) fn local_providers_allowed(caller: &CodeModeCaller, scope: &ToolScope) -> bool {
-    matches!(scope, ToolScope::All)
-        && (caller.capabilities.admin || caller.capabilities.trusted_local)
 }
 
 async fn resolve_snippet<H: CodeModeHost>(
@@ -478,14 +369,6 @@ async fn write_with_deadline<W: tokio::io::AsyncWriteExt + Unpin>(
             sdk_kind: "timeout".to_string(),
             message: "Code Mode runner write timed out".to_string(),
         })?
-}
-
-fn unknown_tool(id: &str, entries: &[ToolDescriptor]) -> ToolError {
-    ToolError::UnknownAction {
-        message: format!("unknown Code Mode tool `{id}`"),
-        valid: entries.iter().map(|entry| entry.id.clone()).collect(),
-        hint: Some(crate::broker::code_mode_unknown_tool_hint()),
-    }
 }
 
 fn to_value<T: serde::Serialize>(value: T) -> Result<Value, ToolError> {

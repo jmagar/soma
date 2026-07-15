@@ -13,8 +13,10 @@ pub async fn prune_old_runs(root: &Path, keep: usize) -> std::io::Result<usize> 
     }
     dirs.sort();
     let remove_count = dirs.len().saturating_sub(keep);
+    let mut removed = 0;
     for dir in dirs.into_iter().take(remove_count) {
-        let _ = tokio::fs::remove_dir_all(dir).await;
+        tokio::fs::remove_dir_all(dir).await?;
+        removed += 1;
     }
-    Ok(remove_count)
+    Ok(removed)
 }

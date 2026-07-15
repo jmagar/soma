@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::runtime::run_start_without_io;
 use crate::protocol::CodeModeRunnerInput;
-use crate::protocol::CodeModeRunnerResult;
+use crate::protocol::{CodeModeRunnerOutput, CodeModeRunnerResult};
 
 #[test]
 fn evaluates_fresh_quickjs_runtime() {
@@ -36,6 +36,22 @@ fn sandbox_has_no_node_or_fetch_globals() {
                 json!({"fetch": "undefined", "process": "undefined", "require": "undefined"})
             ),
             logs: Vec::new()
+        }
+    );
+}
+
+#[test]
+fn rejected_error_preserves_structured_kind() {
+    let output = run_start_without_io(CodeModeRunnerInput::Start {
+        code: r#"async () => { throw new Error(JSON.stringify({kind:"unknown_instance", message:"missing spec"})); }"#.to_string(),
+        proxy: String::new(),
+    })
+    .unwrap();
+    assert_eq!(
+        output,
+        CodeModeRunnerOutput::Error {
+            kind: "unknown_instance".to_string(),
+            message: r#"{"kind":"unknown_instance","message":"missing spec"}"#.to_string()
         }
     );
 }

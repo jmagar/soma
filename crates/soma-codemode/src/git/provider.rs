@@ -28,7 +28,18 @@ impl GitProvider {
                     }
                 })?;
                 validate_ref(reference)?;
-                Ok(json!({"ref": reference}))
+                let resolved = GitCommand::new(
+                    &self.cwd,
+                    vec![
+                        "rev-parse".to_string(),
+                        "--verify".to_string(),
+                        "--quiet".to_string(),
+                        format!("{reference}^{{object}}"),
+                    ],
+                )
+                .run()
+                .await?;
+                Ok(json!({"ref": reference, "oid": resolved.trim()}))
             }
             _ => Err(ToolError::UnknownAction {
                 message: format!("unknown git method `{method}`"),

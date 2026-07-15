@@ -119,13 +119,16 @@ pub trait CodeModeHost: Send + Sync {
         let _ = (ctx, name, value);
         Box::pin(async { Ok(()) })
     }
-}
 
-#[cfg(feature = "openapi")]
-pub trait CodeModeOpenApiHost: CodeModeHost {
-    fn openapi_registry(&self) -> soma_openapi::OpenApiRegistry;
+    #[cfg(feature = "openapi")]
+    fn openapi_registry(&self) -> Option<soma_openapi::OpenApiRegistry> {
+        None
+    }
 
-    fn openapi_http_client(&self) -> reqwest::Client;
+    #[cfg(feature = "openapi")]
+    fn openapi_http_client(&self) -> Option<reqwest::Client> {
+        None
+    }
 }
 
 #[derive(Debug, Default)]
