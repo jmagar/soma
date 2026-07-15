@@ -30,6 +30,7 @@ rmcp = { version = "2.1.0", default-features = false, features = [
 ] }
 soma-auth = { path = "../soma-auth", optional = true, features = ["http-axum"] }
 soma-contracts = { path = "../soma-contracts" }
+soma-gateway = { path = "../soma-gateway", features = ["protected-routes"] }
 soma-runtime = { path = "../soma-runtime", default-features = false }
 soma-service = { path = "../soma-service", default-features = false }
 schemars = "1.2.1"
@@ -38,3 +39,6 @@ serde_json = "1"
 tokio = { version = "1", features = ["io-std", "macros"] }
 tracing = "0.1"
 url = "2"
+
+[dev-dependencies]
+tempfile = "3"

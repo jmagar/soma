@@ -4,8 +4,11 @@
 //! prompt templates, and dispatch shims. Application state lives in `soma_runtime::server`.
 
 mod conformance;
+mod gateway_proxy;
 mod prompts;
 mod response_paging;
+mod rmcp_adapters;
+mod rmcp_auth;
 pub mod rmcp_server;
 mod schemas;
 mod tools;
@@ -23,7 +26,7 @@ pub use tools::execute_tool_without_peer_for_test;
 #[cfg(test)]
 mod testing {
     use soma_contracts::config::{McpConfig, SomaConfig};
-    use soma_runtime::server::{AppState, AuthPolicy};
+    use soma_runtime::server::{empty_gateway_product_state, AppState, AuthPolicy};
     use soma_service::{SomaClient, SomaService};
 
     pub fn loopback_state() -> AppState {
@@ -41,6 +44,7 @@ mod testing {
             auth_policy: AuthPolicy::LoopbackDev,
             service,
             provider_registry,
+            gateway: empty_gateway_product_state(),
             remote_adapter: false,
             response_pages: Default::default(),
         }
