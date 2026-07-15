@@ -111,7 +111,7 @@ pub struct UpstreamPool {
     #[cfg(feature = "oauth")]
     subject_entries: Arc<RwLock<BTreeMap<(String, String), SubjectPoolEntry>>>,
     #[cfg(feature = "oauth")]
-    oauth_cache: Arc<RwLock<Option<soma_auth::upstream::cache::OauthClientCache>>>,
+    oauth_provider: Arc<RwLock<Option<Arc<dyn crate::oauth::UpstreamOAuthProvider>>>>,
     options: PoolOptions,
 }
 
@@ -129,7 +129,7 @@ impl UpstreamPool {
             #[cfg(feature = "oauth")]
             subject_entries: Arc::new(RwLock::new(BTreeMap::new())),
             #[cfg(feature = "oauth")]
-            oauth_cache: Arc::new(RwLock::new(None)),
+            oauth_provider: Arc::new(RwLock::new(None)),
             options: options.normalized(),
         }
     }

@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use soma_mcp_client::oauth::{BeginAuthorization, UpstreamOauthManager};
+use soma_mcp_client::oauth::{BeginAuthorization, UpstreamOAuthManager};
 
 use super::{GatewayManager, GatewayManagerError};
 
@@ -47,11 +47,11 @@ impl GatewayManager {
         subject: &str,
     ) -> Result<UpstreamOauthStatusView, GatewayManagerError> {
         let manager = self.require_oauth_manager(upstream)?;
-        let row = manager
-            .credential_row(subject)
+        let status = manager
+            .credential_status(subject)
             .await
             .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
-        let Some(row) = row else {
+        let Some(status) = status else {
             return Ok(UpstreamOauthStatusView {
                 authenticated: false,
                 upstream: upstream.to_owned(),
@@ -62,8 +62,8 @@ impl GatewayManager {
             });
         };
         let now = now_unix()?;
-        let seconds = row.access_token_expires_at.saturating_sub(now);
-        let state = if row.access_token_expires_at <= now {
+        let seconds = status.access_token_expires_at.saturating_sub(now);
+        let state = if status.access_token_expires_at <= now {
             UpstreamOauthConnectionState::Expired
         } else if seconds <= TOKEN_EXPIRY_WARNING_SECS {
             UpstreamOauthConnectionState::Expiring
@@ -77,9 +77,9 @@ impl GatewayManager {
             ),
             upstream: upstream.to_owned(),
             state,
-            access_token_expires_at: Some(row.access_token_expires_at),
+            access_token_expires_at: Some(status.access_token_expires_at),
             seconds_until_expiry: Some(seconds),
-            refresh_token_present: row.refresh_token_present,
+            refresh_token_present: status.refresh_token_present,
         })
     }
 
@@ -99,7 +99,11 @@ impl GatewayManager {
             .expect("gateway oauth runtime poisoned")
             .as_ref()
         {
-            runtime.cache.evict_subject(upstream, subject);
+            runtime.evict_subject(upstream, subject);
+            self.pool
+                .read()
+                .expect("gateway pool poisoned")
+                .evict_oauth_subject(upstream, subject);
         }
         Ok(())
     }
@@ -107,7 +111,7 @@ impl GatewayManager {
     fn require_oauth_manager(
         &self,
         upstream: &str,
-    ) -> Result<UpstreamOauthManager, GatewayManagerError> {
+    ) -> Result<std::sync::Arc<dyn UpstreamOAuthManager>, GatewayManagerError> {
         let runtime = self
             .oauth_runtime
             .read()
@@ -116,13 +120,9 @@ impl GatewayManager {
             .ok_or_else(|| {
                 GatewayManagerError::OAuth("upstream OAuth runtime is not configured".to_owned())
             })?;
-        runtime
-            .managers
-            .get(upstream)
-            .map(|manager| manager.clone())
-            .ok_or_else(|| {
-                GatewayManagerError::OAuth(format!("upstream `{upstream}` has no OAuth manager"))
-            })
+        runtime.manager(upstream).ok_or_else(|| {
+            GatewayManagerError::OAuth(format!("upstream `{upstream}` has no OAuth manager"))
+        })
     }
 }
 

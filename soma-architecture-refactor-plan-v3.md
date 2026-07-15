@@ -403,6 +403,8 @@ crates/shared/auth/src/
 - reusable bearer-token, OAuth, JWT, session, and SQLite-backed auth primitives
 - optional Axum middleware and auth route builders
 - configurable scope labels and static-token scope minting
+- reusable inbound MCP/HTTP server authorization primitives so products can expose
+  MCP servers protected by bearer tokens or OAuth without embedding product defaults
 - upstream OAuth credential storage, cache, refresh, and manager support
 - generic authorization-server and protected-resource metadata helpers
 - token encryption and key management primitives
@@ -911,9 +913,9 @@ crates/shared/mcp/client/src/
 └── error.rs
 ```
 
-Owns outbound MCP client sessions, upstream discovery, tool/resource/prompt calls, stdio process lifecycle, HTTP/SSE/WebSocket client transports, response caps, upstream health, and client-side security checks such as SSRF and environment redaction.
+Owns outbound MCP client sessions, upstream discovery, tool/resource/prompt calls, stdio process lifecycle, HTTP/SSE/WebSocket client transports, response caps, upstream health, bearer-token attachment for upstreams configured with explicit token env vars, OAuth provider hooks for upstream MCP servers secured by OAuth, and client-side security checks such as SSRF and environment redaction.
 
-Does not own inbound `ServerHandler` implementations, route aggregation, protected public routes, or gateway administration.
+Does not own inbound `ServerHandler` implementations, route aggregation, protected public routes, gateway administration, or a concrete product auth implementation. OAuth support is a generic provider/manager seam; adapters such as `soma-auth` live in `crates/soma/integrations` or another product integration crate.
 
 ### `crates/shared/mcp/server`
 
@@ -935,9 +937,9 @@ crates/shared/mcp/server/src/
 └── trace.rs
 ```
 
-Owns reusable inbound RMCP server lifecycle helpers, stdio and HTTP serving helpers, cancellation/shutdown integration, response page storage, protocol conversion helpers, conformance-test helpers, and integration with `rmcp-traces`.
+Owns reusable inbound RMCP server lifecycle helpers, stdio and HTTP serving helpers, cancellation/shutdown integration, response page storage, protocol conversion helpers, conformance-test helpers, auth hook points for bearer/OAuth-protected MCP servers, and integration with `rmcp-traces`.
 
-Does not own Soma tools, prompts, resources, scopes, product action dispatch, or product-specific MCP error messages.
+Does not own Soma tools, prompts, resources, scopes, product action dispatch, product-specific MCP error messages, or concrete auth defaults. Products can pair it with `soma-auth` or a custom authorizer to expose OAuth-protected MCP servers.
 
 ### `crates/shared/mcp/proxy`
 

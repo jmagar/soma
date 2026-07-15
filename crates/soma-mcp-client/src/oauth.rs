@@ -1,61 +1,123 @@
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use futures::future::BoxFuture;
+use serde::Serialize;
 use thiserror::Error;
 
-use crate::config::{GatewayUpstreamOauthMode, GatewayUpstreamOauthRegistration, UpstreamConfig};
+use crate::config::UpstreamConfig;
+use crate::upstream::http_body_cap::BodyCappedHttpClient;
 
-pub use soma_auth::config::AuthConfig;
-pub use soma_auth::upstream::manager::UpstreamOauthManager;
-pub use soma_auth::upstream::runtime::{build_upstream_oauth_runtime, UpstreamOauthRuntime};
-pub use soma_auth::upstream::types::BeginAuthorization;
+pub type UpstreamOAuthHttpClient = rmcp::transport::AuthClient<BodyCappedHttpClient>;
 
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum UpstreamOAuthConfigError {
-    #[error("upstream oauth config requires oauth")]
-    MissingOauthConfig,
-    #[error("upstream oauth config requires url")]
-    MissingUrl,
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct BeginAuthorization {
+    pub authorization_url: String,
 }
 
-pub fn to_soma_auth_upstream_config(
-    upstream: &UpstreamConfig,
-) -> Result<soma_auth::upstream::config::UpstreamConfig, UpstreamOAuthConfigError> {
-    let oauth = upstream
-        .oauth
-        .as_ref()
-        .ok_or(UpstreamOAuthConfigError::MissingOauthConfig)?;
-    let url = upstream
-        .url
-        .clone()
-        .ok_or(UpstreamOAuthConfigError::MissingUrl)?;
-    Ok(soma_auth::upstream::config::UpstreamConfig {
-        name: upstream.name.clone(),
-        url: Some(url),
-        oauth: Some(soma_auth::upstream::config::UpstreamOauthConfig {
-            mode: match oauth.mode {
-                GatewayUpstreamOauthMode::AuthorizationCodePkce => {
-                    soma_auth::upstream::config::UpstreamOauthMode::AuthorizationCodePkce
-                }
-            },
-            registration: match &oauth.registration {
-                GatewayUpstreamOauthRegistration::ClientMetadataDocument { url } => {
-                    soma_auth::upstream::config::UpstreamOauthRegistration::ClientMetadataDocument {
-                        url: url.clone(),
-                    }
-                }
-                GatewayUpstreamOauthRegistration::Preregistered {
-                    client_id,
-                    client_secret_env,
-                } => soma_auth::upstream::config::UpstreamOauthRegistration::Preregistered {
-                    client_id: client_id.clone(),
-                    client_secret_env: client_secret_env.clone(),
-                },
-                GatewayUpstreamOauthRegistration::Dynamic => {
-                    soma_auth::upstream::config::UpstreamOauthRegistration::Dynamic
-                }
-            },
-            scopes: oauth.scopes.clone(),
-            prefer_client_metadata_document: oauth.prefer_client_metadata_document,
-        }),
-    })
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpstreamOAuthCredentialStatus {
+    pub access_token_expires_at: i64,
+    pub refresh_token_present: bool,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error("{kind}: {message}")]
+pub struct UpstreamOAuthError {
+    kind: String,
+    message: String,
+}
+
+impl UpstreamOAuthError {
+    #[must_use]
+    pub fn new(kind: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            kind: kind.into(),
+            message: message.into(),
+        }
+    }
+
+    #[must_use]
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::new("internal_error", message)
+    }
+
+    #[must_use]
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+pub trait UpstreamOAuthProvider: Send + Sync {
+    fn authenticated_http_client<'a>(
+        &'a self,
+        upstream: &'a UpstreamConfig,
+        subject: &'a str,
+        http_client: BodyCappedHttpClient,
+    ) -> BoxFuture<'a, Result<UpstreamOAuthHttpClient, UpstreamOAuthError>>;
+
+    fn evict_subject(&self, _upstream: &str, _subject: &str) {}
+
+    fn evict_upstream(&self, _upstream: &str) {}
+}
+
+pub trait UpstreamOAuthManager: Send + Sync {
+    fn begin_authorization<'a>(
+        &'a self,
+        subject: &'a str,
+    ) -> BoxFuture<'a, Result<BeginAuthorization, UpstreamOAuthError>>;
+
+    fn credential_status<'a>(
+        &'a self,
+        subject: &'a str,
+    ) -> BoxFuture<'a, Result<Option<UpstreamOAuthCredentialStatus>, UpstreamOAuthError>>;
+
+    fn clear_credentials<'a>(
+        &'a self,
+        subject: &'a str,
+    ) -> BoxFuture<'a, Result<(), UpstreamOAuthError>>;
+}
+
+#[derive(Clone)]
+pub struct UpstreamOAuthRuntime {
+    provider: Arc<dyn UpstreamOAuthProvider>,
+    managers: Arc<BTreeMap<String, Arc<dyn UpstreamOAuthManager>>>,
+}
+
+impl UpstreamOAuthRuntime {
+    #[must_use]
+    pub fn new(
+        provider: Arc<dyn UpstreamOAuthProvider>,
+        managers: BTreeMap<String, Arc<dyn UpstreamOAuthManager>>,
+    ) -> Self {
+        Self {
+            provider,
+            managers: Arc::new(managers),
+        }
+    }
+
+    #[must_use]
+    pub fn provider(&self) -> Arc<dyn UpstreamOAuthProvider> {
+        Arc::clone(&self.provider)
+    }
+
+    #[must_use]
+    pub fn manager(&self, upstream: &str) -> Option<Arc<dyn UpstreamOAuthManager>> {
+        self.managers.get(upstream).cloned()
+    }
+
+    pub fn evict_subject(&self, upstream: &str, subject: &str) {
+        self.provider.evict_subject(upstream, subject);
+    }
+
+    pub fn evict_upstream(&self, upstream: &str) {
+        self.provider.evict_upstream(upstream);
+    }
 }
 
 #[cfg(test)]

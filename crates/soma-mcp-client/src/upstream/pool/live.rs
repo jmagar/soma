@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::process::Stdio;
+#[cfg(feature = "oauth")]
+use std::sync::Arc;
 use std::sync::Once;
 
 use rmcp::model::{CallToolRequestParams, GetPromptRequestParams, ReadResourceRequestParams, Tool};
@@ -14,6 +16,8 @@ use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 
 use crate::config::UpstreamConfig;
+#[cfg(feature = "oauth")]
+use crate::oauth::UpstreamOAuthProvider;
 use crate::process::guard::SpawnGuard;
 use crate::upstream::http_body_cap::BodyCappedHttpClient;
 use crate::upstream::http_client::{decide_http_transport, HttpTransportDecision};
@@ -25,7 +29,7 @@ use crate::upstream::{
     UpstreamError, UpstreamSnapshot,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct LiveConnectContext<'a> {
     response_caps: &'a ResponseCaps,
     #[cfg(feature = "oauth")]
@@ -33,10 +37,10 @@ pub(super) struct LiveConnectContext<'a> {
 }
 
 #[cfg(feature = "oauth")]
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct LiveOauthContext<'a> {
     pub subject: &'a str,
-    pub cache: &'a soma_auth::upstream::cache::OauthClientCache,
+    pub provider: Arc<dyn UpstreamOAuthProvider>,
 }
 
 impl<'a> LiveConnectContext<'a> {
@@ -52,11 +56,11 @@ impl<'a> LiveConnectContext<'a> {
     pub(super) fn oauth(
         response_caps: &'a ResponseCaps,
         subject: &'a str,
-        cache: &'a soma_auth::upstream::cache::OauthClientCache,
+        provider: Arc<dyn UpstreamOAuthProvider>,
     ) -> Self {
         Self {
             response_caps,
-            oauth: Some(LiveOauthContext { subject, cache }),
+            oauth: Some(LiveOauthContext { subject, provider }),
         }
     }
 }
@@ -226,19 +230,13 @@ async fn connect_http(
             upstream: config.name.clone(),
             message: "oauth upstream requires subject-scoped connection context".to_owned(),
         })?;
-        let auth_config = crate::oauth::to_soma_auth_upstream_config(config).map_err(|error| {
-            UpstreamError::LiveConnect {
-                upstream: config.name.clone(),
-                message: error.to_string(),
-            }
-        })?;
         let client = BodyCappedHttpClient::default_with_caps(
             context.response_caps.limit_for(CapScope::HttpJson),
             context.response_caps.limit_for(CapScope::HttpSseEvent),
         );
         let auth_client = oauth
-            .cache
-            .get_or_build_capped(&auth_config, oauth.subject, client)
+            .provider
+            .authenticated_http_client(config, oauth.subject, client)
             .await
             .map_err(|error| UpstreamError::LiveConnect {
                 upstream: config.name.clone(),
@@ -258,10 +256,8 @@ async fn connect_http(
             message: "oauth upstream support is not compiled into soma-mcp-client".to_owned(),
         });
     }
-    if let Some(env_name) = config.bearer_token_env.as_deref() {
-        if let Ok(token) = std::env::var(env_name) {
-            transport_config = transport_config.auth_header(normalize_bearer_value(&token));
-        }
+    if let Some(token) = bearer_token_from_env(config) {
+        transport_config = transport_config.auth_header(token);
     }
     let client = BodyCappedHttpClient::default_with_caps(
         context.response_caps.limit_for(CapScope::HttpJson),
@@ -421,10 +417,14 @@ fn normalize_bearer_value(token: &str) -> String {
 }
 
 fn websocket_authorization(config: &UpstreamConfig) -> Option<String> {
+    bearer_token_from_env(config).map(|token| format!("Bearer {token}"))
+}
+
+fn bearer_token_from_env(config: &UpstreamConfig) -> Option<String> {
     let env_name = config.bearer_token_env.as_deref()?;
     let token = std::env::var(env_name).ok()?;
     let token = normalize_bearer_value(&token);
-    (!token.is_empty()).then(|| format!("Bearer {token}"))
+    (!token.is_empty()).then_some(token)
 }
 
 fn capability_is_absent(error: &str) -> bool {

@@ -1,8 +1,5 @@
 use thiserror::Error;
 
-#[cfg(feature = "oauth")]
-pub use soma_mcp_client::oauth::to_soma_auth_upstream_config;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GatewayOAuthSurface {
     AdminOAuthOperation,

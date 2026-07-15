@@ -1,5 +1,6 @@
 use serde_json::{Map, Value};
 
+use crate::oauth::UpstreamOAuthProvider;
 use crate::process::guard::SpawnGuard;
 use crate::upstream::{
     CapScope, PromptDescriptor, ResourceDescriptor, ToolDescriptor, UpstreamError, UpstreamHealth,
@@ -10,12 +11,30 @@ use super::tools::matches_filter;
 use super::{live, SubjectPoolEntry, ToolCall, UpstreamPool};
 
 impl UpstreamPool {
-    pub fn install_oauth_cache(&self, cache: soma_auth::upstream::cache::OauthClientCache) {
-        *self.oauth_cache.write().expect("oauth cache lock poisoned") = Some(cache);
+    pub fn install_oauth_provider(&self, provider: std::sync::Arc<dyn UpstreamOAuthProvider>) {
+        *self
+            .oauth_provider
+            .write()
+            .expect("oauth provider lock poisoned") = Some(provider);
         self.subject_entries
             .write()
             .expect("subject pool lock poisoned")
             .clear();
+    }
+
+    pub fn evict_oauth_subject(&self, upstream: &str, subject: &str) {
+        self.subject_entries
+            .write()
+            .expect("subject pool lock poisoned")
+            .remove(&(upstream.to_owned(), subject.to_owned()));
+        if let Some(provider) = self
+            .oauth_provider
+            .read()
+            .expect("oauth provider lock poisoned")
+            .as_ref()
+        {
+            provider.evict_subject(upstream, subject);
+        }
     }
 
     pub async fn discover_for_subject(
@@ -212,8 +231,8 @@ impl UpstreamPool {
         if config.oauth.is_none() {
             return self.ensure_connected(upstream).await;
         }
-        let cache = self.oauth_cache()?;
-        let context = live::LiveConnectContext::oauth(self.response_caps(), subject, &cache);
+        let provider = self.oauth_provider()?;
+        let context = live::LiveConnectContext::oauth(self.response_caps(), subject, provider);
         let (live, snapshot) = live::connect_live(&config, &SpawnGuard::default(), context).await?;
         self.subject_entries
             .write()
@@ -289,10 +308,10 @@ impl UpstreamPool {
         f(entry)
     }
 
-    fn oauth_cache(&self) -> Result<soma_auth::upstream::cache::OauthClientCache, UpstreamError> {
-        self.oauth_cache
+    fn oauth_provider(&self) -> Result<std::sync::Arc<dyn UpstreamOAuthProvider>, UpstreamError> {
+        self.oauth_provider
             .read()
-            .expect("oauth cache lock poisoned")
+            .expect("oauth provider lock poisoned")
             .clone()
             .ok_or_else(|| UpstreamError::LiveConnect {
                 upstream: "oauth".to_owned(),

@@ -1,4 +1,6 @@
-use super::{capability_is_absent, normalize_bearer_value};
+use super::{
+    bearer_token_from_env, capability_is_absent, normalize_bearer_value, websocket_authorization,
+};
 use crate::config::UpstreamConfig;
 use crate::upstream::pool::{ToolCall, UpstreamPool};
 use futures::{SinkExt, StreamExt};
@@ -19,6 +21,25 @@ use tokio_tungstenite::tungstenite::Message;
 fn bearer_value_normalization_accepts_raw_or_prefixed_tokens() {
     assert_eq!(normalize_bearer_value("secret"), "secret");
     assert_eq!(normalize_bearer_value(" Bearer secret "), "secret");
+}
+
+#[test]
+fn bearer_token_env_supports_plain_http_and_websocket_auth() {
+    let var = "SOMA_MCP_CLIENT_TEST_BEARER";
+    std::env::set_var(var, "Bearer secret");
+    let config = UpstreamConfig {
+        name: "bearer".to_owned(),
+        bearer_token_env: Some(var.to_owned()),
+        ..UpstreamConfig::default()
+    };
+
+    assert_eq!(bearer_token_from_env(&config).as_deref(), Some("secret"));
+    assert_eq!(
+        websocket_authorization(&config).as_deref(),
+        Some("Bearer secret")
+    );
+
+    std::env::remove_var(var);
 }
 
 #[test]
