@@ -15,7 +15,34 @@ use std::{
 use anyhow::Result;
 
 use soma_contracts::config::{AuthMode, Config, McpConfig};
+use soma_gateway::{
+    config::{GatewayConfig, GatewayPaths},
+    gateway::{config_store::FsGatewayConfigStore, manager::GatewayManager},
+};
 use soma_service::{ProviderRegistry, SomaService};
+
+pub type GatewayProductState = Arc<GatewayManager>;
+
+pub fn gateway_product_state_from_config(config: GatewayConfig) -> Result<GatewayProductState> {
+    Ok(Arc::new(GatewayManager::new(config)?))
+}
+
+pub fn gateway_product_state_from_env() -> Result<GatewayProductState> {
+    let paths = GatewayPaths::from_env()?;
+    gateway_product_state_from_store(FsGatewayConfigStore::from_paths(paths))
+}
+
+pub fn gateway_product_state_from_store(
+    store: FsGatewayConfigStore,
+) -> Result<GatewayProductState> {
+    Ok(Arc::new(GatewayManager::from_store(store)?))
+}
+
+#[must_use]
+pub fn empty_gateway_product_state() -> GatewayProductState {
+    gateway_product_state_from_config(GatewayConfig::default())
+        .expect("empty gateway config should build")
+}
 
 /// Authentication policy attached to [`AppState`].
 ///
@@ -154,6 +181,7 @@ pub struct AppState {
     pub auth_policy: AuthPolicy,
     pub service: SomaService,
     pub provider_registry: ProviderRegistry,
+    pub gateway: GatewayProductState,
     pub remote_adapter: bool,
     pub response_pages: ResponsePageStore,
 }
