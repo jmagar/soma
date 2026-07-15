@@ -3,18 +3,12 @@
 //! `AppState` is injected into every request handler via axum's `State` extractor.
 //! `AuthPolicy` determines which auth middleware (if any) is mounted on the router.
 
-use std::{
-    collections::HashMap,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
 
 use anyhow::Result;
 
 use soma_contracts::config::{AuthMode, Config, McpConfig};
+pub use soma_mcp_server::ResponsePageStore;
 use soma_service::{ProviderRegistry, SomaService};
 
 /// Authentication policy attached to [`AppState`].
@@ -156,61 +150,6 @@ pub struct AppState {
     pub provider_registry: ProviderRegistry,
     pub remote_adapter: bool,
     pub response_pages: ResponsePageStore,
-}
-
-#[derive(Clone, Default)]
-pub struct ResponsePageStore {
-    inner: Arc<ResponsePageStoreInner>,
-}
-
-#[derive(Default)]
-struct ResponsePageStoreInner {
-    counter: AtomicU64,
-    entries: Mutex<HashMap<String, CachedResponsePage>>,
-}
-
-struct CachedResponsePage {
-    serialized: String,
-    expires_at: Instant,
-}
-
-impl ResponsePageStore {
-    const TTL: Duration = Duration::from_secs(300);
-
-    pub fn insert(&self, serialized: String) -> String {
-        self.prune_expired();
-        let id = self.inner.counter.fetch_add(1, Ordering::Relaxed) + 1;
-        let cursor = format!("rsp_{id:x}");
-        let entry = CachedResponsePage {
-            serialized,
-            expires_at: Instant::now() + Self::TTL,
-        };
-        self.inner
-            .entries
-            .lock()
-            .expect("response page store mutex should not be poisoned")
-            .insert(cursor.clone(), entry);
-        cursor
-    }
-
-    pub fn get(&self, cursor: &str) -> Option<String> {
-        self.prune_expired();
-        self.inner
-            .entries
-            .lock()
-            .expect("response page store mutex should not be poisoned")
-            .get(cursor)
-            .map(|entry| entry.serialized.clone())
-    }
-
-    fn prune_expired(&self) {
-        let now = Instant::now();
-        self.inner
-            .entries
-            .lock()
-            .expect("response page store mutex should not be poisoned")
-            .retain(|_, entry| entry.expires_at > now);
-    }
 }
 
 /// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` when the trust

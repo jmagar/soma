@@ -1,5 +1,6 @@
 use crate::config::{
     GatewayUpstreamOauthConfig, GatewayUpstreamOauthMode, GatewayUpstreamOauthRegistration,
+    UpstreamConfig,
 };
 
 use super::*;

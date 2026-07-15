@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn rejects_lowercase_ld_preload_and_soma_env_names() {
+fn rejects_lowercase_ld_preload_and_gateway_env_names() {
     assert_eq!(
         validate_env_name("lowercase").unwrap_err(),
         EnvPolicyError::InvalidName
@@ -11,7 +11,7 @@ fn rejects_lowercase_ld_preload_and_soma_env_names() {
         EnvPolicyError::ProtectedName
     );
     assert_eq!(
-        validate_env_name("SOMA_MCP_TOKEN").unwrap_err(),
+        validate_env_name("MCP_GATEWAY_TOKEN").unwrap_err(),
         EnvPolicyError::ProtectedName
     );
     validate_env_name("UPSTREAM_TOKEN").unwrap();

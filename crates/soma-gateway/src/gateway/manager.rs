@@ -45,6 +45,12 @@ pub enum GatewayManagerError {
     OAuth(String),
 }
 
+impl From<soma_mcp_client::ConfigError> for GatewayManagerError {
+    fn from(error: soma_mcp_client::ConfigError) -> Self {
+        Self::Config(error.into())
+    }
+}
+
 pub struct GatewayManager {
     config: RwLock<GatewayConfig>,
     pool: RwLock<Arc<UpstreamPool>>,
@@ -52,7 +58,7 @@ pub struct GatewayManager {
     usage: Arc<dyn UsageSink>,
     store: Option<FsGatewayConfigStore>,
     #[cfg(feature = "oauth")]
-    oauth_runtime: RwLock<Option<Arc<soma_auth::upstream::runtime::UpstreamOauthRuntime>>>,
+    oauth_runtime: RwLock<Option<Arc<soma_mcp_client::oauth::UpstreamOauthRuntime>>>,
 }
 
 impl GatewayManager {
@@ -265,7 +271,7 @@ impl GatewayManager {
     #[cfg(feature = "oauth")]
     pub async fn configure_upstream_oauth(
         &self,
-        auth_config: &soma_auth::config::AuthConfig,
+        auth_config: &soma_mcp_client::oauth::AuthConfig,
         encryption_key_raw: Option<&str>,
     ) -> Result<(), GatewayManagerError> {
         let upstreams = self
@@ -278,7 +284,7 @@ impl GatewayManager {
             .map(crate::gateway::oauth::to_soma_auth_upstream_config)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
-        let runtime = soma_auth::upstream::runtime::build_upstream_oauth_runtime(
+        let runtime = soma_mcp_client::oauth::build_upstream_oauth_runtime(
             &upstreams,
             auth_config,
             encryption_key_raw,

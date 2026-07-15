@@ -1,6 +1,7 @@
 use thiserror::Error;
 
-use crate::config::{GatewayUpstreamOauthMode, GatewayUpstreamOauthRegistration, UpstreamConfig};
+#[cfg(feature = "oauth")]
+pub use soma_mcp_client::oauth::to_soma_auth_upstream_config;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GatewayOAuthSurface {
@@ -30,52 +31,8 @@ pub struct GatewaySubject {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum GatewayOAuthError {
-    #[error("upstream oauth config requires oauth")]
-    MissingOauthConfig,
-    #[error("upstream oauth config requires url")]
-    MissingUrl,
     #[error("caller supplied subject is accepted only for admin OAuth operations")]
     CallerSuppliedSubjectDenied,
-}
-
-pub fn to_soma_auth_upstream_config(
-    upstream: &UpstreamConfig,
-) -> Result<soma_auth::upstream::config::UpstreamConfig, GatewayOAuthError> {
-    let oauth = upstream
-        .oauth
-        .as_ref()
-        .ok_or(GatewayOAuthError::MissingOauthConfig)?;
-    let url = upstream.url.clone().ok_or(GatewayOAuthError::MissingUrl)?;
-    Ok(soma_auth::upstream::config::UpstreamConfig {
-        name: upstream.name.clone(),
-        url: Some(url),
-        oauth: Some(soma_auth::upstream::config::UpstreamOauthConfig {
-            mode: match oauth.mode {
-                GatewayUpstreamOauthMode::AuthorizationCodePkce => {
-                    soma_auth::upstream::config::UpstreamOauthMode::AuthorizationCodePkce
-                }
-            },
-            registration: match &oauth.registration {
-                GatewayUpstreamOauthRegistration::ClientMetadataDocument { url } => {
-                    soma_auth::upstream::config::UpstreamOauthRegistration::ClientMetadataDocument {
-                        url: url.clone(),
-                    }
-                }
-                GatewayUpstreamOauthRegistration::Preregistered {
-                    client_id,
-                    client_secret_env,
-                } => soma_auth::upstream::config::UpstreamOauthRegistration::Preregistered {
-                    client_id: client_id.clone(),
-                    client_secret_env: client_secret_env.clone(),
-                },
-                GatewayUpstreamOauthRegistration::Dynamic => {
-                    soma_auth::upstream::config::UpstreamOauthRegistration::Dynamic
-                }
-            },
-            scopes: oauth.scopes.clone(),
-            prefer_client_metadata_document: oauth.prefer_client_metadata_document,
-        }),
-    })
 }
 
 pub fn identity_matrix() -> Vec<IdentityMatrixRow> {

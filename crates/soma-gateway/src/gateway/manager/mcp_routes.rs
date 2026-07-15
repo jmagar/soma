@@ -1,36 +1,12 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use serde_json::Value;
+pub use soma_mcp_proxy::{
+    parse_upstream_resource_uri, upstream_resource_uri, McpPromptRoute as GatewayPromptRoute,
+    McpResourceRoute as GatewayResourceRoute, McpToolRoute as GatewayToolRoute,
+};
 
 use crate::upstream::{PromptDescriptor, ResourceDescriptor, ToolDescriptor, UpstreamHealth};
 
 use super::{GatewayManager, GatewayManagerError};
-
-const UPSTREAM_RESOURCE_PREFIX: &str = "mcp-gateway://upstream/";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GatewayToolRoute {
-    pub name: String,
-    pub upstream: String,
-    pub native_name: String,
-    pub descriptor: ToolDescriptor,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GatewayResourceRoute {
-    pub uri: String,
-    pub upstream: String,
-    pub native_uri: String,
-    pub descriptor: ResourceDescriptor,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GatewayPromptRoute {
-    pub name: String,
-    pub upstream: String,
-    pub native_name: String,
-    pub descriptor: PromptDescriptor,
-}
 
 impl GatewayManager {
     pub async fn tool_routes(&self) -> Result<Vec<GatewayToolRoute>, GatewayManagerError> {
@@ -52,7 +28,10 @@ impl GatewayManager {
                 candidates.push((snapshot.name.clone(), descriptor));
             }
         }
-        Ok(tool_routes_from_candidates(candidates))
+        Ok(soma_mcp_proxy::tool_routes_from_candidates(
+            candidates,
+            std::iter::empty::<&str>(),
+        ))
     }
 
     pub async fn call_mcp_tool(
@@ -100,12 +79,7 @@ impl GatewayManager {
                 continue;
             }
             for descriptor in list_resources(&pool, &snapshot.name, subject).await? {
-                routes.push(GatewayResourceRoute {
-                    uri: upstream_resource_uri(&snapshot.name, &descriptor.uri),
-                    upstream: snapshot.name.clone(),
-                    native_uri: descriptor.uri.clone(),
-                    descriptor,
-                });
+                routes.push(soma_mcp_proxy::resource_route(&snapshot.name, descriptor));
             }
         }
         Ok(routes)
@@ -149,7 +123,7 @@ impl GatewayManager {
                 candidates.push((snapshot.name.clone(), descriptor));
             }
         }
-        Ok(prompt_routes_from_candidates(candidates))
+        Ok(soma_mcp_proxy::prompt_routes_from_candidates(candidates))
     }
 
     pub async fn get_mcp_prompt(
@@ -294,153 +268,6 @@ async fn get_prompt(
             .await;
     }
     pool.get_prompt(upstream, name, arguments).await
-}
-
-fn tool_routes_from_candidates(candidates: Vec<(String, ToolDescriptor)>) -> Vec<GatewayToolRoute> {
-    let counts = name_counts(candidates.iter().map(|(_, descriptor)| &descriptor.name));
-    let mut used = BTreeSet::new();
-    candidates
-        .into_iter()
-        .map(|(upstream, descriptor)| {
-            let native_name = descriptor.name.clone();
-            let preferred = if counts.get(native_name.as_str()) == Some(&1) && native_name != "soma"
-            {
-                native_name.clone()
-            } else {
-                format!(
-                    "{}__{}",
-                    route_segment(&upstream),
-                    route_segment(&native_name)
-                )
-            };
-            GatewayToolRoute {
-                name: unique_route_name(preferred, &mut used),
-                upstream,
-                native_name,
-                descriptor,
-            }
-        })
-        .collect()
-}
-
-fn prompt_routes_from_candidates(
-    candidates: Vec<(String, PromptDescriptor)>,
-) -> Vec<GatewayPromptRoute> {
-    let counts = name_counts(candidates.iter().map(|(_, descriptor)| &descriptor.name));
-    let mut used = BTreeSet::new();
-    candidates
-        .into_iter()
-        .map(|(upstream, descriptor)| {
-            let native_name = descriptor.name.clone();
-            let preferred = if counts.get(native_name.as_str()) == Some(&1) {
-                native_name.clone()
-            } else {
-                format!(
-                    "{}__{}",
-                    route_segment(&upstream),
-                    route_segment(&native_name)
-                )
-            };
-            GatewayPromptRoute {
-                name: unique_route_name(preferred, &mut used),
-                upstream,
-                native_name,
-                descriptor,
-            }
-        })
-        .collect()
-}
-
-fn name_counts<'a>(names: impl Iterator<Item = &'a String>) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for name in names {
-        *counts.entry(name.clone()).or_insert(0) += 1;
-    }
-    counts
-}
-
-fn route_segment(value: &str) -> String {
-    let routed: String = value
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-') {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-    if routed.is_empty() {
-        "route".to_owned()
-    } else {
-        routed
-    }
-}
-
-fn unique_route_name(preferred: String, used: &mut BTreeSet<String>) -> String {
-    if used.insert(preferred.clone()) {
-        return preferred;
-    }
-    for index in 2usize.. {
-        let candidate = format!("{preferred}_{index}");
-        if used.insert(candidate.clone()) {
-            return candidate;
-        }
-    }
-    unreachable!("unbounded route suffix loop should always return")
-}
-
-pub fn upstream_resource_uri(upstream: &str, native_uri: &str) -> String {
-    format!(
-        "{UPSTREAM_RESOURCE_PREFIX}{upstream}/{}",
-        percent_encode(native_uri.as_bytes())
-    )
-}
-
-pub fn parse_upstream_resource_uri(uri: &str) -> Option<(String, String)> {
-    let rest = uri.strip_prefix(UPSTREAM_RESOURCE_PREFIX)?;
-    let (upstream, encoded) = rest.split_once('/')?;
-    let native = percent_decode(encoded).ok()?;
-    Some((upstream.to_owned(), native))
-}
-
-fn percent_decode(value: &str) -> Result<String, ()> {
-    let bytes = value.as_bytes();
-    let mut decoded = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'%' {
-            let hi = bytes.get(index + 1).copied().ok_or(())?;
-            let lo = bytes.get(index + 2).copied().ok_or(())?;
-            decoded.push(from_hex(hi)? << 4 | from_hex(lo)?);
-            index += 3;
-        } else {
-            decoded.push(bytes[index]);
-            index += 1;
-        }
-    }
-    String::from_utf8(decoded).map_err(|_| ())
-}
-
-fn percent_encode(bytes: &[u8]) -> String {
-    let mut encoded = String::new();
-    for byte in bytes {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            encoded.push(*byte as char);
-        } else {
-            encoded.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    encoded
-}
-
-fn from_hex(byte: u8) -> Result<u8, ()> {
-    match byte {
-        b'0'..=b'9' => Ok(byte - b'0'),
-        b'a'..=b'f' => Ok(byte - b'a' + 10),
-        b'A'..=b'F' => Ok(byte - b'A' + 10),
-        _ => Err(()),
-    }
 }
 
 #[cfg(test)]

@@ -285,5 +285,5 @@ fn looks_like_jwt(value: &str) -> bool {
 }
 
 #[cfg(test)]
-#[path = "upstream_tests.rs"]
+#[path = "config_tests.rs"]
 mod tests;

@@ -46,6 +46,9 @@ crates/
   soma-auth/             ← bearer/OAuth auth policy and token handling
   soma-codemode/         ← reusable Code Mode runtime and runner support
   soma-gateway/          ← reusable MCP aggregation gateway runtime
+  soma-mcp-client/       ← reusable outbound MCP upstream client runtime
+  soma-mcp-proxy/        ← reusable MCP proxy route projection helpers
+  soma-mcp-server/       ← reusable inbound MCP server protocol helpers
   soma-mcp/              ← MCP schemas, tools, prompts, transport
   soma-openapi/          ← reusable OpenAPI operation registry and dispatcher
   soma-cli/              ← CLI parser, doctor/setup/watch commands

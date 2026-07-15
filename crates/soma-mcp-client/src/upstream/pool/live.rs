@@ -226,13 +226,12 @@ async fn connect_http(
             upstream: config.name.clone(),
             message: "oauth upstream requires subject-scoped connection context".to_owned(),
         })?;
-        let auth_config =
-            crate::gateway::oauth::to_soma_auth_upstream_config(config).map_err(|error| {
-                UpstreamError::LiveConnect {
-                    upstream: config.name.clone(),
-                    message: error.to_string(),
-                }
-            })?;
+        let auth_config = crate::oauth::to_soma_auth_upstream_config(config).map_err(|error| {
+            UpstreamError::LiveConnect {
+                upstream: config.name.clone(),
+                message: error.to_string(),
+            }
+        })?;
         let client = BodyCappedHttpClient::default_with_caps(
             context.response_caps.limit_for(CapScope::HttpJson),
             context.response_caps.limit_for(CapScope::HttpSseEvent),
@@ -256,7 +255,7 @@ async fn connect_http(
     if config.oauth.is_some() {
         return Err(UpstreamError::LiveConnect {
             upstream: config.name.clone(),
-            message: "oauth upstream support is not compiled into soma-gateway".to_owned(),
+            message: "oauth upstream support is not compiled into soma-mcp-client".to_owned(),
         });
     }
     if let Some(env_name) = config.bearer_token_env.as_deref() {

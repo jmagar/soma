@@ -25,7 +25,7 @@ pub fn validate_env_name(name: &str) -> Result<(), EnvPolicyError> {
     if !chars.all(|ch| ch == '_' || ch.is_ascii_uppercase() || ch.is_ascii_digit()) {
         return Err(EnvPolicyError::InvalidName);
     }
-    if matches!(name, "LD_PRELOAD" | "DYLD_INSERT_LIBRARIES") || name.starts_with("SOMA_") {
+    if matches!(name, "LD_PRELOAD" | "DYLD_INSERT_LIBRARIES") || name.starts_with("MCP_GATEWAY_") {
         return Err(EnvPolicyError::ProtectedName);
     }
     Ok(())

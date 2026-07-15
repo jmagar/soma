@@ -1,10 +1,11 @@
 use serde_json::json;
 
-use soma_contracts::token_limit::MAX_RESPONSE_BYTES;
-
 use crate::assert_result_has_no_meta;
 
-use super::{response_page_request, tool_result_from_json, ResponsePageRequest};
+use super::{
+    response_page_request, tool_result_from_json, ResponsePageRequest, ResponsePageStore,
+    ResponsePagingOptions, DEFAULT_MAX_RESPONSE_BYTES,
+};
 
 fn result_text(result: &rmcp::model::CallToolResult) -> &str {
     result.content[0]
@@ -16,11 +17,12 @@ fn result_text(result: &rmcp::model::CallToolResult) -> &str {
 
 #[test]
 fn tool_result_from_json_adds_action_discriminator() {
-    let store = soma_runtime::server::ResponsePageStore::default();
+    let store = ResponsePageStore::default();
     let result = tool_result_from_json(
         json!({ "status": "ok" }),
         &store,
         ResponsePageRequest::default(),
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -32,19 +34,20 @@ fn tool_result_from_json_adds_action_discriminator() {
 
     assert_result_has_no_meta(&result);
     assert_eq!(parsed["status"], "ok");
-    assert_eq!(parsed["_soma_action"], "status");
+    assert_eq!(parsed["_action"], "status");
     assert_eq!(result.structured_content.as_ref(), Some(&parsed));
 }
 
 #[test]
 fn tool_result_from_json_returns_scrollable_page_envelope() {
-    let store = soma_runtime::server::ResponsePageStore::default();
+    let store = ResponsePageStore::default();
     let result = tool_result_from_json(
         json!({
-            "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
+            "payload": "x".repeat(DEFAULT_MAX_RESPONSE_BYTES + 1)
         }),
         &store,
         ResponsePageRequest::default(),
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -72,20 +75,21 @@ fn tool_result_from_json_returns_scrollable_page_envelope() {
             .unwrap()
             > 0
     );
-    assert!(parsed["serialized_bytes"].as_u64().unwrap() > MAX_RESPONSE_BYTES as u64);
+    assert!(parsed["serialized_bytes"].as_u64().unwrap() > DEFAULT_MAX_RESPONSE_BYTES as u64);
     assert!(!text.contains("[TRUNCATED"));
     assert_eq!(result.structured_content.as_ref(), Some(&parsed));
 }
 
 #[test]
 fn tool_result_from_json_returns_requested_continuation_page() {
-    let store = soma_runtime::server::ResponsePageStore::default();
+    let store = ResponsePageStore::default();
     let first = tool_result_from_json(
         json!({
-            "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
+            "payload": "x".repeat(DEFAULT_MAX_RESPONSE_BYTES + 1)
         }),
         &store,
         ResponsePageRequest::default(),
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -108,6 +112,7 @@ fn tool_result_from_json_returns_requested_continuation_page() {
             offset: next_offset,
             page_bytes: 1024,
         },
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -129,7 +134,7 @@ fn tool_result_from_json_returns_requested_continuation_page() {
 
 #[test]
 fn response_page_cursor_rejects_missing_or_expired_cursor() {
-    let store = soma_runtime::server::ResponsePageStore::default();
+    let store = ResponsePageStore::default();
     let error = tool_result_from_json(
         json!({ "payload": "this value should not be executed" }),
         &store,
@@ -138,6 +143,7 @@ fn response_page_cursor_rejects_missing_or_expired_cursor() {
             offset: 1,
             page_bytes: 1024,
         },
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -152,13 +158,14 @@ fn response_page_cursor_rejects_missing_or_expired_cursor() {
 
 #[test]
 fn response_page_cursor_handles_out_of_range_offsets() {
-    let store = soma_runtime::server::ResponsePageStore::default();
+    let store = ResponsePageStore::default();
     let first = tool_result_from_json(
         json!({
-            "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
+            "payload": "x".repeat(DEFAULT_MAX_RESPONSE_BYTES + 1)
         }),
         &store,
         ResponsePageRequest::default(),
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -181,6 +188,7 @@ fn response_page_cursor_handles_out_of_range_offsets() {
             offset: serialized_bytes + 100,
             page_bytes: 1024,
         },
+        ResponsePagingOptions::default(),
         "soma",
         Some("status"),
         None,
@@ -199,17 +207,18 @@ fn response_page_cursor_handles_out_of_range_offsets() {
 
 #[test]
 fn response_page_continuation_preserves_original_arguments() {
-    let store = soma_runtime::server::ResponsePageStore::default();
+    let store = ResponsePageStore::default();
     let mut args = serde_json::Map::new();
     args.insert("action".to_owned(), json!("echo"));
     args.insert("message".to_owned(), json!("hello from original args"));
 
     let result = tool_result_from_json(
         json!({
-            "payload": "x".repeat(MAX_RESPONSE_BYTES + 1)
+            "payload": "x".repeat(DEFAULT_MAX_RESPONSE_BYTES + 1)
         }),
         &store,
         ResponsePageRequest::default(),
+        ResponsePagingOptions::default(),
         "soma",
         Some("echo"),
         Some(&args),

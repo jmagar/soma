@@ -5,7 +5,6 @@
 
 mod conformance;
 mod prompts;
-mod response_paging;
 pub mod rmcp_server;
 mod schemas;
 mod tools;
@@ -15,6 +14,8 @@ mod transport;
 pub use rmcp_server::{rmcp_server, SomaRmcpServer};
 #[cfg(feature = "http")]
 pub use transport::{allowed_origins, streamable_http_config, streamable_http_service};
+
+pub(crate) const ACTION_DISCRIMINATOR_FIELD: &str = "_soma_action";
 
 #[cfg(test)]
 pub(crate) fn assert_result_has_no_meta(result: &rmcp::model::CallToolResult) {

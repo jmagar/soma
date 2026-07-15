@@ -3730,7 +3730,8 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
- "soma-auth",
+ "soma-mcp-client",
+ "soma-mcp-proxy",
  "sse-stream",
  "tempfile",
  "thiserror 2.0.18",
@@ -3755,6 +3756,7 @@ dependencies = [
  "serde_json",
  "soma-auth",
  "soma-contracts",
+ "soma-mcp-server",
  "soma-runtime",
  "soma-service",
  "soma-test-support",
@@ -3762,6 +3764,47 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+]
+
+[[package]]
+name = "soma-mcp-client"
+version = "0.4.1"
+dependencies = [
+ "axum",
+ "bytes",
+ "futures",
+ "http",
+ "process-wrap",
+ "reqwest 0.13.4",
+ "rmcp",
+ "rustls",
+ "serde",
+ "serde_json",
+ "soma-auth",
+ "sse-stream",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "toml",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "soma-mcp-proxy"
+version = "0.4.1"
+dependencies = [
+ "serde_json",
+ "soma-mcp-client",
+]
+
+[[package]]
+name = "soma-mcp-server"
+version = "0.4.1"
+dependencies = [
+ "rmcp",
+ "serde_json",
 ]
 
 [[package]]
@@ -3803,6 +3846,7 @@ dependencies = [
  "anyhow",
  "soma-auth",
  "soma-contracts",
+ "soma-mcp-server",
  "soma-service",
  "tracing",
  "url",

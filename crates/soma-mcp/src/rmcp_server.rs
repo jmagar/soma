@@ -34,18 +34,17 @@ use serde_json::{json, Map, Value};
 use soma_contracts::{
     errors::ServiceErrorKind, providers::ProviderResource, token_limit::MAX_RESPONSE_BYTES,
 };
+use soma_mcp_server::response_paging::{
+    response_page_request, strip_response_page_params, tool_result_from_cached_page,
+    tool_result_from_json, ResponsePagingOptions,
+};
 
 use soma_runtime::server::{AppState, AuthPolicy};
 use soma_service::{ProviderAuthMode, ProviderError, ProviderPrincipal, ResourceReadOutput};
 
 use super::{
-    conformance, prompts,
-    response_paging::{
-        response_page_request, strip_response_page_params, tool_result_from_cached_page,
-        tool_result_from_json,
-    },
-    schemas::tool_definitions_for_catalogs as tool_definitions,
-    tools::execute_tool,
+    conformance, prompts, schemas::tool_definitions_for_catalogs as tool_definitions,
+    tools::execute_tool, ACTION_DISCRIMINATOR_FIELD,
 };
 
 macro_rules! trace_summary_event {
@@ -157,6 +156,7 @@ impl ServerHandler for SomaRmcpServer {
                 &self.state.response_pages,
                 &cursor,
                 response_page,
+                response_paging_options(),
                 &tool_name,
                 empty_action_as_none(&action),
             );
@@ -207,6 +207,7 @@ impl ServerHandler for SomaRmcpServer {
                     result,
                     &self.state.response_pages,
                     response_page,
+                    response_paging_options(),
                     &tool_name,
                     empty_action_as_none(&action),
                     continuation_args.as_ref(),
@@ -406,6 +407,13 @@ impl ServerHandler for SomaRmcpServer {
             env!("CARGO_PKG_VERSION"),
         ))
         .with_instructions(SERVER_INSTRUCTIONS)
+    }
+}
+
+fn response_paging_options() -> ResponsePagingOptions {
+    ResponsePagingOptions {
+        max_response_bytes: MAX_RESPONSE_BYTES,
+        action_discriminator_field: ACTION_DISCRIMINATOR_FIELD,
     }
 }
 

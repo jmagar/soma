@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
-use soma_auth::upstream::{manager::UpstreamOauthManager, types::BeginAuthorization};
+use soma_mcp_client::oauth::{BeginAuthorization, UpstreamOauthManager};
 
 use super::{GatewayManager, GatewayManagerError};
 

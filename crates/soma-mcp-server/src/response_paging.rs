@@ -1,25 +1,102 @@
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    time::{Duration, Instant},
+};
+
 use rmcp::{
     model::{CallToolResult, ContentBlock},
     ErrorData,
 };
 use serde_json::{json, Map, Value};
 
-use soma_contracts::token_limit::MAX_RESPONSE_BYTES;
-use soma_runtime::server::ResponsePageStore;
+pub const RESPONSE_OFFSET_PARAM: &str = "_response_offset";
+pub const RESPONSE_PAGE_BYTES_PARAM: &str = "_response_page_bytes";
+pub const RESPONSE_CURSOR_PARAM: &str = "_response_cursor";
+pub const DEFAULT_ACTION_DISCRIMINATOR_FIELD: &str = "_action";
+pub const DEFAULT_MAX_RESPONSE_BYTES: usize = 40_000;
+pub const DEFAULT_RESPONSE_PAGE_BYTES: usize = 16_000;
+pub const MAX_RESPONSE_PAGE_BYTES: usize = 16_000;
+pub const MAX_RESPONSE_CURSOR_BYTES: usize = 256;
 
-const RESPONSE_OFFSET_PARAM: &str = "_response_offset";
-const RESPONSE_PAGE_BYTES_PARAM: &str = "_response_page_bytes";
-const RESPONSE_CURSOR_PARAM: &str = "_response_cursor";
-pub(crate) const ACTION_DISCRIMINATOR_FIELD: &str = "_soma_action";
-const DEFAULT_RESPONSE_PAGE_BYTES: usize = 16_000;
-const MAX_RESPONSE_PAGE_BYTES: usize = 16_000;
-const MAX_RESPONSE_CURSOR_BYTES: usize = 256;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResponsePagingOptions {
+    pub max_response_bytes: usize,
+    pub action_discriminator_field: &'static str,
+}
+
+impl Default for ResponsePagingOptions {
+    fn default() -> Self {
+        Self {
+            max_response_bytes: DEFAULT_MAX_RESPONSE_BYTES,
+            action_discriminator_field: DEFAULT_ACTION_DISCRIMINATOR_FIELD,
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct ResponsePageStore {
+    inner: Arc<ResponsePageStoreInner>,
+}
+
+#[derive(Default)]
+struct ResponsePageStoreInner {
+    counter: AtomicU64,
+    entries: Mutex<HashMap<String, CachedResponsePage>>,
+}
+
+struct CachedResponsePage {
+    serialized: String,
+    expires_at: Instant,
+}
+
+impl ResponsePageStore {
+    const TTL: Duration = Duration::from_secs(300);
+
+    pub fn insert(&self, serialized: String) -> String {
+        self.prune_expired();
+        let id = self.inner.counter.fetch_add(1, Ordering::Relaxed) + 1;
+        let cursor = format!("rsp_{id:x}");
+        let entry = CachedResponsePage {
+            serialized,
+            expires_at: Instant::now() + Self::TTL,
+        };
+        self.inner
+            .entries
+            .lock()
+            .expect("response page store mutex should not be poisoned")
+            .insert(cursor.clone(), entry);
+        cursor
+    }
+
+    pub fn get(&self, cursor: &str) -> Option<String> {
+        self.prune_expired();
+        self.inner
+            .entries
+            .lock()
+            .expect("response page store mutex should not be poisoned")
+            .get(cursor)
+            .map(|entry| entry.serialized.clone())
+    }
+
+    fn prune_expired(&self) {
+        let now = Instant::now();
+        self.inner
+            .entries
+            .lock()
+            .expect("response page store mutex should not be poisoned")
+            .retain(|_, entry| entry.expires_at > now);
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct ResponsePageRequest {
-    pub(super) cursor: Option<String>,
-    pub(super) offset: usize,
-    pub(super) page_bytes: usize,
+pub struct ResponsePageRequest {
+    pub cursor: Option<String>,
+    pub offset: usize,
+    pub page_bytes: usize,
 }
 
 impl Default for ResponsePageRequest {
@@ -33,12 +110,12 @@ impl Default for ResponsePageRequest {
 }
 
 impl ResponsePageRequest {
-    pub(super) fn cursor(&self) -> Option<&str> {
+    pub fn cursor(&self) -> Option<&str> {
         self.cursor.as_deref()
     }
 }
 
-pub(super) fn response_page_request(
+pub fn response_page_request(
     args: Option<&Map<String, Value>>,
 ) -> Result<ResponsePageRequest, ErrorData> {
     let Some(args) = args else {
@@ -150,7 +227,7 @@ fn optional_usize_arg(args: &Map<String, Value>, field: &str) -> Result<Option<u
     })
 }
 
-pub(super) fn strip_response_page_params(arguments: &mut Value) {
+pub fn strip_response_page_params(arguments: &mut Value) {
     let Some(arguments) = arguments.as_object_mut() else {
         return;
     };
@@ -159,23 +236,31 @@ pub(super) fn strip_response_page_params(arguments: &mut Value) {
     arguments.remove(RESPONSE_CURSOR_PARAM);
 }
 
-pub(super) fn tool_result_from_json(
+pub fn tool_result_from_json(
     mut value: Value,
     response_pages: &ResponsePageStore,
     page_request: ResponsePageRequest,
+    options: ResponsePagingOptions,
     tool: &str,
     action: Option<&str>,
     continuation_args: Option<&Map<String, Value>>,
 ) -> Result<CallToolResult, ErrorData> {
     if let Some(cursor) = page_request.cursor.clone() {
-        return tool_result_from_cached_page(response_pages, &cursor, page_request, tool, action);
+        return tool_result_from_cached_page(
+            response_pages,
+            &cursor,
+            page_request,
+            options,
+            tool,
+            action,
+        );
     }
-    add_action_discriminator(&mut value, action);
+    add_action_discriminator(&mut value, action, options.action_discriminator_field);
 
     // Compact JSON (not pretty) recovers ~30-40% of the 40 KB token budget.
     let text = serde_json::to_string(&value)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
-    if text.len() <= MAX_RESPONSE_BYTES && page_request.offset == 0 {
+    if text.len() <= options.max_response_bytes && page_request.offset == 0 {
         let mut result = CallToolResult::structured(value);
         result.content = vec![ContentBlock::text(text)];
         return Ok(result);
@@ -185,6 +270,7 @@ pub(super) fn tool_result_from_json(
     let payload = response_page_payload(
         &text,
         page_request,
+        options,
         tool,
         action,
         continuation_args,
@@ -197,20 +283,25 @@ pub(super) fn tool_result_from_json(
     Ok(result)
 }
 
-fn add_action_discriminator(value: &mut Value, action: Option<&str>) {
+fn add_action_discriminator(
+    value: &mut Value,
+    action: Option<&str>,
+    action_discriminator_field: &str,
+) {
     let (Some(action), Some(object)) = (action, value.as_object_mut()) else {
         return;
     };
     object.insert(
-        ACTION_DISCRIMINATOR_FIELD.to_owned(),
+        action_discriminator_field.to_owned(),
         Value::String(action.to_owned()),
     );
 }
 
-pub(super) fn tool_result_from_cached_page(
+pub fn tool_result_from_cached_page(
     response_pages: &ResponsePageStore,
     cursor: &str,
     page_request: ResponsePageRequest,
+    options: ResponsePagingOptions,
     tool: &str,
     action: Option<&str>,
 ) -> Result<CallToolResult, ErrorData> {
@@ -227,8 +318,15 @@ pub(super) fn tool_result_from_cached_page(
             })),
         ));
     };
-    let payload =
-        response_page_payload(&serialized, page_request, tool, action, None, Some(cursor));
+    let payload = response_page_payload(
+        &serialized,
+        page_request,
+        options,
+        tool,
+        action,
+        None,
+        Some(cursor),
+    );
     let text = serde_json::to_string(&payload)
         .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
     let mut result = CallToolResult::structured(payload);
@@ -239,6 +337,7 @@ pub(super) fn tool_result_from_cached_page(
 fn response_page_payload(
     serialized: &str,
     page_request: ResponsePageRequest,
+    options: ResponsePagingOptions,
     tool: &str,
     action: Option<&str>,
     continuation_args: Option<&Map<String, Value>>,
@@ -268,7 +367,7 @@ fn response_page_payload(
         "message": "Tool response was returned as a scrollable serialized JSON page.",
         "truncated": false,
         "serialized_bytes": serialized.len(),
-        "max_response_bytes": MAX_RESPONSE_BYTES,
+        "max_response_bytes": options.max_response_bytes,
         "content_format": "application/json-fragment",
         "content": content,
         "page": {
