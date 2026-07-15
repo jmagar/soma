@@ -23,7 +23,7 @@ base64 = "0.22"
 jsonschema = "0.47"
 metrics = { version = "0.24", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rmcp = { version = "2.2.0", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
+rmcp = { version = "=2.2.0", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
 # rmcp >= 2.2 builds its HTTP transport on reqwest 0.13, which requires the
 # process to install a rustls crypto provider before any TLS client is built.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

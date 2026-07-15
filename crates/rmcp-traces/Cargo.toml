@@ -1,6 +1,6 @@
 [package]
 name = "rmcp-traces"
-version = "0.1.0"
+version = "0.4.7"
 edition = "2021"
 rust-version = "1.96"
 authors.workspace = true
@@ -16,5 +16,5 @@ categories = ["development-tools", "network-programming"]
 default = []
 
 [dependencies]
-rmcp = { version = "2.2.0", default-features = false }
+rmcp = { version = "=2.2.0", default-features = false }
 serde_json = "1"

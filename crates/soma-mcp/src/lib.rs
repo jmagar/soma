@@ -45,6 +45,40 @@ mod testing {
             response_pages: Default::default(),
         }
     }
+
+    pub fn bearer_state(token: &str) -> AppState {
+        let client = SomaClient::new(&SomaConfig {
+            api_url: String::new(),
+            api_key: "test".into(),
+            ..SomaConfig::default()
+        })
+        .expect("stub client should always build");
+        let service = SomaService::new(client);
+        let provider_registry =
+            soma_service::static_provider_registry(service.clone()).expect("static registry");
+        AppState {
+            config: McpConfig {
+                api_token: Some(token.to_owned()),
+                ..McpConfig::default()
+            },
+            auth_policy: mounted_test_policy(),
+            service,
+            provider_registry,
+            remote_adapter: false,
+            response_pages: Default::default(),
+        }
+    }
+
+    fn mounted_test_policy() -> AuthPolicy {
+        #[cfg(feature = "auth")]
+        {
+            AuthPolicy::Mounted { auth_state: None }
+        }
+        #[cfg(not(feature = "auth"))]
+        {
+            AuthPolicy::Mounted {}
+        }
+    }
 }
 
 #[cfg(test)]

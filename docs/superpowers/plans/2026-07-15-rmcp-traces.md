@@ -28,7 +28,7 @@ metadata presence/counts, and safe invalid reasons.
 ## Implemented
 
 - Added `crates/rmcp-traces`.
-- Normalized workspace `rmcp` pins to `2.2.0`.
+- Normalized workspace `rmcp` pins to exact `=2.2.0`.
 - Added bounded `traceparent`, `tracestate`, and `baggage` parsing.
 - Added fail-soft `TraceSummary` extraction for logs.
 - Removed public propagation helpers so v1 remains request-summary only.

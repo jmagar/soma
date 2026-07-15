@@ -25,7 +25,7 @@ The v1 crate is request-side only:
 - Parse and validate `traceparent`.
 - Preserve bounded `tracestate` and `baggage` values in private fields.
 - Expose redacted summaries that never print raw baggage.
-- Integrate into Soma MCP by summarizing `RequestContext.meta` at the start of `call_tool`.
+- Integrate into Soma MCP by summarizing `RequestContext.meta` after MCP auth succeeds in `call_tool`; pre-auth rejection logs omit caller-controlled trace fields.
 - Keep v00 `traceparent` exact while preserving stable trace/span ID prefixes from bounded higher-version traceparents with additive fields.
 
 ## Non-goals

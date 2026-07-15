@@ -96,22 +96,12 @@ impl ServerHandler for SomaRmcpServer {
             .and_then(Value::as_str)
             .map(ToOwned::to_owned);
 
-        let trace_summary = trace_summary_from_context(&context);
         let response_page = match response_page_request(request.arguments.as_ref()) {
             Ok(response_page) => response_page,
             Err(error) => {
                 tracing::warn!(
                     tool = %tool_name,
                     action = action_opt.as_deref().unwrap_or_default(),
-                    trace_id_prefix = ?trace_summary.trace_id_prefix(),
-                    span_id_prefix = ?trace_summary.span_id_prefix(),
-                    trace_sampled = ?trace_summary.sampled(),
-                    trace_trust = ?trace_summary.trust(),
-                    has_tracestate = trace_summary.has_tracestate(),
-                    baggage_member_count = trace_summary.baggage_member_count(),
-                    sensitive_baggage_member_count = trace_summary.sensitive_baggage_member_count(),
-                    trace_invalid_count = trace_summary.invalid_count(),
-                    trace_invalid_reasons = ?trace_summary.invalid_reasons(),
                     "MCP tool rejected response paging params"
                 );
                 return Err(error);
@@ -123,20 +113,12 @@ impl ServerHandler for SomaRmcpServer {
                 tracing::warn!(
                     tool = %tool_name,
                     action = action_opt.as_deref().unwrap_or_default(),
-                    trace_id_prefix = ?trace_summary.trace_id_prefix(),
-                    span_id_prefix = ?trace_summary.span_id_prefix(),
-                    trace_sampled = ?trace_summary.sampled(),
-                    trace_trust = ?trace_summary.trust(),
-                    has_tracestate = trace_summary.has_tracestate(),
-                    baggage_member_count = trace_summary.baggage_member_count(),
-                    sensitive_baggage_member_count = trace_summary.sensitive_baggage_member_count(),
-                    trace_invalid_count = trace_summary.invalid_count(),
-                    trace_invalid_reasons = ?trace_summary.invalid_reasons(),
                     "MCP tool rejected auth context"
                 );
                 return Err(error);
             }
         };
+        let trace_summary = trace_summary_from_context(&context);
         if self.state.config.conformance_fixtures {
             if let Some(result) = conformance::call_tool(&tool_name) {
                 return Ok(result);

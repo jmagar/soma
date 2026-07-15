@@ -1,5 +1,6 @@
 use rmcp::{
     model::{CallToolRequestParams, CallToolResult, ErrorCode, Meta, ResourceContents},
+    service::ServiceError,
     ServiceExt,
 };
 use rmcp_traces::TraceTrust;
@@ -145,7 +146,7 @@ fn trace_summary_for_logs_uses_untrusted_fail_soft_policy() {
     let mut meta = Meta::new();
     meta.set_traceparent(VALID_TRACEPARENT);
     meta.set_tracestate("vendor=value");
-    meta.set_baggage(&"a".repeat(9 * 1024));
+    meta.set_baggage("a".repeat(9 * 1024));
 
     let summary = trace_summary_from_meta(&meta);
 
@@ -231,6 +232,66 @@ async fn call_tool_logs_safe_trace_summary_from_request_meta() {
     assert!(!logs.contains("alice@example.com"), "logs were: {logs}");
     assert!(!logs.contains("super-secret-token"), "logs were: {logs}");
     assert!(!logs.contains("abc123"), "logs were: {logs}");
+    assert!(!logs.contains("s123"), "logs were: {logs}");
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "current_thread")]
+async fn call_tool_auth_failure_logs_without_trace_fields() {
+    let _lock = tracing_test_lock();
+    let buf = SharedBuf::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(buf.writer())
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::INFO)
+        .finish();
+    let guard = tracing::subscriber::set_default(subscriber);
+
+    let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
+    let server = super::rmcp_server(crate::testing::bearer_state("secret"));
+    let server_handle = tokio::spawn(async move {
+        let running = server
+            .serve(server_transport)
+            .await
+            .expect("server should handshake");
+        running.waiting().await.expect("server should stop cleanly");
+    });
+    let mut client = ().serve(client_transport).await.expect("client should handshake");
+
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_tracestate("vendor=value");
+    meta.set_baggage("email=alice@example.com,sessionId=s123");
+    let mut request = CallToolRequestParams::new("soma").with_arguments(
+        serde_json::Map::from_iter([("action".to_owned(), json!("status"))]),
+    );
+    request.meta = Some(meta);
+
+    let error = client
+        .call_tool(request)
+        .await
+        .expect_err("mounted auth should reject missing HTTP auth context");
+    let ServiceError::McpError(error) = error else {
+        panic!("expected MCP protocol error, got: {error}");
+    };
+    assert!(error.message.contains("missing http context"));
+
+    client.close().await.expect("client should close");
+    server_handle.await.expect("server task should join");
+    drop(guard);
+
+    let logs = buf.contents();
+    assert!(
+        logs.contains("MCP tool rejected auth context"),
+        "logs were: {logs}"
+    );
+    assert!(!logs.contains("trace_id_prefix"), "logs were: {logs}");
+    assert!(!logs.contains("span_id_prefix"), "logs were: {logs}");
+    assert!(!logs.contains("trace_invalid"), "logs were: {logs}");
+    assert!(!logs.contains(VALID_TRACEPARENT), "logs were: {logs}");
+    assert!(!logs.contains("vendor=value"), "logs were: {logs}");
+    assert!(!logs.contains("alice@example.com"), "logs were: {logs}");
     assert!(!logs.contains("s123"), "logs were: {logs}");
 }
 

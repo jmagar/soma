@@ -2933,7 +2933,7 @@ dependencies = [
 
 [[package]]
 name = "rmcp-traces"
-version = "0.1.0"
+version = "0.4.7"
 dependencies = [
  "rmcp",
  "serde_json",

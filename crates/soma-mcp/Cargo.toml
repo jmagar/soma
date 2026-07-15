@@ -22,7 +22,7 @@ test-support = []
 anyhow = "1"
 axum = { version = "0.8", optional = true }
 http = "1"
-rmcp = { version = "2.2.0", default-features = false, features = [
+rmcp = { version = "=2.2.0", default-features = false, features = [
   "server",
   "macros",
   "elicitation",
@@ -41,7 +41,7 @@ tracing = "0.1"
 url = "2"
 
 [dev-dependencies]
-rmcp = { version = "2.2.0", default-features = false, features = [
+rmcp = { version = "=2.2.0", default-features = false, features = [
   "client",
   "transport-io",
 ] }

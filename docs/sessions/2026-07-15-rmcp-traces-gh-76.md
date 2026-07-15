@@ -21,7 +21,7 @@ Implemented GH #76 for the corrected `rmcp 2.2.0` target.
 - Integrated safe trace summaries into Soma MCP `call_tool` logging.
 - Logged only `trace_id_prefix`, `span_id_prefix`, sampled state, trust, tracestate presence, baggage counts, sensitive baggage counts, and safe invalid reasons.
 - Preserved valid trace ID prefixes when optional metadata is invalid.
-- Added early-branch logging for response paging errors, auth denial, unknown tools, cached pages, validation errors, success, and execution failures.
+- Added post-auth logging for unknown tools, cached pages, validation errors, success, and execution failures. Auth and pre-auth paging rejection logs intentionally omit caller-controlled trace fields.
 
 ## Review Fixes
 

@@ -51,7 +51,7 @@ fn malformed_traceparents_are_rejected() {
 
 #[test]
 fn non_ascii_traceparents_are_rejected_without_panicking() {
-    let value = format!("{}é", &VALID_TRACEPARENT[..54]);
+    let value = format!("{}\u{00e9}", &VALID_TRACEPARENT[..54]);
     let result = std::panic::catch_unwind(|| TraceParent::parse(&value));
 
     assert!(result.is_ok(), "non-ASCII input must not panic");
@@ -100,12 +100,12 @@ fn higher_version_traceparents_preserve_stable_fields() {
 #[test]
 fn oversized_values_are_rejected_before_parsing() {
     let mut meta = Meta::new();
-    meta.set_traceparent(&"x".repeat(4096));
+    meta.set_traceparent("x".repeat(4096));
     assert!(TraceContext::from_meta(&meta, TraceTrust::Untrusted).is_err());
 
     let mut meta = Meta::new();
     meta.set_traceparent(VALID_TRACEPARENT);
-    meta.set_tracestate(&"v".repeat(20));
+    meta.set_tracestate("v".repeat(20));
     let limits = TraceLimits {
         max_tracestate_len: 8,
         ..TraceLimits::default()
@@ -114,7 +114,7 @@ fn oversized_values_are_rejected_before_parsing() {
 
     let mut meta = Meta::new();
     meta.set_traceparent(VALID_TRACEPARENT);
-    meta.set_baggage(&"a".repeat(20));
+    meta.set_baggage("a".repeat(20));
     let limits = TraceLimits {
         max_baggage_len: 8,
         ..TraceLimits::default()

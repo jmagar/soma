@@ -28,7 +28,7 @@ Upstream RMCP debug logs can include raw request values before an application re
 
 ## Soma Integration
 
-Soma reads `RequestContext.meta` at the start of `call_tool` in `crates/soma-mcp/src/rmcp_server.rs` so success and rejection logs share the same safe summary. It logs only `TraceSummary` fields: `trace_id_prefix`, `span_id_prefix`, sampled flag, trust label, tracestate presence, baggage member count, sensitive baggage member count, and safe invalid reasons.
+Soma reads `RequestContext.meta` after the MCP auth context is accepted in `crates/soma-mcp/src/rmcp_server.rs`. Auth and pre-auth paging rejections do not include caller-controlled trace fields. Post-auth logs include only `TraceSummary` fields: `trace_id_prefix`, `span_id_prefix`, sampled flag, trust label, tracestate presence, baggage member count, sensitive baggage member count, and safe invalid reasons.
 
 Soma does not attach result `_meta` in v1. This prevents trace metadata from bypassing response paging or `MAX_RESPONSE_BYTES`.
 
