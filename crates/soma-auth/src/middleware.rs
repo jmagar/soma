@@ -267,6 +267,15 @@ async fn authenticate(
         .and_then(|v| v.to_str().ok())
         .and_then(parse_bearer_token);
 
+    // Scope hint surfaced in `WWW-Authenticate: Bearer ... scope="..."` per
+    // RFC 6750 Section 3 / MCP spec guidance. Only available when the layer
+    // carries an `AuthState` (i.e. OAuth is configured); bearer-only layers
+    // have no scope catalog to advertise.
+    let scope = layer
+        .auth_state
+        .as_ref()
+        .map(|s| s.config.scopes_supported.join(" "));
+
     if let Some(token) = auth_header {
         // 1. Static bearer match — skipped when the consumer has set
         //    `disable_static_token_with_oauth=true` and OAuth mode is active.
@@ -306,6 +315,7 @@ async fn authenticate(
                         auth_state.config.env_prefix
                     ),
                     layer.resource_url.as_deref(),
+                    scope.as_deref(),
                 ));
             };
             let expected_aud = canonical_resource_url(auth_state);
@@ -342,6 +352,7 @@ async fn authenticate(
         return Err(auth_error_response(
             "invalid bearer token",
             layer.resource_url.as_deref(),
+            scope.as_deref(),
         ));
     }
 
@@ -413,6 +424,7 @@ async fn authenticate(
             "missing bearer token"
         },
         layer.resource_url.as_deref(),
+        scope.as_deref(),
     ))
 }
 
@@ -441,11 +453,13 @@ fn derive_actor_key(deriver: Option<&ActorKeyDeriver>, subject: &str) -> Option<
 }
 
 /// Build a 401 response wrapping [`AuthError::AuthFailed`] and decorate it
-/// with `WWW-Authenticate` when a `resource_url` was supplied.
-fn auth_error_response(message: &str, resource_url: Option<&str>) -> Response {
+/// with `WWW-Authenticate` when a `resource_url` was supplied. `scope`, when
+/// present, is threaded into the `scope="..."` parameter (see
+/// [`www_authenticate_value`]).
+fn auth_error_response(message: &str, resource_url: Option<&str>, scope: Option<&str>) -> Response {
     let mut response = AuthError::AuthFailed(message.to_string()).into_response();
     if let Some(url) = resource_url {
-        let www_auth = www_authenticate_value(url);
+        let www_auth = www_authenticate_value(url, scope);
         if let Ok(value) = HeaderValue::from_str(&www_auth) {
             response
                 .headers_mut()
@@ -550,6 +564,41 @@ mod tests {
         assert!(
             www.contains("resource_metadata="),
             "missing resource_metadata in WWW-Authenticate: `{www}`"
+        );
+        assert!(
+            !www.contains("scope="),
+            "unexpected scope in WWW-Authenticate for a layer with no auth_state: `{www}`"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn missing_bearer_token_with_auth_state_includes_scope_in_www_authenticate() {
+        let state = Arc::new(test_auth_state().await);
+        let layer = AuthLayer::from_state(state)
+            .with_resource_url(Some(Arc::<str>::from("https://lab.example.com")));
+        let app = echo_app(layer);
+        let response = app
+            .oneshot(
+                HttpRequest::builder()
+                    .uri("/probe")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let www = response
+            .headers()
+            .get(header::WWW_AUTHENTICATE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        assert!(
+            www.contains("resource_metadata="),
+            "missing resource_metadata in WWW-Authenticate: `{www}`"
+        );
+        assert!(
+            www.contains("scope="),
+            "missing scope in WWW-Authenticate: `{www}`"
         );
     }
 

@@ -9,7 +9,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 use tracing::{debug, info, warn};
 
-use crate::error::AuthError;
+use crate::error::{AuthError, AuthErrorKind};
 use crate::google::AuthorizeUrlRequest;
 use crate::session::{append_set_cookie, build_browser_session_cookie, create_browser_session};
 use crate::state::AuthState;
@@ -127,13 +127,13 @@ pub async fn register_client(
     State(state): State<AuthState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(request): Json<ClientRegistrationRequest>,
-) -> Result<Json<ClientRegistrationResponse>, AuthError> {
+) -> Result<Json<ClientRegistrationResponse>, RegistrationError> {
     state.check_register_rate_limit(remote_ip(addr)).await?;
     if request.redirect_uris.is_empty() {
         warn!("oauth register rejected: no redirect URIs provided");
-        return Err(AuthError::Validation(
-            "at least one redirect URI is required".to_string(),
-        ));
+        return Err(
+            AuthError::Validation("at least one redirect URI is required".to_string()).into(),
+        );
     }
     let native_callback_endpoint = crate::metadata::native_callback_endpoint(&state);
     for redirect_uri in &request.redirect_uris {
@@ -146,7 +146,7 @@ pub async fn register_client(
                 allowed_patterns = ?state.config.allowed_client_redirect_uris,
                 "oauth register rejected: redirect URI is not in the allowlist, native callback, or loopback set"
             );
-            return Err(AuthError::Validation(format!(
+            return Err(RegistrationError::InvalidRedirectUri(format!(
                 "redirect URI `{redirect_uri}` must target a loopback host, match the native callback endpoint, or match an allowed redirect pattern"
             )));
         }
@@ -163,7 +163,7 @@ pub async fn register_client(
                 application_type = %other,
                 "oauth register rejected: unsupported application_type"
             );
-            return Err(AuthError::Validation(format!(
+            return Err(RegistrationError::InvalidClientMetadata(format!(
                 "application_type `{other}` is not supported; use `web` or `native`"
             )));
         }
@@ -187,6 +187,123 @@ pub async fn register_client(
         token_endpoint_auth_method: "none".to_string(),
         application_type,
     }))
+}
+
+/// RFC 7591 §3.2.2 requires `/register` errors to be reported as HTTP 400
+/// with a `{"error": ..., "error_description": ...}` body using one of the
+/// RFC's defined error codes — unlike the generic `AuthError` ->
+/// `IntoResponse` impl in `error.rs`, which returns 422 with a
+/// `{"kind", "message"}` body. This is `register_client`'s dedicated error
+/// type, mirroring `TokenEndpointError` in `token.rs` for the `/token`
+/// endpoint (RFC 6749 §5.2).
+pub enum RegistrationError {
+    /// A `redirect_uris` entry failed validation (RFC 7591 §3.2.2).
+    InvalidRedirectUri(String),
+    /// `application_type` (or another client-metadata field) failed
+    /// validation.
+    InvalidClientMetadata(String),
+    /// Any other failure surfaced from shared auth infrastructure (rate
+    /// limiting, storage). Status codes are preserved from `AuthError`'s own
+    /// semantics, but the response body still uses the RFC 7591
+    /// `error`/`error_description` shape for consistency within this
+    /// endpoint's responses.
+    Auth(AuthError),
+}
+
+impl From<AuthError> for RegistrationError {
+    fn from(error: AuthError) -> Self {
+        Self::Auth(error)
+    }
+}
+
+impl RegistrationError {
+    fn oauth_error(&self) -> &'static str {
+        match self {
+            Self::InvalidRedirectUri(_) => "invalid_redirect_uri",
+            Self::InvalidClientMetadata(_) => "invalid_client_metadata",
+            Self::Auth(AuthError::RateLimited { .. }) => "temporarily_unavailable",
+            // No RFC 7591 error code maps cleanly onto the remaining
+            // AuthError variants (rate limiting aside); `invalid_client_metadata`
+            // is the closest registration-scoped fallback so every `/register`
+            // response still carries an RFC-defined code.
+            Self::Auth(_) => "invalid_client_metadata",
+        }
+    }
+
+    fn log_kind(&self) -> &'static str {
+        match self {
+            Self::InvalidRedirectUri(_) => "invalid_redirect_uri",
+            Self::InvalidClientMetadata(_) => "invalid_client_metadata",
+            Self::Auth(error) => error.kind(),
+        }
+    }
+
+    /// The two RFC 7591-specific variants always answer 400 per §3.2.2. The
+    /// `Auth(_)` passthrough intentionally mirrors `AuthError`'s own private
+    /// `status()` mapping in `error.rs` verbatim rather than introducing a
+    /// registration-specific remap — the task for this endpoint is only to
+    /// change the *body shape* for those errors (`error`/`error_description`
+    /// instead of `kind`/`message`), not their existing status codes.
+    fn status(&self) -> StatusCode {
+        match self {
+            Self::InvalidRedirectUri(_) | Self::InvalidClientMetadata(_) => StatusCode::BAD_REQUEST,
+            Self::Auth(AuthError::InvalidGrant(_)) => StatusCode::BAD_REQUEST,
+            Self::Auth(AuthError::AuthFailed(_) | AuthError::InvalidAccessToken) => {
+                StatusCode::UNAUTHORIZED
+            }
+            Self::Auth(AuthError::Validation(_)) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::Auth(AuthError::Network(_) | AuthError::Server(_)) => StatusCode::BAD_GATEWAY,
+            Self::Auth(AuthError::RateLimited { .. }) => StatusCode::TOO_MANY_REQUESTS,
+            Self::Auth(
+                AuthError::Config(_)
+                | AuthError::Storage(_)
+                | AuthError::Decode(_)
+                | AuthError::InsecurePermissions { .. },
+            ) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn description(&self) -> String {
+        match self {
+            Self::InvalidRedirectUri(message) | Self::InvalidClientMetadata(message) => {
+                message.clone()
+            }
+            Self::Auth(error) => error.to_string(),
+        }
+    }
+
+    fn retry_after_ms(&self) -> Option<u64> {
+        match self {
+            Self::Auth(AuthError::RateLimited { retry_after_ms, .. }) => Some(*retry_after_ms),
+            _ => None,
+        }
+    }
+}
+
+impl IntoResponse for RegistrationError {
+    fn into_response(self) -> Response {
+        let status = self.status();
+        let log_kind = self.log_kind();
+        let retry_after_ms = self.retry_after_ms();
+        let body = Json(serde_json::json!({
+            "error": self.oauth_error(),
+            "error_description": self.description(),
+        }));
+        let mut response = (status, body).into_response();
+        response.extensions_mut().insert(AuthErrorKind(log_kind));
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        response
+            .headers_mut()
+            .insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+        if let Some(retry_after_ms) = retry_after_ms
+            && let Ok(value) = HeaderValue::from_str(&(retry_after_ms / 1_000).max(1).to_string())
+        {
+            response.headers_mut().insert(header::RETRY_AFTER, value);
+        }
+        response
+    }
 }
 
 pub async fn authorize(
@@ -929,7 +1046,7 @@ pub mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -986,7 +1103,24 @@ pub mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json.get("error").and_then(|v| v.as_str()),
+            Some("invalid_redirect_uri"),
+            "must use the RFC 7591 error/error_description shape: {json}"
+        );
+        assert!(
+            json.get("error_description")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.is_empty()),
+            "error_description must be present and non-empty: {json}"
+        );
+        assert!(json.get("kind").is_none());
+        assert!(json.get("message").is_none());
     }
 
     #[tokio::test]
@@ -1078,7 +1212,24 @@ pub mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json.get("error").and_then(|v| v.as_str()),
+            Some("invalid_client_metadata"),
+            "must use the RFC 7591 error/error_description shape: {json}"
+        );
+        assert!(
+            json.get("error_description")
+                .and_then(|v| v.as_str())
+                .is_some_and(|s| !s.is_empty()),
+            "error_description must be present and non-empty: {json}"
+        );
+        assert!(json.get("kind").is_none());
+        assert!(json.get("message").is_none());
     }
 
     #[tokio::test]

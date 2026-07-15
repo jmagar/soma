@@ -15,6 +15,10 @@ pub struct AuthorizationServerMetadata {
     pub grant_types_supported: Vec<String>,
     pub code_challenge_methods_supported: Vec<String>,
     pub token_endpoint_auth_methods_supported: Vec<String>,
+    /// RFC 9207 §2.3 — MUST be `true` whenever the authorization server includes
+    /// the `iss` parameter in authorization responses (soma-auth always does, in
+    /// `authorize::callback`). Always emitted, never conditional.
+    pub authorization_response_iss_parameter_supported: bool,
 }
 
 /// Query params for `GET /native/callback` and `GET /native/poll` — the

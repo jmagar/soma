@@ -34,12 +34,24 @@ pub struct AuthContext {
 
 /// Build the value of an `WWW-Authenticate: Bearer ...` response header
 /// pointing browsers/agents at the protected-resource metadata document.
+///
+/// When `scope` is `Some` and non-empty, a `scope="..."` parameter (RFC 6750
+/// Section 3) is appended so clients get immediate guidance on which scopes
+/// to request during authorization, per the MCP spec's `WWW-Authenticate`
+/// guidance. `scope` is expected to be a space-joined scope list (e.g.
+/// `"syslog:read syslog:admin"`).
 #[must_use]
-pub fn www_authenticate_value(resource_url: &str) -> String {
-    format!(
+pub fn www_authenticate_value(resource_url: &str, scope: Option<&str>) -> String {
+    let mut value = format!(
         "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource\"",
         resource_url.trim_end_matches('/')
-    )
+    );
+    if let Some(scope) = scope
+        && !scope.is_empty()
+    {
+        value.push_str(&format!(", scope=\"{scope}\""));
+    }
+    value
 }
 
 /// Convenience accessor for handlers that have already split a request into
@@ -56,11 +68,29 @@ mod tests {
     #[test]
     fn www_authenticate_value_appends_metadata_path_and_strips_trailing_slash() {
         assert_eq!(
-            www_authenticate_value("https://lab.example.com/"),
+            www_authenticate_value("https://lab.example.com/", None),
             "Bearer resource_metadata=\"https://lab.example.com/.well-known/oauth-protected-resource\""
         );
         assert_eq!(
-            www_authenticate_value("https://lab.example.com"),
+            www_authenticate_value("https://lab.example.com", None),
+            "Bearer resource_metadata=\"https://lab.example.com/.well-known/oauth-protected-resource\""
+        );
+    }
+
+    #[test]
+    fn www_authenticate_value_appends_scope_when_present_and_omits_when_absent() {
+        assert_eq!(
+            www_authenticate_value("https://lab.example.com", Some("syslog:read syslog:admin")),
+            "Bearer resource_metadata=\"https://lab.example.com/.well-known/oauth-protected-resource\", scope=\"syslog:read syslog:admin\""
+        );
+        // `None` and empty-string scopes are both treated as "nothing to
+        // offer" and must not append a `scope=` param.
+        assert_eq!(
+            www_authenticate_value("https://lab.example.com", None),
+            "Bearer resource_metadata=\"https://lab.example.com/.well-known/oauth-protected-resource\""
+        );
+        assert_eq!(
+            www_authenticate_value("https://lab.example.com", Some("")),
             "Bearer resource_metadata=\"https://lab.example.com/.well-known/oauth-protected-resource\""
         );
     }

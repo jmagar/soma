@@ -38,16 +38,19 @@ pub struct CachedAuthClient {
 ///
 /// Cheap to clone (all state is behind `Arc`). Safe to share between the
 /// gateway manager and the upstream pool.
+/// `(upstream_name, subject)` cache key shared by [`OauthClientCache`]'s maps.
+type CacheKey = (String, String);
+
 #[derive(Clone)]
 pub struct OauthClientCache {
     /// Cached clients keyed by `(upstream_name, subject)`.
-    clients: Arc<DashMap<(String, String), Arc<CachedAuthClient>>>,
+    clients: Arc<DashMap<CacheKey, Arc<CachedAuthClient>>>,
     /// Per-upstream OAuth managers, owned by the gateway manager and
     /// shared in by `Arc` so the cache can call `build_auth_client`.
     managers: Arc<DashMap<String, UpstreamOauthManager>>,
     /// Per-`(upstream, subject)` build lock so concurrent first-request
     /// tasks don't issue duplicate token exchanges against the AS.
-    build_locks: Arc<DashMap<(String, String), Arc<Mutex<()>>>>,
+    build_locks: Arc<DashMap<CacheKey, Arc<Mutex<()>>>>,
 }
 
 impl OauthClientCache {

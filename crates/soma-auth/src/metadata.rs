@@ -22,6 +22,9 @@ pub async fn authorization_server_metadata(
         ],
         code_challenge_methods_supported: vec!["S256".to_string()],
         token_endpoint_auth_methods_supported: vec!["none".to_string()],
+        // soma-auth always echoes `iss` on authorization redirects (RFC 9207 §2),
+        // so this capability flag is a static `true`, not config-dependent.
+        authorization_response_iss_parameter_supported: true,
     })
 }
 
@@ -101,6 +104,7 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["token_endpoint"], "https://lab.example.com/token");
+        assert_eq!(json["authorization_response_iss_parameter_supported"], true);
     }
 
     #[tokio::test]

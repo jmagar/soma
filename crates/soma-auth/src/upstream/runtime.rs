@@ -49,7 +49,7 @@ pub async fn build_upstream_oauth_runtime(
         public_url.scheme() == "https",
         "public_url must be absolute https:// when upstream oauth is configured"
     );
-    let key = load_key(&encryption_key_raw)
+    let key = load_key(encryption_key_raw)
         .map_err(|error| anyhow::anyhow!("invalid upstream OAuth encryption key: {error}"))?;
     let sqlite = SqliteStore::open(auth_config.sqlite_path.clone())
         .await
