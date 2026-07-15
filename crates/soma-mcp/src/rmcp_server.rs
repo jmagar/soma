@@ -15,7 +15,8 @@ use rmcp::{
         CallToolRequestParams, CallToolResult, ContentBlock, GetPromptRequestParams,
         GetPromptResult, Implementation, ListPromptsResult, ListResourceTemplatesResult,
         ListResourcesResult, ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams,
-        ReadResourceResult, Resource, ResourceContents, ServerCapabilities, ServerInfo, Tool,
+        ReadResourceResult, Resource, ResourceContents, ResourceTemplate, ServerCapabilities,
+        ServerInfo, Tool,
     },
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
@@ -29,10 +30,12 @@ struct AuthContext {
 }
 use serde_json::{json, Map, Value};
 
-use soma_contracts::{errors::ServiceErrorKind, token_limit::MAX_RESPONSE_BYTES};
+use soma_contracts::{
+    errors::ServiceErrorKind, providers::ProviderResource, token_limit::MAX_RESPONSE_BYTES,
+};
 
 use soma_runtime::server::{AppState, AuthPolicy};
-use soma_service::{ProviderAuthMode, ProviderPrincipal};
+use soma_service::{ProviderAuthMode, ProviderError, ProviderPrincipal, ResourceReadOutput};
 
 use super::{
     conformance, prompts,
@@ -189,7 +192,16 @@ impl ServerHandler for SomaRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<ListResourcesResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
+        refresh_file_providers(&self.state)?;
+        let snapshot = self.state.provider_registry.snapshot();
         let mut resources = vec![schema_resource()];
+        resources.extend(
+            snapshot
+                .catalogs
+                .iter()
+                .flat_map(|catalog| &catalog.resources)
+                .map(rmcp_resource_from_catalog_resource),
+        );
         if self.state.config.conformance_fixtures {
             resources.extend(conformance::resources());
         }
@@ -205,7 +217,21 @@ impl ServerHandler for SomaRmcpServer {
         context: RequestContext<RoleServer>,
     ) -> Result<ListResourceTemplatesResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
-        let mut resource_templates = Vec::new();
+        refresh_file_providers(&self.state)?;
+        let snapshot = self.state.provider_registry.snapshot();
+        let mut resource_templates: Vec<ResourceTemplate> = snapshot
+            .dynamic_resource_templates()
+            .iter()
+            .map(|(_, template)| {
+                let mut built =
+                    ResourceTemplate::new(template.uri_template(), template.name.clone())
+                        .with_description(template.description.clone());
+                if let Some(mime_type) = &template.mime_type {
+                    built = built.with_mime_type(mime_type.clone());
+                }
+                built
+            })
+            .collect();
         if self.state.config.conformance_fixtures {
             resource_templates.extend(conformance::resource_templates());
         }
@@ -220,27 +246,36 @@ impl ServerHandler for SomaRmcpServer {
         request: ReadResourceRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<ReadResourceResult, ErrorData> {
-        require_auth_context(&self.state, &context)?;
+        let auth = require_auth_context(&self.state, &context)?;
         if self.state.config.conformance_fixtures {
             if let Some(result) = conformance::read_resource(&request.uri) {
                 return Ok(result);
             }
         }
-        if request.uri != SCHEMA_RESOURCE_URI {
-            return Err(ErrorData::invalid_params(
-                format!("unknown resource: {}", request.uri),
-                None,
-            ));
-        }
         refresh_file_providers(&self.state)?;
-        let schema = tool_definitions_for_state(&self.state);
-        let text = serde_json::to_string_pretty(&schema)
-            .map_err(|e| ErrorData::internal_error(format!("serialization error: {e}"), None))?;
-        Ok(ReadResourceResult::new(vec![ResourceContents::text(
-            text,
-            SCHEMA_RESOURCE_URI,
-        )
-        .with_mime_type("application/json")]))
+        if request.uri == SCHEMA_RESOURCE_URI {
+            let schema = tool_definitions_for_state(&self.state);
+            let text = serde_json::to_string_pretty(&schema).map_err(|e| {
+                ErrorData::internal_error(format!("serialization error: {e}"), None)
+            })?;
+            return Ok(ReadResourceResult::new(vec![ResourceContents::text(
+                text,
+                SCHEMA_RESOURCE_URI,
+            )
+            .with_mime_type("application/json")]));
+        }
+
+        let principal = provider_principal(auth);
+        let auth_mode = provider_auth_mode(&self.state.auth_policy);
+        let output = self
+            .state
+            .provider_registry
+            .read_resource(&request.uri, &principal, auth_mode)
+            .await
+            .map_err(|error| resource_read_error(&request.uri, &error))?;
+        Ok(ReadResourceResult::new(vec![
+            resource_contents_from_output(&request.uri, output),
+        ]))
     }
 
     // ── prompts ───────────────────────────────────────────────────────────────
@@ -338,6 +373,51 @@ fn schema_resource() -> Resource {
     Resource::new(SCHEMA_RESOURCE_URI, "soma tool schema")
         .with_description("JSON schema for the Soma MCP tool and its action-based parameters")
         .with_mime_type("application/json")
+}
+
+fn rmcp_resource_from_catalog_resource(resource: &ProviderResource) -> Resource {
+    let mut built = Resource::new(resource.uri_template.clone(), resource.name.clone())
+        .with_description(resource.description.clone());
+    if let Some(mime_type) = &resource.mime_type {
+        built = built.with_mime_type(mime_type.clone());
+    }
+    built
+}
+
+fn resource_contents_from_output(uri: &str, output: ResourceReadOutput) -> ResourceContents {
+    match output {
+        ResourceReadOutput::Text { text, mime_type } => {
+            let mut contents = ResourceContents::text(text, uri);
+            if let Some(mime_type) = mime_type {
+                contents = contents.with_mime_type(mime_type);
+            }
+            contents
+        }
+        ResourceReadOutput::Blob {
+            blob_base64,
+            mime_type,
+        } => {
+            let mut contents = ResourceContents::blob(blob_base64, uri);
+            if let Some(mime_type) = mime_type {
+                contents = contents.with_mime_type(mime_type);
+            }
+            contents
+        }
+    }
+}
+
+/// Maps a `ProviderRegistry::read_resource` failure to the protocol-level
+/// `ErrorData` MCP `resources/read` expects — there is no structured
+/// tool-result-style "isError" channel for resource reads the way
+/// `call_tool` has, so every failure kind maps to `ErrorData`.
+fn resource_read_error(uri: &str, error: &ProviderError) -> ErrorData {
+    match error.code.as_ref() {
+        "unknown_resource" => ErrorData::invalid_params(format!("unknown resource: {uri}"), None),
+        "insufficient_scope" => {
+            ErrorData::invalid_request(format!("forbidden: {}", error.message), None)
+        }
+        _ => ErrorData::internal_error(error.message.to_string(), None),
+    }
 }
 
 // ── tool definition conversion ────────────────────────────────────────────────

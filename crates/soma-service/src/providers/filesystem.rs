@@ -20,12 +20,19 @@ use crate::{
         mcp::McpProvider,
         openapi::OpenApiProvider,
         python::{load_python_catalog, PythonProvider},
+        resource_files::{ResourceFileError, ResourceFileProvider},
         wasm::WasmProvider,
     },
 };
 
+#[path = "filesystem_prompts.rs"]
+mod filesystem_prompts;
+#[path = "filesystem_resources.rs"]
+mod filesystem_resources;
 #[path = "filesystem_uniqueness.rs"]
 mod filesystem_uniqueness;
+#[path = "filesystem_wasm.rs"]
+mod filesystem_wasm;
 
 #[derive(Debug, Clone)]
 pub struct FileProviderSource {
@@ -193,6 +200,37 @@ impl FileProviderSource {
             }
         }
 
+        for (absolute, relative, canonical_root) in self.resource_pairs_with_canonical_root()? {
+            let file_name = relative.display().to_string();
+            match ResourceFileProvider::from_file(absolute.clone(), &relative, &canonical_root) {
+                Ok(provider) => {
+                    let catalog = provider.catalog();
+                    files.push(ProviderFileInspection {
+                        path: absolute,
+                        file_name,
+                        status: ProviderFileInspectionStatus::Loaded,
+                        provider_id: Some(catalog.provider.name.clone()),
+                        provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
+                        actions: Vec::new(),
+                        error: None,
+                    });
+                    loaded_catalogs.push(Some(catalog));
+                }
+                Err(ResourceFileError(message)) => {
+                    files.push(ProviderFileInspection {
+                        path: absolute,
+                        file_name,
+                        status: ProviderFileInspectionStatus::Invalid,
+                        provider_id: None,
+                        provider_kind: Some(ProviderKind::StaticRust.as_str().to_owned()),
+                        actions: Vec::new(),
+                        error: Some(message),
+                    });
+                    loaded_catalogs.push(None);
+                }
+            }
+        }
+
         filesystem_uniqueness::apply_directory_wide_checks(&mut files, &loaded_catalogs);
         files.sort_by(|left, right| left.file_name.cmp(&right.file_name));
         let providers_loaded = files
@@ -232,6 +270,14 @@ impl FileProviderSource {
             }
             providers.push(provider_for_catalog(path, catalog));
         }
+        for (absolute, relative, canonical_root) in self.resource_pairs_with_canonical_root()? {
+            let provider = ResourceFileProvider::arc(absolute.clone(), &relative, &canonical_root)
+                .map_err(|ResourceFileError(message)| FileProviderLoadError {
+                    path: absolute,
+                    message,
+                })?;
+            providers.push(provider);
+        }
         Ok(providers)
     }
 
@@ -255,7 +301,7 @@ impl FileProviderSource {
         for path in &provider_paths {
             match path.extension().and_then(|extension| extension.to_str()) {
                 Some("wasm") => {
-                    let sidecar = wasm_sidecar_manifest_path(path);
+                    let sidecar = filesystem_wasm::wasm_sidecar_manifest_path(path);
                     if sidecar.is_file() {
                         paths.insert(sidecar);
                     } else {
@@ -276,31 +322,89 @@ impl FileProviderSource {
             collect_python_dependency_paths(&self.root, &mut paths)?;
         }
 
+        for (absolute, _relative) in self.resource_paths()? {
+            paths.insert(absolute);
+        }
+
         Ok(paths.into_iter().collect())
     }
 
+    /// Manifest-backed provider files (`.json`/`.ts`/`.wasm`/`.py`/`.md`),
+    /// from the provider root plus the structured `tools/` and `prompts/`
+    /// subdirectories, if present. Root-level files remain supported for
+    /// compatibility per the drop-in provider layout contract; new docs and
+    /// examples should prefer the structured layout. Neither subdirectory is
+    /// scanned recursively — same flat-directory semantics as root.
     fn provider_paths(&self) -> Result<Vec<PathBuf>, FileProviderLoadError> {
         if !self.root.exists() {
             return Ok(Vec::new());
         }
-        let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
-            path: self.root.clone(),
-            message: format!("failed to read provider directory: {source}"),
-        })?;
         let mut paths = Vec::new();
-        for entry in entries {
-            let entry = entry.map_err(|source| FileProviderLoadError {
-                path: self.root.clone(),
-                message: format!("failed to read provider directory entry: {source}"),
+        collect_flat_files(&self.root, &mut paths, |path| {
+            is_provider_file(path) && !is_wasm_sidecar_manifest(path)
+        })?;
+        let tools_dir = self.root.join("tools");
+        if tools_dir.is_dir() {
+            collect_flat_files(&tools_dir, &mut paths, |path| {
+                is_tool_file(path) && !is_wasm_sidecar_manifest(path)
             })?;
-            let path = entry.path();
-            if path.is_file() && is_provider_file(&path) && !is_wasm_sidecar_manifest(&path) {
-                paths.push(path);
-            }
+        }
+        let prompts_dir = self.root.join("prompts");
+        if prompts_dir.is_dir() {
+            collect_flat_files(&prompts_dir, &mut paths, is_markdown_prompt_file)?;
         }
         paths.sort();
         Ok(paths)
     }
+
+    /// Files under the structured `resources/` subdirectory, recursively,
+    /// as `(absolute_path, path_relative_to_resources_dir)` pairs. See
+    /// `filesystem_resources::resource_paths` for the trust-boundary
+    /// enforcement this delegates to.
+    fn resource_paths(&self) -> Result<Vec<(PathBuf, PathBuf)>, FileProviderLoadError> {
+        filesystem_resources::resource_paths(&self.root)
+    }
+
+    /// `resource_paths()` triples with the canonicalized `resources/`
+    /// directory attached to each, so `ResourceFileProvider` can re-verify
+    /// containment at read time against the same root discovery validated,
+    /// closing the TOCTOU window between the two.
+    fn resource_pairs_with_canonical_root(
+        &self,
+    ) -> Result<Vec<(PathBuf, PathBuf, PathBuf)>, FileProviderLoadError> {
+        let pairs = self.resource_paths()?;
+        if pairs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let canonical_root = filesystem_resources::canonical_resources_root(&self.root)?
+            .expect("non-empty resource_paths() implies the resources dir exists");
+        Ok(pairs
+            .into_iter()
+            .map(|(absolute, relative)| (absolute, relative, canonical_root.clone()))
+            .collect())
+    }
+}
+
+fn collect_flat_files(
+    dir: &Path,
+    paths: &mut Vec<PathBuf>,
+    accept: impl Fn(&Path) -> bool,
+) -> Result<(), FileProviderLoadError> {
+    let entries = fs::read_dir(dir).map_err(|source| FileProviderLoadError {
+        path: dir.to_path_buf(),
+        message: format!("failed to read provider directory: {source}"),
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|source| FileProviderLoadError {
+            path: dir.to_path_buf(),
+            message: format!("failed to read provider directory entry: {source}"),
+        })?;
+        let path = entry.path();
+        if path.is_file() && accept(&path) {
+            paths.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn collect_python_dependency_paths(
@@ -448,6 +552,15 @@ fn is_provider_file(path: &Path) -> bool {
     }
 }
 
+/// The structured `providers/tools/` directory only owns action-like files —
+/// no `.md`, which belongs to `providers/prompts/` instead.
+fn is_tool_file(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|extension| extension.to_str()),
+        Some("json" | "ts" | "wasm" | "py")
+    )
+}
+
 /// A `.md` file is a prompt provider unless it's the directory's own README —
 /// `examples/providers/README.md` documents the directory, it isn't a prompt.
 fn is_markdown_prompt_file(path: &Path) -> bool {
@@ -555,8 +668,8 @@ fn load_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
             })
         }
         Some("ts") => load_ts_catalog_value(path),
-        Some("wasm") => load_wasm_catalog_value(path),
-        Some("md") => load_markdown_catalog_value(path),
+        Some("wasm") => filesystem_wasm::load_wasm_catalog_value(path),
+        Some("md") => filesystem_prompts::load_markdown_catalog_value(path),
         _ => Err(FileProviderLoadError {
             path: path.to_path_buf(),
             message: "unsupported provider file extension".to_owned(),
@@ -613,168 +726,6 @@ fn extract_ts_manifest(text: &str) -> Option<&str> {
         }
     }
     None
-}
-
-fn load_wasm_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
-    let sidecar_path = wasm_sidecar_manifest_path(path);
-    if sidecar_path.is_file() {
-        return serde_json::from_slice(&fs::read(&sidecar_path).map_err(|source| {
-            FileProviderLoadError {
-                path: sidecar_path.clone(),
-                message: format!("failed to read WASM provider sidecar manifest: {source}"),
-            }
-        })?)
-        .map_err(|source| FileProviderLoadError {
-            path: sidecar_path,
-            message: format!("invalid WASM provider sidecar manifest JSON: {source}"),
-        });
-    }
-
-    let bytes = fs::read(path).map_err(|source| FileProviderLoadError {
-        path: path.to_path_buf(),
-        message: format!("failed to read WASM provider: {source}"),
-    })?;
-    let payload =
-        wasm_custom_section(&bytes, "soma.provider").ok_or_else(|| FileProviderLoadError {
-            path: path.to_path_buf(),
-            message: "WASM provider must contain a `soma.provider` custom section".to_owned(),
-        })?;
-    serde_json::from_slice(payload).map_err(|source| FileProviderLoadError {
-        path: path.to_path_buf(),
-        message: format!("invalid WASM provider manifest JSON: {source}"),
-    })
-}
-
-fn wasm_sidecar_manifest_path(path: &Path) -> PathBuf {
-    path.with_file_name(format!(
-        "{}.json",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-    ))
-}
-
-fn wasm_custom_section<'a>(bytes: &'a [u8], wanted_name: &str) -> Option<&'a [u8]> {
-    if bytes.len() < 8 || &bytes[..4] != b"\0asm" || bytes[4..8] != [1, 0, 0, 0] {
-        return None;
-    }
-    let mut offset = 8;
-    while offset < bytes.len() {
-        let section_id = *bytes.get(offset)?;
-        offset += 1;
-        let section_len = read_leb_u32(bytes, &mut offset)? as usize;
-        let section_end = offset.checked_add(section_len)?;
-        if section_end > bytes.len() {
-            return None;
-        }
-        if section_id == 0 {
-            let mut cursor = offset;
-            let name_len = read_leb_u32(bytes, &mut cursor)? as usize;
-            let name_end = cursor.checked_add(name_len)?;
-            if name_end <= section_end && &bytes[cursor..name_end] == wanted_name.as_bytes() {
-                return Some(&bytes[name_end..section_end]);
-            }
-        }
-        offset = section_end;
-    }
-    None
-}
-
-fn read_leb_u32(bytes: &[u8], offset: &mut usize) -> Option<u32> {
-    let mut result = 0u32;
-    let mut shift = 0;
-    loop {
-        let byte = *bytes.get(*offset)?;
-        *offset += 1;
-        result |= u32::from(byte & 0x7f) << shift;
-        if byte & 0x80 == 0 {
-            return Some(result);
-        }
-        shift += 7;
-        if shift >= 32 {
-            return None;
-        }
-    }
-}
-
-/// Synthesizes a single-prompt `static-rust` manifest `Value` from a Markdown
-/// file: the file stem becomes both the provider name and the prompt name,
-/// the first `# Heading` becomes the description, and the full file body
-/// becomes the prompt `template`. Provider names and MCP primitive (prompt)
-/// names live in separate uniqueness namespaces
-/// (`filesystem_uniqueness::DirectoryNamespace`), so reusing the same slug
-/// for both is safe and keeps `soma providers list`'s reported `provider_id`
-/// matching the resulting `prompts/get` name.
-fn load_markdown_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
-    let text = fs::read_to_string(path).map_err(|source| FileProviderLoadError {
-        path: path.to_path_buf(),
-        message: format!("failed to read Markdown provider: {source}"),
-    })?;
-    let stem = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("prompt");
-    let name = prompt_name_from_file_stem(stem);
-    let description =
-        first_markdown_heading(&text).unwrap_or_else(|| format!("Markdown prompt from {stem}"));
-
-    Ok(json!({
-        "schema_version": 1,
-        "provider": {
-            "name": name.clone(),
-            "kind": "static-rust",
-            "title": description,
-            "description": format!("Markdown prompt provider loaded from {}", path.display()),
-            "source": path.display().to_string(),
-        },
-        "prompts": [{
-            "name": name,
-            "description": description,
-            "template": text,
-        }],
-    }))
-}
-
-/// Derives a schema-valid `name` (`^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$`) from a
-/// file stem: lowercases, collapses runs of non-alphanumerics to a single
-/// hyphen, and trims trailing hyphens. Falls back to a `prompt-` prefix when
-/// the result would not otherwise start with a lowercase letter.
-fn prompt_name_from_file_stem(stem: &str) -> String {
-    let mut output = String::new();
-    let mut previous_separator = false;
-    for ch in stem.chars().flat_map(char::to_lowercase) {
-        if ch.is_ascii_alphanumeric() {
-            output.push(ch);
-            previous_separator = false;
-        } else if !previous_separator && !output.is_empty() {
-            output.push('-');
-            previous_separator = true;
-        }
-    }
-    while output.ends_with('-') {
-        output.pop();
-    }
-    if output.is_empty() {
-        return "prompt".to_owned();
-    }
-    if output
-        .chars()
-        .next()
-        .is_some_and(|ch| ch.is_ascii_lowercase())
-    {
-        output
-    } else {
-        format!("prompt-{output}")
-    }
-}
-
-fn first_markdown_heading(text: &str) -> Option<String> {
-    text.lines().find_map(|line| {
-        let trimmed = line.trim();
-        let heading = trimmed.strip_prefix("# ")?;
-        let heading = heading.trim();
-        (!heading.is_empty()).then(|| heading.to_owned())
-    })
 }
 
 fn ensure_kind_matches(

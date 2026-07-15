@@ -4,6 +4,23 @@
 directory with `SOMA_PROVIDER_DIR` at runtime or with
 `soma providers ... --dir <path>` for local checks.
 
+## Structured Directory Layout
+
+Beyond root-level files, `soma` also scans a structured layout:
+
+```text
+providers/
+  tools/       # .json, .ts, .wasm, .py — same rules as root
+  prompts/     # .md — same rules as root
+  resources/   # any file (recursive) — see "Resources" below
+```
+
+`tools/` and `prompts/` are flat (non-recursive) and use the exact same
+file-type rules as root-level files — they're purely an organizational
+convenience. Root-level files keep working unchanged; new examples and docs
+prefer the structured layout. See
+`docs/contracts/drop-in-provider-layout.md` for the full contract.
+
 ## Supported Files
 
 | Extension | Provider kind | What is loaded |
@@ -105,8 +122,14 @@ soma my_provider_action --json '{"message":"hello"}'
 
 MCP servers refresh file providers when clients list tools or read the tools
 resource, so a newly dropped provider appears without rebuilding the binary.
-MCP servers also refresh when clients list or get prompts, so a newly dropped
-Markdown prompt appears without rebuilding the binary.
+MCP servers also refresh when clients list/get prompts or list/read
+resources, so a newly dropped Markdown prompt or `providers/resources/` file
+appears without rebuilding the binary.
+
+If a refresh fails — an invalid file, a name/URI collision, a symlink that
+escapes the provider root — the server logs a warning and keeps serving the
+last valid snapshot rather than failing every other, unrelated, already-loaded
+provider's requests too.
 
 HTTP dispatch uses the same registry:
 
@@ -139,6 +162,45 @@ becomes the prompt description when present, and the full Markdown file is
 returned as the prompt message. A `README.md` in the provider directory is
 never treated as a prompt.
 
+## Resources
+
+Drop a file into `providers/resources/` (recursive) to expose it as an MCP
+resource. Every file that isn't a `.ts` reader becomes a static resource;
+`.ts` files become dynamic resource templates.
+
+**Static** — the path relative to `resources/`, minus the extension, becomes
+the URI:
+
+```text
+providers/resources/api/schema.json  ->  soma://resources/api/schema
+```
+
+`name` is the joined path segments, `description` comes from the first `#
+Heading` for `.md` files (a generated fallback otherwise), and `mime_type` is
+inferred from the extension. Files over 10 MiB are rejected.
+
+**Dynamic** — `.ts` files export `async function read(input)` and use
+bracket segments for path parameters, the same convention as
+`providers/prompts/`'s naming but applied to directory structure:
+
+```text
+providers/resources/service/[name].ts       -> soma://resources/service/{name}
+providers/resources/repo/file/[...path].ts  -> soma://resources/repo/file/{path}
+```
+
+`input` is `{ uri, params, query }`; the reader returns `{ text, mimeType? }`,
+`{ json }`, or `{ blob, mimeType }`. Dynamic readers run through the same
+sandboxed Node sidecar `ai-sdk` tool providers use — no network or filesystem
+access beyond what the script itself does, no inherited environment
+variables.
+
+Both static and dynamic resource files are recursively discovered with a
+path-traversal check: a symlink whose target resolves outside the
+`resources/` root fails the directory scan rather than being silently loaded.
+See `docs/contracts/drop-in-provider-layout.md` for the full contract,
+including URI-matching precedence and ambiguity rules.
+
 ## Examples
 
-See `examples/providers/`.
+See `examples/providers/`, including `examples/providers/resources/` for the
+structured resources layout.

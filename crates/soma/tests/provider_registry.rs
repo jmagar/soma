@@ -8,8 +8,9 @@ use soma_contracts::providers::{
 };
 use soma_service::capabilities::CapabilityBroker;
 use soma_service::provider_registry::{
-    Provider, ProviderAuthMode, ProviderCall, ProviderOutput, ProviderPrincipal, ProviderRegistry,
-    ProviderRequestLimits, ProviderSurface,
+    DynamicResourceTemplate, Provider, ProviderAuthMode, ProviderCall, ProviderOutput,
+    ProviderPrincipal, ProviderRegistry, ProviderRequestLimits, ProviderSurface,
+    ResourceReadOutput,
 };
 use soma_service::ProviderError;
 use tokio::sync::Notify;
@@ -111,7 +112,7 @@ fn catalog_with_primitives(provider: &str) -> ProviderCatalog {
         prompts: vec![ProviderPrompt {
             name: "brief_prompt".to_owned(),
             description: "Prompt for a compact brief".to_owned(),
-            template: None,
+            template: Some("Summarize {{topic}} in three bullet points.".to_owned()),
             arguments_schema: Some(json!({
                 "type": "object",
                 "properties": {
@@ -225,6 +226,12 @@ fn inspection_report_includes_provider_routes_schemas_prompts_and_resources() {
     assert_eq!(provider["tools"][0]["rest"]["path"], "/v1/weather");
     assert_eq!(provider["tools"][0]["surfaces"]["rest"], true);
     assert_eq!(provider["prompts"][0]["name"], "brief_prompt");
+    assert_eq!(
+        provider["prompts"][0]["template"], "Summarize {{topic}} in three bullet points.",
+        "inspection_report must include prompt.template — it's the field \
+         a remote-adapter server's RemoteCatalogProvider reconstructs \
+         ProviderPrompt.template from"
+    );
     assert_eq!(
         provider["prompts"][0]["arguments_schema"]["properties"]["topic"]["type"],
         "string"
@@ -531,4 +538,406 @@ async fn destructive_provider_actions_require_confirmation() {
         .dispatch(confirmed)
         .await
         .expect("confirmed destructive action should dispatch");
+}
+
+/// A `Provider` whose only job is to serve resources — either a fixed static
+/// catalog resource, or a dynamic template that echoes captured params back
+/// as text, letting these tests exercise `ProviderRegistry::read_resource`
+/// without going through the filesystem.
+#[derive(Clone)]
+struct ResourceProvider {
+    catalog: ProviderCatalog,
+    dynamic_template: Option<DynamicResourceTemplate>,
+}
+
+#[async_trait]
+impl Provider for ResourceProvider {
+    fn catalog(&self) -> ProviderCatalog {
+        self.catalog.clone()
+    }
+
+    async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
+        Err(ProviderError::validation(
+            &self.catalog.provider.name,
+            &call.action,
+            "no_actions",
+            "this test provider has no callable actions",
+        ))
+    }
+
+    fn dynamic_resource_templates(&self) -> Vec<DynamicResourceTemplate> {
+        self.dynamic_template.clone().into_iter().collect()
+    }
+
+    fn supports_resource_reads(&self) -> bool {
+        true
+    }
+
+    async fn read_resource(
+        &self,
+        uri: &str,
+        params: &std::collections::BTreeMap<String, String>,
+    ) -> Result<ResourceReadOutput, ProviderError> {
+        if let Some(resource) = self
+            .catalog
+            .resources
+            .iter()
+            .find(|r| r.uri_template == uri)
+        {
+            return Ok(ResourceReadOutput::Text {
+                text: format!("static:{}", resource.name),
+                mime_type: resource.mime_type.clone(),
+            });
+        }
+        if params.is_empty() {
+            return Ok(ResourceReadOutput::Text {
+                text: format!("dynamic:{uri}"),
+                mime_type: None,
+            });
+        }
+        let rendered = params
+            .iter()
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        Ok(ResourceReadOutput::Text {
+            text: format!("dynamic:{rendered}"),
+            mime_type: None,
+        })
+    }
+}
+
+fn resource_catalog(provider: &str, resource: ProviderResource) -> ProviderCatalog {
+    ProviderManifest {
+        resources: vec![resource],
+        ..catalog(provider, Vec::new())
+    }
+}
+
+fn demo_resource(scope: Option<&str>) -> ProviderResource {
+    ProviderResource {
+        uri_template: "soma://resources/runbook".to_owned(),
+        name: "runbook".to_owned(),
+        description: "Runbook".to_owned(),
+        mime_type: Some("text/markdown".to_owned()),
+        scope: scope.map(str::to_owned),
+        mcp: None,
+        annotations: json!({}),
+    }
+}
+
+#[tokio::test]
+async fn static_resource_read_returns_provider_content() {
+    let provider = Arc::new(ResourceProvider {
+        catalog: resource_catalog("demo", demo_resource(None)),
+        dynamic_template: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+    let output = registry
+        .read_resource(
+            "soma://resources/runbook",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect("static resource should resolve");
+    match output {
+        ResourceReadOutput::Text { text, .. } => assert_eq!(text, "static:runbook"),
+        ResourceReadOutput::Blob { .. } => panic!("expected text output"),
+    }
+}
+
+#[tokio::test]
+async fn unknown_resource_uri_is_rejected() {
+    let provider = Arc::new(ResourceProvider {
+        catalog: catalog("demo", Vec::new()),
+        dynamic_template: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+    let error = registry
+        .read_resource(
+            "soma://resources/missing",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect_err("unknown resource must be rejected");
+    assert_eq!(&*error.code, "unknown_resource");
+}
+
+#[tokio::test]
+async fn resource_scope_is_enforced_by_registry() {
+    let provider = Arc::new(ResourceProvider {
+        catalog: resource_catalog("demo", demo_resource(Some("soma:write"))),
+        dynamic_template: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+    let error = registry
+        .read_resource(
+            "soma://resources/runbook",
+            &ProviderPrincipal {
+                subject: "reader".to_owned(),
+                scopes: vec!["soma:read".to_owned()],
+            },
+            ProviderAuthMode::Mounted,
+        )
+        .await
+        .expect_err("read-only principal should be denied");
+    assert_eq!(&*error.code, "insufficient_scope");
+
+    registry
+        .read_resource(
+            "soma://resources/runbook",
+            &ProviderPrincipal {
+                subject: "writer".to_owned(),
+                scopes: vec!["soma:write".to_owned()],
+            },
+            ProviderAuthMode::Mounted,
+        )
+        .await
+        .expect("write scope should satisfy a write-scoped resource");
+}
+
+#[tokio::test]
+async fn resource_scope_is_ignored_outside_mounted_auth() {
+    let provider = Arc::new(ResourceProvider {
+        catalog: resource_catalog("demo", demo_resource(Some("soma:write"))),
+        dynamic_template: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+    registry
+        .read_resource(
+            "soma://resources/runbook",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect("scope should not be enforced outside Mounted auth, matching tool enforce_scope");
+}
+
+#[tokio::test]
+async fn duplicate_resource_uri_fails_snapshot_validation() {
+    // Different resource *names* so the pre-existing name-based
+    // `duplicate_mcp_primitive` check doesn't fire first — this isolates the
+    // URI-based check this test actually targets.
+    let mut second_resource = demo_resource(None);
+    second_resource.name = "runbook-2".to_owned();
+    let first = Arc::new(ResourceProvider {
+        catalog: resource_catalog("first", demo_resource(None)),
+        dynamic_template: None,
+    });
+    let second = Arc::new(ResourceProvider {
+        catalog: resource_catalog("second", second_resource),
+        dynamic_template: None,
+    });
+    let error = match ProviderRegistry::new(vec![first, second]) {
+        Ok(_) => panic!("duplicate resource URI should fail"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "duplicate_resource_uri");
+}
+
+#[tokio::test]
+async fn dynamic_resource_template_matches_and_captures_params() {
+    let provider = Arc::new(ResourceProvider {
+        catalog: catalog("demo", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(
+                &["service", "[name]"],
+                "service-status",
+                "Live service status",
+                None,
+            )
+            .expect("valid template"),
+        ),
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+    assert_eq!(
+        registry.snapshot().dynamic_resource_templates()[0]
+            .1
+            .uri_template(),
+        "soma://resources/service/{name}"
+    );
+
+    let output = registry
+        .read_resource(
+            "soma://resources/service/checkout",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect("dynamic template should match");
+    match output {
+        ResourceReadOutput::Text { text, .. } => assert_eq!(text, "dynamic:name=checkout"),
+        ResourceReadOutput::Blob { .. } => panic!("expected text output"),
+    }
+}
+
+#[tokio::test]
+async fn ambiguous_dynamic_resource_templates_fail_snapshot_validation() {
+    let first = Arc::new(ResourceProvider {
+        catalog: catalog("first", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(
+                &["service", "[name]"],
+                "by-name",
+                "d",
+                None,
+            )
+            .expect("valid template"),
+        ),
+    });
+    let second = Arc::new(ResourceProvider {
+        catalog: catalog("second", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["service", "[id]"], "by-id", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    let error = match ProviderRegistry::new(vec![first, second]) {
+        Ok(_) => panic!("ambiguous dynamic resource templates should fail"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "ambiguous_resource_template");
+}
+
+#[tokio::test]
+async fn provider_declaring_resources_without_read_support_is_excluded_from_live_serving() {
+    // EchoProvider inherits Provider::supports_resource_reads()'s `false`
+    // default (unlike ResourceProvider above, which overrides it) — the
+    // same situation as an OpenAPI/MCP/ai-sdk/WASM/Python provider
+    // declaring a manifest `resources[]` field it has no way to serve.
+    // Registration must still succeed (inspection/reporting legitimately
+    // reads `catalog().resources` directly, regardless of live-serving
+    // support) but the resource must not be listed or readable — the
+    // previously-broken outcome was listing it and then always failing the
+    // read.
+    let provider = Arc::new(EchoProvider {
+        catalog: resource_catalog("echo", demo_resource(None)),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registration should succeed");
+
+    assert!(
+        registry
+            .snapshot()
+            .match_resource("soma://resources/runbook")
+            .is_none(),
+        "a resource from a provider that can't serve reads must not be live-matchable"
+    );
+    let error = registry
+        .read_resource(
+            "soma://resources/runbook",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect_err("unreachable resource must be rejected as unknown, not attempted");
+    assert_eq!(&*error.code, "unknown_resource");
+}
+
+#[tokio::test]
+async fn resource_precedence_prefers_exact_dynamic_template_over_parameterized() {
+    let exact = Arc::new(ResourceProvider {
+        catalog: catalog("exact", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(
+                &["service", "status"],
+                "status",
+                "d",
+                None,
+            )
+            .expect("valid template"),
+        ),
+    });
+    let parameterized = Arc::new(ResourceProvider {
+        catalog: catalog("parameterized", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(
+                &["service", "[name]"],
+                "by-name",
+                "d",
+                None,
+            )
+            .expect("valid template"),
+        ),
+    });
+    let registry = ProviderRegistry::new(vec![exact, parameterized]).expect("registry");
+
+    let output = registry
+        .read_resource(
+            "soma://resources/service/status",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect("should match the exact template");
+    match output {
+        ResourceReadOutput::Text { text, .. } => assert_eq!(
+            text, "dynamic:soma://resources/service/status",
+            "the exact (zero-param) template must win over a parameterized one for the same concrete URI"
+        ),
+        ResourceReadOutput::Blob { .. } => panic!("expected text output"),
+    }
+
+    let output = registry
+        .read_resource(
+            "soma://resources/service/other",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect("should match the parameterized template");
+    match output {
+        ResourceReadOutput::Text { text, .. } => assert_eq!(text, "dynamic:name=other"),
+        ResourceReadOutput::Blob { .. } => panic!("expected text output"),
+    }
+}
+
+#[tokio::test]
+async fn exact_resource_ambiguous_with_zero_param_dynamic_template_fails_snapshot_validation() {
+    // A static, exact `catalog().resources[]` entry and a zero-param
+    // dynamic template rendering to the same URI are just as ambiguous as
+    // two same-shape dynamic templates — the exact tier would otherwise
+    // silently and permanently shadow the dynamic one at read time.
+    let static_provider = Arc::new(ResourceProvider {
+        catalog: resource_catalog(
+            "static",
+            ProviderResource {
+                uri_template: "soma://resources/service/status".to_owned(),
+                name: "status".to_owned(),
+                description: "d".to_owned(),
+                mime_type: None,
+                scope: None,
+                mcp: None,
+                annotations: json!({}),
+            },
+        ),
+        dynamic_template: None,
+    });
+    let dynamic_provider = Arc::new(ResourceProvider {
+        catalog: catalog("dynamic", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(
+                &["service", "status"],
+                "status",
+                "d",
+                None,
+            )
+            .expect("valid template"),
+        ),
+    });
+    let error = match ProviderRegistry::new(vec![static_provider, dynamic_provider]) {
+        Ok(_) => panic!(
+            "cross-tier ambiguity between an exact resource and a dynamic template should fail"
+        ),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "ambiguous_resource_template");
 }

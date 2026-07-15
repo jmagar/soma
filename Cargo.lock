@@ -3576,6 +3576,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "base64",
  "jsonschema",
  "metrics",
  "reqwest 0.12.28",

@@ -21,7 +21,7 @@
       "soma.provider custom section"
     ]
   },
-  "provider_fingerprint": "sha256:15886cdadcb08343b54cdcf065b2fcb6d164a5ca76b9df464139b8ef25399e80",
+  "provider_fingerprint": "sha256:ce1be4dd0185d4fd8989f796b521d57e6ec2da5316cceab44d9d5960792e5a22",
   "providers": [
     {
       "description": "Self-contained AI SDK sidecar tools for Soma provider smoke tests.",
@@ -156,7 +156,13 @@
       "elicitation": [],
       "kind": "static-rust",
       "name": "static-rust",
-      "prompts": [],
+      "prompts": [
+        {
+          "arguments_schema": null,
+          "description": "Check the server status and get a personalised greeting to verify the MCP connection is working end-to-end.",
+          "name": "quick_start"
+        }
+      ],
       "resources": [],
       "tasks": [],
       "title": "Built-in Rust actions",

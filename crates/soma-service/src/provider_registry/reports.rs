@@ -65,6 +65,7 @@ impl RegistrySnapshot {
                         json!({
                             "name": prompt.name.clone(),
                             "description": prompt.description.clone(),
+                            "template": prompt.template.clone(),
                             "arguments_schema": prompt.arguments_schema.clone(),
                             "scope": prompt.scope.clone(),
                             "surfaces": {

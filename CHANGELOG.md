@@ -22,6 +22,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider directory exposes it as an MCP prompt (file stem → prompt name,
   first `# Heading` → description, full file body → prompt template).
   `README.md` is never treated as a prompt. See `docs/PROVIDERS.md`.
+- Added a structured `providers/{tools,prompts,resources}/` directory layout
+  alongside root-level file loading. `tools/` and `prompts/` reuse the
+  existing root-level file-type rules; `resources/` is new — any file
+  (recursive) becomes an MCP resource, with static files served directly and
+  `.ts` files dispatched as dynamic resource readers (parameterized/catch-all
+  path templates, e.g. `service/[name].ts` → `soma://resources/service/{name}`)
+  through the same sandboxed Node sidecar `ai-sdk` tool providers use.
+  Enforces a path-traversal trust boundary (symlinks cannot escape the
+  provider root) and `resource.scope` enforcement matching `tool.scope`.
+  `resources/list`, `resources/templates/list`, and `resources/read` are
+  wired into the live MCP surface for the first time. A directory refresh
+  failure now keeps the last valid snapshot active instead of failing every
+  provider's requests. See `docs/PROVIDERS.md` and
+  `docs/contracts/drop-in-provider-layout.md`.
 
 ### Fixed
 
@@ -31,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sse-stream` to 0.2.4 for rmcp 2.2, and installed a rustls crypto provider
   before building the rmcp streamable HTTP client transport (reqwest 0.13
   panics without one). Warm CI caches had masked all four breakages.
+- Fixed `RegistrySnapshot::inspection_report` omitting `prompt.template` from
+  its JSON, which meant a `SOMA_RUNTIME_MODE=remote` server's
+  `RemoteCatalogProvider` always reconstructed remote Markdown provider
+  prompts with `template: None` and silently dropped them from
+  `prompts/list`/`prompts/get` (`servable_prompts` requires a template),
+  even though the same prompts served correctly in local mode.
 
 ## [0.4.7]
 

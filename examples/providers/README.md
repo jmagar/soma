@@ -12,3 +12,9 @@ local development does not load sample actions by accident.
 
 Markdown files in this directory are exposed as MCP prompts. For example,
 `code-review.md` appears as the `code-review` prompt.
+
+`resources/` demonstrates the structured resources layout: `runbook.md` is a
+static resource (`soma://resources/runbook`), and `service/[name].ts` is a
+dynamic resource template (`soma://resources/service/{name}`) that requires
+Node to actually read. See `docs/PROVIDERS.md`'s Resources section and
+`docs/contracts/drop-in-provider-layout.md`.

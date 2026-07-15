@@ -45,6 +45,7 @@ fn inspection_report_maps_remote_inventory_to_catalog() {
                     {
                         "name": "quick-start",
                         "description": "Start quickly",
+                        "template": "# Quick Start\n\nDo the thing.\n",
                         "arguments_schema": {"type": "object"},
                         "scope": "soma:read",
                         "surfaces": {"mcp": true}
@@ -96,6 +97,13 @@ fn inspection_report_maps_remote_inventory_to_catalog() {
 
     let prompt = &catalog.prompts[0];
     assert_eq!(prompt.name, "quick-start");
+    assert_eq!(
+        prompt.template.as_deref(),
+        Some("# Quick Start\n\nDo the thing.\n"),
+        "a remote catalog report must round-trip prompt.template — without it, \
+         a Markdown provider prompt served locally would be silently dropped by \
+         servable_prompts() when the same server runs in remote-adapter mode"
+    );
     assert!(prompt.mcp.as_ref().expect("prompt mcp overlay").enabled);
 
     let resource = &catalog.resources[0];
