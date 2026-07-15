@@ -2,8 +2,8 @@ use crate::config::UpstreamConfig;
 use crate::upstream::pool::{InProcessUpstream, ToolCall, UpstreamPool};
 use crate::upstream::{ToolDescriptor, UpstreamError};
 
-#[test]
-fn routed_tool_call_uses_in_process_upstream() {
+#[tokio::test]
+async fn routed_tool_call_uses_in_process_upstream() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -21,13 +21,14 @@ fn routed_tool_call_uses_in_process_upstream() {
             tool: "echo".to_owned(),
             params: serde_json::json!({}),
         })
+        .await
         .unwrap();
 
     assert_eq!(result, serde_json::json!({"echo": "ok"}));
 }
 
-#[test]
-fn exposed_tool_filter_fails_closed() {
+#[tokio::test]
+async fn exposed_tool_filter_fails_closed() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -44,13 +45,14 @@ fn exposed_tool_filter_fails_closed() {
             tool: "delete".to_owned(),
             params: serde_json::json!({}),
         })
+        .await
         .unwrap_err();
 
     assert!(matches!(error, UpstreamError::NotExposed { .. }));
 }
 
-#[test]
-fn params_must_be_objects() {
+#[tokio::test]
+async fn params_must_be_objects() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -66,6 +68,7 @@ fn params_must_be_objects() {
             tool: "echo".to_owned(),
             params: serde_json::json!("not-object"),
         })
+        .await
         .unwrap_err();
 
     assert_eq!(error, UpstreamError::ParamsMustBeObject);

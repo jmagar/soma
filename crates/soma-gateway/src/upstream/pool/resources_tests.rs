@@ -2,8 +2,8 @@ use crate::config::UpstreamConfig;
 use crate::upstream::pool::{InProcessUpstream, UpstreamPool};
 use crate::upstream::{ResourceDescriptor, TransportKind, UpstreamSnapshot};
 
-#[test]
-fn resources_obey_proxy_flag_and_filters() {
+#[tokio::test]
+async fn resources_obey_proxy_flag_and_filters() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -27,13 +27,13 @@ fn resources_obey_proxy_flag_and_filters() {
     )
     .unwrap();
 
-    let resources = pool.list_resources("local").unwrap();
+    let resources = pool.list_resources("local").await.unwrap();
     assert_eq!(resources.len(), 1);
     assert_eq!(resources[0].uri, "file://allowed/one");
 }
 
-#[test]
-fn resources_return_empty_when_proxy_disabled() {
+#[tokio::test]
+async fn resources_return_empty_when_proxy_disabled() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -52,5 +52,5 @@ fn resources_return_empty_when_proxy_disabled() {
     )
     .unwrap();
 
-    assert!(pool.list_resources("local").unwrap().is_empty());
+    assert!(pool.list_resources("local").await.unwrap().is_empty());
 }

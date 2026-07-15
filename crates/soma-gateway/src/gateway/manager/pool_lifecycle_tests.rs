@@ -3,8 +3,8 @@ use crate::upstream::TransportKind;
 
 use super::*;
 
-#[test]
-fn build_pool_from_config_keeps_transport_state_in_pool() {
+#[tokio::test]
+async fn build_pool_from_config_keeps_transport_state_in_pool() {
     let pool = build_pool_from_config(&GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "http".to_owned(),
@@ -16,7 +16,7 @@ fn build_pool_from_config_keeps_transport_state_in_pool() {
     .unwrap();
 
     assert_eq!(
-        pool.discover_upstream("http").unwrap().transport,
+        pool.discover_upstream("http").await.unwrap().transport,
         TransportKind::HttpJson
     );
 }

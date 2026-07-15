@@ -110,8 +110,8 @@ fn wildcard_public_url_is_rejected() {
         .contains("SOMA_MCP_PUBLIC_URL must not contain wildcard hosts"));
 }
 
-#[test]
-fn gateway_product_state_loads_filesystem_config() {
+#[tokio::test]
+async fn gateway_product_state_loads_filesystem_config() {
     let temp = tempfile::tempdir().expect("tempdir");
     let home = temp.path().join(".soma");
     let paths = GatewayPaths::new(home).expect("paths");
@@ -129,5 +129,8 @@ fn gateway_product_state_loads_filesystem_config() {
 
     let state = gateway_product_state_from_store(store).expect("gateway state");
 
-    assert_eq!(state.discover().expect("discover")[0].name, "persisted");
+    assert_eq!(
+        state.discover().await.expect("discover")[0].name,
+        "persisted"
+    );
 }

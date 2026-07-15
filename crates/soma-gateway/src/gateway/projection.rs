@@ -12,8 +12,8 @@ pub struct GatewayProjection {
 }
 
 impl GatewayProjection {
-    pub fn from_manager(manager: &GatewayManager) -> Result<Self, GatewayManagerError> {
-        let snapshots = manager.discover()?;
+    pub async fn from_manager(manager: &GatewayManager) -> Result<Self, GatewayManagerError> {
+        let snapshots = manager.discover().await?;
         let upstream_count = snapshots.len();
         let connected_count = snapshots
             .iter()

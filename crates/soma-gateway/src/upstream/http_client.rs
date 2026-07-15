@@ -6,14 +6,12 @@ use super::{CapScope, ResponseCaps, TransportKind, UpstreamError};
 pub enum HttpTransportDecision {
     Json,
     Sse,
-    UnsupportedWebSocket { reason: String },
+    WebSocket,
 }
 
 pub fn decide_http_transport(url: &str) -> HttpTransportDecision {
     if url.starts_with("ws://") || url.starts_with("wss://") {
-        return HttpTransportDecision::UnsupportedWebSocket {
-            reason: "websocket upstreams are not supported by soma-gateway yet".to_owned(),
-        };
+        return HttpTransportDecision::WebSocket;
     }
     if url.contains("transport=sse") {
         return HttpTransportDecision::Sse;
@@ -25,7 +23,7 @@ pub fn transport_kind_for_decision(decision: &HttpTransportDecision) -> Transpor
     match decision {
         HttpTransportDecision::Json => TransportKind::HttpJson,
         HttpTransportDecision::Sse => TransportKind::HttpSse,
-        HttpTransportDecision::UnsupportedWebSocket { .. } => TransportKind::WebSocketUnsupported,
+        HttpTransportDecision::WebSocket => TransportKind::WebSocket,
     }
 }
 

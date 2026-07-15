@@ -40,7 +40,7 @@ pub async fn v1_gateway_action(
             .unwrap_or_default(),
     );
 
-    match dispatch_gateway_action(&state.gateway, access, &action, params) {
+    match dispatch_gateway_action(&state.gateway, access, &action, params).await {
         Ok(value) => Json(cap_gateway_response(value)).into_response(),
         Err(error) => gateway_error_response(&action, error),
     }
@@ -70,7 +70,6 @@ fn gateway_error_response(action: &str, error: GatewayDispatchError) -> axum::re
             StatusCode::BAD_REQUEST
         }
         GatewayDispatchError::UnknownAction => StatusCode::NOT_FOUND,
-        GatewayDispatchError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         GatewayDispatchError::Manager(error) => manager_error_status(error),
     };
     (status, Json(error.structured(action).to_json())).into_response()
@@ -91,6 +90,9 @@ fn manager_error_status(error: &GatewayManagerError) -> StatusCode {
         GatewayManagerError::Upstream(UpstreamError::Unsupported { .. }) => {
             StatusCode::NOT_IMPLEMENTED
         }
+        GatewayManagerError::Upstream(UpstreamError::LiveConnect { .. })
+        | GatewayManagerError::Upstream(UpstreamError::LiveCall { .. })
+        | GatewayManagerError::OAuth(_) => StatusCode::SERVICE_UNAVAILABLE,
         GatewayManagerError::Upstream(UpstreamError::ResponseTooLarge { .. }) => {
             StatusCode::PAYLOAD_TOO_LARGE
         }

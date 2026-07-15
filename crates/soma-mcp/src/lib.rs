@@ -4,8 +4,11 @@
 //! prompt templates, and dispatch shims. Application state lives in `soma_runtime::server`.
 
 mod conformance;
+mod gateway_proxy;
 mod prompts;
 mod response_paging;
+mod rmcp_adapters;
+mod rmcp_auth;
 pub mod rmcp_server;
 mod schemas;
 mod tools;

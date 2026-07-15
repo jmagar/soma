@@ -1,8 +1,10 @@
 //! Self-contained upstream runtime primitives.
 
+pub mod http_body_cap;
 pub mod http_client;
 pub mod pool;
 pub mod relay;
+pub mod transport;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -54,7 +56,7 @@ pub enum TransportKind {
     HttpJson,
     HttpSse,
     Stdio,
-    WebSocketUnsupported,
+    WebSocket,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -196,6 +198,14 @@ pub enum UpstreamError {
         upstream: String,
         capability: &'static str,
     },
+    #[error("upstream `{upstream}` failed to connect: {message}")]
+    LiveConnect { upstream: String, message: String },
+    #[error("upstream `{upstream}` {operation} failed: {message}")]
+    LiveCall {
+        upstream: String,
+        operation: &'static str,
+        message: String,
+    },
     #[error("{scope:?} payload was {observed_bytes} bytes, exceeding {limit} bytes")]
     ResponseTooLarge {
         scope: CapScope,
@@ -204,6 +214,18 @@ pub enum UpstreamError {
     },
     #[error("tool params must be a JSON object")]
     ParamsMustBeObject,
+}
+
+impl UpstreamError {
+    pub(crate) fn connect(
+        config: &crate::config::UpstreamConfig,
+        error: impl std::fmt::Display,
+    ) -> Self {
+        Self::LiveConnect {
+            upstream: config.name.clone(),
+            message: error.to_string(),
+        }
+    }
 }
 
 #[cfg(test)]

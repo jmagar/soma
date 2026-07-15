@@ -108,6 +108,7 @@ pub struct ProtectedMcpRouteConfigView {
     pub public_path: String,
     pub upstream: Option<String>,
     pub has_backend_url: bool,
+    pub scopes: Vec<String>,
     pub target: Option<ProtectedGatewaySubsetTarget>,
 }
 
@@ -120,6 +121,7 @@ impl From<&ProtectedMcpRouteConfig> for ProtectedMcpRouteConfigView {
             public_path: route.public_path.clone(),
             upstream: route.upstream.clone(),
             has_backend_url: !route.backend_url.trim().is_empty(),
+            scopes: route.scopes.clone(),
             target: route.target.clone(),
         }
     }

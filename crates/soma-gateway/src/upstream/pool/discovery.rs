@@ -3,14 +3,21 @@ use crate::upstream::{CapScope, UpstreamError, UpstreamSnapshot};
 use super::UpstreamPool;
 
 impl UpstreamPool {
-    pub fn discover(&self) -> Result<Vec<UpstreamSnapshot>, UpstreamError> {
+    pub async fn discover(&self) -> Result<Vec<UpstreamSnapshot>, UpstreamError> {
+        self.refresh_all().await;
         let snapshots = self.snapshots();
         let bytes = serde_json::to_vec(&snapshots).map_or(usize::MAX, |bytes| bytes.len());
         self.response_caps().enforce(CapScope::ToolsList, bytes)?;
         Ok(snapshots)
     }
 
-    pub fn discover_upstream(&self, upstream: &str) -> Result<UpstreamSnapshot, UpstreamError> {
+    pub async fn discover_upstream(
+        &self,
+        upstream: &str,
+    ) -> Result<UpstreamSnapshot, UpstreamError> {
+        if let Err(error) = self.ensure_connected(upstream).await {
+            self.record_discovery_error(upstream, error)?;
+        }
         self.with_entry(upstream, |entry| Ok(entry.snapshot.clone()))
     }
 

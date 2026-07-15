@@ -1,9 +1,9 @@
 use crate::config::UpstreamConfig;
 use crate::upstream::pool::UpstreamPool;
-use crate::upstream::{TransportKind, UpstreamHealth};
+use crate::upstream::UpstreamHealth;
 
-#[test]
-fn websocket_configs_are_registered_as_unsupported_not_routable() {
+#[tokio::test]
+async fn websocket_configs_start_unconnected_not_routable() {
     let pool = UpstreamPool::default();
     pool.register_config(UpstreamConfig {
         name: "ws".to_owned(),
@@ -17,14 +17,10 @@ fn websocket_configs_are_registered_as_unsupported_not_routable() {
         pool.upstream_health("ws").unwrap(),
         UpstreamHealth::Unsupported { .. }
     ));
-    assert_eq!(
-        pool.discover_upstream("ws").unwrap().transport,
-        TransportKind::WebSocketUnsupported
-    );
 }
 
-#[test]
-fn disabled_upstreams_are_not_connected() {
+#[tokio::test]
+async fn disabled_upstreams_are_not_connected() {
     let pool = UpstreamPool::default();
     pool.register_config(UpstreamConfig {
         name: "off".to_owned(),

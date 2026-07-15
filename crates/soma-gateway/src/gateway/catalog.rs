@@ -92,6 +92,27 @@ const STANDARD_ACTIONS: &[GatewayAction] = &[
         discovery: false,
         spawn_validation_required: false,
     },
+    GatewayAction {
+        name: "gateway.oauth.start",
+        admin_required: true,
+        destructive: false,
+        discovery: false,
+        spawn_validation_required: false,
+    },
+    GatewayAction {
+        name: "gateway.oauth.status",
+        admin_required: true,
+        destructive: false,
+        discovery: true,
+        spawn_validation_required: false,
+    },
+    GatewayAction {
+        name: "gateway.oauth.clear",
+        admin_required: true,
+        destructive: true,
+        discovery: false,
+        spawn_validation_required: false,
+    },
 ];
 
 #[cfg(test)]

@@ -2,8 +2,8 @@ use crate::config::UpstreamConfig;
 use crate::upstream::pool::{InProcessUpstream, UpstreamPool};
 use crate::upstream::{PromptDescriptor, TransportKind, UpstreamSnapshot};
 
-#[test]
-fn prompts_obey_proxy_flag_and_filters() {
+#[tokio::test]
+async fn prompts_obey_proxy_flag_and_filters() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -26,13 +26,13 @@ fn prompts_obey_proxy_flag_and_filters() {
     )
     .unwrap();
 
-    let prompts = pool.list_prompts("local").unwrap();
+    let prompts = pool.list_prompts("local").await.unwrap();
     assert_eq!(prompts.len(), 1);
     assert_eq!(prompts[0].name, "assist");
 }
 
-#[test]
-fn prompts_return_empty_when_proxy_disabled() {
+#[tokio::test]
+async fn prompts_return_empty_when_proxy_disabled() {
     let pool = UpstreamPool::default();
     let config = UpstreamConfig {
         name: "local".to_owned(),
@@ -51,5 +51,5 @@ fn prompts_return_empty_when_proxy_disabled() {
     )
     .unwrap();
 
-    assert!(pool.list_prompts("local").unwrap().is_empty());
+    assert!(pool.list_prompts("local").await.unwrap().is_empty());
 }

@@ -35,6 +35,10 @@ pub use soma_contracts::token_limit;
 pub use soma_web as web;
 
 #[cfg(feature = "mcp-http")]
+mod protected_routes;
+#[cfg(feature = "mcp-http")]
+mod protected_routes_proxy;
+#[cfg(feature = "mcp-http")]
 mod routes;
 
 #[cfg(any(feature = "cli", feature = "mcp", feature = "api"))]

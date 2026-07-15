@@ -1,4 +1,4 @@
-# Build Self-Contained Soma Gateway Foundation
+# Port Self-Contained Soma Gateway
 
 Date: 2026-07-15
 Epic: `rmcp-template-0lnb`
@@ -6,7 +6,7 @@ Execution branch base observed during planning: `codex/port-palette-app`
 
 ## Goal
 
-Build a self-contained Soma gateway foundation from the Labby gateway design in `/home/jmagar/workspace/lab/crates/labby-gateway`, without claiming live transport parity until real upstream clients are wired and smoked.
+Build a self-contained Soma gateway port from the Labby gateway design in `/home/jmagar/workspace/lab/crates/labby-gateway`, including the live gateway-owned MCP routing surfaces: HTTP/SSE, stdio, websocket, tools, resources, prompts, protected routes, admin config, upstream OAuth, and subject-scoped routing.
 
 `soma-gateway` must not depend on any `labby-*` crate and must not depend on Soma product/runtime/shim crates: `soma`, `soma-runtime`, `soma-service`, `soma-contracts`, `soma-mcp`, `soma-api`, or `soma-cli`.
 
@@ -15,6 +15,8 @@ The only allowed internal Soma dependencies are optional leaf crates when avoidi
 - `soma-auth` behind the `oauth` feature.
 - `soma-codemode` behind the `codemode` feature.
 - `soma-openapi` behind the `openapi` feature, or via `soma-codemode` if that is the cleaner adapter path.
+
+Code Mode and OpenAPI are intentionally feature-gated adapter seams while those crates are being ported. They are not blockers for the gateway crate becoming self-contained or for gateway-owned live MCP transport parity.
 
 All former `labby-runtime`, `labby-primitives`, `labby-winjob`, and dev-only `labby-apis` slices used by the gateway must become local `soma-gateway` modules or test fixtures.
 
@@ -711,28 +713,28 @@ find crates/soma-gateway -type f -name '*.rs' -print0 \
   | awk '$1 > 500 { bad=1; print } END { exit bad }'
 ```
 
-Post-review correction:
+Post-review correction, folded back into execution:
 
-- Do not claim live Labby-equivalent HTTP/SSE/stdio routing until a real async rmcp transport layer is wired and smoked.
-- This branch's corrected acceptance state is a self-contained, config-backed gateway foundation: strict config validation, filesystem persistence, product startup load path, admin add/update/remove/reload mutation, safe redaction, protected-route projection, Code Mode/OpenAPI/palette adapter seams, and accurate `Unsupported`/not-routable status for configured transports that do not yet have live clients.
-- Final smoke for this branch must therefore prove the truthful contract: health, read-only bearer discovery, static bearer admin denial, loopback/admin add-list-remove behavior, no false connected count for unsupported live transports, config view no protected backend leak, route inventory/OpenAPI includes `/v1/gateway/{action}`, and no placeholder success for unknown or unimplemented actions.
-- A later full live-transport pass must restore the stronger smoke requirements: disposable upstream `soma-gateway-smoke`, discovered/exposed counts, likely_stale_count == 0, real routed echo returning `smoke-0lnb`, protected-route no-leak proof, public bearer isolation, OAuth subject miss, relay cross-session isolation, stdio child/grandchild cleanup, and redaction scan over captured smoke logs/results.
+- The earlier "foundation only" acceptance state was rejected. The branch must implement and verify the full self-contained gateway-owned port instead of preserving fake or partial parity language.
+- Gateway-owned live transport parity means real async rmcp routing for HTTP/SSE, stdio, and websocket upstreams; live discovery and calls; tools/resources/prompts proxying; protected route scoping; public bearer isolation; subject-scoped OAuth routing; upstream OAuth lifecycle actions; strict config validation; filesystem persistence; product startup load path; admin add/update/remove/reload/import/test mutation; safe redaction; and route inventory/OpenAPI exposure for `/v1/gateway/{action}`.
+- Code Mode and OpenAPI engine behavior remains behind the feature-gated adapter seams because those are separate crates being ported. The gateway crate must not depend on Labby or Soma product crates to fake those surfaces.
+- Final smoke must prove the stronger live gateway contract: disposable upstream `soma-gateway-smoke`, discovered/exposed counts, real routed echo returning `smoke-0lnb`, protected-route no-leak proof, public bearer isolation, OAuth subject miss, relay cross-session isolation, stdio child/grandchild cleanup, redaction scan over captured smoke logs/results, read-only bearer discovery, admin denial for read-only tokens, loopback/admin add-list-remove behavior, config view no protected backend leak, and no placeholder success for unknown or unimplemented actions.
 
-Broad 20+ mixed-upstream concurrency/stress remains deterministic test coverage once live transports exist; it is not a substitute for the small live smoke.
+Broad 20+ mixed-upstream concurrency/stress remains deterministic test coverage for the live transports; it is not a substitute for the small live smoke.
 
 Closeout:
 
 ```bash
 bd swarm validate rmcp-template-0lnb
-bd close rmcp-template-0lnb.1 rmcp-template-0lnb.2 rmcp-template-0lnb.3 rmcp-template-0lnb.4 rmcp-template-0lnb.5 rmcp-template-0lnb.6 rmcp-template-0lnb.7 rmcp-template-0lnb.8 rmcp-template-0lnb.9 rmcp-template-0lnb.10 rmcp-template-0lnb.11 rmcp-template-0lnb.12 rmcp-template-0lnb.13 rmcp-template-0lnb.14 --reason "Implemented and verified the corrected self-contained gateway foundation"
-bd close rmcp-template-0lnb --reason "Corrected self-contained gateway foundation is implemented, verified, and no longer claims unsupported live transports"
+bd close rmcp-template-0lnb.1 rmcp-template-0lnb.2 rmcp-template-0lnb.3 rmcp-template-0lnb.4 rmcp-template-0lnb.5 rmcp-template-0lnb.6 rmcp-template-0lnb.7 rmcp-template-0lnb.8 rmcp-template-0lnb.9 rmcp-template-0lnb.10 rmcp-template-0lnb.11 rmcp-template-0lnb.12 rmcp-template-0lnb.13 rmcp-template-0lnb.14 --reason "Implemented and verified the self-contained gateway-owned Labby port"
+bd close rmcp-template-0lnb --reason "Self-contained gateway-owned Labby port is implemented and verified"
 git pull --rebase
 bd dolt push
 git push
 git status --short --branch
 ```
 
-Do not run the closeout commands above while review blockers remain. If the branch is only at the corrected foundation state, close reasons must say so and must not say the full Labby gateway port is complete.
+Do not run the closeout commands above while review blockers remain. Close reasons must stay explicit that this is the gateway-owned Labby port and that Code Mode/OpenAPI engines are separate feature-gated crates.
 
 ## Review Workflow After Implementation
 

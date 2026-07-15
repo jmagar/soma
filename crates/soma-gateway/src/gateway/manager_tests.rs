@@ -5,8 +5,8 @@ use crate::usage::MemoryUsageSink;
 
 use super::*;
 
-#[test]
-fn manager_builds_from_gateway_config() {
+#[tokio::test]
+async fn manager_builds_from_gateway_config() {
     let manager = GatewayManager::new(GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "mock".to_owned(),
@@ -18,11 +18,11 @@ fn manager_builds_from_gateway_config() {
     .unwrap();
 
     assert_eq!(manager.lifecycle(), GatewayLifecycle::Ready);
-    assert_eq!(manager.discover().unwrap()[0].name, "mock");
+    assert_eq!(manager.discover().await.unwrap()[0].name, "mock");
 }
 
-#[test]
-fn manager_add_update_and_remove_mutate_config() {
+#[tokio::test]
+async fn manager_add_update_and_remove_mutate_config() {
     let manager = GatewayManager::new(GatewayConfig::default()).unwrap();
 
     manager
@@ -32,7 +32,7 @@ fn manager_add_update_and_remove_mutate_config() {
             ..UpstreamConfig::default()
         })
         .unwrap();
-    assert_eq!(manager.discover().unwrap().len(), 1);
+    assert_eq!(manager.discover().await.unwrap().len(), 1);
 
     manager
         .update_upstream(UpstreamConfig {
@@ -45,22 +45,22 @@ fn manager_add_update_and_remove_mutate_config() {
     assert!(rendered.contains("example.com/updated"));
 
     manager.remove_upstream("mock").unwrap();
-    assert!(manager.discover().unwrap().is_empty());
+    assert!(manager.discover().await.unwrap().is_empty());
 }
 
-#[test]
-fn manager_fails_fast_when_reloading() {
+#[tokio::test]
+async fn manager_fails_fast_when_reloading() {
     let manager = GatewayManager::new(GatewayConfig::default()).unwrap();
     manager.set_lifecycle_for_tests(GatewayLifecycle::Reloading);
 
     assert!(matches!(
-        manager.discover().unwrap_err(),
+        manager.discover().await.unwrap_err(),
         GatewayManagerError::GatewayReloading
     ));
 }
 
-#[test]
-fn manager_records_usage_for_routed_calls() {
+#[tokio::test]
+async fn manager_records_usage_for_routed_calls() {
     let sink = MemoryUsageSink::shared();
     let manager = GatewayManager::with_usage(GatewayConfig::default(), sink.clone()).unwrap();
     let pool = UpstreamPool::default();
@@ -77,6 +77,7 @@ fn manager_records_usage_for_routed_calls() {
 
     manager
         .call_tool("mock", "echo", serde_json::json!({}))
+        .await
         .unwrap();
 
     let events = sink.events();

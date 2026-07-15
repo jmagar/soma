@@ -10,6 +10,11 @@ use crate::upstream::{UpstreamError, UpstreamSnapshot};
 use crate::usage::{NoopUsageSink, UsageEvent, UsageSink};
 
 pub mod core;
+pub mod mcp_routes;
+#[cfg(feature = "protected-routes")]
+pub mod mcp_scoped_routes;
+#[cfg(feature = "oauth")]
+pub mod oauth_lifecycle;
 pub mod pool_lifecycle;
 #[cfg(feature = "protected-routes")]
 pub mod protected_routes;
@@ -36,6 +41,8 @@ pub enum GatewayManagerError {
     UpstreamExists(String),
     #[error("upstream `{0}` is not configured")]
     UpstreamMissing(String),
+    #[error("gateway oauth runtime error: {0}")]
+    OAuth(String),
 }
 
 pub struct GatewayManager {
@@ -44,6 +51,8 @@ pub struct GatewayManager {
     lifecycle: RwLock<GatewayLifecycle>,
     usage: Arc<dyn UsageSink>,
     store: Option<FsGatewayConfigStore>,
+    #[cfg(feature = "oauth")]
+    oauth_runtime: RwLock<Option<Arc<soma_auth::upstream::runtime::UpstreamOauthRuntime>>>,
 }
 
 impl GatewayManager {
@@ -76,6 +85,8 @@ impl GatewayManager {
             lifecycle: RwLock::new(GatewayLifecycle::Ready),
             usage,
             store,
+            #[cfg(feature = "oauth")]
+            oauth_runtime: RwLock::new(None),
         })
     }
 
@@ -92,13 +103,10 @@ impl GatewayManager {
             .redacted_view()
     }
 
-    pub fn discover(&self) -> Result<Vec<UpstreamSnapshot>, GatewayManagerError> {
+    pub async fn discover(&self) -> Result<Vec<UpstreamSnapshot>, GatewayManagerError> {
         self.ensure_ready()?;
-        Ok(self
-            .pool
-            .read()
-            .expect("gateway pool poisoned")
-            .discover()?)
+        let pool = self.pool.read().expect("gateway pool poisoned").clone();
+        Ok(pool.discover().await?)
     }
 
     pub fn exposed_tool_count(&self) -> Result<usize, GatewayManagerError> {
@@ -110,7 +118,7 @@ impl GatewayManager {
             .exposed_tool_count())
     }
 
-    pub fn call_tool(
+    pub async fn call_tool(
         &self,
         upstream: impl Into<String>,
         tool: impl Into<String>,
@@ -119,15 +127,14 @@ impl GatewayManager {
         self.ensure_ready()?;
         let upstream = upstream.into();
         let tool = tool.into();
-        let result = self
-            .pool
-            .read()
-            .expect("gateway pool poisoned")
+        let pool = self.pool.read().expect("gateway pool poisoned").clone();
+        let result = pool
             .call_tool(ToolCall {
                 upstream: upstream.clone(),
                 tool,
                 params,
-            });
+            })
+            .await;
         let success = result.is_ok();
         let bytes = result
             .as_ref()
@@ -241,8 +248,54 @@ impl GatewayManager {
 
     fn replace_config_and_pool(&self, next: GatewayConfig) -> Result<(), GatewayManagerError> {
         let pool = pool_lifecycle::build_pool_from_config(&next)?;
+        #[cfg(feature = "oauth")]
+        if let Some(runtime) = self
+            .oauth_runtime
+            .read()
+            .expect("gateway oauth runtime poisoned")
+            .as_ref()
+        {
+            pool.install_oauth_cache(runtime.cache.clone());
+        }
         *self.config.write().expect("gateway config poisoned") = next;
         *self.pool.write().expect("gateway pool poisoned") = Arc::new(pool);
+        Ok(())
+    }
+
+    #[cfg(feature = "oauth")]
+    pub async fn configure_upstream_oauth(
+        &self,
+        auth_config: &soma_auth::config::AuthConfig,
+        encryption_key_raw: Option<&str>,
+    ) -> Result<(), GatewayManagerError> {
+        let upstreams = self
+            .config
+            .read()
+            .expect("gateway config poisoned")
+            .upstream
+            .iter()
+            .filter(|upstream| upstream.oauth.is_some())
+            .map(crate::gateway::oauth::to_soma_auth_upstream_config)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
+        let runtime = soma_auth::upstream::runtime::build_upstream_oauth_runtime(
+            &upstreams,
+            auth_config,
+            encryption_key_raw,
+        )
+        .await
+        .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
+        if let Some(runtime) = runtime {
+            let runtime = Arc::new(runtime);
+            self.pool
+                .read()
+                .expect("gateway pool poisoned")
+                .install_oauth_cache(runtime.cache.clone());
+            *self
+                .oauth_runtime
+                .write()
+                .expect("gateway oauth runtime poisoned") = Some(runtime);
+        }
         Ok(())
     }
 

@@ -13,6 +13,10 @@ pub struct ProtectedGatewaySubsetTarget {
     pub expose_code_mode: bool,
 }
 
+fn default_protected_route_scopes() -> Vec<String> {
+    vec!["soma:read".to_owned(), "soma:write".to_owned()]
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProtectedMcpRouteConfig {
     pub name: String,
@@ -24,6 +28,8 @@ pub struct ProtectedMcpRouteConfig {
     pub upstream: Option<String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub backend_url: String,
+    #[serde(default = "default_protected_route_scopes")]
+    pub scopes: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<ProtectedGatewaySubsetTarget>,
 }
@@ -37,6 +43,7 @@ impl Default for ProtectedMcpRouteConfig {
             public_path: "/mcp".to_owned(),
             upstream: None,
             backend_url: String::new(),
+            scopes: default_protected_route_scopes(),
             target: None,
         }
     }
@@ -71,6 +78,34 @@ impl ProtectedMcpRouteConfig {
                 crate::security::ssrf::OutboundPolicy::AdminProtectedBackend,
             )
             .map_err(|_| ConfigError::invalid("route.backend_url", "is not allowed"))?;
+        }
+        if self.scopes.iter().any(|scope| scope.trim().is_empty()) {
+            return Err(ConfigError::invalid(
+                "route.scopes",
+                "must not contain empty scopes",
+            ));
+        }
+        if let Some(target) = &self.target {
+            if target
+                .upstreams
+                .iter()
+                .any(|upstream| upstream.trim().is_empty())
+            {
+                return Err(ConfigError::invalid(
+                    "route.target.upstreams",
+                    "must not contain empty upstream names",
+                ));
+            }
+            if target
+                .services
+                .iter()
+                .any(|service| service.trim().is_empty())
+            {
+                return Err(ConfigError::invalid(
+                    "route.target.services",
+                    "must not contain empty service names",
+                ));
+            }
         }
         Ok(())
     }

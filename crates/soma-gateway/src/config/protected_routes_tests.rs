@@ -46,3 +46,27 @@ fn route_rejects_spoofed_host_and_denied_backend_url_at_config_write() {
     };
     assert!(denied_backend.validate().is_err());
 }
+
+#[test]
+fn route_rejects_empty_scopes_and_empty_subset_entries() {
+    let empty_scope = ProtectedMcpRouteConfig {
+        name: "demo".to_owned(),
+        public_host: "mcp.example.com".to_owned(),
+        public_path: "/demo".to_owned(),
+        scopes: vec!["".to_owned()],
+        ..ProtectedMcpRouteConfig::default()
+    };
+    assert!(empty_scope.validate().is_err());
+
+    let empty_upstream = ProtectedMcpRouteConfig {
+        name: "demo".to_owned(),
+        public_host: "mcp.example.com".to_owned(),
+        public_path: "/demo".to_owned(),
+        target: Some(ProtectedGatewaySubsetTarget {
+            upstreams: vec![" ".to_owned()],
+            ..ProtectedGatewaySubsetTarget::default()
+        }),
+        ..ProtectedMcpRouteConfig::default()
+    };
+    assert!(empty_upstream.validate().is_err());
+}

@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 use serde_json::Value;
 
 use crate::config::UpstreamConfig;
+use crate::process::guard::SpawnGuard;
 use crate::upstream::http_client::{decide_http_transport, transport_kind_for_decision};
 use crate::upstream::{
     ResponseCaps, ToolDescriptor, TransportKind, UpstreamError, UpstreamHealth, UpstreamSnapshot,
@@ -12,8 +13,11 @@ use crate::upstream::{
 pub mod connect_stdio;
 pub mod discovery;
 pub mod health;
+pub mod live;
 pub mod prompts;
 pub mod resources;
+#[cfg(feature = "oauth")]
+pub mod subject;
 pub mod tools;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,16 +92,26 @@ impl InProcessUpstream {
     }
 }
 
-#[derive(Debug, Clone)]
 struct PoolEntry {
     config: UpstreamConfig,
     snapshot: UpstreamSnapshot,
     in_process: Option<InProcessUpstream>,
+    live: Option<Arc<live::LiveUpstream>>,
 }
 
-#[derive(Debug, Clone)]
+#[cfg(feature = "oauth")]
+struct SubjectPoolEntry {
+    snapshot: UpstreamSnapshot,
+    live: Arc<live::LiveUpstream>,
+}
+
+#[derive(Clone)]
 pub struct UpstreamPool {
     entries: Arc<RwLock<BTreeMap<String, PoolEntry>>>,
+    #[cfg(feature = "oauth")]
+    subject_entries: Arc<RwLock<BTreeMap<(String, String), SubjectPoolEntry>>>,
+    #[cfg(feature = "oauth")]
+    oauth_cache: Arc<RwLock<Option<soma_auth::upstream::cache::OauthClientCache>>>,
     options: PoolOptions,
 }
 
@@ -112,6 +126,10 @@ impl UpstreamPool {
     pub fn new(options: PoolOptions) -> Self {
         Self {
             entries: Arc::new(RwLock::new(BTreeMap::new())),
+            #[cfg(feature = "oauth")]
+            subject_entries: Arc::new(RwLock::new(BTreeMap::new())),
+            #[cfg(feature = "oauth")]
+            oauth_cache: Arc::new(RwLock::new(None)),
             options: options.normalized(),
         }
     }
@@ -139,6 +157,7 @@ impl UpstreamPool {
             config: config.clone(),
             snapshot,
             in_process: None,
+            live: None,
         };
         self.entries
             .write()
@@ -164,6 +183,7 @@ impl UpstreamPool {
             config: config.clone(),
             snapshot,
             in_process: Some(upstream),
+            live: None,
         };
         self.entries
             .write()
@@ -172,26 +192,111 @@ impl UpstreamPool {
         Ok(())
     }
 
-    pub fn call_tool(&self, call: ToolCall) -> Result<Value, UpstreamError> {
-        let entries = self.entries.read().expect("upstream pool lock poisoned");
-        let entry = entries
-            .get(&call.upstream)
-            .ok_or_else(|| UpstreamError::UnknownUpstream {
-                upstream: call.upstream.clone(),
-            })?;
-        ensure_routable(entry)?;
-        tools::ensure_tool_exposed(entry, &call.tool)?;
-        let Some(in_process) = &entry.in_process else {
+    pub async fn call_tool(&self, call: ToolCall) -> Result<Value, UpstreamError> {
+        self.ensure_connected(&call.upstream).await?;
+        let live_peer = {
+            let entries = self.entries.read().expect("upstream pool lock poisoned");
+            let entry =
+                entries
+                    .get(&call.upstream)
+                    .ok_or_else(|| UpstreamError::UnknownUpstream {
+                        upstream: call.upstream.clone(),
+                    })?;
+            ensure_routable(entry)?;
+            tools::ensure_tool_exposed(entry, &call.tool)?;
+            if let Some(in_process) = &entry.in_process {
+                let result = in_process.call_tool(&call)?;
+                let bytes = serde_json::to_vec(&result).map_or(usize::MAX, |bytes| bytes.len());
+                self.response_caps()
+                    .enforce(crate::upstream::CapScope::ToolsCall, bytes)?;
+                return Ok(result);
+            }
+            entry.live.as_ref().map(|live| live.peer())
+        };
+        let Some(peer) = live_peer else {
             return Err(UpstreamError::Unsupported {
                 upstream: call.upstream,
                 capability: "tools/call",
             });
         };
-        let result = in_process.call_tool(&call)?;
+        let upstream = call.upstream.clone();
+        let result = live::call_live_tool(&upstream, peer, call.tool, call.params).await?;
         let bytes = serde_json::to_vec(&result).map_or(usize::MAX, |bytes| bytes.len());
         self.response_caps()
             .enforce(crate::upstream::CapScope::ToolsCall, bytes)?;
         Ok(result)
+    }
+
+    pub async fn ensure_connected(&self, upstream: &str) -> Result<(), UpstreamError> {
+        let config = {
+            let entries = self.entries.read().expect("upstream pool lock poisoned");
+            let entry = entries
+                .get(upstream)
+                .ok_or_else(|| UpstreamError::UnknownUpstream {
+                    upstream: upstream.to_owned(),
+                })?;
+            if entry.in_process.is_some() || entry.live.is_some() || !entry.config.enabled {
+                return Ok(());
+            }
+            entry.config.clone()
+        };
+        let context = live::LiveConnectContext::shared(self.response_caps());
+        let (live, snapshot) = live::connect_live(&config, &SpawnGuard::default(), context).await?;
+        let mut entries = self.entries.write().expect("upstream pool lock poisoned");
+        let entry = entries
+            .get_mut(upstream)
+            .ok_or_else(|| UpstreamError::UnknownUpstream {
+                upstream: upstream.to_owned(),
+            })?;
+        entry.snapshot = snapshot;
+        entry.live = Some(Arc::new(live));
+        Ok(())
+    }
+
+    pub async fn refresh_all(&self) {
+        let names = self
+            .entries
+            .read()
+            .expect("upstream pool lock poisoned")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for name in names {
+            if let Err(error) = self.ensure_connected(&name).await {
+                let _ = self.record_discovery_error(&name, error);
+            }
+        }
+    }
+
+    pub(super) fn record_discovery_error(
+        &self,
+        upstream: &str,
+        error: UpstreamError,
+    ) -> Result<(), UpstreamError> {
+        let mut entries = self.entries.write().expect("upstream pool lock poisoned");
+        let entry = entries
+            .get_mut(upstream)
+            .ok_or_else(|| UpstreamError::UnknownUpstream {
+                upstream: upstream.to_owned(),
+            })?;
+        match error {
+            UpstreamError::Unsupported {
+                upstream,
+                capability,
+            } => {
+                entry.snapshot.health = UpstreamHealth::Unsupported {
+                    reason: format!("upstream `{upstream}` does not support `{capability}`"),
+                };
+            }
+            other => {
+                entry.snapshot.health = UpstreamHealth::Degraded {
+                    consecutive_failures: 1,
+                    error: Some(other.to_string()),
+                };
+                entry.snapshot.stale = true;
+            }
+        }
+        Ok(())
     }
 
     fn snapshots(&self) -> Vec<UpstreamSnapshot> {
@@ -254,14 +359,13 @@ fn health_for_config(name: &str, transport: TransportKind) -> UpstreamHealth {
         TransportKind::InProcess => UpstreamHealth::Unsupported {
             reason: format!("configured upstream `{name}` has no live in-process connector"),
         },
-        TransportKind::HttpJson | TransportKind::HttpSse => UpstreamHealth::Unsupported {
-            reason: format!("live HTTP/SSE upstream `{name}` is not implemented in this build"),
-        },
+        TransportKind::HttpJson | TransportKind::HttpSse | TransportKind::WebSocket => {
+            UpstreamHealth::Unsupported {
+                reason: format!("live upstream `{name}` is not connected yet"),
+            }
+        }
         TransportKind::Stdio => UpstreamHealth::Unsupported {
-            reason: format!("live stdio upstream `{name}` is not implemented in this build"),
-        },
-        TransportKind::WebSocketUnsupported => UpstreamHealth::Unsupported {
-            reason: format!("websocket upstream `{name}` is not supported by soma-gateway yet"),
+            reason: format!("live stdio upstream `{name}` is not connected yet"),
         },
     }
 }

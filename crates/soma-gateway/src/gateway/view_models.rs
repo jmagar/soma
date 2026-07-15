@@ -3,8 +3,8 @@ use serde_json::{json, Value};
 use crate::gateway::manager::{GatewayManager, GatewayManagerError};
 use crate::gateway::projection::GatewayProjection;
 
-pub fn gateway_list_view(manager: &GatewayManager) -> Result<Value, GatewayManagerError> {
-    let projection = GatewayProjection::from_manager(manager)?;
+pub async fn gateway_list_view(manager: &GatewayManager) -> Result<Value, GatewayManagerError> {
+    let projection = GatewayProjection::from_manager(manager).await?;
     Ok(json!({
         "upstream_count": projection.upstream_count,
         "connected_count": projection.connected_count,

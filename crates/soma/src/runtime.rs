@@ -91,12 +91,15 @@ pub async fn serve_stdio_mcp() -> Result<()> {
     } else {
         soma_service::dynamic_provider_registry(service.clone())?
     };
+    let gateway = gateway_product_state_from_env()?;
+    #[cfg(feature = "oauth")]
+    configure_gateway_upstream_oauth_from_env(&gateway).await?;
     let state = AppState {
         config: config.mcp,
         auth_policy: AuthPolicy::LoopbackDev,
         service,
         provider_registry,
-        gateway: gateway_product_state_from_env()?,
+        gateway,
         remote_adapter,
         response_pages: Default::default(),
     };
@@ -139,15 +142,87 @@ async fn build_state(config: Config) -> Result<AppState> {
     let auth_policy = build_auth_policy(&config).await?;
     let service = SomaService::new(SomaClient::new(&config.soma)?);
     let provider_registry = soma_service::dynamic_provider_registry(service.clone())?;
+    let gateway = gateway_product_state_from_env()?;
+    #[cfg(feature = "oauth")]
+    configure_gateway_upstream_oauth_for_policy(&gateway, &auth_policy).await?;
     Ok(AppState {
         config: config.mcp,
         auth_policy,
         service,
         provider_registry,
-        gateway: gateway_product_state_from_env()?,
+        gateway,
         remote_adapter: false,
         response_pages: Default::default(),
     })
+}
+
+#[cfg(feature = "oauth")]
+async fn configure_gateway_upstream_oauth_for_policy(
+    gateway: &soma_runtime::server::GatewayProductState,
+    auth_policy: &AuthPolicy,
+) -> Result<()> {
+    if !gateway_has_oauth_upstreams(gateway) {
+        return Ok(());
+    }
+    if let AuthPolicy::Mounted {
+        auth_state: Some(auth_state),
+    } = auth_policy
+    {
+        return configure_gateway_upstream_oauth(gateway, auth_state.config.as_ref()).await;
+    }
+    let auth_config = soma_mcp_auth_config_builder()
+        .build_from_sources(std::env::vars())
+        .map_err(|error| anyhow::anyhow!("Gateway upstream OAuth config error: {error}"))?;
+    configure_gateway_upstream_oauth(gateway, &auth_config).await
+}
+
+#[cfg(feature = "oauth")]
+async fn configure_gateway_upstream_oauth_from_env(
+    gateway: &soma_runtime::server::GatewayProductState,
+) -> Result<()> {
+    if !gateway_has_oauth_upstreams(gateway) {
+        return Ok(());
+    }
+    let auth_config = soma_mcp_auth_config_builder()
+        .build_from_sources(std::env::vars())
+        .map_err(|error| anyhow::anyhow!("Gateway upstream OAuth config error: {error}"))?;
+    configure_gateway_upstream_oauth(gateway, &auth_config).await
+}
+
+#[cfg(feature = "oauth")]
+async fn configure_gateway_upstream_oauth(
+    gateway: &soma_runtime::server::GatewayProductState,
+    auth_config: &soma_auth::config::AuthConfig,
+) -> Result<()> {
+    let key = std::env::var("SOMA_MCP_OAUTH_ENCRYPTION_KEY").ok();
+    gateway
+        .configure_upstream_oauth(auth_config, key.as_deref())
+        .await
+        .map_err(|error| anyhow::anyhow!("Gateway upstream OAuth init error: {error}"))
+}
+
+#[cfg(feature = "oauth")]
+fn gateway_has_oauth_upstreams(gateway: &soma_runtime::server::GatewayProductState) -> bool {
+    gateway
+        .config_view()
+        .upstream
+        .iter()
+        .any(|upstream| upstream.oauth_enabled)
+}
+
+#[cfg(feature = "auth")]
+fn soma_mcp_auth_config_builder() -> soma_auth::config::AuthConfigBuilder {
+    soma_auth::config::AuthConfigBuilder::new()
+        .env_prefix("SOMA_MCP")
+        .session_cookie_name("soma_mcp_session")
+        .scopes_supported(vec![
+            soma_contracts::actions::READ_SCOPE.into(),
+            soma_contracts::actions::WRITE_SCOPE.into(),
+            soma_contracts::scopes::ADMIN_SCOPE.into(),
+        ])
+        .default_scope("soma:read")
+        .resource_path("/mcp")
+        .enable_dynamic_registration(true)
 }
 
 #[cfg(feature = "mcp-http")]
@@ -157,17 +232,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
         AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
         AuthPolicyKind::MountedBearer => Ok(mounted_bearer_policy()),
         AuthPolicyKind::MountedOAuth => {
-            let auth_cfg = soma_auth::config::AuthConfigBuilder::new()
-                .env_prefix("SOMA_MCP")
-                .session_cookie_name("soma_mcp_session")
-                .scopes_supported(vec![
-                    soma_contracts::actions::READ_SCOPE.into(),
-                    soma_contracts::actions::WRITE_SCOPE.into(),
-                    soma_contracts::scopes::ADMIN_SCOPE.into(),
-                ])
-                .default_scope("soma:read")
-                .resource_path("/mcp")
-                .enable_dynamic_registration(true)
+            let auth_cfg = soma_mcp_auth_config_builder()
                 .build_from_sources(std::env::vars())
                 .map_err(|e| anyhow::anyhow!("OAuth config error: {e}"))?;
             let auth_state = soma_auth::state::AuthState::new(auth_cfg)

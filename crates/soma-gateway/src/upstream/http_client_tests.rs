@@ -38,15 +38,12 @@ fn caps_reject_oversized_sse_events() {
 }
 
 #[test]
-fn websocket_is_explicitly_unsupported() {
+fn websocket_urls_select_websocket_transport() {
     let decision = decide_http_transport("wss://example.test/mcp");
 
     assert_eq!(
         transport_kind_for_decision(&decision),
-        TransportKind::WebSocketUnsupported
+        TransportKind::WebSocket
     );
-    assert!(matches!(
-        decision,
-        HttpTransportDecision::UnsupportedWebSocket { .. }
-    ));
+    assert!(matches!(decision, HttpTransportDecision::WebSocket));
 }

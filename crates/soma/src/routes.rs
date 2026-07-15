@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 use axum::{
     http::{HeaderName, HeaderValue, Method, StatusCode},
+    middleware,
     response::Json,
     routing::{get, post},
     Router,
@@ -105,7 +106,11 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/readyz", get(readyz))
         .route("/status", get(status))
-        .route("/openapi.json", get(openapi_json));
+        .route("/openapi.json", get(openapi_json))
+        .route(
+            "/.well-known/oauth-protected-resource/{*route}",
+            get(crate::protected_routes::protected_route_resource_metadata),
+        );
     // Prometheus metrics are only meaningful when the observability feature
     // installed a recorder at startup; gate the route on the same feature.
     #[cfg(feature = "observability")]
@@ -127,6 +132,11 @@ pub fn router(state: AppState) -> Router {
     #[cfg(not(feature = "web"))]
     let base =
         base.fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))) });
+
+    let base = base.layer(middleware::from_fn_with_state(
+        state.clone(),
+        crate::protected_routes::protected_mcp_intercept,
+    ));
 
     base.layer(RequestBodyLimitLayer::new(MCP_BODY_LIMIT_BYTES))
         .layer(cors_layer(&state.config))
