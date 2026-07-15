@@ -67,6 +67,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompts with `template: None` and silently dropped them from
   `prompts/list`/`prompts/get` (`servable_prompts` requires a template),
   even though the same prompts served correctly in local mode.
+- Fixed three MCP resource gaps: `resources/list` advertised every declared
+  `catalog().resources` entry, including ones from provider kinds that
+  can't serve reads (always failing `resources/read` with `unknown_resource`)
+  — now built from the same live, read-capable index `read_resource`
+  consults. A static resource with `mcp: { enabled: false }` was still
+  indexed and readable via MCP despite the overlay — resource disablement is
+  now honored the same way tools/prompts honor theirs. Two parameterized
+  resource templates whose literal segment falls in a different position
+  (e.g. `foo/[id]` and `[kind]/bar`, both matching `foo/bar`) were not
+  detected as ambiguous because the old check only compared identical
+  segment shapes — ambiguity detection is now a proper pointwise overlap
+  check within each precedence tier.
 
 ## [0.4.7]
 

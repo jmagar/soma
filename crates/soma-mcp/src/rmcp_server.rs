@@ -197,9 +197,7 @@ impl ServerHandler for SomaRmcpServer {
         let mut resources = vec![schema_resource()];
         resources.extend(
             snapshot
-                .catalogs
-                .iter()
-                .flat_map(|catalog| &catalog.resources)
+                .exact_resources()
                 .map(rmcp_resource_from_catalog_resource),
         );
         if self.state.config.conformance_fixtures {

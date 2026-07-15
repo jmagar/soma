@@ -160,6 +160,14 @@ impl ResourceIndex {
         }
 
         for resource in resources {
+            if !resource.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true) {
+                // `mcp: { enabled: false }` opts a resource out of the MCP
+                // surface (matching how tools/prompts honor the same
+                // overlay) — never index it for live `resources/list` or
+                // `resources/read`. Reporting/remote-catalog code still
+                // preserves the raw field via `catalog().resources`.
+                continue;
+            }
             if let Some(exact_path) = literal_resource_path(&resource.uri_template) {
                 for (owner, other) in &self.dynamic {
                     if exact_path.is_ambiguous_with(&other.path) {
@@ -210,6 +218,18 @@ impl RegistrySnapshot {
     /// Every provider's dynamic resource templates, for `resources/templates/list`.
     pub fn dynamic_resource_templates(&self) -> &[(String, DynamicResourceTemplate)] {
         &self.dynamic_resources
+    }
+
+    /// The live, MCP-visible, readable exact resources — i.e. exactly the
+    /// set `resources/read` can actually resolve. Already excludes
+    /// resources from providers that can't serve reads
+    /// (`!supports_resource_reads()`) and resources explicitly disabled via
+    /// `mcp: { enabled: false }`, since both are filtered out before
+    /// insertion in `ResourceIndex::register`. Use this for
+    /// `resources/list` instead of walking raw `catalogs` directly, or the
+    /// list can advertise resources that always fail to read.
+    pub fn exact_resources(&self) -> impl Iterator<Item = &ProviderResource> {
+        self.exact_resources.values().map(|(_, resource)| resource)
     }
 
     /// Resolves a request resource URI against exact resources first, then

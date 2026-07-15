@@ -3,8 +3,9 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde_json::json;
 use soma_contracts::providers::{
-    CapabilityGrant, HostCapabilities, NetworkCapability, ProviderCatalog, ProviderIdentity,
-    ProviderKind, ProviderManifest, ProviderPrompt, ProviderResource, ProviderTool, RestOverlay,
+    CapabilityGrant, HostCapabilities, McpOverlay, NetworkCapability, ProviderCatalog,
+    ProviderIdentity, ProviderKind, ProviderManifest, ProviderPrompt, ProviderResource,
+    ProviderTool, RestOverlay,
 };
 use soma_service::capabilities::CapabilityBroker;
 use soma_service::provider_registry::{
@@ -940,4 +941,141 @@ async fn exact_resource_ambiguous_with_zero_param_dynamic_template_fails_snapsho
         Err(error) => error,
     };
     assert_eq!(error.code(), "ambiguous_resource_template");
+}
+
+#[tokio::test]
+async fn unreadable_provider_resource_is_excluded_from_exact_resources_snapshot_view() {
+    // EchoProvider inherits the `false` supports_resource_reads() default —
+    // regression for a Codex review finding on rmcp-template-7nyf: `list_resources`
+    // must be built from the same live index `read_resource` consults
+    // (`RegistrySnapshot::exact_resources()`), not raw `catalogs`, or it
+    // can advertise a resource that always fails to read.
+    let provider = Arc::new(EchoProvider {
+        catalog: resource_catalog("echo", demo_resource(None)),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registration should succeed");
+    assert!(
+        registry
+            .snapshot()
+            .exact_resources()
+            .all(|resource| resource.uri_template != "soma://resources/runbook"),
+        "a resource from a provider that can't serve reads must not appear in the live \
+         exact_resources() view that resources/list is built from"
+    );
+}
+
+#[tokio::test]
+async fn mcp_disabled_resource_is_excluded_from_live_resources_surface() {
+    // Regression for a Codex review finding: `mcp: { enabled: false }` must
+    // be honored the same way tools/prompts honor their MCP overlay --
+    // never indexed for live resources/list or resources/read, even though
+    // the owning provider otherwise supports reads.
+    let mut resource = demo_resource(None);
+    resource.mcp = Some(McpOverlay {
+        enabled: false,
+        title: None,
+        annotations: json!({}),
+    });
+    let provider = Arc::new(ResourceProvider {
+        catalog: resource_catalog("demo", resource),
+        dynamic_template: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registration should succeed");
+
+    assert!(
+        registry
+            .snapshot()
+            .exact_resources()
+            .all(|resource| resource.uri_template != "soma://resources/runbook"),
+        "an mcp-disabled resource must not appear in exact_resources()"
+    );
+    let error = registry
+        .read_resource(
+            "soma://resources/runbook",
+            &ProviderPrincipal::anonymous(),
+            ProviderAuthMode::LoopbackDev,
+        )
+        .await
+        .expect_err("an mcp-disabled resource must not be readable via MCP");
+    assert_eq!(&*error.code, "unknown_resource");
+}
+
+#[tokio::test]
+async fn overlapping_parameterized_templates_with_literals_in_different_positions_are_ambiguous() {
+    // Regression for a Codex review finding: `foo/[id]` and `[kind]/bar`
+    // have different "shapes" (literal-then-param vs param-then-literal)
+    // but both match the concrete request `foo/bar` -- a shape-equality-only
+    // check misses this overlap.
+    let first = Arc::new(ResourceProvider {
+        catalog: catalog("first", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["foo", "[id]"], "by-id", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    let second = Arc::new(ResourceProvider {
+        catalog: catalog("second", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["[kind]", "bar"], "by-kind", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    let error = match ProviderRegistry::new(vec![first, second]) {
+        Ok(_) => panic!(
+            "templates that could both match the same concrete URI (e.g. foo/bar) must be \
+             rejected as ambiguous even when their literal falls in different positions"
+        ),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), "ambiguous_resource_template");
+}
+
+#[tokio::test]
+async fn non_overlapping_parameterized_templates_coexist() {
+    // Sanity check alongside the ambiguity regression above: templates that
+    // genuinely can never match the same concrete URI (a literal/literal
+    // mismatch at some position) must still be allowed to coexist.
+    let first = Arc::new(ResourceProvider {
+        catalog: catalog("first", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["service", "[name]"], "a", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    let second = Arc::new(ResourceProvider {
+        catalog: catalog("second", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["other", "[id]"], "b", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    ProviderRegistry::new(vec![first, second])
+        .expect("non-overlapping parameterized templates must coexist");
+}
+
+#[tokio::test]
+async fn parameterized_and_catch_all_templates_coexist_across_precedence_tiers() {
+    // A parameterized template and a catch-all template can match the same
+    // concrete URI (e.g. `service/x` matches both `service/[name]` and
+    // `service/[...rest]`), but that's resolved deterministically by
+    // match_resource's precedence order (parameterized wins), not an error
+    // -- must not regress into a false-positive ambiguity rejection.
+    let parameterized = Arc::new(ResourceProvider {
+        catalog: catalog("parameterized", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["service", "[name]"], "a", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    let catch_all = Arc::new(ResourceProvider {
+        catalog: catalog("catch-all", Vec::new()),
+        dynamic_template: Some(
+            DynamicResourceTemplate::from_path_segments(&["service", "[...rest]"], "b", "d", None)
+                .expect("valid template"),
+        ),
+    });
+    ProviderRegistry::new(vec![parameterized, catch_all])
+        .expect("parameterized and catch-all templates at different precedence tiers must coexist");
 }

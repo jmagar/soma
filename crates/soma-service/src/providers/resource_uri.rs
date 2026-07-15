@@ -23,13 +23,6 @@ pub(crate) struct ResourcePath {
     pub segments: Vec<PathSegment>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum SegmentShape {
-    Literal(String),
-    Param,
-    CatchAll,
-}
-
 impl ResourcePath {
     pub fn is_dynamic(&self) -> bool {
         self.segments
@@ -56,23 +49,39 @@ impl ResourcePath {
         format!("{RESOURCE_URI_PREFIX}{rendered}")
     }
 
-    fn shape(&self) -> Vec<SegmentShape> {
+    /// Two templates are ambiguous if some request URI could match both,
+    /// per the contract's "ambiguous templates at the same precedence
+    /// level MUST make validation fail." Templates at *different*
+    /// precedence tiers (e.g. a parameterized template vs a catch-all one)
+    /// are deliberately excluded even if they could match the same request
+    /// — `RegistrySnapshot::match_resource`'s precedence order already
+    /// resolves that case deterministically (the more specific tier always
+    /// wins), so it's intended fallback behavior, not ambiguity.
+    ///
+    /// Within the same tier and segment count, a pointwise literal/literal
+    /// mismatch at any position proves no concrete URI can ever satisfy
+    /// both (e.g. `service/[name]` vs `other/[id]`); the absence of any
+    /// such mismatch means every other segment pairing (literal/param,
+    /// param/param, etc.) can be satisfied simultaneously by some request,
+    /// even when the literal falls in a *different* position in each
+    /// template — e.g. `foo/[id]` and `[kind]/bar` both match the concrete
+    /// request `foo/bar`, despite having different "shapes."
+    pub fn is_ambiguous_with(&self, other: &ResourcePath) -> bool {
+        let self_catch_all = matches!(self.segments.last(), Some(PathSegment::CatchAll(_)));
+        let other_catch_all = matches!(other.segments.last(), Some(PathSegment::CatchAll(_)));
+        if self.is_dynamic() != other.is_dynamic() || self_catch_all != other_catch_all {
+            return false;
+        }
+        if self.segments.len() != other.segments.len() {
+            return false;
+        }
         self.segments
             .iter()
-            .map(|segment| match segment {
-                PathSegment::Literal(value) => SegmentShape::Literal(value.clone()),
-                PathSegment::Param(_) => SegmentShape::Param,
-                PathSegment::CatchAll(_) => SegmentShape::CatchAll,
+            .zip(&other.segments)
+            .all(|(a, b)| match (a, b) {
+                (PathSegment::Literal(x), PathSegment::Literal(y)) => x == y,
+                _ => true,
             })
-            .collect()
-    }
-
-    /// Two templates are ambiguous if some request URI could match both —
-    /// approximated here as "identical segment shape, ignoring param
-    /// names," matching the contract's "ambiguous templates at the same
-    /// precedence level MUST make validation fail."
-    pub fn is_ambiguous_with(&self, other: &ResourcePath) -> bool {
-        self.shape() == other.shape()
     }
 
     /// Attempts to match `request_segments` (the request URI's path split
