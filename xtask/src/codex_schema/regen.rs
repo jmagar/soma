@@ -8,12 +8,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
-use serde_json::Value;
 
-use super::{merge, read_json, CODEX_VERSION_PATH, METHODS_JSON_PATH, PROTOCOL_SCHEMA_PATH};
-
-const MASTER_BUNDLE_FILE: &str = "codex_app_server_protocol.schemas.json";
-const V2_BUNDLE_FILE: &str = "codex_app_server_protocol.v2.schemas.json";
+use super::{
+    load_combined_defs, merge, parse_gen_dir, CODEX_VERSION_PATH, METHODS_JSON_PATH,
+    PROTOCOL_SCHEMA_PATH,
+};
 
 pub fn run(args: &[String]) -> Result<()> {
     let gen_dir = parse_args(args)?;
@@ -21,20 +20,8 @@ pub fn run(args: &[String]) -> Result<()> {
 }
 
 fn parse_args(args: &[String]) -> Result<PathBuf> {
-    let mut gen_dir = None;
-    for arg in args {
-        match arg.as_str() {
-            "--help" | "-h" => {
-                println!(
-                    "Usage: cargo xtask codex-schema regen <path-to-codex-generate-json-schema-output-dir>"
-                );
-                std::process::exit(0);
-            }
-            other if gen_dir.is_none() => gen_dir = Some(PathBuf::from(other)),
-            other => bail!("unexpected argument: {other}"),
-        }
-    }
-    gen_dir.context(
+    parse_gen_dir(
+        args,
         "Usage: cargo xtask codex-schema regen <path-to-codex-generate-json-schema-output-dir>\n\
          Generate that directory first with:\n  \
          codex app-server generate-json-schema --out <dir> --experimental",
@@ -42,20 +29,22 @@ fn parse_args(args: &[String]) -> Result<PathBuf> {
 }
 
 pub fn regen(gen_dir: &Path) -> Result<()> {
-    let master = read_json(&gen_dir.join(MASTER_BUNDLE_FILE))?;
-    let v2 = read_json(&gen_dir.join(V2_BUNDLE_FILE))?;
+    // Captured (and its file written) first, before either schema file is
+    // touched: `codex --version` failing (e.g. not on PATH) is the one step
+    // in this function most likely to fail on a maintainer's machine, and
+    // doing it last used to leave the working tree in a confusing
+    // partially-regenerated state (both schema files rewritten, but the
+    // version stamp untouched) if it failed. Front-loading it means a
+    // failure here leaves nothing changed at all.
+    let version = capture_codex_version()?;
 
-    let combined = merge::build_combined(&master, &v2)?;
-    let combined_defs = combined
-        .get("definitions")
-        .and_then(Value::as_object)
-        .context("combined schema missing \"definitions\"")?;
+    let (combined, combined_defs) = load_combined_defs(gen_dir)?;
 
     let protocol_text =
         serde_json::to_string_pretty(&combined).context("serialize combined schema")?;
     assert_no_v2_refs(&protocol_text)?;
 
-    let manifest = merge::build_methods_manifest(combined_defs)?;
+    let manifest = merge::build_methods_manifest(&combined_defs)?;
     let methods_value = serde_json::to_value(&manifest).context("serialize methods manifest")?;
     let methods_text =
         serde_json::to_string_pretty(&methods_value).context("serialize methods manifest")?;
@@ -85,7 +74,7 @@ pub fn regen(gen_dir: &Path) -> Result<()> {
     eprintln!("methods with no resolvable response type: {missing_response:?}");
     eprintln!("wrote {METHODS_JSON_PATH}");
 
-    stamp_codex_version()?;
+    stamp_codex_version(&version)?;
 
     Ok(())
 }
@@ -105,8 +94,7 @@ fn assert_no_v2_refs(serialized_protocol_schema: &str) -> Result<()> {
     Ok(())
 }
 
-fn stamp_codex_version() -> Result<()> {
-    let version = capture_codex_version()?;
+fn stamp_codex_version(version: &str) -> Result<()> {
     fs::write(CODEX_VERSION_PATH, format!("{version}\n"))
         .with_context(|| format!("write {CODEX_VERSION_PATH}"))?;
     eprintln!("stamped {CODEX_VERSION_PATH}: {version:?}");

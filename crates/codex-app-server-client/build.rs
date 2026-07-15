@@ -29,6 +29,10 @@ use std::process::Command;
 
 use serde_json::Value;
 
+#[path = "src/build_support.rs"]
+mod build_support;
+use build_support::response_type_of;
+
 fn main() {
     println!("cargo:rerun-if-changed=schema/protocol.schema.json");
     println!("cargo:rerun-if-changed=schema/methods.json");
@@ -135,28 +139,14 @@ struct MethodEntry {
     response_type: Option<String>,
 }
 
-// `server_notifications` entries never have a "response_type" key at all -
-// indexing a missing key on a `serde_json::Value::Object` yields `Value::Null`
-// (serde_json's `Index` impl, not a panic) - so a missing key and an explicit
-// `null` (the `xtask/codex-schema`-generated shape for a genuinely
-// void-response request, see `RequestEntry` in `xtask/src/codex_schema/merge.rs`)
-// are indistinguishable and both legitimately mean "no response". Anything
-// else (a number, bool, array, or object) can only mean the manifest is
-// malformed - fail the build loudly instead of silently treating it the same
-// as "no response", which would generate a wrapper method that quietly
-// discards the app-server's actual reply.
-fn response_type_of(method: &str, e: &Value) -> Option<String> {
-    match e.get("response_type") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(s.clone()),
-        Some(other) => panic!(
-            "schema/methods.json entry for method {method:?} has a non-string, non-null \
-             \"response_type\": {other} - this indicates a corrupt or hand-edited \
-             methods.json (the generator, `cargo xtask codex-schema regen`, only ever emits \
-             a string or null/absent here). Regenerate the schema rather than editing \
-             methods.json by hand."
-        ),
-    }
+/// Reads a required string field from one `methods.json` entry, panicking
+/// with the entry's index and the field name (not just a bare
+/// `Option::unwrap()` message) so a malformed manifest points a maintainer
+/// straight at the offending entry instead of an anonymous panic location.
+fn required_str_field<'a>(e: &'a Value, index: usize, field: &str) -> &'a str {
+    e[field].as_str().unwrap_or_else(|| {
+        panic!("schema/methods.json entry #{index} is missing a string \"{field}\" field: {e}")
+    })
 }
 
 fn parse_entries(value: &Value) -> Vec<MethodEntry> {
@@ -164,11 +154,12 @@ fn parse_entries(value: &Value) -> Vec<MethodEntry> {
         .as_array()
         .expect("methods.json section is an array")
         .iter()
-        .map(|e| {
-            let method = e["method"].as_str().unwrap().to_string();
+        .enumerate()
+        .map(|(index, e)| {
+            let method = required_str_field(e, index, "method").to_string();
             MethodEntry {
-                variant_name: e["variant_name"].as_str().unwrap().to_string(),
-                fn_name: e["fn_name"].as_str().unwrap().to_string(),
+                variant_name: required_str_field(e, index, "variant_name").to_string(),
+                fn_name: required_str_field(e, index, "fn_name").to_string(),
                 params_type: e["params_type"].as_str().map(str::to_string),
                 params_optional: e["params_optional"].as_bool().unwrap_or(false),
                 response_type: response_type_of(&method, e),
@@ -188,15 +179,20 @@ fn params_fragment(entry: &MethodEntry) -> (String, &'static str) {
     }
 }
 
-/// One (return type, body-tail expression) pair, shared by every per-method
-/// wrapper regardless of its params shape.
-fn response_fragment(entry: &MethodEntry) -> (String, &'static str) {
+/// (return type, value-binding prefix, body-tail expression) triple, shared
+/// by every per-method wrapper regardless of its params shape. The three
+/// pieces are computed together (rather than `value_binding` being derived
+/// separately from `entry.response_type.is_some()` elsewhere) so they can't
+/// drift out of sync with each other - the binding and the tail expression
+/// that consumes it must always agree on whether `value` exists.
+fn response_fragment(entry: &MethodEntry) -> (String, &'static str, &'static str) {
     match &entry.response_type {
         Some(rt) => (
             format!("crate::Result<crate::protocol::{rt}>"),
+            "let value = ",
             "Ok(serde_json::from_value(value)?)",
         ),
-        None => ("crate::Result<()>".to_string(), "Ok(())"),
+        None => ("crate::Result<()>".to_string(), "", "Ok(())"),
     }
 }
 
@@ -228,16 +224,12 @@ fn generate_method_wrappers(out_dir: &Path) {
     for e in &client_requests {
         let doc = format!("Calls the `{}` app-server method.", e.method);
         let (param_sig, param_pass) = params_fragment(e);
-        let (ret_ty, ret_tail) = response_fragment(e);
         // When there's a response, `call_request(...).await?` binds to
-        // `value`, which `ret_tail` (`Ok(serde_json::from_value(value)?)`)
-        // consumes; when there isn't, the call is just awaited for its error
-        // and `ret_tail` is a bare `Ok(())`.
-        let value_binding = if e.response_type.is_some() {
-            "let value = "
-        } else {
-            ""
-        };
+        // `value` (via `value_binding`), which `ret_tail`
+        // (`Ok(serde_json::from_value(value)?)`) consumes; when there isn't,
+        // the call is just awaited for its error and `ret_tail` is a bare
+        // `Ok(())`.
+        let (ret_ty, value_binding, ret_tail) = response_fragment(e);
         let call_expr = format!(
             "{value_binding}self.call_request(|id| crate::protocol::ClientRequest::{variant} {{ id, {param_pass} }}).await?;",
             variant = e.variant_name,
@@ -306,7 +298,7 @@ impl crate::protocol::ServerRequest {{
     /// `result` must serialize to for this specific request. Not always
     /// `PascalCase(method_name) + "Response"` - a few methods need an
     /// irregular name (see `RESPONSE_OVERRIDES` in
-    /// `schema/build_combined_schema.py`) - so prefer this accessor over
+    /// `xtask/src/codex_schema/naming.rs`) - so prefer this accessor over
     /// guessing the name yourself.
     pub(crate) fn expected_response_type_name(&self) -> &'static str {{
         match self {{"#

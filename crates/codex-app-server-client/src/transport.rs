@@ -14,7 +14,7 @@ use crate::{Error, Result};
 
 /// Hard cap on a single NDJSON line's size. Without this, a single huge or
 /// unterminated line from a buggy or malicious app-server peer would grow
-/// [`read_line`]'s buffer without bound. 64 MiB comfortably covers legitimate
+/// `read_line`'s buffer without bound. 64 MiB comfortably covers legitimate
 /// large payloads (e.g. `fs/readFile` results, big diffs) while still being a
 /// real, finite bound.
 pub const MAX_LINE_BYTES: usize = 64 * 1024 * 1024;

@@ -60,6 +60,9 @@
 //! # }
 //! ```
 
+#[cfg(test)]
+#[path = "build_support.rs"]
+mod build_support;
 mod client;
 mod error;
 pub mod protocol;

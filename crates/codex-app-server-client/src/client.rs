@@ -1,6 +1,8 @@
+mod dispatch;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use tokio::process::Child;
@@ -13,7 +15,7 @@ use tokio::io::AsyncWriteExt as _;
 use crate::transport::{self, AsyncBufRead, AsyncWrite, OutgoingReply};
 use crate::{Error, Result};
 
-/// Default timeout for [`CodexAppServerClient::call_request`] (and therefore
+/// Default timeout for `CodexAppServerClient::call_request` (and therefore
 /// every generated per-method wrapper). Override with
 /// [`CodexAppServerClient::with_call_timeout`]. This bounds one request/response
 /// round trip - it has nothing to do with how long a turn takes to finish
@@ -24,23 +26,28 @@ pub const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(120);
 /// Timeout for a single outgoing line write. A `write_all`/`flush` to a healthy
 /// pipe or socket completes in microseconds; if it hasn't completed in this
 /// long the peer is almost certainly stalled (backpressure with nobody
-/// reading), and we'd rather tear the connection down - failing every pending
-/// and future call with a clear error - than hang forever with an
-/// ever-growing outgoing queue and no diagnostics.
+/// reading), and we'd rather tear the connection down than hang forever with
+/// an ever-growing outgoing queue and no diagnostics. Tearing the connection
+/// down always fails every *future* call immediately (`write_tx.send`
+/// starts failing once the writer task exits). For [`CodexAppServerClient::spawn`]
+/// it also fails every *pending* call promptly: killing the child closes its
+/// stdout, the reader sees EOF, and that's what actually clears the pending
+/// map. For [`CodexAppServerClient::connect_streams`]/[`CodexAppServerClient::connect_unix`]
+/// there's no child to kill, so a write-stall alone doesn't touch the reader
+/// task or the pending map - already-in-flight calls there still rely on
+/// their own `call_timeout` instead.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Upper bound on how long the forwarding task spawned for one incoming
-/// server->client request (see [`PendingServerRequest`]) will wait for
-/// `.respond()`/`.respond_error()` before giving up on its own. This exists
-/// purely as a leak backstop: dropping a `PendingServerRequest` *without*
-/// responding already resolves the forwarding task immediately (dropping the
-/// paired `oneshot::Sender` wakes it with an error), so this timeout only
-/// fires for the pathological case of a caller holding onto one indefinitely
-/// without ever dropping or responding to it - at which point the task gives
-/// up, sends a fallback error reply so the app-server isn't left waiting
-/// forever either, and frees its resources (the spawned task itself and its
-/// `write_tx` clone). Generous because these are often human-in-the-loop
-/// approval/elicitation flows that can legitimately take a while.
+/// server->client request (see [`PendingServerRequest`]) will wait for a
+/// reply before giving up on its own. This is a backstop for the case where a
+/// caller holds a `PendingServerRequest` forever without ever dropping or
+/// responding to it (e.g. stored in a collection and forgotten). Dropping one
+/// (deliberately, via cancellation, or via a panic) always sends a fallback
+/// error through its own `Drop` impl first, so this timeout only covers the
+/// "never even dropped" case. Generous because these are often
+/// human-in-the-loop approval/elicitation flows that can legitimately take a
+/// while.
 const PENDING_SERVER_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// Capacity of the internal channel from the reader task to [`EventStream`].
@@ -53,7 +60,26 @@ const EVENTS_CHANNEL_CAPACITY: usize = 1024;
 type PendingSender = oneshot::Sender<std::result::Result<serde_json::Value, Error>>;
 type PendingMap = Arc<Mutex<HashMap<i64, PendingSender>>>;
 
-/// An event pushed from the app-server connection.
+/// Locks `pending`, recovering from mutex poisoning rather than panicking a
+/// second time. A panic while this lock is held elsewhere in the crate can't
+/// leave the underlying `HashMap` in a logically-broken state - every
+/// operation on it (`insert`/`remove`/`clear`) either fully completes or
+/// doesn't start - so recovering the guard and continuing is safe, and it
+/// avoids turning one unrelated bug into a crate-wide cascade of
+/// poisoned-lock panics on every subsequent call.
+fn lock_pending(pending: &PendingMap) -> MutexGuard<'_, HashMap<i64, PendingSender>> {
+    pending
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// An event pushed from the app-server connection. Deliberately *not*
+/// `#[non_exhaustive]` (contrast [`Error`], which explains its own opposite
+/// choice) - this models a closed, stable three-way split of "shape of thing
+/// the app-server can send," not an open-ended taxonomy, so callers matching
+/// on it exhaustively (as this crate's own code does everywhere) get a
+/// compile error if a variant is ever added, rather than silently ignoring
+/// the new case via a wildcard arm.
 #[derive(Debug)]
 pub enum Event {
     /// A fire-and-forget server notification (`turn/completed`, `item/started`, etc.).
@@ -69,7 +95,7 @@ pub enum Event {
 ///
 /// Own exactly one `EventStream` per connection and keep draining it (even if
 /// you only care about requests, not notifications). The channel between the
-/// reader task and this stream is bounded (see [`EVENTS_CHANNEL_CAPACITY`]):
+/// reader task and this stream is bounded (see `EVENTS_CHANNEL_CAPACITY`):
 /// a slow consumer just grows a fixed-size backlog, but a consumer that stops
 /// draining entirely will eventually cause the reader task to drop events
 /// once that backlog fills. Drop policy when full:
@@ -94,17 +120,17 @@ impl EventStream {
 /// etc.), paired with a one-shot reply channel. Obtain these from
 /// [`EventStream::recv`] as an [`Event::Request`].
 ///
-/// Every `PendingServerRequest` you receive must eventually be resolved via
-/// [`Self::respond`] or [`Self::respond_error`] - dropping one without
-/// responding resolves its internal forwarding task immediately (no leak),
-/// but the app-server then gets **no reply at all**, ever; the
-/// `PENDING_SERVER_REQUEST_TIMEOUT` fallback error only covers the different
-/// case of a caller holding onto one indefinitely without ever dropping or
-/// responding to it. Always call [`Self::respond`] or [`Self::respond_error`]
-/// - even to report "not handled" - rather than dropping.
+/// Every `PendingServerRequest` gets exactly one reply, no matter what
+/// happens to it: call [`Self::respond`] or [`Self::respond_error`] to send
+/// your own, or just let it drop - deliberately, via cancellation, or via a
+/// panic unwinding through it - and its [`Drop`] impl sends a generic
+/// fallback error on your behalf. The app-server is never left permanently
+/// unanswered either way. Prefer responding explicitly and promptly when you
+/// can; the fallback exists so a bug, an unhandled case, or a task
+/// abandoning this value doesn't turn into a silent hang.
 pub struct PendingServerRequest {
     pub request: ServerRequest,
-    pub(crate) reply_tx: oneshot::Sender<OutgoingReply>,
+    reply_tx: Option<oneshot::Sender<OutgoingReply>>,
 }
 
 impl std::fmt::Debug for PendingServerRequest {
@@ -140,13 +166,16 @@ impl PendingServerRequest {
     /// Send a successful reply. `result` must serialize to the response
     /// shape the app-server expects for this specific method - see
     /// [`Self::expected_response_type_name`] for exactly which
-    /// `crate::protocol` type that is.
-    pub fn respond(self, result: impl serde::Serialize) -> Result<()> {
+    /// `crate::protocol` type that is. `Err` only means `result` failed to
+    /// serialize; a returned `Ok(())` means the reply was accepted, not that
+    /// it was necessarily delivered - if the forwarding task already gave up
+    /// on this request (its own timeout already fired), delivery is no
+    /// longer possible and that's logged, but it's too late to matter which
+    /// of the two happened.
+    pub fn respond(mut self, result: impl serde::Serialize) -> Result<()> {
         let id = self.id().clone();
         let value = serde_json::to_value(result)?;
-        let _ = self
-            .reply_tx
-            .send(OutgoingReply::Result { id, result: value });
+        self.send_reply(OutgoingReply::Result { id, result: value });
         Ok(())
     }
 
@@ -155,17 +184,53 @@ impl PendingServerRequest {
     /// arbitrary caller-supplied value - so it deliberately returns `()`
     /// rather than a `Result` that could only ever be `Ok`.
     pub fn respond_error(
-        self,
+        mut self,
         code: i64,
         message: impl Into<String>,
         data: Option<serde_json::Value>,
     ) {
         let id = self.id().clone();
-        let _ = self.reply_tx.send(OutgoingReply::Error {
+        self.send_reply(OutgoingReply::Error {
             id,
             code,
             message: message.into(),
             data,
+        });
+    }
+
+    /// Takes `reply_tx` (leaving `None` so [`Drop`] becomes a no-op) and
+    /// sends `reply` through it, logging - rather than silently discarding -
+    /// the case where the forwarding task already gave up and dropped its
+    /// receiving end.
+    fn send_reply(&mut self, reply: OutgoingReply) {
+        let Some(tx) = self.reply_tx.take() else {
+            return;
+        };
+        if tx.send(reply).is_err() {
+            tracing::debug!(
+                method = self.method_name(),
+                "reply channel already closed (the forwarding task must have already given up, \
+                 e.g. its own timeout fired) - this reply was accepted but could not be delivered"
+            );
+        }
+    }
+}
+
+impl Drop for PendingServerRequest {
+    fn drop(&mut self) {
+        // `respond`/`respond_error` already took `reply_tx` (leaving `None`)
+        // if either was called - only a bare drop (deliberate, cancelled, or
+        // unwinding through a panic) reaches this with `Some` still set.
+        let Some(tx) = self.reply_tx.take() else {
+            return;
+        };
+        let id = self.request.id().clone();
+        let _ = tx.send(OutgoingReply::Error {
+            id,
+            code: -32000,
+            message: "codex-app-server-client: PendingServerRequest was dropped without a response"
+                .to_string(),
+            data: None,
         });
     }
 }
@@ -252,7 +317,7 @@ impl CodexAppServerClient {
     /// Returns a client that applies `timeout` to every request/response call
     /// instead of [`DEFAULT_CALL_TIMEOUT`]. Cloning preserves the timeout;
     /// mixing timeouts across clones of the same connection is fine (it's a
-    /// per-call setting checked in [`Self::call_request`], not a property of
+    /// per-call setting checked in `Self::call_request`, not a property of
     /// the shared connection state).
     pub fn with_call_timeout(mut self, timeout: Duration) -> Self {
         self.call_timeout = timeout;
@@ -324,42 +389,84 @@ impl CodexAppServerClient {
         let write_tx_for_reader = write_tx.clone();
         let reader_cancel = cancel.clone();
         tokio::spawn(async move {
-            let mut buf = String::new();
-            loop {
-                match transport::read_line(&mut reader, &mut buf).await {
-                    Ok(0) => break, // EOF
-                    Ok(_) => {
-                        let line = buf.trim();
-                        if line.is_empty() {
-                            continue;
-                        }
-                        dispatch_incoming_line(
-                            line,
-                            &pending_reader,
-                            &events_tx,
-                            &write_tx_for_reader,
+            // Guarantees the three cleanup steps below run on *every* exit
+            // from the loop - clean EOF, a transport error, cancellation, or
+            // a panic unwinding out of `dispatch_incoming_line` - rather than
+            // only the two normal `break` paths the loop was originally
+            // written to reach. Without this, a panic here would silently
+            // orphan the connection: pending calls never resolve (each rides
+            // out its own timeout instead), and the writer task (and, for a
+            // spawned child, the process) is never reaped, because nothing
+            // else calls `reader_cancel.cancel()` on this task's behalf. Owns
+            // cheap clones (`Arc`/`Sender`/`CancellationToken`) rather than
+            // borrowing so it has no lifetime relationship to the rest of
+            // this function's locals to reason about.
+            struct ReaderCleanup {
+                pending: PendingMap,
+                events_tx: mpsc::Sender<Event>,
+                reader_cancel: CancellationToken,
+            }
+            impl Drop for ReaderCleanup {
+                fn drop(&mut self) {
+                    lock_pending(&self.pending).clear(); // drops senders -> pending calls see TransportClosed
+                    if let Err(err) = self.events_tx.try_send(Event::Closed) {
+                        // Harmless: dropping `events_tx` (this task ending)
+                        // still makes `EventStream::recv` observe closure as
+                        // `None`.
+                        tracing::debug!(
+                            ?err,
+                            "event channel full/closed while sending Event::Closed"
                         );
                     }
-                    Err(err) => {
-                        tracing::warn!(error = %err, "app-server transport read error");
-                        break;
+                    // Proactively tear down the writer task (and reap a
+                    // spawned child) the moment we know the connection is
+                    // dead, rather than waiting for the caller to notice
+                    // `Event::Closed` and drop the client, or for the
+                    // writer's own next write attempt to fail.
+                    self.reader_cancel.cancel();
+                }
+            }
+            let _cleanup = ReaderCleanup {
+                pending: pending_reader.clone(),
+                events_tx: events_tx.clone(),
+                reader_cancel: reader_cancel.clone(),
+            };
+
+            let mut buf = String::new();
+            loop {
+                // Raced against `reader_cancel` (not just relied on via
+                // EOF/error) so a caller-initiated shutdown - the last client
+                // clone dropping - terminates this task promptly even when
+                // the peer never notices the writer's half-close and so never
+                // sends EOF back (a real risk for `connect_streams`/
+                // `connect_unix`, which - unlike a spawned child - have no
+                // `kill_on_drop` to force the issue).
+                tokio::select! {
+                    biased;
+                    _ = reader_cancel.cancelled() => break,
+                    result = transport::read_line(&mut reader, &mut buf) => {
+                        match result {
+                            Ok(0) => break, // EOF
+                            Ok(_) => {
+                                let line = buf.trim();
+                                if line.is_empty() {
+                                    continue;
+                                }
+                                dispatch::dispatch_incoming_line(
+                                    line,
+                                    &pending_reader,
+                                    &events_tx,
+                                    &write_tx_for_reader,
+                                );
+                            }
+                            Err(err) => {
+                                tracing::warn!(error = %err, "app-server transport read error");
+                                break;
+                            }
+                        }
                     }
                 }
             }
-            pending_reader.lock().unwrap().clear(); // drops senders -> pending calls see TransportClosed
-            if let Err(err) = events_tx.try_send(Event::Closed) {
-                // Harmless: dropping `events_tx` below (end of this task)
-                // still makes `EventStream::recv` observe closure as `None`.
-                tracing::debug!(
-                    ?err,
-                    "event channel full/closed while sending Event::Closed"
-                );
-            }
-            // Proactively tear down the writer task (and reap a spawned child)
-            // the moment we know the connection is dead, rather than waiting
-            // for the caller to notice `Event::Closed` and drop the client, or
-            // for the writer's own next write attempt to fail.
-            reader_cancel.cancel();
         });
 
         let client = CodexAppServerClient {
@@ -384,7 +491,7 @@ impl CodexAppServerClient {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let request = build(RequestId::Int64(id));
         let (tx, rx) = oneshot::channel();
-        self.pending.lock().unwrap().insert(id, tx);
+        lock_pending(&self.pending).insert(id, tx);
 
         // Removes this id's map entry when this guard drops, which happens
         // whether `call_request` returns normally, is cancelled (e.g. wrapped
@@ -401,7 +508,7 @@ impl CodexAppServerClient {
         }
         impl Drop for RemoveOnDrop<'_> {
             fn drop(&mut self) {
-                self.pending.lock().unwrap().remove(&self.id);
+                lock_pending(self.pending).remove(&self.id);
             }
         }
         let _guard = RemoveOnDrop {
@@ -432,225 +539,6 @@ impl CodexAppServerClient {
     }
 }
 
-/// Builds a raw JSON-RPC error response using `id` exactly as received (never
-/// reinterpreted through [`RequestId`]), so it round-trips correctly whether
-/// the app-server used a string or integer id.
-fn error_reply_line(id: &serde_json::Value, code: i64, message: String) -> Option<String> {
-    let value = serde_json::json!({ "id": id, "error": { "code": code, "message": message, "data": null } });
-    serde_json::to_string(&value).ok()
-}
-
-/// Number of characters of a raw wire line included in diagnostic logs. This
-/// is a truncation, not real redaction - JSON-RPC payloads on this protocol
-/// can carry sensitive content (auth tokens, command output, arbitrary
-/// agent-generated text), and these log sites fire on *undecodable* messages,
-/// which are expected to happen occasionally in normal operation (e.g. a
-/// newer app-server version using a method this crate's vendored schema
-/// doesn't know about) - not just on truly exceptional/attacker-controlled
-/// input. Keeping full lines out of logs by default bounds that exposure; a
-/// short preview is still enough to identify which method/shape was involved
-/// for debugging, since JSON-RPC messages put `method`/`id` up front.
-const LOG_LINE_PREVIEW_CHARS: usize = 200;
-
-fn line_preview(line: &str) -> String {
-    if line.chars().count() <= LOG_LINE_PREVIEW_CHARS {
-        line.to_string()
-    } else {
-        let preview: String = line.chars().take(LOG_LINE_PREVIEW_CHARS).collect();
-        format!(
-            "{preview}... ({} bytes total, truncated for logging)",
-            line.len()
-        )
-    }
-}
-
-fn dispatch_incoming_line(
-    line: &str,
-    pending: &PendingMap,
-    events_tx: &mpsc::Sender<Event>,
-    write_tx: &mpsc::UnboundedSender<String>,
-) {
-    let value: serde_json::Value = match serde_json::from_str(line) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::warn!(line_preview = %line_preview(line), error = %err, "app-server sent a line that is not valid JSON; ignoring");
-            return;
-        }
-    };
-    // Own the parsed object from here on (rather than borrowing via
-    // `.as_object()`) so the response/error path below can `.remove()` the
-    // `result`/`error` payload instead of cloning it - `result` in
-    // particular can be an arbitrarily large value (e.g. a big `fs/readFile`
-    // payload), and this is on the per-line hot path.
-    let serde_json::Value::Object(mut map) = value else {
-        tracing::warn!(line_preview = %line_preview(line), "app-server sent a non-object JSON-RPC line; ignoring");
-        return;
-    };
-
-    if map.contains_key("method") {
-        match map.get("id").cloned() {
-            Some(id_value) => {
-                let value = serde_json::Value::Object(map);
-                match serde_json::from_value::<ServerRequest>(value) {
-                    Ok(request) => {
-                        let (reply_tx, reply_rx) = oneshot::channel::<OutgoingReply>();
-                        let write_tx = write_tx.clone();
-                        let timeout_id = id_value.clone();
-                        tokio::spawn(async move {
-                            match tokio::time::timeout(PENDING_SERVER_REQUEST_TIMEOUT, reply_rx)
-                                .await
-                            {
-                                Ok(Ok(reply)) => {
-                                    if let Ok(line) = reply.into_line() {
-                                        let _ = write_tx.send(line);
-                                    }
-                                }
-                                Ok(Err(_recv_error)) => {
-                                    // The PendingServerRequest was dropped without a
-                                    // response - nothing to forward and nothing left
-                                    // to wait for; this is not the leak case.
-                                }
-                                Err(_elapsed) => {
-                                    tracing::warn!(
-                                        timeout = ?PENDING_SERVER_REQUEST_TIMEOUT,
-                                        "no one responded to a server->client request within the \
-                                         timeout; sending a fallback error reply instead of leaving \
-                                         the app-server waiting forever"
-                                    );
-                                    if let Some(line) = error_reply_line(
-                                        &timeout_id,
-                                        -32000,
-                                        format!(
-                                            "codex-app-server-client: no reply within {PENDING_SERVER_REQUEST_TIMEOUT:?}"
-                                        ),
-                                    ) {
-                                        let _ = write_tx.send(line);
-                                    }
-                                }
-                            }
-                        });
-                        if let Err(err) = events_tx
-                            .try_send(Event::Request(PendingServerRequest { request, reply_tx }))
-                        {
-                            // The consumer isn't draining EventStream fast enough (Full) or
-                            // has dropped it entirely (Closed). Either way, letting `psr`
-                            // fall out of scope here would silently drop `reply_tx`, which
-                            // resolves the forwarding task immediately with *no* reply ever
-                            // sent (see `PendingServerRequest`'s doc comment on bare drops) -
-                            // leaving the app-server waiting forever. Reply explicitly
-                            // instead of a silent hang.
-                            let Event::Request(psr) = err.into_inner() else {
-                                unreachable!("we always send Event::Request here")
-                            };
-                            tracing::warn!(
-                                method = psr.method_name(),
-                                "event channel unavailable (full or EventStream dropped); \
-                                 replying with a fallback error instead of leaving this \
-                                 server->client request unanswered"
-                            );
-                            psr.respond_error(
-                                -32000,
-                                "codex-app-server-client: event channel unavailable, request \
-                                 could not be delivered",
-                                None,
-                            );
-                        }
-                    }
-                    Err(err) => {
-                        // The app-server expects a reply for every request it
-                        // sends; if we can't understand this one (e.g. a
-                        // method added in a newer app-server version than
-                        // this crate's schema), silently dropping it leaves
-                        // the app-server waiting forever. Fail it explicitly
-                        // instead.
-                        tracing::warn!(
-                            line_preview = %line_preview(line), error = %err,
-                            "could not decode a server->client request into any known method; \
-                             sending back a JSON-RPC error instead of leaving the app-server waiting"
-                        );
-                        if let Some(reply) = error_reply_line(
-                            &id_value,
-                            -32601,
-                            format!("codex-app-server-client: unrecognized or undecodable request: {err}"),
-                        ) {
-                            let _ = write_tx.send(reply);
-                        }
-                    }
-                }
-            }
-            None => {
-                match serde_json::from_value::<ServerNotification>(serde_json::Value::Object(map)) {
-                    Ok(notification) => {
-                        // Fire-and-forget: unlike Event::Request, nothing on the other end
-                        // is waiting for a reply, so it's safe to just drop this under
-                        // backpressure rather than block the reader task. Deliberately not
-                        // logging the notification payload itself (could be arbitrarily
-                        // large, e.g. a big diff) - just that one was dropped.
-                        if let Err(err) = events_tx.try_send(Event::Notification(notification)) {
-                            let cause = match err {
-                                mpsc::error::TrySendError::Full(_) => "channel full",
-                                mpsc::error::TrySendError::Closed(_) => "EventStream dropped",
-                            };
-                            tracing::warn!(cause, "dropping a server notification");
-                        }
-                    }
-                    Err(err) => {
-                        // Notifications never expect a reply, so there's nothing
-                        // actionable to send back - just make the gap visible.
-                        tracing::warn!(
-                            line_preview = %line_preview(line), error = %err,
-                            "could not decode a server notification into any known method; ignoring"
-                        );
-                    }
-                }
-            }
-        }
-        return;
-    }
-
-    let Some(id) = map.get("id").and_then(serde_json::Value::as_i64) else {
-        // Either there's no "id" at all, or it's not an integer - we only
-        // ever mint i64 request ids ourselves, so a non-integer id on a
-        // response can't correlate to anything we're waiting on either way.
-        tracing::warn!(line_preview = %line_preview(line), "app-server sent a response with no id, or an id we never issued; ignoring");
-        return;
-    };
-
-    let sender = pending.lock().unwrap().remove(&id);
-    let Some(sender) = sender else {
-        tracing::debug!(
-            id,
-            "app-server response for an unknown or already-resolved request id"
-        );
-        return;
-    };
-
-    if let Some(result) = map.remove("result") {
-        let _ = sender.send(Ok(result));
-    } else if let Some(error) = map.remove("error") {
-        let code = error
-            .get("code")
-            .and_then(serde_json::Value::as_i64)
-            .unwrap_or(-1);
-        let message = error
-            .get("message")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        let data = match error {
-            serde_json::Value::Object(mut error_map) => error_map.remove("data"),
-            _ => None,
-        };
-        let _ = sender.send(Err(Error::Rpc {
-            code,
-            message,
-            data,
-        }));
-    } else {
-        tracing::warn!(line_preview = %line_preview(line), "app-server response has an id but neither result nor error");
-    }
-}
-
 include!(concat!(env!("OUT_DIR"), "/methods_generated.rs"));
 
 #[cfg(test)]
@@ -663,7 +551,7 @@ mod tests {
     /// `PascalCase(method) + "Response"` convention is wrong -
     /// `item/tool/call` is one of the 6 (of 11) server-request methods that
     /// need the `RESPONSE_OVERRIDES` table in
-    /// `schema/build_combined_schema.py` (it expects `DynamicToolCallResponse`,
+    /// `xtask/src/codex_schema/naming.rs` (it expects `DynamicToolCallResponse`,
     /// not the naive `ItemToolCallResponse`).
     #[tokio::test]
     async fn expected_response_type_name_resolves_irregular_names_correctly() {
@@ -680,7 +568,7 @@ mod tests {
                     turn_id: "turn_1".into(),
                 },
             },
-            reply_tx,
+            reply_tx: Some(reply_tx),
         };
         assert_eq!(
             pending.expected_response_type_name(),
@@ -704,7 +592,7 @@ mod tests {
                     thread_id: "thr_test".into(),
                 },
             },
-            reply_tx,
+            reply_tx: Some(reply_tx),
         };
         assert_eq!(pending.method_name(), "currentTime/read");
         assert_eq!(pending.id(), &RequestId::Int64(7));
@@ -737,7 +625,7 @@ mod tests {
                     thread_id: "thr_test".into(),
                 },
             },
-            reply_tx,
+            reply_tx: Some(reply_tx),
         };
 
         pending.respond_error(-32000, "denied", None);
@@ -752,6 +640,45 @@ mod tests {
         assert_eq!(
             parsed,
             serde_json::json!({ "id": "req-1", "error": { "code": -32000, "message": "denied", "data": null } })
+        );
+    }
+
+    /// Regression test: `PendingServerRequest`'s `Drop` impl must send a
+    /// fallback error reply when a value is dropped without ever calling
+    /// `.respond()`/`.respond_error()` - the whole point of moving from a
+    /// bare `oneshot::Sender` field to `Option<...>` + `Drop`. Constructs the
+    /// pair directly (bypassing the full dispatch/connection machinery) to
+    /// check the `Drop`-triggered wire shape in isolation.
+    #[tokio::test]
+    async fn dropping_a_pending_server_request_without_responding_sends_a_fallback_error() {
+        let (reply_tx, reply_rx) = oneshot::channel::<OutgoingReply>();
+        let pending = PendingServerRequest {
+            request: ServerRequest::CurrentTimeRead {
+                id: RequestId::Int64(42),
+                params: crate::protocol::CurrentTimeReadParams {
+                    thread_id: "thr_test".into(),
+                },
+            },
+            reply_tx: Some(reply_tx),
+        };
+
+        drop(pending); // no .respond()/.respond_error() call
+
+        let reply = reply_rx
+            .await
+            .expect("Drop must send a fallback reply, not just drop the sender silently");
+        let line = reply
+            .into_line()
+            .expect("fallback reply should serialize to a wire line");
+        let parsed: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(parsed["id"], 42);
+        assert_eq!(parsed["error"]["code"], -32000);
+        assert!(
+            parsed["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("dropped without a response"),
+            "unexpected fallback message: {parsed}"
         );
     }
 
@@ -859,6 +786,37 @@ mod tests {
         );
     }
 
+    /// Regression test: when `EventStream` is dropped, an incoming
+    /// server->client request must still get a JSON-RPC error reply on the
+    /// wire - never silently dropped - exercising the `events_tx.try_send`
+    /// failure branch in `dispatch::dispatch_incoming_line` (the behavioral
+    /// change this session's channel-bounding fix was about; with the
+    /// previous unbounded channel this branch could never be reached at
+    /// all).
+    #[tokio::test]
+    async fn a_server_request_gets_a_fallback_error_reply_when_the_event_stream_is_dropped() {
+        let (client_io, mut server_io) = tokio::io::duplex(4096);
+        let (client_read, client_write) = tokio::io::split(client_io);
+        let (_client, events) =
+            CodexAppServerClient::connect_streams(BufReader::new(client_read), client_write);
+        drop(events); // closes the events_tx receiver -> try_send returns Closed
+
+        server_io
+            .write_all(br#"{"method":"currentTime/read","id":9,"params":{"threadId":"thr_test"}}"#)
+            .await
+            .unwrap();
+        server_io.write_all(b"\n").await.unwrap();
+
+        let mut buf = [0u8; 4096];
+        let n = tokio::time::timeout(Duration::from_secs(5), server_io.read(&mut buf))
+            .await
+            .expect("should get a reply promptly, not a hang")
+            .unwrap();
+        let reply: serde_json::Value = serde_json::from_slice(&buf[..n]).unwrap();
+        assert_eq!(reply["id"], 9);
+        assert_eq!(reply["error"]["code"], -32000);
+    }
+
     /// Regression test: the reader task detecting a dead connection (EOF from
     /// the peer, here simulated by dropping the peer side entirely) must
     /// proactively reap the writer task - not just when the caller eventually
@@ -916,6 +874,32 @@ mod tests {
         assert!(
             matches!(result, Ok(Ok(0))),
             "expected EOF on the peer side after dropping the last client handle, got {result:?}"
+        );
+    }
+
+    /// Regression test: for `connect_streams`/`connect_unix` (unlike
+    /// `spawn()`, which can force the issue via `kill_on_drop`), dropping
+    /// every `CodexAppServerClient` clone must terminate the reader task
+    /// promptly even when the peer never sends EOF and never reacts to the
+    /// writer's half-close. `_server_io` is kept alive but never read,
+    /// written, or dropped - an uncooperative peer that will never produce
+    /// EOF on its own. Before the reader task raced on `reader_cancel` (not
+    /// just EOF/errors), this would hang forever instead of observing
+    /// `Event::Closed`.
+    #[tokio::test]
+    async fn dropping_the_last_client_terminates_the_reader_even_without_peer_eof() {
+        let (client_io, _server_io) = tokio::io::duplex(4096);
+        let (client_read, client_write) = tokio::io::split(client_io);
+        let (client, mut events) =
+            CodexAppServerClient::connect_streams(BufReader::new(client_read), client_write);
+
+        drop(client);
+
+        let event = tokio::time::timeout(Duration::from_secs(5), events.recv()).await;
+        assert!(
+            matches!(event, Ok(Some(Event::Closed))),
+            "expected the reader task to notice cancellation and emit Event::Closed \
+             even without peer EOF, got {event:?}"
         );
     }
 

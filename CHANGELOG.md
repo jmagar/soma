@@ -24,7 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   into another project wholesale. Protocol types are generated at build time
   from a vendored JSON Schema; regenerate after upgrading `codex` via
   `cargo xtask codex-schema regen` (staleness is detected and warned about
-  automatically). See `crates/codex-app-server-client/README.md`.
+  automatically). Includes a bounded `EventStream` channel (notifications are
+  dropped and logged on overflow, but server requests always get a fallback
+  JSON-RPC error reply rather than being silently dropped), a line-cap fix so
+  `MAX_LINE_BYTES` is enforced on both the newline-found and no-newline read
+  paths, and build-time schema validation that fails loudly on a malformed
+  `response_type` instead of misreading it. See
+  `crates/codex-app-server-client/README.md`.
 
 ### Fixed
 

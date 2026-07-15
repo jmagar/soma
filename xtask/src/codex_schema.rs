@@ -21,7 +21,8 @@ mod regen;
 mod typify_probe;
 
 use anyhow::{bail, Context, Result};
-use std::path::Path;
+use serde_json::{Map, Value};
+use std::path::{Path, PathBuf};
 
 /// Workspace-relative path to the vendored combined protocol schema.
 pub(crate) const PROTOCOL_SCHEMA_PATH: &str =
@@ -33,11 +34,21 @@ pub(crate) const METHODS_JSON_PATH: &str = "crates/codex-app-server-client/schem
 pub(crate) const CODEX_VERSION_PATH: &str =
     "crates/codex-app-server-client/schema/CODEX_VERSION.txt";
 
+/// Filename of the master (non-v2) schema bundle emitted by
+/// `codex app-server generate-json-schema` into its output directory.
+/// Shared by `regen` and `bisect`, which both read the same dump directory -
+/// must stay byte-identical between the two or one could silently start
+/// reading a stale/mismatched file.
+pub(crate) const MASTER_BUNDLE_FILE: &str = "codex_app_server_protocol.schemas.json";
+/// Filename of the v2-only schema bundle emitted alongside the master
+/// bundle. See [`MASTER_BUNDLE_FILE`].
+pub(crate) const V2_BUNDLE_FILE: &str = "codex_app_server_protocol.v2.schemas.json";
+
 pub fn run(args: &[String]) -> Result<()> {
     match args.first().map(String::as_str) {
         Some("regen") => regen::run(&args[1..]),
         Some("bisect") => bisect::run(&args[1..]),
-        Some("--help") | Some("-h") | None => {
+        Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
             Ok(())
         }
@@ -75,9 +86,48 @@ If that panics inside typify, bisect it:
 }
 
 /// Reads and parses a JSON file, with file-path context on failure.
-pub(crate) fn read_json(path: &Path) -> Result<serde_json::Value> {
+pub(crate) fn read_json(path: &Path) -> Result<Value> {
     let text = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
     serde_json::from_str(&text)
         .with_context(|| format!("failed to parse {} as JSON", path.display()))
+}
+
+/// Parses the single positional `<gen-dir>` argument shared by the
+/// `codex-schema regen` and `codex-schema bisect` subcommands: `--help`/`-h`
+/// prints `usage` and exits 0 immediately, exactly one positional argument is
+/// accepted as the generated-schema directory, and any further positional
+/// argument is rejected. `usage` doubles as the error context when the
+/// positional argument is missing.
+pub(crate) fn parse_gen_dir(args: &[String], usage: &str) -> Result<PathBuf> {
+    let mut gen_dir = None;
+    for arg in args {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!("{usage}");
+                std::process::exit(0);
+            }
+            other if gen_dir.is_none() => gen_dir = Some(PathBuf::from(other)),
+            other => bail!("unexpected argument: {other}"),
+        }
+    }
+    gen_dir.context(usage.to_string())
+}
+
+/// Reads the master + v2 schema bundles from `gen_dir`, merges them via
+/// `merge::build_combined`, and extracts the flat `definitions` object.
+/// Shared by `regen::regen` (which writes the combined schema out) and
+/// `bisect::bisect` (which probes the definitions with typify).
+pub(crate) fn load_combined_defs(gen_dir: &Path) -> Result<(Value, Map<String, Value>)> {
+    let master = read_json(&gen_dir.join(MASTER_BUNDLE_FILE))?;
+    let v2 = read_json(&gen_dir.join(V2_BUNDLE_FILE))?;
+
+    let combined = merge::build_combined(&master, &v2)?;
+    let combined_defs = combined
+        .get("definitions")
+        .and_then(Value::as_object)
+        .context("combined schema missing \"definitions\"")?
+        .clone();
+
+    Ok((combined, combined_defs))
 }

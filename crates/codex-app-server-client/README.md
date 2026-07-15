@@ -200,17 +200,30 @@ about even though they're not "limitations" per se:
   cancels the shared token the moment it detects the connection is dead (EOF
   or a read error), so a crashed/exited app-server process gets cleaned up
   immediately - the caller doesn't need to notice `Event::Closed` and drop the
-  client themselves for that to happen.
-- **No `PendingServerRequest` can leak indefinitely.** Dropping one without
-  responding resolves its forwarding task immediately (the paired channel
-  wakes with an error the moment the sender is dropped). For the pathological
-  case of holding one forever without dropping *or* responding, an internal
+  client themselves for that to happen. The reader task itself also races
+  against that same cancellation signal (not just EOF/errors), so dropping
+  every client clone terminates it promptly even for `connect_streams`/
+  `connect_unix` peers that never notice or react to the writer's half-close -
+  and its cleanup (clearing pending calls, emitting `Event::Closed`,
+  cancelling the writer) runs via a `Drop` guard, so it still happens even if
+  a panic unwinds through the reader loop instead of exiting normally.
+- **Bounded event channel.** `EventStream`'s internal channel holds up to
+  1024 events (`EVENTS_CHANNEL_CAPACITY`); if a consumer falls behind,
+  `Event::Notification`s are dropped (logged), but `Event::Request`s are
+  never silently dropped - this crate replies with a fallback JSON-RPC error
+  on the app-server's behalf instead of leaving it hanging.
+- **No `PendingServerRequest` can leak indefinitely, and none is ever left
+  permanently unanswered.** Dropping one - deliberately, via cancellation, or
+  via a panic unwinding through it - sends a fallback JSON-RPC error reply
+  through its own `Drop` impl, so the app-server always gets *some* reply,
+  not just a resolved-with-nothing internal channel. An internal
   `PENDING_SERVER_REQUEST_TIMEOUT` (600s - generous, since these are often
-  human-in-the-loop approval/elicitation flows) bounds it: the forwarding task
-  gives up, sends a fallback JSON-RPC error reply so the app-server isn't left
-  waiting forever either, and frees its resources. Always respond promptly
-  anyway (even with an error) - the timeout is a backstop, not a substitute
-  for handling every event you receive.
+  human-in-the-loop approval/elicitation flows) is a separate backstop for
+  the different, rarer case of a caller holding one forever without ever
+  dropping *or* responding to it (e.g. stored in a collection and forgotten).
+  Always respond promptly and explicitly anyway - the fallbacks exist so a
+  bug or an unhandled case doesn't turn into a silent hang, not as a
+  substitute for handling every event you receive.
 - **`RequestId` is a full `Eq + Hash` key type**, so it can be used directly
   as a `HashMap`/`HashSet` key with no caller-side newtype wrapper. This
   matters for anything built on top of this crate that needs to track

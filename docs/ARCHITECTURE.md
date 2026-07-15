@@ -54,15 +54,18 @@ crates/
 ```
 
 Two crates in this workspace sit outside the layered architecture above by
-design - each is a standalone, self-contained tool with no path-dependency on
-any `soma-*` crate, so neither follows (or should be forced to follow) the
-client → service → shim pattern:
+design - each contains a standalone, self-contained tool that doesn't follow
+(or need to follow) the client → service → shim pattern:
 
 - `crates/codex-app-server-client/` - a fully-typed async Rust client for the
-  Codex CLI's `app-server` v2 JSON-RPC protocol. See its own README for
-  architecture and usage.
+  Codex CLI's `app-server` v2 JSON-RPC protocol, with zero path-dependencies
+  on any other crate in this workspace. See its own README for architecture
+  and usage.
 - `xtask/` - repo-local build/release tooling (version-sync checks, release
-  planning, schema codegen for `codex-app-server-client`). See
+  planning, schema codegen for `codex-app-server-client`). Its
+  `codex-schema` subcommand has no dependency on `soma-*` crates, but `xtask`
+  itself depends on `soma-contracts` and `soma-service` (path deps) for its
+  other duties, such as version-sync and release-plan checks. See
   `docs/XTASKS.md`.
 
 ## Core files

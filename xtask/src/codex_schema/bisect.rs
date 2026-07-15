@@ -9,14 +9,11 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use serde_json::{Map, Value};
 
 use super::typify_probe::{self, ProbeOutcome};
-use super::{merge, read_json, PROTOCOL_SCHEMA_PATH};
-
-const MASTER_BUNDLE_FILE: &str = "codex_app_server_protocol.schemas.json";
-const V2_BUNDLE_FILE: &str = "codex_app_server_protocol.v2.schemas.json";
+use super::{load_combined_defs, merge, parse_gen_dir, PROTOCOL_SCHEMA_PATH};
 
 pub fn run(args: &[String]) -> Result<()> {
     let gen_dir = parse_args(args)?;
@@ -24,34 +21,14 @@ pub fn run(args: &[String]) -> Result<()> {
 }
 
 fn parse_args(args: &[String]) -> Result<PathBuf> {
-    let mut gen_dir = None;
-    for arg in args {
-        match arg.as_str() {
-            "--help" | "-h" => {
-                println!(
-                    "Usage: cargo xtask codex-schema bisect <path-to-codex-generate-json-schema-output-dir>"
-                );
-                std::process::exit(0);
-            }
-            other if gen_dir.is_none() => gen_dir = Some(PathBuf::from(other)),
-            other => bail!("unexpected argument: {other}"),
-        }
-    }
-    gen_dir.context(
+    parse_gen_dir(
+        args,
         "Usage: cargo xtask codex-schema bisect <path-to-codex-generate-json-schema-output-dir>",
     )
 }
 
 pub fn bisect(gen_dir: &Path) -> Result<()> {
-    let master = read_json(&gen_dir.join(MASTER_BUNDLE_FILE))?;
-    let v2 = read_json(&gen_dir.join(V2_BUNDLE_FILE))?;
-
-    let combined = merge::build_combined(&master, &v2)?;
-    let defs = combined
-        .get("definitions")
-        .and_then(Value::as_object)
-        .context("combined schema missing \"definitions\"")?
-        .clone();
+    let (combined, defs) = load_combined_defs(gen_dir)?;
 
     println!(
         "==> probing the full merged schema ({} definitions)...",
