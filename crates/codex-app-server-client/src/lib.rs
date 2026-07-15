@@ -41,6 +41,8 @@ mod daemon;
 mod error;
 mod events;
 pub mod protocol;
+#[cfg(feature = "rest")]
+pub mod rest;
 mod session;
 mod transport;
 

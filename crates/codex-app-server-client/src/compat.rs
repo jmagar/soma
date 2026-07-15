@@ -1,8 +1,10 @@
 use std::process::Command;
 
+use serde::{Deserialize, Serialize};
+
 include!(concat!(env!("OUT_DIR"), "/compat_generated.rs"));
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SurfaceSummary {
     pub client_requests: usize,
     pub server_requests: usize,
@@ -21,9 +23,9 @@ impl SurfaceSummary {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CompatibilityReport {
-    pub schema_codex_version: &'static str,
+    pub schema_codex_version: String,
     pub installed_codex_version: Option<String>,
     pub surface: SurfaceSummary,
 }
@@ -35,7 +37,7 @@ impl CompatibilityReport {
 
     pub fn from_installed_version(installed_codex_version: Option<String>) -> Self {
         Self {
-            schema_codex_version: CODEX_SCHEMA_VERSION.trim(),
+            schema_codex_version: CODEX_SCHEMA_VERSION.trim().to_owned(),
             installed_codex_version,
             surface: SurfaceSummary::current(),
         }

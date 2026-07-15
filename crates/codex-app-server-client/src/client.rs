@@ -504,6 +504,35 @@ impl CodexAppServerClient {
     ) -> Result<serde_json::Value> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let request = build(RequestId::Int64(id));
+        let line = serde_json::to_string(&request)?;
+        self.call_serialized_request(id, line).await
+    }
+
+    /// Issues one raw JSON-RPC method call and returns its raw `result` value.
+    ///
+    /// This is the escape hatch for bridges and generated surfaces that need
+    /// to call app-server methods dynamically. Prefer the typed generated
+    /// wrappers when the method is known at compile time.
+    pub async fn call_raw_method(
+        &self,
+        method: impl Into<String>,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let mut request = serde_json::Map::new();
+        request.insert("id".to_owned(), serde_json::Value::from(id));
+        request.insert(
+            "method".to_owned(),
+            serde_json::Value::String(method.into()),
+        );
+        if !params.is_null() {
+            request.insert("params".to_owned(), params);
+        }
+        let line = serde_json::to_string(&request)?;
+        self.call_serialized_request(id, line).await
+    }
+
+    async fn call_serialized_request(&self, id: i64, line: String) -> Result<serde_json::Value> {
         let (tx, rx) = oneshot::channel();
         lock_pending(&self.pending).insert(id, tx);
 
@@ -530,7 +559,6 @@ impl CodexAppServerClient {
             id,
         };
 
-        let line = serde_json::to_string(&request)?;
         if self.write_tx.try_send(line).is_err() {
             return Err(Error::TransportClosed);
         }

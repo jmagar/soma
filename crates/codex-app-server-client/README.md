@@ -36,6 +36,9 @@ copied into another project wholesale and will keep working.
 - No WebSocket transport - OpenAI's own docs mark it "experimental and
   unsupported." Stdio (the default) and Unix sockets cover the documented,
   supported surface.
+- No native Codex app-server REST transport exists upstream. This crate's
+  optional `rest` feature is an HTTP adapter that calls the real JSON-RPC
+  app-server client underneath.
 - No opinion on auth, sandboxing, or approval policy - that's all `codex`
   CLI/config territory, passed straight through via `extra_args` or the
   typed params structs.
@@ -71,6 +74,7 @@ See:
   policy; use the documented preset handlers when they fit.
 - `examples/daemon.rs` for Unix socket connection helpers.
 - `examples/compatibility.rs` for schema/version diagnostics.
+- `examples/rest_server.rs` for the optional HTTP bridge.
 - `tests/smoke.rs` for a live integration test against the real binary
   (skips gracefully if `codex` isn't on `PATH`).
 
@@ -115,8 +119,220 @@ The generated low-level methods are still available directly through
   turn errors from `ServerNotification`s.
 - `CodexDaemon`: build real `codex app-server --listen unix://...` args and
   connect to an existing Unix socket with the same session handshake.
+- `CodexAppServerClient::call_raw_method(...)`: dynamic JSON-RPC method calls
+  for bridge layers and generated surfaces that need to route methods by name.
 - `CompatibilityReport::current()`: compare the installed `codex --version`
   with the vendored schema stamp and print method-count diagnostics.
+
+## Optional REST adapter
+
+Enable the `rest` feature when you want a portable HTTP bridge for the Codex
+app-server protocol:
+
+```toml
+codex-app-server-client = { path = "crates/codex-app-server-client", features = ["rest"] }
+```
+
+The adapter is deliberately self-contained: it uses crates.io dependencies
+only, has no Soma path-dependencies, and does not assume any auth, gateway,
+Labby, Beads, or repo-specific runtime.
+
+```rust,no_run
+use codex_app_server_client::rest;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let listener = tokio::net::TcpListener::bind("127.0.0.1:43210").await?;
+axum::serve(listener, rest::router()).await?;
+# Ok(())
+# }
+```
+
+Routes:
+
+- `GET /health` and `GET /v1/health`: liveness probe.
+- `GET /v1/compatibility`: schema stamp, installed `codex --version`, and
+  generated method-count summary.
+- `POST /v1/text-turn`: starts a fresh Codex session, sends one text prompt,
+  waits for turn completion, and returns assistant text, latest diff, and
+  turn errors.
+- `POST /v1/call/{method}`: one-shot raw JSON-RPC bridge. The backend starts
+  a fresh session, calls the app-server method named by the path (for example
+  `/v1/call/config/read` or `/v1/call/thread/start`), and returns the raw
+  result.
+- `POST /v1/sessions`: starts a persistent app-server session and returns a
+  `sessionId` plus the raw initialize response.
+- `GET /v1/sessions`: lists active REST bridge sessions.
+- `DELETE /v1/sessions/{sessionId}`: drops a bridge session and terminates the
+  owned app-server process when no client clones remain.
+- `POST /v1/sessions/{sessionId}/call/{method}`: calls any app-server method
+  on an existing session, preserving thread/event state across calls.
+- `GET /v1/sessions/{sessionId}/events?timeoutMs=30000`: long-polls the next
+  server notification/request. Server requests are returned with a
+  `requestKey` so REST clients can answer them later.
+- `POST /v1/sessions/{sessionId}/requests/{requestKey}/result`: replies to a
+  pending server-originated request with a JSON-RPC `result`.
+- `POST /v1/sessions/{sessionId}/requests/{requestKey}/error`: replies to a
+  pending server-originated request with a JSON-RPC `error`.
+
+One-shot text helper request:
+
+```json
+{
+  "prompt": "Say hello in one sentence.",
+  "model": "gpt-5",
+  "approvalPolicy": "read_only",
+  "client": {
+    "name": "my_rest_client",
+    "version": "0.1.0",
+    "command": "codex",
+    "extraArgs": ["--experimental"],
+    "config": {
+      "model_reasoning_effort": "low"
+    },
+    "callTimeoutMs": 120000
+  }
+}
+```
+
+One-shot text helper response:
+
+```json
+{
+  "threadId": "019...",
+  "turnId": "019...",
+  "agentMessage": "Hello.",
+  "latestDiff": null,
+  "errors": []
+}
+```
+
+One-shot raw bridge request:
+
+```http
+POST /v1/call/thread/start
+content-type: application/json
+```
+
+```json
+{
+  "params": {
+    "model": "gpt-5",
+    "cwd": "/workspace"
+  },
+  "client": {
+    "name": "my_rest_client",
+    "version": "0.1.0",
+    "extraArgs": ["--experimental"]
+  }
+}
+```
+
+One-shot raw bridge response:
+
+```json
+{
+  "method": "thread/start",
+  "result": {
+    "thread": {
+      "id": "019..."
+    }
+  }
+}
+```
+
+Stateful bridge flow:
+
+```http
+POST /v1/sessions
+content-type: application/json
+```
+
+```json
+{
+  "client": {
+    "name": "my_rest_client",
+    "version": "0.1.0"
+  }
+}
+```
+
+```json
+{
+  "sessionId": "session-1",
+  "initializeResponse": {
+    "platformOs": "linux"
+  }
+}
+```
+
+```http
+POST /v1/sessions/session-1/call/turn/start
+content-type: application/json
+```
+
+```json
+{
+  "params": {
+    "threadId": "019...",
+    "input": [{ "type": "text", "text": "Hello" }]
+  }
+}
+```
+
+Event polling response shapes:
+
+```json
+{ "event": "timeout" }
+```
+
+```json
+{
+  "event": "notification",
+  "notification": {
+    "method": "turn/completed",
+    "params": {}
+  }
+}
+```
+
+```json
+{
+  "event": "request",
+  "requestKey": "request-1",
+  "requestId": 42,
+  "method": "currentTime/read",
+  "request": {
+    "id": 42,
+    "method": "currentTime/read",
+    "params": {}
+  }
+}
+```
+
+Request reply examples:
+
+```json
+{ "result": { "currentTimeMs": 1760000000000 } }
+```
+
+```json
+{
+  "code": -32000,
+  "message": "denied",
+  "data": null
+}
+```
+
+Run the example server:
+
+```bash
+cargo run -p codex-app-server-client --features rest --example rest_server
+```
+
+Set `CODEX_APP_SERVER_REST_ADDR=127.0.0.1:43211` to pick a different bind
+address. The default backend can do both short-lived one-shot calls and
+persistent bridge sessions; host applications that want pooling, auth, tenancy,
+or their own process lifecycle can mount `rest::router_with_backend(...)`.
 
 ## How the typed protocol layer is built
 

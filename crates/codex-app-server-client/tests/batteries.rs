@@ -6,9 +6,9 @@ use codex_app_server_client::protocol::{
     UserInput,
 };
 use codex_app_server_client::{
-    AllowAllApprovalHandler, ApprovalHandler, CodexDaemon, CodexSession, CompatibilityReport,
-    DenyAllApprovalHandler, EventCollector, ReadOnlyApprovalHandler, ServerRequestReply,
-    SessionOptions, SurfaceSummary, CODEX_SCHEMA_VERSION,
+    AllowAllApprovalHandler, ApprovalHandler, CodexAppServerClient, CodexDaemon, CodexSession,
+    CompatibilityReport, DenyAllApprovalHandler, EventCollector, ReadOnlyApprovalHandler,
+    ServerRequestReply, SessionOptions, SurfaceSummary, CODEX_SCHEMA_VERSION,
 };
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 
@@ -191,6 +191,50 @@ async fn session_connect_streams_handshakes_before_returning() {
         .unwrap();
 
     assert_eq!(session.initialize_response().platform_os, "linux");
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn raw_method_calls_bridge_direct_json_rpc_requests() {
+    let (client_io, server_io) = tokio::io::duplex(4096);
+    let (client_read, client_write) = tokio::io::split(client_io);
+    let (server_read, mut server_write) = tokio::io::split(server_io);
+
+    let server = tokio::spawn(async move {
+        let mut reader = BufReader::new(server_read);
+        let request = read_json_line(&mut reader).await;
+        assert_eq!(request["method"], "thread/start");
+        assert_eq!(request["params"]["model"], "gpt-5");
+        assert_eq!(request["params"]["cwd"], "/workspace");
+        respond_json(
+            &mut server_write,
+            request["id"].clone(),
+            serde_json::json!({
+                "thread": {
+                    "id": "thread-raw",
+                    "title": "raw bridge",
+                    "model": "gpt-5"
+                }
+            }),
+        )
+        .await;
+    });
+
+    let (client, _events) =
+        CodexAppServerClient::connect_streams(BufReader::new(client_read), client_write);
+    let result = client
+        .with_call_timeout(Duration::from_secs(5))
+        .call_raw_method(
+            "thread/start",
+            serde_json::json!({
+                "model": "gpt-5",
+                "cwd": "/workspace"
+            }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result["thread"]["id"], "thread-raw");
     server.await.unwrap();
 }
 
