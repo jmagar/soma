@@ -168,6 +168,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `resources/service/[name].ts` and `resources/service/[id].ts`) both
   reported as `Loaded` even though the live registry rejects the pair and
   keeps the previous snapshot at real construction time.
+- Fixed two Windows-only breakages in the structured resources feature's
+  own test suite (found via Windows CI after the fact, not by design):
+  a test simulating a colliding drop-in file used a case-only filename
+  variant (`Runbook.md` after `runbook.md`), which is the same path on
+  case-insensitive filesystems (NTFS, APFS by default) and silently
+  overwrote the original instead of creating a genuine second file; and
+  `ProviderFileInspection.file_name` for a nested resource file rendered
+  with the platform's native path separator (`\` on Windows) instead of
+  the `/` its sibling `uri_template` field always uses, so a resource
+  under a subdirectory reported a `file_name` that looked nothing like
+  its own URI on Windows.
 
 ## [0.4.7]
 
