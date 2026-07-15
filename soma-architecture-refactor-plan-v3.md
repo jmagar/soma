@@ -32,6 +32,45 @@ MCP tool ────┘
 
 A surface translates input and output. It does not independently implement the business operation.
 
+## Reusable crate goal
+
+The shared layer is not merely internal cleanup. This repository should become the source of truth for Jacob's extracted Rust project building blocks and the proof of concept for the facade/orchestrator pattern.
+
+The goal is to extract recurring Rust project patterns into reusable crates that can be pulled into new projects quickly, mixed and matched independently, and eventually published to crates.io.
+
+For a new project, the target experience is:
+
+```text
+new product
+    depends on shared auth, observability, API, web, CLI, MCP, provider, gateway,
+    OpenAPI, Code Mode, and trace crates
+
+product code
+    supplies configuration, branding/defaults, domain types, application use cases,
+    product-specific routes/tools/commands, and integrations between the shared crates
+```
+
+Soma becomes the reference implementation and packaging/runtime product built on these crates. New products should mostly compose the shared crates behind a thin facade/orchestrator and then add domain-specific behavior.
+
+Every shared crate should be evaluated for:
+
+- scaffold speed: can a new product use it with explicit config and minimal glue?
+- reuse: can an unrelated Rust project depend on it without importing Soma product code?
+- publishability: are package names, docs, defaults, features, and dependency graphs suitable for crates.io?
+- mix-and-match simplicity: can a consumer opt into only the crate and feature set they need without inheriting the whole Soma stack?
+
+Prefer small explicit configuration types, narrow feature flags, examples that start from a blank project, and dependency graphs that stay understandable in `cargo tree`. Avoid hidden product defaults, broad feature aggregators, and "one crate imports everything" convenience shortcuts in shared crates.
+
+Dependency independence is a product goal, not just an aesthetic preference:
+
+- Leaf shared crates should have no internal Soma workspace dependencies unless there is a clear shared abstraction they are intentionally building on.
+- Higher-level shared crates may depend on lower-level shared crates, but only across explicit layers and only when the dependency keeps the public API simpler or preserves a shared invariant.
+- Optional features should be preferred for integrations such as Axum, rmcp, OpenAPI, storage, tracing exporters, OAuth providers, and gateway/auth bridges.
+- No shared crate should require a product crate, product defaults, product env prefixes, product binary names, or product policy to compile or to use its default feature set.
+- A little duplication at crate edges is acceptable when it prevents a tiny helper from forcing a large transitive dependency tree on consumers.
+
+The practical target is not "every crate depends on nothing." It is "every crate can be understood, packaged, documented, and adopted without dragging in unrelated product surface."
+
 ---
 
 ## 1. Executive decision
@@ -71,8 +110,11 @@ soma/
 └── crates/
     ├── shared/
     │   ├── traces/
+    │   ├── auth/
+    │   ├── observability/
     │   ├── openapi/
     │   ├── codemode/
+    │   ├── api-kit/
     │   ├── mcp/
     │   │   ├── client/
     │   │   ├── server/
@@ -90,8 +132,6 @@ soma/
         ├── config/
         ├── client/
         ├── integrations/
-        ├── auth/
-        ├── observability/
         ├── runtime/
         ├── api/
         ├── mcp/
@@ -122,6 +162,7 @@ A crate belongs in `crates/shared` only when all of the following are true:
 3. Its public types do not encode Soma product policy.
 4. An unrelated Rust project could use it naturally.
 5. Its all-features dependency graph still satisfies the previous rules.
+6. Its default feature set is minimal enough that consumers can mix and match crates without pulling in unrelated surfaces.
 
 A crate belongs in `crates/soma` when it defines or implements Soma-specific behavior, even when several Soma binaries or surfaces reuse it.
 
@@ -135,8 +176,11 @@ The physical path determines the architectural layer. The package name determine
 |---|---|---|---|
 | `apps/soma` | `soma` | `soma` | executable composition |
 | `crates/shared/traces` | `rmcp-traces` | `rmcp_traces` | shared |
+| `crates/shared/auth` | `soma-auth` | `soma_auth` | shared |
+| `crates/shared/observability` | `soma-observability` | `soma_observability` | shared |
 | `crates/shared/openapi` | `soma-openapi` | `soma_openapi` | shared |
 | `crates/shared/codemode` | `soma-codemode` | `soma_codemode` | shared |
+| `crates/shared/api-kit` | `soma-api-kit` | `soma_api_kit` | shared |
 | `crates/shared/mcp/client` | `soma-mcp-client` | `soma_mcp_client` | shared |
 | `crates/shared/mcp/server` | `soma-mcp-server` | `soma_mcp_server` | shared |
 | `crates/shared/mcp/proxy` | `soma-mcp-proxy` | `soma_mcp_proxy` | shared |
@@ -151,8 +195,6 @@ The physical path determines the architectural layer. The package name determine
 | `crates/soma/config` | `soma-config` | `soma_config` | product |
 | `crates/soma/client` | `soma-client` | `soma_client` | product |
 | `crates/soma/integrations` | `soma-integrations` | `soma_integrations` | product |
-| `crates/soma/auth` | `soma-auth` | `soma_auth` | product |
-| `crates/soma/observability` | `soma-observability` | `soma_observability` | product |
 | `crates/soma/runtime` | `soma-runtime` | `soma_runtime` | product |
 | `crates/soma/api` | `soma-api` | `soma_api` | product |
 | `crates/soma/mcp` | `soma-mcp` | `soma_mcp` | product |
@@ -306,7 +348,112 @@ Prefer only external dependencies. `soma-mcp-server` may depend on `rmcp-traces`
 
 ---
 
-## 3.3 `crates/shared/openapi`: reusable OpenAPI engine
+## 3.3 `crates/shared/auth`: reusable auth implementation
+
+**Package:** `soma-auth` during the migration.
+
+The live crate currently has no dependency on Soma product crates. It is structurally reusable and belongs in the shared layer.
+
+Suggested layout remains close to its current shape:
+
+```text
+crates/shared/auth/src/
+├── lib.rs
+├── config.rs
+├── auth_context.rs
+├── middleware.rs
+├── routes.rs
+├── jwt.rs
+├── session.rs
+├── sqlite.rs
+├── google.rs
+├── registration.rs
+├── metadata.rs
+├── cimd/
+└── upstream/
+```
+
+### Owns
+
+- reusable bearer-token, OAuth, JWT, session, and SQLite-backed auth primitives
+- optional Axum middleware and auth route builders
+- configurable scope labels and static-token scope minting
+- upstream OAuth credential storage, cache, refresh, and manager support
+- generic authorization-server and protected-resource metadata helpers
+- token encryption and key management primitives
+
+### Does not own
+
+- Soma product scopes, principals, or admin policy
+- `SOMA_*` environment loading
+- Soma default paths, cookie names, or data directories
+- gateway route policy
+- product audit policy
+- application authorization ports
+
+### Publishability cleanup
+
+Before publishing or declaring this crate shared-stable:
+
+- replace `~/.soma` default data directory with a neutral default or require the consumer to supply one
+- replace legacy `LAB` env prefix defaults with explicit consumer configuration
+- replace `lab_session`, `lab`, `lab:read`, and `lab:admin` defaults with neutral or required consumer values
+- move Soma/Lab-specific defaults into `crates/soma/config` or `crates/soma/integrations/auth.rs`
+- update package description and docs so they describe a reusable auth crate, not "for soma and derived servers"
+
+The package name may remain `soma-auth` temporarily to reduce churn. Pick a brand-neutral publish name only when the crate is ready for external publishing.
+
+---
+
+## 3.4 `crates/shared/observability`: reusable observability helpers
+
+**Package:** `soma-observability` during the migration.
+
+The live crate currently has no dependency on Soma product crates. It is reusable after removing product-specific default strings and env names.
+
+Suggested layout remains close to its current shape:
+
+```text
+crates/shared/observability/src/
+├── lib.rs
+├── metrics.rs
+├── logging.rs
+├── logging/
+│   ├── aurora.rs
+│   └── formatter.rs
+└── binary_status.rs
+```
+
+### Owns
+
+- Prometheus recorder install/render helpers
+- reusable tracing/logging initialization primitives
+- reusable structured/colored log formatter
+- reusable terminal/log palette constants where not product-specific
+- configurable stale-binary/source freshness helper
+
+### Does not own
+
+- Soma metric names and dashboards
+- product audit/telemetry policy
+- hard-coded `SOMA_*` env vars
+- hard-coded `soma` binary names, rebuild commands, or product paths
+- product readiness aggregation
+
+### Publishability cleanup
+
+Before publishing or declaring this crate shared-stable:
+
+- parameterize `SOMA_SUPPRESS_STALE_BINARY_WARNING`
+- parameterize the stale-binary warning text, binary name, build command, and source inputs
+- remove or generalize docs that say "When adapting Soma"
+- ensure logging palette defaults are either neutral shared defaults or explicitly branded as Aurora reusable tokens
+
+Product metric naming and dashboards belong in `crates/soma/integrations` or `crates/soma/runtime`, not in `crates/shared/observability`.
+
+---
+
+## 3.5 `crates/shared/openapi`: reusable OpenAPI engine
 
 **Package:** `soma-openapi`
 
@@ -368,7 +515,7 @@ Do not create a second OpenAPI executor inside `provider-adapters`, `soma-applic
 
 ---
 
-## 3.4 `crates/shared/codemode`: reusable Code Mode runtime
+## 3.6 `crates/shared/codemode`: reusable Code Mode runtime
 
 **Package:** `soma-codemode`
 
@@ -432,7 +579,7 @@ The product adapter may map `SOMA_HOME`, product auth context, audit fields, and
 
 ---
 
-## 3.5 `crates/shared/mcp/gateway`: reusable upstream MCP gateway
+## 3.7 `crates/shared/mcp/gateway`: reusable upstream MCP gateway
 
 **Package:** `soma-gateway`
 
@@ -476,7 +623,7 @@ crates/shared/mcp/gateway/src/
 
 ### Does not own
 
-- `soma-auth` types
+- product auth types or product auth defaults
 - Soma scopes or principals
 - Soma REST routes
 - Soma MCP tool descriptions
@@ -501,20 +648,20 @@ The gateway is the reusable engine that users instantiate when they want a full 
 This dependency is forbidden:
 
 ```text
-crates/shared/mcp/gateway ──X──▶ crates/soma/auth
+crates/shared/mcp/gateway ──X──▶ crates/soma/*
 ```
 
-The bridge belongs here:
+An optional dependency on `crates/shared/auth` is allowed only if it remains generic and does not pull in Soma product defaults. Product mapping belongs here:
 
 ```text
 crates/soma/integrations/src/gateway_auth.rs
 ```
 
-That bridge can depend on both `soma-gateway` and `soma-auth` and implement the generic gateway auth hook.
+That bridge can depend on both `soma-gateway` and shared `soma-auth` and implement the generic gateway auth hook with Soma product defaults.
 
 The reviewed gateway branch currently has these Soma-shaped pieces that must be neutralized before `soma-gateway` is declared shared:
 
-- `soma-auth` optional dependency and direct `soma_auth::upstream::*` runtime/cache/manager types.
+- `soma-auth` optional dependency currently points at a product-path crate; retarget it to `crates/shared/auth` or hide it behind a generic trait.
 - `SOMA_HOME`, `.soma`, and `soma_home` validation in gateway path defaults.
 - default protected-route scopes of `soma:read` and `soma:write`.
 - `soma.gateway.error.v1` as the structured error schema namespace.
@@ -547,7 +694,7 @@ Keep gateway-owned code limited to routing, projection, and gateway-specific ada
 
 ---
 
-## 3.6 `crates/shared/provider-kit`: reusable provider framework
+## 3.8 `crates/shared/provider-kit`: reusable provider framework
 
 **Package:** `soma-provider-kit`
 
@@ -621,7 +768,7 @@ A gateway adapter can project gateway capabilities into the provider registry, b
 
 ---
 
-## 3.7 `crates/shared/provider-adapters`: reusable provider implementations
+## 3.9 `crates/shared/provider-adapters`: reusable provider implementations
 
 **Package:** `soma-provider-adapters`
 
@@ -672,7 +819,7 @@ Start with one feature-gated `provider-adapters` crate. Create one crate per ada
 
 ---
 
-## 3.8 MCP role crates: client, server, and proxy
+## 3.10 MCP role crates: client, server, and proxy
 
 Split reusable MCP infrastructure by protocol role. This keeps each consumer's dependency surface honest:
 
@@ -771,7 +918,65 @@ These crates should remain thin wrappers around RMCP. RMCP already supplies prot
 
 ---
 
-## 3.9 `crates/shared/web-kit`: reusable web-server plumbing
+## 3.11 `crates/shared/api-kit`: reusable HTTP API surface helpers
+
+**Package:** `soma-api-kit`
+
+`web-kit` owns server lifecycle. `api-kit` owns reusable API surface mechanics.
+
+Suggested layout:
+
+```text
+crates/shared/api-kit/src/
+├── lib.rs
+├── response.rs
+├── error.rs
+├── problem.rs
+├── probe.rs
+├── route_inventory.rs
+├── pagination.rs
+├── json.rs
+├── openapi.rs
+└── axum.rs
+```
+
+### Owns
+
+- reusable JSON response envelopes and error body helpers
+- reusable problem-details or structured-error response helpers
+- liveness/readiness probe DTOs and response helpers
+- route inventory metadata and documentation helpers
+- generic pagination/query DTO helpers
+- optional Axum `IntoResponse` adapters
+- optional OpenAPI metadata projection helpers that delegate to `soma-openapi`
+
+### Does not own
+
+- `/v1/*` Soma routes
+- Soma action names or REST paths
+- product auth policy
+- product service/runtime state
+- listener binding or graceful shutdown
+- embedded web UI assets
+
+### Relationship to `web-kit`
+
+```text
+soma-api
+    product routes and request translation
+
+soma-api-kit
+    reusable API response/error/probe/route-inventory helpers
+
+soma-web-kit
+    listener, middleware, CORS, static files, shutdown, SSE/WebSocket helpers
+```
+
+Do not use `web-kit` as a drawer for reusable API contracts. If a helper is about JSON API shape, route metadata, or HTTP error/probe DTOs, it belongs in `api-kit`. If it is about running an Axum service, request middleware, or transport lifecycle, it belongs in `web-kit`.
+
+---
+
+## 3.12 `crates/shared/web-kit`: reusable web-server plumbing
 
 **Package:** `soma-web-kit`
 
@@ -807,8 +1012,6 @@ crates/shared/web-kit/src/
 - generic request tracing
 - timeouts and body limits
 - generic CORS configuration
-- reusable health/readiness primitives
-- generic rejection and error-envelope helpers
 - reusable SSE, WebSocket, and static-file helpers when proven reusable
 
 ### Does not own
@@ -819,13 +1022,9 @@ crates/shared/web-kit/src/
 - embedded Soma UI assets
 - action dispatch
 
-### `web-kit` versus `api-kit`
-
-Do not create a separate `api-kit` initially. Put genuinely reusable JSON API helpers into modules inside `web-kit`. Split `api-kit` later only when it has a distinct consumer and dependency boundary.
-
 ---
 
-## 3.10 `crates/shared/cli-kit`: reusable CLI plumbing
+## 3.13 `crates/shared/cli-kit`: reusable CLI plumbing
 
 **Package:** `soma-cli-kit`
 
@@ -871,7 +1070,7 @@ The CLI adapter may ask a human for confirmation. The application layer must sti
 
 ---
 
-## 3.11 `crates/shared/codex-app-server-client`
+## 3.14 `crates/shared/codex-app-server-client`
 
 **Package:** `codex-app-server-client`
 
@@ -887,7 +1086,7 @@ It may later be consumed by Code Mode, gateway, provider adapters, or Soma integ
 
 ---
 
-## 3.12 `crates/soma/domain`: product concepts and invariant rules
+## 3.15 `crates/soma/domain`: product concepts and invariant rules
 
 **Package:** `soma-domain`
 
@@ -937,7 +1136,7 @@ Do not move all of `soma-contracts` into `soma-domain`. Configuration, provider 
 
 ---
 
-## 3.13 `crates/soma/application`: shared product use cases
+## 3.16 `crates/soma/application`: shared product use cases
 
 **Package:** `soma-application`
 
@@ -1069,7 +1268,7 @@ The API endpoint, MCP tool, and CLI command all invoke this same method.
 
 ---
 
-## 3.14 `crates/soma/config`: product configuration
+## 3.17 `crates/soma/config`: product configuration
 
 **Package:** `soma-config`
 
@@ -1121,7 +1320,7 @@ The standalone crates keep their own explicit config types. `soma-config` perfor
 
 ---
 
-## 3.15 `crates/soma/client`: Soma upstream client
+## 3.18 `crates/soma/client`: Soma upstream client
 
 **Package:** `soma-client`
 
@@ -1157,7 +1356,7 @@ The application layer decides when a request should use an upstream. The client 
 
 ---
 
-## 3.16 `crates/soma/integrations`: product adapters to shared engines
+## 3.19 `crates/soma/integrations`: product adapters to shared engines
 
 **Package:** `soma-integrations`
 
@@ -1170,6 +1369,8 @@ crates/soma/integrations/src/
 ├── gateway.rs
 ├── gateway_auth.rs
 ├── gateway_trace.rs
+├── auth.rs
+├── observability.rs
 ├── codemode.rs
 ├── openapi.rs
 ├── upstream.rs
@@ -1178,14 +1379,15 @@ crates/soma/integrations/src/
 └── error.rs
 ```
 
-This crate answers the earlier adapter question precisely. The adapter connecting the standalone gateway to `soma-auth` goes here, not under `apps/soma` and not inside `soma-gateway`.
+This crate answers the earlier adapter question precisely. Product defaults and adapters connecting the standalone gateway to shared auth go here, not under `apps/soma` and not inside `soma-gateway`.
 
 ### Owns
 
 - implementations of `soma-application` ports
 - translation between Soma product types and shared-engine types
-- gateway-to-auth bridge
+- gateway-to-auth bridge and product auth default mapping
 - gateway trace propagation bridge
+- observability setup using Soma product names, env vars, and dashboards
 - provider registry adapter
 - Code Mode adapter
 - OpenAPI adapter
@@ -1206,6 +1408,7 @@ soma-integrations
 ├── soma-application
 ├── soma-domain
 ├── soma-auth
+├── soma-observability
 ├── soma-client
 ├── soma-provider-kit
 ├── soma-provider-adapters
@@ -1231,49 +1434,7 @@ Start with one `soma-integrations` crate and modules. Split only when compile we
 
 ---
 
-## 3.17 `crates/soma/auth`: Soma authentication and authorization implementation
-
-**Package:** `soma-auth`
-
-Suggested layout remains close to its current shape.
-
-### Owns
-
-- Soma principals and credential processing where product-specific
-- bearer-token policy
-- OAuth/JWT product implementation
-- scope resolution
-- implementations of application authorization ports
-- product auth routes or route builders if they cannot be generic
-
-### Does not own
-
-- generic gateway auth interfaces
-- action workflows
-- API business routes
-- process composition
-
-The shared gateway defines an auth hook. `soma-integrations::gateway_auth` implements that hook with `soma-auth`.
-
----
-
-## 3.18 `crates/soma/observability`
-
-**Package:** `soma-observability`
-
-### Owns
-
-- Soma metric names
-- product dashboards/labels
-- tracing initialization presets
-- product audit/telemetry sinks
-- readiness and health observation helpers
-
-Generic request tracing middleware belongs in `web-kit`. RMCP trace parsing belongs in `rmcp-traces`. Product telemetry policy belongs here.
-
----
-
-## 3.19 `crates/soma/runtime`: initialized product runtime
+## 3.20 `crates/soma/runtime`: initialized product runtime
 
 **Package:** `soma-runtime`
 
@@ -1322,7 +1483,7 @@ Surface state should expose the application facade, not every lower-level depend
 
 ---
 
-## 3.20 `crates/soma/api`: Soma HTTP adapter
+## 3.21 `crates/soma/api`: Soma HTTP adapter
 
 **Package:** `soma-api`
 
@@ -1358,6 +1519,11 @@ crates/soma/api/src/
 - product OpenAPI document generation
 - translation into `soma-application` requests
 
+### Uses
+
+- `soma-api-kit` for reusable JSON response, error, probe, pagination, and route-inventory helpers
+- `soma-web-kit` only through app/server composition for listener and middleware lifecycle
+
 ### Does not own
 
 - action execution workflows
@@ -1365,6 +1531,9 @@ crates/soma/api/src/
 - construction of `SomaClient` or shared engines
 - listener binding
 - generic middleware
+- reusable health/readiness DTOs
+- generic error envelopes
+- reusable route inventory primitives
 
 Target state:
 
@@ -1376,7 +1545,7 @@ pub struct ApiState {
 
 ---
 
-## 3.21 `crates/soma/mcp`: Soma MCP adapter
+## 3.22 `crates/soma/mcp`: Soma MCP adapter
 
 **Package:** `soma-mcp`
 
@@ -1433,7 +1602,7 @@ pub struct McpState {
 
 ---
 
-## 3.22 `crates/soma/cli`: Soma CLI adapter
+## 3.23 `crates/soma/cli`: Soma CLI adapter
 
 **Package:** `soma-cli`
 
@@ -1482,7 +1651,7 @@ The CLI may collect confirmation, but the application validates the confirmation
 
 ---
 
-## 3.23 Remaining Soma product crates
+## 3.24 Remaining Soma product crates
 
 ### `crates/soma/plugin-support`
 
@@ -1516,45 +1685,28 @@ crates/shared/web-kit
 ## 4.1 Target graph
 
 ```text
-                                      apps/soma
-                                         │
-              ┌──────────────────────────┼──────────────────────────┐
-              │                          │                          │
-              ▼                          ▼                          ▼
-          soma-cli                   soma-api                   soma-mcp
-              │                          │                          │
-              ▼                          ▼                          ▼
-         soma-cli-kit              soma-web-kit              soma-mcp-server
-                                                                     │
-                                                                     ▼
-                                                                 rmcp-traces
+apps/soma
+    ├── soma-cli ─────────────▶ soma-cli-kit
+    ├── soma-api ─────────────▶ soma-api-kit
+    │                           soma-web-kit
+    ├── soma-mcp ─────────────▶ soma-mcp-server ───▶ rmcp-traces
+    ├── soma-runtime ─────────▶ soma-application ──▶ soma-domain
+    └── soma-integrations
+            ├── soma-auth
+            ├── soma-observability
+            ├── soma-client
+            ├── soma-provider-kit ───────▶ soma-provider-adapters
+            ├── soma-gateway ────────────▶ soma-mcp-proxy
+            │                              ├── soma-mcp-client
+            │                              └── soma-mcp-server
+            ├── soma-codemode ───────────▶ soma-openapi
+            └── soma-openapi
 
-              soma-cli ───────┐
-              soma-api ───────┼──────────────▶ soma-application
-              soma-mcp ───────┘                       │
-                                                     ▼
-                                                soma-domain
-                                                     ▲
-                                                     │
-                                             soma-integrations
-        ┌────────────────────────────────────────────┼──────────────────────────────┐
-        │                  │                         │                 │            │
-        ▼                  ▼                         ▼                 ▼            ▼
-   soma-client        soma-auth          soma-provider-kit      soma-gateway  soma-codemode
-                                                  │                 │             │
-                                                  ▼                 ▼             ▼
-                                      soma-provider-adapters  soma-mcp-proxy  soma-openapi
-                                                                    │
-                                                                    ▼
-                                                             soma-mcp-client
-
-                                  soma-runtime
-                                      │
-                                      ▼
-                              soma-application
+soma-api, soma-mcp, and soma-cli also call soma-application for product use cases.
+soma-web-kit is composed by apps/soma and/or soma-api where HTTP serving is needed.
 ```
 
-`apps/soma` also depends on configuration, observability, runtime, web, and plugin support as required by features.
+`apps/soma` also depends on configuration, shared observability, runtime, web, and plugin support as required by features.
 
 ## 4.2 Mandatory dependency rules
 
@@ -1637,7 +1789,10 @@ Recommended direction:
 
 ```text
 rmcp-traces                         leaf
+soma-auth                           external + optional rmcp
+soma-observability                  external
 soma-openapi                        leaf
+soma-api-kit                        external + optional axum/openapi
 codex-app-server-client             leaf
 
 soma-codemode ────────────────▶ soma-openapi          optional
@@ -1660,6 +1815,8 @@ soma-cli-kit                        independent
 ```
 
 Do not introduce cycles among shared crates. If gateway and provider adapters need each other in both directions, extract the shared contract or keep one direction through an adapter owned by the higher layer.
+
+Treat this DAG as a maximum, not a shopping list. A shared crate should start with the smallest dependency cone that lets it be useful. Add an internal shared dependency only when the public API becomes clearer, a duplicated invariant disappears, or the consumer avoids more glue than the dependency costs.
 
 ---
 
@@ -1759,6 +1916,9 @@ Most "business for a tool" belongs in `soma-application`. Only invariant rules a
 |---|---|---|
 | `crates/soma` | `apps/soma` | `soma` |
 | `crates/rmcp-traces` | `crates/shared/traces` | `rmcp-traces` |
+| `crates/soma-auth` | `crates/shared/auth` | `soma-auth` |
+| `crates/soma-observability` | `crates/shared/observability` | `soma-observability` |
+| new extraction from `crates/soma-api` | `crates/shared/api-kit` | `soma-api-kit` |
 | `crates/soma-openapi` | `crates/shared/openapi` | `soma-openapi` |
 | `crates/soma-codemode` | `crates/shared/codemode` | `soma-codemode` |
 | `crates/soma-mcp-client` | `crates/shared/mcp/client` | `soma-mcp-client` |
@@ -1767,10 +1927,8 @@ Most "business for a tool" belongs in `soma-application`. Only invariant rules a
 | `crates/soma-gateway` | `crates/shared/mcp/gateway` | `soma-gateway` |
 | `crates/codex-app-server-client` | `crates/shared/codex-app-server-client` | unchanged |
 | `crates/soma-api` | `crates/soma/api` | `soma-api` |
-| `crates/soma-auth` | `crates/soma/auth` | `soma-auth` |
 | `crates/soma-cli` | `crates/soma/cli` | `soma-cli` |
 | `crates/soma-mcp` | `crates/soma/mcp` | `soma-mcp` |
-| `crates/soma-observability` | `crates/soma/observability` | unchanged |
 | `crates/soma-plugin-support` | `crates/soma/plugin-support` | unchanged |
 | `crates/soma-runtime` | `crates/soma/runtime` | unchanged |
 | `crates/soma-test-support` | `crates/soma/test-support` | unchanged |
@@ -1862,8 +2020,11 @@ resolver = "2"
 members = [
     "apps/soma",
     "crates/shared/traces",
+    "crates/shared/auth",
+    "crates/shared/observability",
     "crates/shared/openapi",
     "crates/shared/codemode",
+    "crates/shared/api-kit",
     "crates/shared/mcp/*",
     "crates/shared/provider-kit",
     "crates/shared/provider-adapters",
@@ -1883,8 +2044,11 @@ Centralize all internal paths:
 [workspace.dependencies]
 # Shared
 rmcp-traces = { path = "crates/shared/traces" }
+soma-auth = { path = "crates/shared/auth" }
+soma-observability = { path = "crates/shared/observability" }
 soma-openapi = { path = "crates/shared/openapi" }
 soma-codemode = { path = "crates/shared/codemode" }
+soma-api-kit = { path = "crates/shared/api-kit" }
 soma-mcp-client = { path = "crates/shared/mcp/client" }
 soma-mcp-server = { path = "crates/shared/mcp/server" }
 soma-mcp-proxy = { path = "crates/shared/mcp/proxy" }
@@ -1901,8 +2065,6 @@ soma-application = { path = "crates/soma/application" }
 soma-config = { path = "crates/soma/config" }
 soma-client = { path = "crates/soma/client" }
 soma-integrations = { path = "crates/soma/integrations" }
-soma-auth = { path = "crates/soma/auth" }
-soma-observability = { path = "crates/soma/observability" }
 soma-runtime = { path = "crates/soma/runtime" }
 soma-api = { path = "crates/soma/api" }
 soma-mcp = { path = "crates/soma/mcp" }
@@ -1963,7 +2125,7 @@ cli = ["dep:soma-cli", "dep:soma-cli-kit"]
 mcp = ["dep:soma-mcp"]
 mcp-stdio = ["mcp"]
 mcp-http = ["mcp", "api"]
-api = ["dep:soma-api", "dep:soma-web-kit"]
+api = ["dep:soma-api", "dep:soma-api-kit", "dep:soma-web-kit"]
 auth = ["dep:soma-auth"]
 oauth = ["auth"]
 web = ["api", "dep:soma-web"]
@@ -2130,7 +2292,7 @@ Land the incoming traces, OpenAPI, Code Mode, and gateway work with valid standa
 - merge/rebase traces, OpenAPI, Code Mode, and gateway work
 - align RMCP versions
 - extract `soma-mcp-client`, `soma-mcp-server`, and `soma-mcp-proxy` from gateway/MCP overlap
-- remove `soma-gateway -> soma-auth`
+- remove product-shaped gateway auth defaults and ensure any auth dependency resolves to shared `soma-auth`
 - remove Soma-shaped gateway defaults from the shared layer
 - reconcile gateway Code Mode/OpenAPI modules with the standalone engines
 - add direct package tests
@@ -2220,12 +2382,15 @@ Adopt the chosen `apps`, `crates/shared`, and `crates/soma` paths with no intent
 
 ```bash
 mkdir -p crates/shared
+mkdir -p crates/shared/mcp
 
 git mv crates/soma apps/soma
 mkdir -p crates/soma
 
 # Incoming standalone crates
 git mv crates/rmcp-traces crates/shared/traces
+git mv crates/soma-auth crates/shared/auth
+git mv crates/soma-observability crates/shared/observability
 git mv crates/soma-openapi crates/shared/openapi
 git mv crates/soma-codemode crates/shared/codemode
 git mv crates/soma-mcp-client crates/shared/mcp/client
@@ -2238,11 +2403,9 @@ git mv crates/codex-app-server-client crates/shared/codex-app-server-client
 
 # Existing Soma product crates
 git mv crates/soma-api crates/soma/api
-git mv crates/soma-auth crates/soma/auth
 git mv crates/soma-cli crates/soma/cli
 git mv crates/soma-contracts crates/soma/contracts
 git mv crates/soma-mcp crates/soma/mcp
-git mv crates/soma-observability crates/soma/observability
 git mv crates/soma-plugin-support crates/soma/plugin-support
 git mv crates/soma-runtime crates/soma/runtime
 git mv crates/soma-service crates/soma/service
@@ -2960,8 +3123,8 @@ Example failure:
 ```text
 architecture violation:
   shared package soma-gateway
-  depends on product package soma-auth
-  edge: soma-gateway --feature oauth -> soma-auth
+  depends on product package soma-config
+  edge: soma-gateway --feature oauth -> soma-config
 
 move the adapter to crates/soma/integrations or make the gateway hook generic
 ```
@@ -2981,8 +3144,11 @@ After migration, allow only DTO/type references explicitly approved by the archi
 
 ```bash
 cargo tree -p rmcp-traces --all-features
+cargo tree -p soma-auth --all-features
+cargo tree -p soma-observability --all-features
 cargo tree -p soma-openapi --all-features
 cargo tree -p soma-codemode --all-features
+cargo tree -p soma-api-kit --all-features
 cargo tree -p soma-gateway --all-features
 cargo tree -p soma-provider-kit --all-features
 cargo tree -p soma-provider-adapters --all-features
@@ -2995,6 +3161,8 @@ cargo tree -p soma-cli-kit --all-features
 
 Fail CI when any tree reaches `crates/soma` or `apps/soma`.
 
+Also check the default-feature trees for shared crates. Default features should not pull in unrelated surfaces such as gateway, web serving, OAuth providers, OpenAPI generation, storage, or product integration unless the crate's core purpose requires them.
+
 ---
 
 ## 12. Test strategy
@@ -3006,8 +3174,10 @@ Every shared crate gets:
 - direct unit tests
 - at least one explicit-construction integration test
 - no-default-features build when supported
+- default-features dependency snapshot
 - all-features build
 - dependency-boundary check
+- crates.io package include/list check before publish
 - documentation examples
 - no reliance on `SOMA_HOME` or product config in core tests
 
@@ -3091,15 +3261,17 @@ The refactor is complete when all statements are true.
 
 - executable Rust product package is under `apps/soma`
 - every cross-project crate is under `crates/shared`
-- every Soma product library is under `crates/soma`
+- every Soma product-only library is under `crates/soma`
 - package names remain stable unless a separate naming decision changes them
 
 ### Shared boundaries
 
 - no shared crate depends on a product crate under any feature
-- gateway has no `soma-auth` dependency
+- gateway has no dependency on product auth/config/defaults; optional shared `soma-auth` use remains generic
 - Code Mode and OpenAPI have one canonical implementation each
 - shared crates construct from explicit configuration
+- shared crates keep minimal default features and feature-gate heavyweight integrations
+- each publishable shared crate has docs/examples that show blank-project usage
 
 ### Business boundary
 
@@ -3131,7 +3303,7 @@ The refactor is complete when all statements are true.
 
 The first four moves should be:
 
-1. **Fix and merge the standalone foundations.** Align RMCP, remove gateway-to-auth, and eliminate duplicated OpenAPI/Code Mode engines.
+1. **Fix and merge the standalone foundations.** Align RMCP, remove product-shaped gateway auth/config defaults, and eliminate duplicated OpenAPI/Code Mode engines.
 2. **Freeze behavior.** Capture every current surface contract and feature build.
 3. **Apply the physical taxonomy in one mechanical PR.** Move the app, shared crates, and product crates without changing their package names or internals.
 4. **Introduce `SomaApplication`, then migrate CLI, API, and MCP one surface at a time.** Only after all surfaces use the facade should the legacy service/contracts internals be carved into their final crates.
@@ -3150,12 +3322,14 @@ This order gives Soma the selected map first, then builds the roads without rero
 | product config and `SOMA_*` env | `crates/soma/config` |
 | outbound remote Soma HTTP client | `crates/soma/client` |
 | bridges from application ports to engines | `crates/soma/integrations` |
-| Soma auth implementation | `crates/soma/auth` |
 | initialized tasks/readiness | `crates/soma/runtime` |
 | Soma REST routes | `crates/soma/api` |
 | Soma MCP tools/prompts/resources | `crates/soma/mcp` |
 | Soma CLI commands | `crates/soma/cli` |
 | generic trace metadata | `crates/shared/traces` |
+| reusable auth implementation | `crates/shared/auth` |
+| reusable observability helpers | `crates/shared/observability` |
+| reusable API response/error/probe helpers | `crates/shared/api-kit` |
 | generic OpenAPI engine | `crates/shared/openapi` |
 | generic Code Mode runtime | `crates/shared/codemode` |
 | generic outbound MCP client | `crates/shared/mcp/client` |
