@@ -105,7 +105,9 @@ soma/
 │   │       └── process_smoke.rs
 │   │
 │   ├── web/                              # existing editable frontend source
-│   └── palette/                          # existing Palette application/source
+│   └── palette/                          # desktop Palette frontend + Tauri app package
+│       ├── src/
+│       └── src-tauri/                    # app-local Tauri composition package
 │
 └── crates/
     ├── shared/
@@ -124,6 +126,7 @@ soma/
     │   ├── provider-adapters/
     │   ├── http-server/
     │   ├── cli-core/
+    │   ├── tauri-shell/
     │   └── codex-app-server-client/
     │
     └── soma/
@@ -136,6 +139,7 @@ soma/
         ├── api/
         ├── mcp/
         ├── cli/
+        ├── palette/
         ├── plugin-support/
         ├── test-support/
         └── web/
@@ -189,7 +193,9 @@ The physical path determines the architectural layer. The package name determine
 | `crates/shared/provider-adapters` | `soma-provider-adapters` | `soma_provider_adapters` | shared |
 | `crates/shared/http-server` | `soma-http-server` | `soma_http_server` | shared |
 | `crates/shared/cli-core` | `soma-cli-core` | `soma_cli_core` | shared |
+| `crates/shared/tauri-shell` | `soma-tauri-shell` | `soma_tauri_shell` | shared |
 | `crates/shared/codex-app-server-client` | `codex-app-server-client` | `codex_app_server_client` | shared |
+| `apps/palette/src-tauri` | `soma-palette-tauri` | `soma_palette_tauri` | executable composition |
 | `crates/soma/domain` | `soma-domain` | `soma_domain` | product |
 | `crates/soma/application` | `soma-application` | `soma_application` | product |
 | `crates/soma/config` | `soma-config` | `soma_config` | product |
@@ -199,6 +205,7 @@ The physical path determines the architectural layer. The package name determine
 | `crates/soma/api` | `soma-api` | `soma_api` | product |
 | `crates/soma/mcp` | `soma-mcp` | `soma_mcp` | product |
 | `crates/soma/cli` | `soma-cli` | `soma_cli` | product |
+| `crates/soma/palette` | `soma-palette` | `soma_palette` | product |
 | `crates/soma/plugin-support` | `soma-plugin-support` | `soma_plugin_support` | product |
 | `crates/soma/test-support` | `soma-test-support` | `soma_test_support` | product |
 | `crates/soma/web` | `soma-web` | `soma_web` | product |
@@ -283,7 +290,8 @@ local.rs
 
 http.rs
     Merge soma_api::router(...), soma_mcp::http_router(...),
-    auth routes, observability routes, and soma_web fallback.
+    soma_palette::router(...), auth routes, observability routes,
+    and soma_web fallback.
     Call soma_http_server::serve(...).
 
 stdio.rs
@@ -306,6 +314,23 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 The composition root may depend on every required product crate and shared engine. No lower layer may depend back on it.
+
+### `apps/palette`: desktop app composition
+
+`apps/palette` remains the actual desktop application. It owns the Vite/React source, Tauri app package, `tauri.conf.json`, icons, capabilities, installer/package metadata, and app-local command registration.
+
+The target Tauri package is still app-local:
+
+```text
+apps/palette/src-tauri
+    depends on soma-tauri-shell for reusable desktop shell mechanics
+    depends on soma-palette when it needs shared product DTOs or product route helpers
+    supplies product name, app identifier, icons, window defaults, and command wiring
+```
+
+Do not move the whole desktop app into `crates/`. Tauri packaging expects an application boundary with frontend assets and bundle metadata. Extract only reusable Rust mechanics or product server/API contracts.
+
+Keep `apps/palette/src-tauri` as an app-local Tauri workspace/package by default, even when it depends on root workspace crates by path. Add it to the root Cargo workspace only if the build and release tooling benefit more than the Tauri-local lockfile/package boundary does.
 
 ---
 
@@ -1148,7 +1173,53 @@ The CLI adapter may ask a human for confirmation. The application layer must sti
 
 ---
 
-## 3.14 `crates/shared/codex-app-server-client`
+## 3.14 `crates/shared/tauri-shell`: reusable Tauri desktop shell helpers
+
+**Package:** `soma-tauri-shell`
+
+This crate owns reusable Rust mechanics for Tauri desktop shells. It is intentionally named `tauri-shell`, not `palette`, because the reusable API is desktop-window/Tauri behavior rather than Soma's command-palette product.
+
+Suggested layout:
+
+```text
+crates/shared/tauri-shell/src/
+├── lib.rs
+├── app.rs
+├── window.rs
+├── tray.rs
+├── shortcut.rs
+├── blur.rs
+├── persistence.rs
+├── command.rs
+├── oauth_window.rs
+└── error.rs
+```
+
+### Owns
+
+- Tauri app/window show, hide, focus, resize, center, and shadow helpers
+- tray icon setup helpers
+- global shortcut parsing, registration, rebind, and active-shortcut tracking
+- blur-dismiss state and window-event helpers
+- generic app-data path and JSON persistence helpers
+- command result/error helpers for Tauri command handlers
+- optional product-neutral browser-open or loopback callback helpers when fully configured by the caller
+
+### Does not own
+
+- Soma or Labby settings types
+- `LABBY_*` or `SOMA_*` environment defaults
+- `/v1/palette/*` HTTP calls
+- product OAuth policy or server discovery defaults
+- app identifier, product name, icons, capabilities, or `tauri.conf.json`
+- frontend React components or CSS
+- provider `ToolSpec` / Palette overlay contracts
+
+`crates/shared/provider-core` owns generic Palette surface metadata through `ToolSpec` overlays. `crates/shared/tauri-shell` owns the native desktop shell mechanics. Do not create `crates/shared/palette` unless a third, product-neutral palette domain emerges that is neither provider metadata nor Tauri shell behavior.
+
+---
+
+## 3.15 `crates/shared/codex-app-server-client`
 
 **Package:** `codex-app-server-client`
 
@@ -1164,7 +1235,7 @@ It may later be consumed by Code Mode, gateway, provider adapters, or Soma integ
 
 ---
 
-## 3.15 `crates/soma/domain`: product concepts and invariant rules
+## 3.16 `crates/soma/domain`: product concepts and invariant rules
 
 **Package:** `soma-domain`
 
@@ -1214,7 +1285,7 @@ Do not move all of `soma-contracts` into `soma-domain`. Configuration, provider 
 
 ---
 
-## 3.16 `crates/soma/application`: shared product use cases
+## 3.17 `crates/soma/application`: shared product use cases
 
 **Package:** `soma-application`
 
@@ -1346,7 +1417,7 @@ The API endpoint, MCP tool, and CLI command all invoke this same method.
 
 ---
 
-## 3.17 `crates/soma/config`: product configuration
+## 3.18 `crates/soma/config`: product configuration
 
 **Package:** `soma-config`
 
@@ -1398,7 +1469,7 @@ The standalone crates keep their own explicit config types. `soma-config` perfor
 
 ---
 
-## 3.18 `crates/soma/client`: Soma upstream client
+## 3.19 `crates/soma/client`: Soma upstream client
 
 **Package:** `soma-client`
 
@@ -1434,7 +1505,7 @@ The application layer decides when a request should use an upstream. The client 
 
 ---
 
-## 3.19 `crates/soma/integrations`: product adapters to shared engines
+## 3.20 `crates/soma/integrations`: product adapters to shared engines
 
 **Package:** `soma-integrations`
 
@@ -1512,7 +1583,7 @@ Start with one `soma-integrations` crate and modules. Split only when compile we
 
 ---
 
-## 3.20 `crates/soma/runtime`: initialized product runtime
+## 3.21 `crates/soma/runtime`: initialized product runtime
 
 **Package:** `soma-runtime`
 
@@ -1561,7 +1632,7 @@ Surface state should expose the application facade, not every lower-level depend
 
 ---
 
-## 3.21 `crates/soma/api`: Soma HTTP adapter
+## 3.22 `crates/soma/api`: Soma HTTP adapter
 
 **Package:** `soma-api`
 
@@ -1623,7 +1694,7 @@ pub struct ApiState {
 
 ---
 
-## 3.22 `crates/soma/mcp`: Soma MCP adapter
+## 3.23 `crates/soma/mcp`: Soma MCP adapter
 
 **Package:** `soma-mcp`
 
@@ -1680,7 +1751,7 @@ pub struct McpState {
 
 ---
 
-## 3.23 `crates/soma/cli`: Soma CLI adapter
+## 3.24 `crates/soma/cli`: Soma CLI adapter
 
 **Package:** `soma-cli`
 
@@ -1729,15 +1800,89 @@ The CLI may collect confirmation, but the application validates the confirmation
 
 ---
 
-## 3.24 Remaining Soma product crates
+## 3.25 `crates/soma/palette`: Soma Palette product API and adapter
+
+**Package:** `soma-palette`
+
+This crate owns Soma-specific Palette behavior that is shared between the HTTP server and the desktop app, especially server-side Palette routes and product DTOs. It is product code, not a reusable desktop shell.
+
+Suggested layout:
+
+```text
+crates/soma/palette/src/
+├── lib.rs
+├── router.rs
+├── state.rs
+├── dto.rs
+├── catalog.rs
+├── execute.rs
+├── schema.rs
+├── auth.rs
+├── launcher.rs
+└── error.rs
+```
+
+### Owns
+
+- `/v1/palette/*` product routes and handlers
+- Palette DTOs used by Soma's HTTP API and desktop app
+- product mapping from provider `ToolSpec` / Palette overlays into Palette actions
+- product launcher catalog and execution policy
+- product auth/session behavior for Palette requests
+- product error mapping for Palette UI responses
+- product OpenAPI route metadata for Palette endpoints
+
+### Does not own
+
+- Tauri app/window/tray/shortcut mechanics
+- `tauri.conf.json`, icons, capabilities, bundle metadata, or installers
+- React components, CSS, or frontend state
+- generic provider `ToolSpec` definitions
+- generic Palette overlay contracts
+- generic HTTP API response helpers
+
+### Relationship to app and shared crates
+
+```text
+apps/palette
+    desktop frontend and Tauri app composition
+
+apps/palette/src-tauri
+    app-local native package; wires Tauri commands to product APIs
+
+crates/shared/tauri-shell
+    reusable Tauri shell mechanics
+
+crates/soma/palette
+    Soma Palette server routes, DTOs, product mapping, and product policy
+```
+
+Do not create `crates/shared/palette` yet. Generic Palette action metadata belongs in `soma-provider-core` as `ToolSpec` overlays, and reusable native shell behavior belongs in `soma-tauri-shell`.
+
+---
+
+## 3.26 Remaining Soma product crates
 
 ### `crates/soma/plugin-support`
 
-Keep Soma plugin packaging, setup, metadata projection, and product plugin behavior here. Extract a generic plugin-support crate only after another unrelated product consumes the same abstraction.
+The live crate is currently a placeholder: it only re-exports `soma_contracts::env_registry`. Do not preserve it as a standalone product crate unless real plugin packaging/setup behavior moves into it.
+
+Recommended target:
+
+- fold the current env-registry re-export into `soma-config`, `soma-cli`, or `apps/soma` during the contracts split
+- delete `soma-plugin-support` if no substantial plugin behavior remains
+- recreate `crates/soma/plugin-support` only when Soma has durable product plugin packaging, setup, metadata projection, or hook contracts that justify a crate boundary
+- extract a generic plugin-support shared crate only after another unrelated product consumes the same abstraction
 
 ### `crates/soma/test-support`
 
-Own product fixtures, fake application ports, contract snapshot helpers, process fixtures, and test configuration.
+The live crate is not a full harness today; it only provides shared tracing-capture helpers used by a few tests.
+
+Recommended target:
+
+- keep a standalone `soma-test-support` crate only if it grows into product fixtures, fake application ports, contract snapshot helpers, process fixtures, or test configuration
+- otherwise fold the tracing helper into the tests that use it, or move a product-neutral version into a future shared testing helper only when multiple unrelated projects need it
+- do not let `soma-test-support` depend broadly on product crates unless those dependencies are genuinely needed by test-only fixtures
 
 ### `crates/soma/web`
 
@@ -1767,6 +1912,7 @@ apps/soma
     ├── soma-cli ─────────────▶ soma-cli-core
     ├── soma-api ─────────────▶ soma-http-api
     │                           soma-http-server
+    ├── soma-palette ─────────▶ soma-http-api
     ├── soma-mcp ─────────────▶ soma-mcp-server ───▶ rmcp-traces
     ├── soma-runtime ─────────▶ soma-application ──▶ soma-domain
     └── soma-integrations
@@ -1780,11 +1926,15 @@ apps/soma
             ├── soma-codemode ───────────▶ soma-openapi
             └── soma-openapi
 
-soma-api, soma-mcp, and soma-cli also call soma-application for product use cases.
+soma-api, soma-palette, soma-mcp, and soma-cli also call soma-application for product use cases.
 soma-http-server is composed by apps/soma and/or soma-api where HTTP serving is needed.
+
+apps/palette/src-tauri
+    ├── soma-tauri-shell
+    └── soma-palette
 ```
 
-`apps/soma` also depends on configuration, shared observability, runtime, web, and plugin support as required by features.
+`apps/soma` also depends on configuration, shared observability, runtime, web, palette, and plugin support as required by features.
 
 ## 4.2 Mandatory dependency rules
 
@@ -1836,6 +1986,7 @@ soma-integrations
 
 ```text
 soma-api
+soma-palette
 soma-mcp
 soma-cli
     depend on soma-application
@@ -1857,8 +2008,12 @@ soma-runtime
 
 ```text
 apps/soma
-    is the only package expected to depend broadly across the graph
+    is the server/CLI composition root and may depend broadly across product/shared crates
     owns composition, not business policy
+
+apps/palette/src-tauri
+    is the desktop composition package and may depend on soma-tauri-shell and soma-palette
+    owns desktop app wiring, not product/server policy
 ```
 
 ## 4.3 Shared-layer DAG
@@ -1890,6 +2045,7 @@ soma-provider-adapters ───────▶ soma-gateway           optional
 
 soma-http-server                    independent
 soma-cli-core                       independent
+soma-tauri-shell                    external + tauri
 ```
 
 Do not introduce cycles among shared crates. If gateway and provider adapters need each other in both directions, extract the shared contract or keep one direction through an adapter owned by the higher layer.
@@ -1999,6 +2155,7 @@ Most "business for a tool" belongs in `soma-application`. Only invariant rules a
 | new extraction from `crates/soma-api` | `crates/shared/http-api` | `soma-http-api` |
 | `crates/soma-openapi` | `crates/shared/openapi` | `soma-openapi` |
 | `crates/soma-codemode` | `crates/shared/codemode` | `soma-codemode` |
+| new extraction from `apps/palette/src-tauri` | `crates/shared/tauri-shell` | `soma-tauri-shell` |
 | `crates/soma-mcp-client` | `crates/shared/mcp/client` | `soma-mcp-client` |
 | `crates/soma-mcp-server` | `crates/shared/mcp/server` | `soma-mcp-server` |
 | `crates/soma-mcp-proxy` | `crates/shared/mcp/proxy` | `soma-mcp-proxy` |
@@ -2007,6 +2164,8 @@ Most "business for a tool" belongs in `soma-application`. Only invariant rules a
 | `crates/soma-api` | `crates/soma/api` | `soma-api` |
 | `crates/soma-cli` | `crates/soma/cli` | `soma-cli` |
 | `crates/soma-mcp` | `crates/soma/mcp` | `soma-mcp` |
+| new extraction from Palette routes/app contract | `crates/soma/palette` | `soma-palette` |
+| `apps/palette/src-tauri` | remains app-local | `soma-palette-tauri` |
 | `crates/soma-plugin-support` | `crates/soma/plugin-support` | unchanged |
 | `crates/soma-runtime` | `crates/soma/runtime` | unchanged |
 | `crates/soma-test-support` | `crates/soma/test-support` | unchanged |
@@ -2086,6 +2245,41 @@ soma-runtime AppState fields
     → Arc<SomaApplication>
 ```
 
+### From current Palette app
+
+```text
+apps/palette/src-tauri/src/lib.rs window/tray/shortcut/blur helpers
+    → soma-tauri-shell
+
+apps/palette/src-tauri/src/persistence.rs generic JSON app-data helpers
+    → soma-tauri-shell where product-neutral
+    → stays in apps/palette/src-tauri when tied to Palette settings shape
+
+apps/palette/src-tauri/src/labby_bridge.rs
+    → apps/palette/src-tauri for app-local HTTP client wiring
+    → soma-palette for shared product DTOs, endpoint constants, and error shapes
+
+apps/palette/src-tauri/src/oauth/*
+    → apps/palette/src-tauri unless it becomes product-neutral enough for soma-auth
+
+frontend React components and CSS
+    → stay in apps/palette/src
+```
+
+### From current Palette HTTP/provider code
+
+```text
+provider registry cached_palette_manifest and Palette report projection
+    → soma-palette for product manifest shape
+    → soma-provider-core for generic ToolSpec Palette overlay metadata
+
+/v1/palette/catalog
+/v1/palette/search
+/v1/palette/schema
+/v1/palette/execute
+    → soma-palette routes
+```
+
 ---
 
 ## 7. Workspace manifest
@@ -2108,13 +2302,14 @@ members = [
     "crates/shared/provider-adapters",
     "crates/shared/http-server",
     "crates/shared/cli-core",
+    "crates/shared/tauri-shell",
     "crates/shared/codex-app-server-client",
     "crates/soma/*",
     "xtask",
 ]
 ```
 
-Keep non-Rust frontend directories such as `apps/web` and `apps/palette` outside Cargo membership unless they contain Rust packages. Do not use a broad `crates/shared/*` member glob once `crates/shared/mcp/` exists unless the parent directory is explicitly excluded; otherwise Cargo may try to treat the grouping directory as a package.
+Keep non-Rust frontend directories such as `apps/web` outside Cargo membership. Keep `apps/palette/src-tauri` as an app-local Tauri workspace/package by default; it may depend on root workspace crates by path but does not need to be a root workspace member. Do not use a broad `crates/shared/*` member glob once `crates/shared/mcp/` exists unless the parent directory is explicitly excluded; otherwise Cargo may try to treat the grouping directory as a package.
 
 Centralize all internal paths:
 
@@ -2135,6 +2330,7 @@ soma-provider-core = { path = "crates/shared/provider-core" }
 soma-provider-adapters = { path = "crates/shared/provider-adapters" }
 soma-http-server = { path = "crates/shared/http-server" }
 soma-cli-core = { path = "crates/shared/cli-core" }
+soma-tauri-shell = { path = "crates/shared/tauri-shell" }
 codex-app-server-client = { path = "crates/shared/codex-app-server-client" }
 
 # Soma product
@@ -2147,6 +2343,7 @@ soma-runtime = { path = "crates/soma/runtime" }
 soma-api = { path = "crates/soma/api" }
 soma-mcp = { path = "crates/soma/mcp" }
 soma-cli = { path = "crates/soma/cli" }
+soma-palette = { path = "crates/soma/palette" }
 soma-plugin-support = { path = "crates/soma/plugin-support" }
 soma-test-support = { path = "crates/soma/test-support" }
 soma-web = { path = "crates/soma/web" }
@@ -2204,6 +2401,7 @@ mcp = ["dep:soma-mcp"]
 mcp-stdio = ["mcp"]
 mcp-http = ["mcp", "api"]
 api = ["dep:soma-api", "dep:soma-http-api", "dep:soma-http-server"]
+palette = ["api", "dep:soma-palette"]
 auth = ["dep:soma-auth"]
 oauth = ["auth"]
 web = ["api", "dep:soma-web"]
@@ -2219,6 +2417,7 @@ full = [
     "server",
     "auth",
     "oauth",
+    "palette",
     "web",
     "observability",
     "plugin",
@@ -2226,6 +2425,13 @@ full = [
     "codemode",
     "openapi",
 ]
+```
+
+`apps/palette/src-tauri/Cargo.toml` can stay app-local and still depend on shared/product crates by path:
+
+```toml
+soma-tauri-shell = { path = "../../../crates/shared/tauri-shell" }
+soma-palette = { path = "../../../crates/soma/palette" }
 ```
 
 Exact features should follow current product behavior. The architectural rules are:
@@ -3115,7 +3321,53 @@ Do not combine a CLI parser rewrite with this extraction. Preserve current help 
 
 ---
 
-## PR 17: Slim `apps/soma` and finalize composition
+## PR 17: Extract `soma-palette` and `soma-tauri-shell`
+
+### Goal
+
+Separate reusable Tauri shell mechanics from Soma-specific Palette product behavior while keeping `apps/palette` as the desktop application package.
+
+### Move to `soma-tauri-shell`
+
+- product-neutral window show/hide/focus/resize helpers
+- tray setup helpers
+- shortcut parsing and rebind helpers
+- blur-dismiss state/event helpers
+- product-neutral app-data JSON persistence helpers
+- generic Tauri command error/result helpers
+
+### Move to `soma-palette`
+
+- `/v1/palette/catalog`
+- `/v1/palette/search`
+- `/v1/palette/schema`
+- `/v1/palette/execute`
+- Palette DTOs shared by server and desktop app
+- product mapping from provider `ToolSpec` Palette overlays to UI actions
+- product launcher execution and auth policy
+- product Palette route OpenAPI metadata
+
+### Keep in `apps/palette`
+
+- React/Vite frontend source
+- Tauri package, `tauri.conf.json`, icons, capabilities, and bundle metadata
+- command registration and app-local wiring
+- server URL settings and app-specific HTTP bridge
+- OAuth desktop flow until it is proven reusable enough for `soma-auth`
+
+### Acceptance
+
+```bash
+cargo test -p soma-tauri-shell --all-features
+cargo test -p soma-palette --all-features
+pnpm --dir apps/palette test
+```
+
+The desktop app still builds from `apps/palette`, and the root Cargo workspace does not need to own the app-local Tauri package.
+
+---
+
+## PR 18: Slim `apps/soma` and finalize composition
 
 ### Goal
 
@@ -3124,7 +3376,7 @@ Make the binary package an unmistakable composition root.
 ### Finalize
 
 - `bootstrap.rs` builds concrete graph
-- `http.rs` composes product routers and calls `http-server`
+- `http.rs` composes product routers including `soma-palette` and calls `http-server`
 - `stdio.rs` starts product MCP through `soma-mcp-server`
 - `local.rs` invokes `soma-cli`
 - `shutdown.rs` owns process signals
@@ -3141,7 +3393,7 @@ The app package's modules are mostly constructors, mode selection, router mergin
 
 ---
 
-## PR 18: Delete legacy facades and update ecosystem artifacts
+## PR 19: Delete legacy facades and update ecosystem artifacts
 
 ### Goal
 
@@ -3235,6 +3487,8 @@ cargo tree -p soma-mcp-server --all-features
 cargo tree -p soma-mcp-proxy --all-features
 cargo tree -p soma-http-server --all-features
 cargo tree -p soma-cli-core --all-features
+cargo tree -p soma-tauri-shell --all-features
+cargo tree -p soma-palette --all-features
 ```
 
 Fail CI when any tree reaches `crates/soma` or `apps/soma`.
@@ -3337,7 +3591,8 @@ The refactor is complete when all statements are true.
 
 ### Physical organization
 
-- executable Rust product package is under `apps/soma`
+- server/CLI executable Rust product package is under `apps/soma`
+- desktop Palette Tauri package remains under `apps/palette/src-tauri`
 - every cross-project crate is under `crates/shared`
 - every Soma product-only library is under `crates/soma`
 - package names remain stable unless a separate naming decision changes them
@@ -3354,6 +3609,7 @@ The refactor is complete when all statements are true.
 ### Business boundary
 
 - CLI, API, and MCP all call `SomaApplication`
+- Palette routes call the same application/provider operation path instead of directly owning execution logic
 - shared business operations live in `soma-application`
 - invariant product rules live in `soma-domain`
 - concrete engine bridges live in `soma-integrations`
@@ -3362,8 +3618,8 @@ The refactor is complete when all statements are true.
 ### Runtime/composition
 
 - runtime exposes application and supervised runtime handles, not a sack of internals
-- app package owns construction, mode selection, listeners, and shutdown
-- app package does not own business policy
+- app packages own construction, mode selection, native/app wiring, listeners, and shutdown
+- app packages do not own business policy
 
 ### Legacy removal
 
@@ -3373,7 +3629,7 @@ The refactor is complete when all statements are true.
 
 ### Behavior
 
-- CLI, REST, MCP, OpenAPI, provider docs, plugins, auth, and feature profiles preserve their documented contracts unless a separate change explicitly versions them
+- CLI, REST, MCP, Palette, OpenAPI, provider docs, plugins, auth, and feature profiles preserve their documented contracts unless a separate change explicitly versions them
 
 ---
 
@@ -3404,6 +3660,8 @@ This order gives Soma the selected map first, then builds the roads without rero
 | Soma REST routes | `crates/soma/api` |
 | Soma MCP tools/prompts/resources | `crates/soma/mcp` |
 | Soma CLI commands | `crates/soma/cli` |
+| Soma Palette product routes/DTOs | `crates/soma/palette` |
+| desktop Palette frontend/Tauri app | `apps/palette` |
 | generic trace metadata | `crates/shared/traces` |
 | reusable auth implementation | `crates/shared/auth` |
 | reusable observability helpers | `crates/shared/observability` |
@@ -3418,5 +3676,6 @@ This order gives Soma the selected map first, then builds the roads without rero
 | generic concrete provider implementations | `crates/shared/provider-adapters` |
 | generic Axum lifecycle/middleware | `crates/shared/http-server` |
 | generic terminal/CLI helpers | `crates/shared/cli-core` |
+| generic Tauri shell helpers | `crates/shared/tauri-shell` |
 | typed Codex app-server client | `crates/shared/codex-app-server-client` |
 | gateway plus Soma auth adapter | `crates/soma/integrations/gateway_auth.rs` |
