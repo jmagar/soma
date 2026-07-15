@@ -20,11 +20,12 @@
 //!
 //! [`fetch_and_validate_client_metadata`] composes all three for the real
 //! production path, with per-key single-flight coordination and a short
-//! negative-result cooldown for cached failures — mirroring
-//! `crate::upstream::cache::OauthClientCache`'s `build_locks` pattern,
-//! since `client_id` here is just as attacker/caller-influenced as an
-//! upstream OAuth client and deserves the same protection against
-//! concurrent-first-request stampedes.
+//! negative-result cooldown for cached failures — the mechanism mirrors
+//! `crate::upstream::cache::OauthClientCache`'s `build_locks` pattern, but
+//! unlike that cache's `(upstream_name, subject)` key (bounded by operator
+//! config and authenticated sessions, not attacker-controlled), `client_id`
+//! here is an anonymous, attacker-controlled URL — see [`DocumentCache`]'s
+//! own doc for how that difference is handled.
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -45,11 +46,11 @@ const MAX_DOCUMENT_BYTES: usize = 64 * 1024;
 
 /// Fetch timeout for CIMD document requests, applied to the HTTP client
 /// AFTER DNS resolution has already completed (see `DNS_TIMEOUT` for the
-/// separate bound on resolution itself). Aligned with this crate's own
-/// precedent for a hot-path, user-is-actively-waiting fetch —
-/// `google.rs::GOOGLE_JWKS_FETCH_TIMEOUT` uses 5s for the same reason
-/// (`/authorize` must stay responsive; `/token`-adjacent background
-/// refreshes can afford the looser 30s bound elsewhere in that file).
+/// separate bound on resolution itself). Matches this crate's existing
+/// precedent for a request an interactive caller is actively waiting on —
+/// `google.rs::GOOGLE_JWKS_FETCH_TIMEOUT` also uses 5s, so that a slow
+/// upstream response can't stall the request past what a caller on
+/// `/authorize` will tolerate.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Timeout for the DNS resolution step, bounded separately from
@@ -127,9 +128,9 @@ pub enum CimdError {
 impl CimdError {
     /// Stable kind string for structured logging. Deliberately NOT surfaced
     /// verbatim (via `Display`/`to_string()`) to the anonymous `/authorize`
-    /// caller — see `authorize::resolve_client_redirect_uris` in Task 4,
-    /// which logs the full error server-side via this `kind()` plus
-    /// `Display` but returns only a generic message in the HTTP response.
+    /// caller — see `authorize::resolve_client_redirect_uris`, which logs
+    /// the full error server-side via this `kind()` plus `Display` but
+    /// returns only a generic message in the HTTP response.
     /// A detailed message returned to an unauthenticated caller lets them
     /// distinguish "resolves internally" from "doesn't exist" from
     /// "resolves publicly but unreachable," which is a network-topology
@@ -357,9 +358,15 @@ struct CacheEntry {
 /// Unlike `OauthClientCache` (keyed by `(upstream_name, subject)`, a
 /// cardinality bounded by operator config and authenticated sessions),
 /// `build_locks` here is keyed by an anonymous, attacker-controlled `url`
-/// string — so it needs the same `MAX_CACHE_ENTRIES` bound `entries` has,
-/// enforced by sweeping out locks nobody currently holds
-/// (`Arc::strong_count(lock) == 1` means only this map references it).
+/// string — so it uses the same `MAX_CACHE_ENTRIES` threshold `entries`
+/// does, sweeping out locks nobody currently holds (`Arc::strong_count ==
+/// 1` means only this map references it) whenever a new key is requested
+/// at capacity. This is a softer guarantee than `entries`' hard cap: if
+/// every held lock is genuinely busy (an in-flight fetch), a new key still
+/// gets inserted, so sustained full-concurrency load across
+/// `MAX_CACHE_ENTRIES`+ distinct URLs can transiently exceed the
+/// threshold — self-correcting as those fetches complete and free their
+/// locks, unlike the original unbounded-forever growth this replaced.
 pub struct DocumentCache {
     entries: DashMap<String, CacheEntry>,
     build_locks: DashMap<String, Arc<Mutex<()>>>,
@@ -588,6 +595,7 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, CimdError::PeerMismatch { .. }));
+        assert_eq!(err.kind(), "ssrf_blocked");
     }
 
     #[tokio::test]
@@ -607,6 +615,7 @@ mod tests {
 
         let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
         assert!(matches!(err, CimdError::ClientIdMismatch { .. }));
+        assert_eq!(err.kind(), "invalid_client_metadata");
     }
 
     #[tokio::test]
@@ -625,6 +634,23 @@ mod tests {
 
         let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
         assert!(matches!(err, CimdError::InvalidDocument(_)));
+        assert_eq!(err.kind(), "invalid_client_metadata");
+    }
+
+    #[tokio::test]
+    async fn fetch_via_pinned_address_rejects_malformed_json() {
+        let server = MockServer::start().await;
+        let addr = *server.address();
+        let url = format!("{}/client.json", server.uri());
+        Mock::given(method("GET"))
+            .and(path("/client.json"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("{not valid json"))
+            .mount(&server)
+            .await;
+
+        let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
+        assert!(matches!(err, CimdError::InvalidDocument(_)));
+        assert_eq!(err.kind(), "invalid_client_metadata");
     }
 
     #[tokio::test]
@@ -644,6 +670,7 @@ mod tests {
 
         let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
         assert!(matches!(err, CimdError::InvalidDocument(_)));
+        assert_eq!(err.kind(), "invalid_client_metadata");
     }
 
     #[tokio::test]
@@ -659,6 +686,7 @@ mod tests {
 
         let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
         assert!(matches!(err, CimdError::Fetch(_)));
+        assert_eq!(err.kind(), "cimd_fetch_failed");
     }
 
     #[tokio::test]
@@ -677,6 +705,7 @@ mod tests {
 
         let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
         assert!(matches!(err, CimdError::Fetch(_)));
+        assert_eq!(err.kind(), "cimd_fetch_failed");
     }
 
     #[tokio::test]
@@ -693,6 +722,7 @@ mod tests {
 
         let err = fetch_via_pinned_address(&url, addr).await.unwrap_err();
         assert!(matches!(err, CimdError::InvalidDocument(_)));
+        assert_eq!(err.kind(), "invalid_client_metadata");
     }
 
     #[test]
@@ -739,7 +769,7 @@ mod tests {
     #[test]
     fn cache_caches_negative_results_too() {
         let cache = DocumentCache::new();
-        let err = CimdError::Fetch("simulated failure".to_string());
+        let err = CimdError::DnsBlocked("app.example.com".to_string());
         cache.insert(
             "https://app.example.com/client.json".to_string(),
             &Err(err),
@@ -748,7 +778,66 @@ mod tests {
         let cached = cache
             .get_fresh("https://app.example.com/client.json")
             .expect("negative result should be cached");
-        assert!(cached.is_err());
+        // The specific variant (and therefore `kind()`) must survive the
+        // cache round-trip -- a security-relevant classification like
+        // "ssrf_blocked" must not be downgraded to a generic failure on a
+        // cache hit (see CacheEntry's doc comment for why).
+        assert!(matches!(cached, Err(CimdError::DnsBlocked(_))));
+        assert_eq!(cached.unwrap_err().kind(), "ssrf_blocked");
+    }
+
+    #[test]
+    fn entries_insert_skips_caching_once_at_capacity_with_nothing_expired() {
+        let cache = DocumentCache::new();
+        for i in 0..MAX_CACHE_ENTRIES {
+            let url = format!("https://app.example.com/{i}.json");
+            let doc = ClientMetadataDocument {
+                client_id: url.clone(),
+                client_name: "Example".to_string(),
+                redirect_uris: vec!["http://127.0.0.1:3000/callback".to_string()],
+            };
+            cache.insert(url, &Ok(doc), CACHE_TTL);
+        }
+        assert_eq!(cache.entries.len(), MAX_CACHE_ENTRIES);
+
+        let overflow_url = "https://app.example.com/overflow.json".to_string();
+        let doc = ClientMetadataDocument {
+            client_id: overflow_url.clone(),
+            client_name: "Example".to_string(),
+            redirect_uris: vec!["http://127.0.0.1:3000/callback".to_string()],
+        };
+        cache.insert(overflow_url.clone(), &Ok(doc), CACHE_TTL);
+
+        // At capacity with nothing expired (every entry shares CACHE_TTL and
+        // was just inserted): the overflow insert must be skipped rather
+        // than growing the map past MAX_CACHE_ENTRIES.
+        assert_eq!(cache.entries.len(), MAX_CACHE_ENTRIES);
+        assert!(cache.get_fresh(&overflow_url).is_none());
+    }
+
+    #[test]
+    fn lock_for_sweeps_idle_locks_through_the_real_entry_point_when_at_capacity() {
+        let cache = DocumentCache::new();
+        for i in 0..MAX_CACHE_ENTRIES {
+            cache.build_locks.insert(
+                format!("https://idle.example/{i}.json"),
+                Arc::new(Mutex::new(())),
+            );
+        }
+        assert_eq!(cache.build_locks.len(), MAX_CACHE_ENTRIES);
+
+        let _ = cache.lock_for("https://new.example/client.json".to_string());
+
+        // lock_for's own `len() >= MAX_CACHE_ENTRIES` branch (not just the
+        // retain predicate in isolation) must have triggered the sweep: all
+        // idle locks are gone, leaving only the newly-created one.
+        assert_eq!(cache.build_locks.len(), 1);
+        assert!(
+            cache
+                .build_locks
+                .get("https://new.example/client.json")
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -762,8 +851,9 @@ mod tests {
         // deleted network-level test never actually demonstrated (it
         // pre-seeded the cache, so both racers took the cache-hit path and
         // the lock was never contended). A real network-level version of
-        // this test would need a public DNS-resolvable host, which CI does
-        // not have (see the module's Global Constraints).
+        // this test would need a public DNS-resolvable host, which this
+        // module's other tests also avoid (see the module doc above) since
+        // CI has no network access.
         async fn simulate_fetch(
             cache: &DocumentCache,
             url: &str,

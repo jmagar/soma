@@ -330,11 +330,38 @@ fn allowlist_redirect_uris(
         .collect()
 }
 
+/// Filter a fetched CIMD document's `redirect_uris` through
+/// [`allowlist_redirect_uris`] and turn an empty result into the
+/// appropriate rejection. Split out from [`resolve_client_redirect_uris`]
+/// as a pure function (no fetch, no I/O) so this decision is unit-testable
+/// directly: `resolve_client_redirect_uris` itself can only be exercised
+/// end-to-end through a real CIMD fetch, which requires a public https host
+/// this crate's test suite has no way to provide.
+fn allowed_uris_from_cimd_document(
+    document: &crate::cimd::document::ClientMetadataDocument,
+    client_id: &str,
+    client_state_id: &str,
+    allowed_patterns: &[String],
+) -> Result<Vec<String>, AuthError> {
+    let allowed = allowlist_redirect_uris(&document.redirect_uris, allowed_patterns);
+    if allowed.is_empty() {
+        warn!(
+            client_id = %client_id,
+            client_state_id = %client_state_id,
+            "oauth authorize rejected: CIMD document declares no allowlisted redirect_uris"
+        );
+        return Err(AuthError::Validation(
+            "client_id metadata document declares no allowed redirect_uris".to_string(),
+        ));
+    }
+    Ok(allowed)
+}
+
 /// Resolve the set of trusted `redirect_uris` for `client_id`, either via
 /// the DCR-registered-clients table or, for an `https://`-shaped
 /// `client_id`, by fetching and validating its CIMD document (see
 /// [`crate::cimd`]) and filtering its declared `redirect_uris` through
-/// [`allowlist_redirect_uris`].
+/// [`allowed_uris_from_cimd_document`].
 async fn resolve_client_redirect_uris(
     state: &AuthState,
     client_id: &str,
@@ -361,21 +388,12 @@ async fn resolve_client_redirect_uris(
                         "client_id metadata document is invalid or unreachable".to_string(),
                     )
                 })?;
-        let allowed = allowlist_redirect_uris(
-            &document.redirect_uris,
+        return allowed_uris_from_cimd_document(
+            &document,
+            client_id,
+            client_state_id,
             &state.config.allowed_client_redirect_uris,
         );
-        if allowed.is_empty() {
-            warn!(
-                client_id = %client_id,
-                client_state_id = %client_state_id,
-                "oauth authorize rejected: CIMD document declares no allowlisted redirect_uris"
-            );
-            return Err(AuthError::Validation(
-                "client_id metadata document declares no allowed redirect_uris".to_string(),
-            ));
-        }
-        return Ok(allowed);
     }
 
     let client = state.store.find_client(client_id).await?.ok_or_else(|| {
@@ -1055,9 +1073,11 @@ pub mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::{
-        allowlist_redirect_uris, host_pattern_matches, is_allowed_redirect_uri, wildcard_matches,
+        allowed_uris_from_cimd_document, allowlist_redirect_uris, host_pattern_matches,
+        is_allowed_redirect_uri, wildcard_matches,
     };
     use crate::config::{AuthConfig, AuthMode, GoogleConfig};
+    use crate::error::AuthError;
     use crate::google::GoogleProvider;
     use crate::state::AuthState;
     use crate::types::{AuthorizationRequestRow, NativeAuthorizationResultRow, RegisteredClient};
@@ -1102,6 +1122,46 @@ pub mod tests {
         assert!(allowed.is_empty());
     }
 
+    #[test]
+    fn allowed_uris_from_cimd_document_returns_the_allowlisted_subset() {
+        let document = crate::cimd::document::ClientMetadataDocument {
+            client_id: "https://app.example.com/client.json".to_string(),
+            client_name: "Example".to_string(),
+            redirect_uris: vec![
+                "http://127.0.0.1:3000/callback".to_string(),
+                "https://attacker.evil/steal-code".to_string(),
+            ],
+        };
+        let allowed = allowed_uris_from_cimd_document(
+            &document,
+            "https://app.example.com/client.json",
+            "state-id",
+            &[],
+        )
+        .expect("the loopback redirect_uri is allowed by default");
+        assert_eq!(allowed, vec!["http://127.0.0.1:3000/callback".to_string()]);
+    }
+
+    #[test]
+    fn allowed_uris_from_cimd_document_rejects_when_nothing_survives_the_allowlist() {
+        // The whole point of filtering CIMD-declared redirect_uris through
+        // the allowlist: a document that only declares an attacker-hosted
+        // target must be rejected outright, not silently trusted.
+        let document = crate::cimd::document::ClientMetadataDocument {
+            client_id: "https://app.example.com/client.json".to_string(),
+            client_name: "Example".to_string(),
+            redirect_uris: vec!["https://attacker.evil/steal-code".to_string()],
+        };
+        let err = allowed_uris_from_cimd_document(
+            &document,
+            "https://app.example.com/client.json",
+            "state-id",
+            &[],
+        )
+        .unwrap_err();
+        assert!(matches!(err, AuthError::Validation(_)));
+    }
+
     #[tokio::test]
     async fn authorize_rejects_a_cimd_client_id_that_targets_a_private_address() {
         // A `client_id` shaped like a CIMD URL but pointing at a private
@@ -1121,6 +1181,22 @@ pub mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        // The response must carry only the generic message -- the detailed
+        // CimdError (which would reveal "resolved only to a private
+        // address" and leak internal-network-topology information to an
+        // anonymous caller) must never appear in the HTTP response body.
+        assert_eq!(
+            json["message"],
+            "client_id metadata document is invalid or unreachable"
+        );
+        let raw_body = String::from_utf8(body.to_vec()).unwrap();
+        assert!(!raw_body.contains("ssrf_blocked"), "{raw_body}");
+        assert!(!raw_body.contains("127.0.0.1"), "{raw_body}");
+        assert!(!raw_body.contains("private"), "{raw_body}");
     }
 
     #[tokio::test]

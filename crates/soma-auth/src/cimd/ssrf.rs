@@ -372,4 +372,29 @@ mod tests {
             .expect("should validate");
         assert_eq!(parsed.host_str(), Some("app.example.com"));
     }
+
+    #[test]
+    fn redact_url_strips_userinfo_query_and_fragment() {
+        let redacted = redact_url("https://user:pass@app.example.com/path?token=secret#frag");
+        assert!(!redacted.contains("user"), "{redacted}");
+        assert!(!redacted.contains("pass"), "{redacted}");
+        assert!(!redacted.contains("token=secret"), "{redacted}");
+        assert!(!redacted.contains("frag"), "{redacted}");
+        assert!(redacted.contains("app.example.com"), "{redacted}");
+        assert!(redacted.contains("/path"), "{redacted}");
+    }
+
+    #[test]
+    fn redact_url_reports_a_placeholder_for_an_unparseable_url() {
+        assert_eq!(redact_url("not a url"), "<invalid-url>");
+    }
+
+    #[test]
+    fn rejects_userinfo_without_leaking_credentials_in_the_error() {
+        let err =
+            validate_url_shape("https://secretuser:secretpass@app.example.com/c.json").unwrap_err();
+        let message = err.to_string();
+        assert!(!message.contains("secretuser"), "{message}");
+        assert!(!message.contains("secretpass"), "{message}");
+    }
 }
