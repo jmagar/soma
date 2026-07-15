@@ -1055,19 +1055,17 @@ Expected: both pass.
 
 - [ ] **Step 3: Update Beads status**
 
-Run these commands after code and docs pass:
+After code and docs pass, record completion in Beads with issue-specific
+comments and close reasons:
 
-```bash
-bd comments add rmcp-template-xh6c "DECISION: Implemented v1 as request-side rmcp-traces for rmcp 2.2.0. Result _meta and HTTP propagation are explicitly deferred by engineering review to avoid response-budget and trust-boundary side channels."
-bd close rmcp-template-xh6c.1 --reason="Compatibility target and crate API contract captured in docs/adr/0012-rmcp-traces-rmcp-2-2.md."
-bd close rmcp-template-xh6c.2 --reason="rmcp-traces workspace crate skeleton and package metadata added."
-bd close rmcp-template-xh6c.3 --reason="Core RMCP Meta trace helpers implemented and tested."
-bd close rmcp-template-xh6c.4 --reason="HTTP propagation explicitly deferred for v1; documented as future work."
-bd close rmcp-template-xh6c.5 --reason="Log-safe trace summaries and baggage redaction counts implemented and tested."
-bd close rmcp-template-xh6c.6 --reason="Soma MCP request path now logs safe trace summaries without raw baggage."
-bd close rmcp-template-xh6c.7 --reason="Crate docs document usage, non-goals, deferrals, and migration path."
-bd close rmcp-template-xh6c --reason="GH #76 v1 implemented: rmcp-traces targets rmcp 2.2.0, request-side trace helpers are tested, Soma proof path is integrated, HTTP/result metadata are explicitly deferred."
-```
+- Compatibility target and crate API contract captured in `docs/adr/0012-rmcp-traces-rmcp-2-2.md`.
+- `rmcp-traces` workspace crate skeleton and package metadata added.
+- Core RMCP Meta trace helpers implemented and tested.
+- HTTP propagation explicitly deferred for v1 and documented as future work.
+- Log-safe trace summaries and baggage redaction counts implemented and tested.
+- Soma MCP request path logs safe trace summaries without raw baggage.
+- Crate docs document usage, non-goals, deferrals, and migration path.
+- Epic close reason: GH #76 v1 implemented for `rmcp 2.2.0`; HTTP/result metadata are explicitly deferred.
 
 Expected: child beads and epic close cleanly. If `bd close rmcp-template-xh6c` refuses because a child is still open, inspect `bd show rmcp-template-xh6c` and close the remaining completed child with a specific reason.
 

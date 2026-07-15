@@ -10,6 +10,7 @@ This crate targets `rmcp 2.2.0`. RMCP owns wire serialization for `_meta`; this 
 - Preserve bounded `tracestate` and `baggage` privately.
 - Produce `TraceSummary` values safe for logs.
 - Treat inbound metadata as untrusted by default.
+- Keep v00 `traceparent` exact while allowing bounded higher-version additive fields to preserve stable trace/span IDs.
 
 ## Non-goals
 

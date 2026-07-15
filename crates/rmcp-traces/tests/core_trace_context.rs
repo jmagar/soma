@@ -1,13 +1,14 @@
 use rmcp::model::Meta;
-use rmcp_traces::{TraceContext, TraceLimits, TraceParent, TraceParseError, TraceTrust};
+use rmcp_traces::{
+    TraceContext, TraceLimits, TraceParent, TraceParseError, TraceSummary, TraceTrust,
+};
 use serde_json::json;
 
 const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
 
 #[test]
-fn traceparent_round_trips_through_meta() {
+fn trace_context_parses_meta_and_summarizes_safely() {
     let mut meta = Meta::new();
-    meta.insert("unrelated".to_owned(), json!("kept"));
     meta.set_traceparent(VALID_TRACEPARENT);
     meta.set_tracestate("vendor=value");
     meta.set_baggage("region=us-east-1,accessToken=super-secret-token");
@@ -16,17 +17,15 @@ fn traceparent_round_trips_through_meta() {
         .expect("valid trace metadata")
         .expect("trace context exists");
 
-    let mut output = Meta::new();
-    output.insert("unrelated".to_owned(), json!("kept"));
-    context.apply_to_meta(&mut output);
+    let summary = context.summary();
 
-    assert_eq!(output.get_traceparent(), Some(VALID_TRACEPARENT));
-    assert_eq!(output.get_tracestate(), Some("vendor=value"));
-    assert_eq!(
-        output.get_baggage(),
-        Some("region=us-east-1,accessToken=super-secret-token")
-    );
-    assert_eq!(output.get("unrelated"), Some(&json!("kept")));
+    assert_eq!(context.traceparent().as_str(), VALID_TRACEPARENT);
+    assert_eq!(summary.trace_id.as_deref(), Some("0af76519"));
+    assert_eq!(summary.span_id.as_deref(), Some("00f067aa"));
+    assert_eq!(summary.sampled, Some(true));
+    assert!(summary.has_tracestate);
+    assert_eq!(summary.baggage_member_count, 2);
+    assert_eq!(summary.sensitive_baggage_member_count, 1);
 }
 
 #[test]
@@ -34,7 +33,7 @@ fn malformed_traceparents_are_rejected() {
     for value in [
         "",
         "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7",
-        "01-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01",
+        "ff-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01",
         "00-00000000000000000000000000000000-00f067aa0ba902b7-01",
         "00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01",
         "00-0AF7651916CD43DD8448EB211C80319C-00f067aa0ba902b7-01",
@@ -45,6 +44,17 @@ fn malformed_traceparents_are_rejected() {
             "{value} should be rejected"
         );
     }
+}
+
+#[test]
+fn higher_version_traceparents_preserve_stable_fields() {
+    let traceparent =
+        TraceParent::parse("01-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01-extra")
+            .expect("higher versions can carry additive fields");
+
+    assert_eq!(traceparent.trace_id(), "0af7651916cd43dd8448eb211c80319c");
+    assert_eq!(traceparent.span_id(), "00f067aa0ba902b7");
+    assert!(traceparent.sampled());
 }
 
 #[test]
@@ -61,6 +71,29 @@ fn oversized_values_are_rejected_before_parsing() {
         ..TraceLimits::default()
     };
     assert!(TraceContext::from_meta_with_limits(&meta, TraceTrust::Untrusted, limits).is_err());
+}
+
+#[test]
+fn summary_preserves_valid_traceparent_when_optional_metadata_is_invalid() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_baggage("a=1,b=2,c=3");
+    let limits = TraceLimits {
+        max_baggage_members: 2,
+        ..TraceLimits::default()
+    };
+
+    let summary = TraceSummary::from_meta_with_limits(&meta, TraceTrust::Untrusted, limits);
+
+    assert_eq!(summary.trace_id.as_deref(), Some("0af76519"));
+    assert_eq!(summary.span_id.as_deref(), Some("00f067aa"));
+    assert_eq!(summary.sampled, Some(true));
+    assert_eq!(
+        summary.invalid.as_deref(),
+        Some("baggage exceeded 2 members (actual at least 3)")
+    );
+    assert_eq!(summary.baggage_member_count, 0);
+    assert_eq!(summary.sensitive_baggage_member_count, 0);
 }
 
 #[test]

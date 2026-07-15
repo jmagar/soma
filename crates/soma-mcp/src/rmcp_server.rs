@@ -21,7 +21,7 @@ use rmcp::{
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
 };
-use rmcp_traces::{TraceContext, TraceSummary, TraceTrust};
+use rmcp_traces::{TraceSummary, TraceTrust};
 #[cfg(feature = "auth")]
 use soma_auth::AuthContext;
 #[cfg(not(feature = "auth"))]
@@ -542,11 +542,11 @@ fn empty_action_as_none(action: &str) -> Option<&str> {
 }
 
 fn trace_summary_from_context(context: &RequestContext<RoleServer>) -> TraceSummary {
-    match TraceContext::from_meta(&context.meta, TraceTrust::Untrusted) {
-        Ok(Some(trace_context)) => trace_context.summary(),
-        Ok(None) => TraceSummary::absent(),
-        Err(error) => TraceSummary::invalid(&error),
-    }
+    trace_summary_from_meta(&context.meta)
+}
+
+fn trace_summary_from_meta(meta: &rmcp::model::Meta) -> TraceSummary {
+    TraceSummary::from_meta(meta, TraceTrust::Untrusted)
 }
 
 fn unknown_tool_error(tool_name: &str) -> ErrorData {
