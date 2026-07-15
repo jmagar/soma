@@ -7,9 +7,22 @@
 //! templates happens in strict precedence order: exact static, exact
 //! dynamic (no params), parameterized, catch-all.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path};
 
 pub(crate) const RESOURCE_URI_PREFIX: &str = "soma://resources/";
+
+/// Renders a path relative to `providers/resources/` with `/` separators
+/// regardless of host OS. `Path::display()` uses the platform's native
+/// separator (`\` on Windows), which is wrong for anything that's surfaced
+/// as an API-facing string (`ProviderFileInspection.file_name`, a dynamic
+/// reader's description) meant to read like the `/`-joined URIs the same
+/// path produces — those two should always agree, not just on Unix.
+pub(crate) fn display_with_forward_slashes(path: &Path) -> String {
+    path.components()
+        .map(|component| component.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PathSegment {

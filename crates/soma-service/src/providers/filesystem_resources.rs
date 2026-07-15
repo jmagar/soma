@@ -13,7 +13,10 @@ use soma_contracts::providers::{ProviderCatalog, ProviderKind};
 
 use crate::{
     provider_registry::{DynamicResourceTemplate, Provider},
-    providers::resource_files::{ResourceFileError, ResourceFileProvider},
+    providers::{
+        resource_files::{ResourceFileError, ResourceFileProvider},
+        resource_uri::display_with_forward_slashes,
+    },
 };
 
 use super::{FileProviderLoadError, ProviderFileInspection, ProviderFileInspectionStatus};
@@ -151,7 +154,7 @@ pub(super) fn inspect_files(
     let mut catalogs = Vec::with_capacity(pairs.len());
     let mut templates = Vec::with_capacity(pairs.len());
     for (absolute, relative, canonical_root) in pairs {
-        let file_name = relative.display().to_string();
+        let file_name = display_with_forward_slashes(&relative);
         match ResourceFileProvider::from_file(absolute.clone(), &relative, &canonical_root) {
             Ok(provider) => {
                 let template = provider.dynamic_resource_templates().into_iter().next();
