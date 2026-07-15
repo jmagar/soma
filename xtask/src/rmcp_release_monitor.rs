@@ -1479,8 +1479,9 @@ mod tests {
         .unwrap();
         let error = detect_current_rmcp_version(root).expect_err("mixed pins should fail");
         let message = error.to_string();
+        let normalized_message = message.replace('\\', "/");
         assert!(message.contains("conflicting rmcp versions"));
-        assert!(message.contains("crates/rmcp-traces/Cargo.toml=1.8.0"));
+        assert!(normalized_message.contains("crates/rmcp-traces/Cargo.toml=1.8.0"));
         assert!(!message.contains("9.9.9"));
     }
 
