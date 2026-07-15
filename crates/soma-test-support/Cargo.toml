@@ -12,7 +12,7 @@ publish = false
 
 [dependencies]
 soma-api = { path = "../soma-api", features = ["auth"] }
-soma-auth = { path = "../soma-auth" }
+soma-auth = { path = "../soma-auth", features = ["http-axum"] }
 soma-contracts = { path = "../soma-contracts" }
 soma-service = { path = "../soma-service", default-features = false, features = ["observability"] }
 tracing = "0.1"

@@ -12,6 +12,8 @@ pub async fn authorization_server_metadata(
         authorization_endpoint: format!("{base}/authorize"),
         token_endpoint: format!("{base}/token"),
         registration_endpoint: format!("{base}/register"),
+        native_callback_endpoint: Some(native_callback_endpoint(&state)),
+        native_poll_endpoint: Some(native_poll_endpoint(&state)),
         jwks_uri: format!("{base}/jwks"),
         response_types_supported: vec!["code".to_string()],
         grant_types_supported: vec![
@@ -20,6 +22,12 @@ pub async fn authorization_server_metadata(
         ],
         code_challenge_methods_supported: vec!["S256".to_string()],
         token_endpoint_auth_methods_supported: vec!["none".to_string()],
+        // soma-auth always echoes `iss` on authorization redirects (RFC 9207 §2),
+        // so this capability flag is a static `true`, not config-dependent.
+        authorization_response_iss_parameter_supported: true,
+        // soma-auth supports CIMD unconditionally alongside DCR (see
+        // crate::cimd and authorize::resolve_client_redirect_uris).
+        client_id_metadata_document_supported: true,
     })
 }
 
@@ -51,6 +59,14 @@ pub(crate) fn public_base_url(state: &AuthState) -> String {
         .as_str()
         .trim_end_matches('/')
         .to_string()
+}
+
+pub(crate) fn native_callback_endpoint(state: &AuthState) -> String {
+    format!("{}/native/callback", public_base_url(state))
+}
+
+pub(crate) fn native_poll_endpoint(state: &AuthState) -> String {
+    format!("{}/native/poll", public_base_url(state))
 }
 
 pub fn canonical_resource_url(state: &AuthState) -> String {
@@ -91,6 +107,8 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["token_endpoint"], "https://lab.example.com/token");
+        assert_eq!(json["authorization_response_iss_parameter_supported"], true);
+        assert_eq!(json["client_id_metadata_document_supported"], true);
     }
 
     #[tokio::test]
@@ -119,7 +137,7 @@ mod tests {
         use crate::config::AuthConfig;
 
         // Synthesize a config that overrides scopes_supported and resource_path,
-        // matching how cortex will eventually configure lab-auth.
+        // matching how a downstream consumer will eventually configure soma-auth.
         let dir = tempfile::tempdir().unwrap();
         let config = AuthConfig {
             mode: crate::config::AuthMode::OAuth,

@@ -110,6 +110,12 @@ pub struct AuthState {
     allowed_resource_scopes: Arc<RwLock<BTreeMap<String, BTreeSet<String>>>>,
     authorize_limiter: PerIpRateLimiter,
     register_limiter: PerIpRateLimiter,
+    /// Single-flight, TTL-cached OAuth Client ID Metadata Document store for
+    /// `/authorize`'s CIMD path (`crate::cimd`). Gated behind `http-axum`
+    /// alongside `crate::cimd` itself, even though `AuthState` (this struct)
+    /// is otherwise usable without that feature.
+    #[cfg(feature = "http-axum")]
+    pub(crate) cimd_cache: Arc<crate::cimd::document::DocumentCache>,
 }
 
 impl AuthState {
@@ -158,6 +164,8 @@ impl AuthState {
             allowed_resource_scopes: Arc::new(RwLock::new(BTreeMap::new())),
             authorize_limiter,
             register_limiter,
+            #[cfg(feature = "http-axum")]
+            cimd_cache: Arc::new(crate::cimd::document::DocumentCache::new()),
         })
     }
 
@@ -295,6 +303,8 @@ impl AuthState {
             allowed_resource_scopes: Arc::new(RwLock::new(BTreeMap::new())),
             authorize_limiter,
             register_limiter,
+            #[cfg(feature = "http-axum")]
+            cimd_cache: Arc::new(crate::cimd::document::DocumentCache::new()),
         }
     }
 }

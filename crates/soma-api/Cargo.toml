@@ -18,7 +18,7 @@ oauth = ["auth"]
 [dependencies]
 anyhow = "1"
 axum = "0.8"
-soma-auth = { path = "../soma-auth", optional = true }
+soma-auth = { path = "../soma-auth", optional = true, features = ["http-axum"] }
 soma-contracts = { path = "../soma-contracts" }
 soma-runtime = { path = "../soma-runtime", default-features = false }
 soma-service = { path = "../soma-service", default-features = false }
