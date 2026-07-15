@@ -6,7 +6,7 @@ use std::{
 };
 
 use rmcp::{
-    model::CallToolRequestParams,
+    model::{CallToolRequestParams, GetPromptRequestParams},
     transport::{ConfigureCommandExt, TokioChildProcess},
     ServiceExt,
 };
@@ -225,6 +225,68 @@ async fn dropped_ts_and_wasm_files_hot_register_provider_tools() -> anyhow::Resu
     )
     .await?;
     assert_eq!(rest_json["action"], "live_wasm_probe");
+
+    service.cancel().await?;
+    Ok(())
+}
+
+/// End-to-end proof for the claim in `docs/PROVIDERS.md`: "MCP servers also
+/// refresh when clients list or get prompts, so a newly dropped Markdown
+/// prompt appears without rebuilding the binary." Unlike the unit tests in
+/// `crates/soma-mcp/src/prompts_tests.rs` (which call `provider_prompts`/
+/// `get_provider_prompt` directly against a hand-built `Vec<ProviderCatalog>`)
+/// this drives a real `soma mcp` stdio server end to end, mirroring
+/// `dropped_ts_and_wasm_files_hot_register_provider_tools` above for tools.
+#[tokio::test]
+async fn dropped_markdown_file_hot_registers_mcp_prompt() -> anyhow::Result<()> {
+    let temp = tempfile::tempdir()?;
+    let providers = temp.path().join("providers");
+    fs::create_dir(&providers)?;
+
+    let service = stdio_client_in(temp.path()).await?;
+    let before = service.list_prompts(Default::default()).await?;
+    let before_names: Vec<&str> = before.prompts.iter().map(|p| p.name.as_str()).collect();
+    println!("before_prompts={before_names:?}");
+    assert!(before_names.contains(&"quick_start"));
+    assert!(!before_names.contains(&"code-review"));
+
+    fs::write(
+        providers.join("code-review.md"),
+        "# Code Review\n\nReview this change for correctness and missing tests.\n",
+    )?;
+
+    let after = service.list_prompts(Default::default()).await?;
+    let after_names: Vec<&str> = after.prompts.iter().map(|p| p.name.as_str()).collect();
+    println!("after_prompts={after_names:?}");
+    assert!(
+        after_names.contains(&"quick_start"),
+        "built-in prompt must still be listed exactly once, not shadowed"
+    );
+    assert_eq!(
+        after_names
+            .iter()
+            .filter(|name| **name == "quick_start")
+            .count(),
+        1,
+        "quick_start must not be duplicated by the built-in provider's reservation entry"
+    );
+    assert!(after_names.contains(&"code-review"));
+
+    let result = service
+        .get_prompt(GetPromptRequestParams::new("code-review"))
+        .await?;
+    assert_eq!(
+        result.description.as_deref(),
+        Some("Code Review"),
+        "description should come from the first Markdown heading"
+    );
+    let text = result.messages[0]
+        .content
+        .as_text()
+        .expect("prompt message should be text")
+        .text
+        .clone();
+    assert!(text.contains("Review this change for correctness"));
 
     service.cancel().await?;
     Ok(())

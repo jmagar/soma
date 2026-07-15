@@ -12,6 +12,7 @@ directory with `SOMA_PROVIDER_DIR` at runtime or with
 | `.ts` | `ai-sdk` | `export default { ... }` provider catalog metadata |
 | `.wasm` | `wasm` | `soma.provider` custom section (or a `.wasm.json` sidecar manifest) |
 | `.py` | `python`, `langchain`, `llamaindex` | `PROVIDER` dict plus tool functions |
+| `.md` | `static-rust` prompt | Markdown prompt exposed through MCP prompts |
 
 Disabled manifests with `"enabled": false` under `provider` are visible in
 inspection output and are not registered at runtime.
@@ -26,6 +27,7 @@ Every provider declares:
 - `tools[].name`: action name exposed through CLI, MCP, and HTTP.
 - `tools[].input_schema`: JSON Schema object for action input.
 - `tools[].output_schema`: optional JSON Schema for action output.
+- `prompts[].template`: prompt body returned by MCP `prompts/get`.
 
 Set `provider.enabled` to `false` when you want a manifest checked and documented
 without loading it at runtime.
@@ -45,8 +47,8 @@ soma providers lint                       # like status, but exits non-zero on a
 soma providers lint --dir ./examples/providers --json
 ```
 
-These parse manifests (JSON/TS/WASM sidecar) but never execute handler code,
-call MCP, or fetch OpenAPI. Safe to run before the runtime touches any
+These parse manifests (JSON/TS/WASM sidecar/Markdown) but never execute handler
+code, call MCP, or fetch OpenAPI. Safe to run before the runtime touches any
 provider — e.g. in CI, before committing a new provider example, or to sanity
 check a directory you're about to point `SOMA_PROVIDER_DIR` at.
 
@@ -103,6 +105,8 @@ soma my_provider_action --json '{"message":"hello"}'
 
 MCP servers refresh file providers when clients list tools or read the tools
 resource, so a newly dropped provider appears without rebuilding the binary.
+MCP servers also refresh when clients list or get prompts, so a newly dropped
+Markdown prompt appears without rebuilding the binary.
 
 HTTP dispatch uses the same registry:
 
@@ -125,6 +129,15 @@ a relative operation path in `tools[].meta.openapi.path` or `tools[].rest.path`.
 Operation paths must stay relative to the pinned base URL. Declare allowed
 network hosts in `capabilities.network.allowed_hosts` when network capability is
 enabled.
+
+## Markdown Prompts
+
+Drop a `.md` file into the provider directory to expose it as an MCP prompt. The
+file stem becomes the prompt name after lowercasing and replacing punctuation
+with hyphens, so `Code Review.md` becomes `code-review`. The first `# Heading`
+becomes the prompt description when present, and the full Markdown file is
+returned as the prompt message. A `README.md` in the provider directory is
+never treated as a prompt.
 
 ## Examples
 

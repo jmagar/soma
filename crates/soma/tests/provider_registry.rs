@@ -111,6 +111,7 @@ fn catalog_with_primitives(provider: &str) -> ProviderCatalog {
         prompts: vec![ProviderPrompt {
             name: "brief_prompt".to_owned(),
             description: "Prompt for a compact brief".to_owned(),
+            template: None,
             arguments_schema: Some(json!({
                 "type": "object",
                 "properties": {

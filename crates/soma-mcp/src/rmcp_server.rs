@@ -252,6 +252,11 @@ impl ServerHandler for SomaRmcpServer {
     ) -> Result<ListPromptsResult, ErrorData> {
         require_auth_context(&self.state, &context)?;
         let mut result = prompts::list_prompts();
+        refresh_file_providers(&self.state)?;
+        let snapshot = self.state.provider_registry.snapshot();
+        result
+            .prompts
+            .extend(prompts::provider_prompts(&snapshot.catalogs));
         if self.state.config.conformance_fixtures {
             result.prompts.extend(conformance::prompts());
         }
@@ -263,11 +268,31 @@ impl ServerHandler for SomaRmcpServer {
         request: GetPromptRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<GetPromptResult, ErrorData> {
-        require_auth_context(&self.state, &context)?;
+        let auth = require_auth_context(&self.state, &context)?;
         if self.state.config.conformance_fixtures {
             if let Some(result) = conformance::get_prompt(request.clone()) {
                 return Ok(result);
             }
+        }
+        refresh_file_providers(&self.state)?;
+        let snapshot = self.state.provider_registry.snapshot();
+        match prompts::get_provider_prompt(
+            &snapshot.catalogs,
+            &request,
+            provider_auth_mode(&self.state.auth_policy),
+            &provider_principal(auth),
+        ) {
+            prompts::ProviderPromptLookup::Found(result) => return Ok(result),
+            prompts::ProviderPromptLookup::ScopeDenied { required_scope } => {
+                return Err(ErrorData::invalid_request(
+                    format!(
+                        "forbidden: prompt `{}` requires scope `{required_scope}`",
+                        request.name
+                    ),
+                    None,
+                ));
+            }
+            prompts::ProviderPromptLookup::NotFound => {}
         }
         prompts::get_prompt(request).map_err(|e| ErrorData::invalid_params(e.to_string(), None))
     }

@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build or dispatch through the live `ProviderRegistry` — they only parse manifests
   on disk via `FileProviderSource::inspect()`, so they're safe to run before the
   runtime touches TS/WASM/MCP/OpenAPI handlers. See `docs/PROVIDERS.md`.
+- Added Markdown-file-as-MCP-prompt support: dropping a `.md` file into the
+  provider directory exposes it as an MCP prompt (file stem → prompt name,
+  first `# Heading` → description, full file body → prompt template).
+  `README.md` is never treated as a prompt. See `docs/PROVIDERS.md`.
 
 ### Fixed
 
