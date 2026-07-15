@@ -280,13 +280,23 @@ impl ProviderRegistry {
     /// `resource.scope` under `ProviderAuthMode::Mounted` the same way
     /// `dispatch()` enforces `tool.scope`, then delegates to the owning
     /// provider's `read_resource`.
+    ///
+    /// The match and the provider clone are fetched from the same read
+    /// lock acquisition, mirroring `dispatch()`'s pattern for tools — a
+    /// concurrent `refresh_file_providers()` between two separate lock
+    /// acquisitions could otherwise return params/scope from one snapshot
+    /// but a provider instance from a newer one (e.g. a hot-swapped
+    /// `resources/foo.md` -> `resources/foo.ts` letting a request matched
+    /// against the old unscoped static resource invoke the new
+    /// `soma:write`-scoped dynamic reader without ever being checked
+    /// against its scope).
     pub async fn read_resource(
         &self,
         uri: &str,
         principal: &ProviderPrincipal,
         auth_mode: ProviderAuthMode,
     ) -> Result<ResourceReadOutput, ProviderError> {
-        let (provider_name, params, resource_scope) = {
+        let (provider_name, params, resource_scope, provider) = {
             let state = self
                 .state
                 .read()
@@ -299,10 +309,13 @@ impl ProviderRegistry {
                     format!("unknown resource `{uri}`"),
                 ));
             };
+            let provider_name = provider_name.to_owned();
+            let provider = state.providers.get(&provider_name).cloned();
             (
-                provider_name.to_owned(),
+                provider_name,
                 params,
                 scope.map(ToOwned::to_owned),
+                provider,
             )
         };
 
@@ -320,13 +333,6 @@ impl ProviderRegistry {
             }
         }
 
-        let provider = {
-            let state = self
-                .state
-                .read()
-                .expect("provider registry lock should not be poisoned");
-            state.providers.get(&provider_name).cloned()
-        };
         let Some(provider) = provider else {
             return Err(ProviderError::new(
                 "provider_not_loaded",

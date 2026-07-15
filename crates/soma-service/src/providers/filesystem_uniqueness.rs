@@ -11,6 +11,11 @@ use std::collections::HashMap;
 
 use soma_contracts::providers::ProviderCatalog;
 
+use crate::{
+    provider_registry::DynamicResourceTemplate,
+    providers::resource_uri::{PathSegment, ResourcePath},
+};
+
 use super::{ProviderFileInspection, ProviderFileInspectionStatus};
 
 /// Mirrors the cross-provider uniqueness checks
@@ -34,9 +39,19 @@ use super::{ProviderFileInspection, ProviderFileInspectionStatus};
 /// On the first file to reuse an already-claimed name, that file (not the
 /// original owner) is marked `Invalid`, mirroring the live registry's
 /// insert-into-a-map-fails-on-second-entry semantics.
+///
+/// `dynamic_resource_templates` is index-aligned with `files`/`loaded_catalogs`
+/// and holds `Some(template)` only for dynamic `.ts` resource readers — the
+/// only `Provider` kind whose `dynamic_resource_templates()` isn't already
+/// captured in `catalog().resources` (dynamic templates are derived from the
+/// filename, not declared data), so the ambiguity check
+/// `provider_registry::ResourceIndex::register` runs against them at real
+/// registry construction time has no equivalent in the catalog-only checks
+/// above without this.
 pub(super) fn apply_directory_wide_checks(
     files: &mut [ProviderFileInspection],
     loaded_catalogs: &[Option<ProviderCatalog>],
+    dynamic_resource_templates: &[Option<DynamicResourceTemplate>],
 ) {
     let mut namespace = DirectoryNamespace::default();
     namespace.register(
@@ -45,18 +60,35 @@ pub(super) fn apply_directory_wide_checks(
     );
 
     for index in 0..files.len() {
-        let Some(catalog) = &loaded_catalogs[index] else {
-            continue;
-        };
-
-        if let Some(message) = namespace.find_conflict(catalog) {
-            files[index].status = ProviderFileInspectionStatus::Invalid;
-            files[index].actions = Vec::new();
-            files[index].error = Some(message);
+        let catalog = &loaded_catalogs[index];
+        let template = &dynamic_resource_templates[index];
+        if catalog.is_none() && template.is_none() {
             continue;
         }
 
-        namespace.register(catalog, &files[index].file_name);
+        if let Some(catalog) = catalog {
+            if let Some(message) = namespace.find_conflict(catalog) {
+                files[index].status = ProviderFileInspectionStatus::Invalid;
+                files[index].actions = Vec::new();
+                files[index].error = Some(message);
+                continue;
+            }
+        }
+        if let Some(template) = template {
+            if let Some(message) = namespace.find_template_conflict(template) {
+                files[index].status = ProviderFileInspectionStatus::Invalid;
+                files[index].actions = Vec::new();
+                files[index].error = Some(message);
+                continue;
+            }
+        }
+
+        if let Some(catalog) = catalog {
+            namespace.register(catalog, &files[index].file_name);
+        }
+        if let Some(template) = template {
+            namespace.register_template(template, &files[index].file_name);
+        }
     }
 }
 
@@ -97,6 +129,16 @@ struct DirectoryNamespace {
     rest_routes: HashMap<(String, String), String>,
     cli_commands: HashMap<String, String>,
     primitives: HashMap<String, String>,
+    /// `catalog().resources[].uri_template`, owner — used to cross-check
+    /// dynamic resource templates against exact/static resources, mirroring
+    /// `provider_registry::ResourceIndex::register`'s cross-tier ambiguity
+    /// check (a static exact resource and a zero-param dynamic template
+    /// rendering to the same URI are just as ambiguous as two same-shape
+    /// dynamic templates).
+    exact_resource_uris: HashMap<String, String>,
+    /// Every dynamic `.ts` resource reader's template registered so far,
+    /// checked pairwise against each newly-discovered one.
+    dynamic_templates: Vec<(ResourcePath, String)>,
 }
 
 impl DirectoryNamespace {
@@ -157,9 +199,48 @@ impl DirectoryNamespace {
         None
     }
 
+    /// The dynamic-template counterpart to `find_conflict`: checks a
+    /// candidate template against every dynamic template already
+    /// registered (same overlap logic `ResourcePath::is_ambiguous_with`
+    /// uses at real registry construction time) and against every exact
+    /// resource URI already registered from a catalog (the cross-tier
+    /// case).
+    fn find_template_conflict(&self, template: &DynamicResourceTemplate) -> Option<String> {
+        for (path, owner) in &self.dynamic_templates {
+            if template.path.is_ambiguous_with(path) {
+                return Some(conflict_message(
+                    "resource template",
+                    &template.uri_template(),
+                    owner,
+                ));
+            }
+        }
+        for (uri, owner) in &self.exact_resource_uris {
+            if let Some(exact_path) = literal_resource_path(uri) {
+                if template.path.is_ambiguous_with(&exact_path) {
+                    return Some(conflict_message(
+                        "resource template",
+                        &template.uri_template(),
+                        owner,
+                    ));
+                }
+            }
+        }
+        None
+    }
+
+    fn register_template(&mut self, template: &DynamicResourceTemplate, owner: &str) {
+        self.dynamic_templates
+            .push((template.path.clone(), owner.to_owned()));
+    }
+
     fn register(&mut self, catalog: &ProviderCatalog, owner: &str) {
         self.provider_names
             .insert(catalog.provider.name.clone(), owner.to_owned());
+        for resource in &catalog.resources {
+            self.exact_resource_uris
+                .insert(resource.uri_template.clone(), owner.to_owned());
+        }
         for tool in &catalog.tools {
             self.action_names
                 .insert(tool.name.clone(), owner.to_owned());
@@ -213,6 +294,22 @@ fn rest_route_key(
 
 fn cli_command(tool_name: &str, cli: &soma_contracts::providers::CliOverlay) -> String {
     cli.command.clone().unwrap_or_else(|| tool_name.to_owned())
+}
+
+/// Parses an exact resource's `uri_template` string into an all-literal
+/// `ResourcePath`, for reuse with `ResourcePath::is_ambiguous_with` when
+/// comparing against a dynamic template — mirrors
+/// `provider_registry::resources::literal_resource_path`, duplicated here
+/// since that one is private to a different module tree. Returns `None` for
+/// a URI that doesn't use the resource scheme at all.
+fn literal_resource_path(uri: &str) -> Option<ResourcePath> {
+    let segments = crate::providers::resource_uri::request_segments(uri)?;
+    Some(ResourcePath {
+        segments: segments
+            .into_iter()
+            .map(|segment| PathSegment::Literal(segment.to_owned()))
+            .collect(),
+    })
 }
 
 fn primitive_names(catalog: &ProviderCatalog) -> Vec<String> {

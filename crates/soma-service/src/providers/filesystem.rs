@@ -14,7 +14,7 @@ use soma_contracts::{
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{DynamicResourceTemplate, Provider, ProviderCall, ProviderOutput},
     providers::{
         ai_sdk::AiSdkProvider,
         mcp::McpProvider,
@@ -104,6 +104,13 @@ impl FileProviderSource {
         // `load()` never registers disabled providers either, so they can't
         // collide with anything at runtime.
         let mut loaded_catalogs: Vec<Option<ProviderCatalog>> = Vec::new();
+        // Parallel to `files`/`loaded_catalogs`: a dynamic `.ts` resource
+        // reader's template, which the live `ResourceIndex::register`
+        // checks for ambiguity but which never appears in `catalog().resources`
+        // (dynamic templates aren't declared data, they're derived from the
+        // filename) — without this, lint can't see two colliding readers
+        // like `service/[name].ts` and `service/[id].ts` at all.
+        let mut dynamic_templates: Vec<Option<DynamicResourceTemplate>> = Vec::new();
 
         for path in self.provider_paths()? {
             let file_name = path
@@ -200,38 +207,23 @@ impl FileProviderSource {
             }
         }
 
-        for (absolute, relative, canonical_root) in self.resource_pairs_with_canonical_root()? {
-            let file_name = relative.display().to_string();
-            match ResourceFileProvider::from_file(absolute.clone(), &relative, &canonical_root) {
-                Ok(provider) => {
-                    let catalog = provider.catalog();
-                    files.push(ProviderFileInspection {
-                        path: absolute,
-                        file_name,
-                        status: ProviderFileInspectionStatus::Loaded,
-                        provider_id: Some(catalog.provider.name.clone()),
-                        provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
-                        actions: Vec::new(),
-                        error: None,
-                    });
-                    loaded_catalogs.push(Some(catalog));
-                }
-                Err(ResourceFileError(message)) => {
-                    files.push(ProviderFileInspection {
-                        path: absolute,
-                        file_name,
-                        status: ProviderFileInspectionStatus::Invalid,
-                        provider_id: None,
-                        provider_kind: Some(ProviderKind::StaticRust.as_str().to_owned()),
-                        actions: Vec::new(),
-                        error: Some(message),
-                    });
-                    loaded_catalogs.push(None);
-                }
-            }
-        }
+        // None of the entries pushed above are resource files, so pad
+        // `dynamic_templates` up to the same length before extending with
+        // the resource files' own (possibly `Some`) entries below — keeps
+        // all three vectors index-aligned with `files` without touching
+        // every earlier push site.
+        dynamic_templates.resize(files.len(), None);
+        let (resource_files, resource_catalogs, resource_templates) =
+            filesystem_resources::inspect_files(self.resource_pairs_with_canonical_root()?);
+        files.extend(resource_files);
+        loaded_catalogs.extend(resource_catalogs);
+        dynamic_templates.extend(resource_templates);
 
-        filesystem_uniqueness::apply_directory_wide_checks(&mut files, &loaded_catalogs);
+        filesystem_uniqueness::apply_directory_wide_checks(
+            &mut files,
+            &loaded_catalogs,
+            &dynamic_templates,
+        );
         files.sort_by(|left, right| left.file_name.cmp(&right.file_name));
         let providers_loaded = files
             .iter()

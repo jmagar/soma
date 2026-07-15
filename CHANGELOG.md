@@ -79,6 +79,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   detected as ambiguous because the old check only compared identical
   segment shapes — ambiguity detection is now a proper pointwise overlap
   check within each precedence tier.
+- Fixed a TOCTOU in `ProviderRegistry::read_resource`: the URI match and the
+  provider clone were two separate lock acquisitions, so a concurrent
+  `refresh_file_providers()` between them could invoke a newer snapshot's
+  provider using scope/params matched against the older snapshot (e.g. a
+  hot-swapped `resources/foo.md` -> `resources/foo.ts` letting a request
+  matched against the old unscoped static resource run the new
+  `soma:write`-scoped dynamic reader unchecked). Both are now fetched from a
+  single lock acquisition, mirroring `dispatch()`'s pattern for tools.
+- Fixed static resource names being derived from just the leaf filename
+  stem, so `resources/api/runbook.md` and `resources/ops/runbook.md` (two
+  distinct, valid, non-colliding URIs) both derived `name == "runbook"` and
+  tripped the global resource-name uniqueness check, failing the whole
+  directory's refresh. Names now use the same full-path-derived name the
+  provider ID already used.
+- Fixed `soma providers lint`/`inspect` never checking dynamic `.ts`
+  resource readers for template ambiguity — `dynamic_resource_templates()`
+  isn't part of `catalog()`, so two colliding readers (e.g.
+  `resources/service/[name].ts` and `resources/service/[id].ts`) both
+  reported as `Loaded` even though the live registry rejects the pair and
+  keeps the previous snapshot at real construction time.
 
 ## [0.4.7]
 

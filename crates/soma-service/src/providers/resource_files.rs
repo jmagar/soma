@@ -139,10 +139,13 @@ impl ResourceFileProvider {
         }
 
         let mime_type = mime_type_for_extension(relative_path);
-        let name = stem_segments
-            .last()
-            .cloned()
-            .unwrap_or_else(|| "resource".to_owned());
+        // The full-path clean_name, not just the leaf stem: two files that
+        // share a leaf name under different directories (resources/api/runbook.md,
+        // resources/ops/runbook.md) have distinct, valid, non-colliding URIs
+        // but would collide on a leaf-only name, tripping the global
+        // resource-name uniqueness check in build_snapshot() and failing
+        // the whole refresh over two perfectly valid resources.
+        let name = clean_name;
         let description = static_resource_description(&absolute_path, &mime_type, &name)?;
         let resource = ProviderResource {
             uri_template: resource_path.uri_string(),

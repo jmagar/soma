@@ -171,6 +171,51 @@ fn dynamic_resource_reader_is_loaded_but_exposes_no_tool_actions() {
     assert!(report.files[0].actions.is_empty());
 }
 
+#[test]
+fn lint_flags_colliding_dynamic_resource_readers() {
+    // Regression: dynamic .ts resource templates never appear in
+    // catalog().resources (they're derived from the filename, not declared
+    // data), so the directory-wide uniqueness pass used to miss two
+    // ambiguous readers entirely -- lint would report both as `Loaded`
+    // even though the live ResourceIndex::register rejects the pair and
+    // keeps the previous snapshot at real registry construction time.
+    let temp = tempdir().expect("tempdir");
+    let providers = temp.path();
+    let service_dir = providers.join("resources").join("service");
+    fs::create_dir_all(&service_dir).expect("mkdir resources/service");
+    fs::write(
+        service_dir.join("[name].ts"),
+        "export async function read(input) { return { text: input.params.name }; }",
+    )
+    .expect("write [name].ts");
+    fs::write(
+        service_dir.join("[id].ts"),
+        "export async function read(input) { return { text: input.params.id }; }",
+    )
+    .expect("write [id].ts");
+
+    let report = FileProviderSource::new(providers)
+        .inspect()
+        .expect("inspect providers");
+
+    assert_eq!(report.providers_loaded, 1, "errors: {:?}", report.files);
+    assert_eq!(report.providers_invalid, 1, "errors: {:?}", report.files);
+    let invalid = report
+        .files
+        .iter()
+        .find(|file| file.status == ProviderFileInspectionStatus::Invalid)
+        .expect("one reader should be flagged invalid");
+    assert!(
+        invalid
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("resource template"),
+        "unexpected error: {:?}",
+        invalid.error
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn symlink_escaping_the_resources_root_is_rejected() {

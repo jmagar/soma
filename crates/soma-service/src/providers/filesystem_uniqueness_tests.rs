@@ -1,7 +1,10 @@
 use soma_contracts::providers::ProviderCatalog;
 
 use super::{apply_directory_wide_checks, DirectoryNamespace};
-use crate::providers::filesystem::{ProviderFileInspection, ProviderFileInspectionStatus};
+use crate::{
+    provider_registry::DynamicResourceTemplate,
+    providers::filesystem::{ProviderFileInspection, ProviderFileInspectionStatus},
+};
 
 fn tool_catalog(provider_name: &str, tool_name: &str) -> ProviderCatalog {
     serde_json::from_str(&format!(
@@ -93,7 +96,8 @@ fn apply_directory_wide_checks_rejects_a_reserved_infrastructure_route() {
         "/v1/providers",
     ))];
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert_eq!(files[0].status, ProviderFileInspectionStatus::Invalid);
     assert!(files[0]
@@ -125,7 +129,8 @@ fn apply_directory_wide_checks_rejects_a_different_method_on_a_reserved_infrastr
         "/v1/providers",
     ))];
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert_eq!(files[0].status, ProviderFileInspectionStatus::Invalid);
     assert!(files[0]
@@ -156,7 +161,8 @@ fn apply_directory_wide_checks_rejects_a_different_method_on_greet() {
         "/v1/greet",
     ))];
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert_eq!(files[0].status, ProviderFileInspectionStatus::Invalid);
     assert!(files[0]
@@ -187,7 +193,8 @@ fn apply_directory_wide_checks_rejects_a_path_shadowed_by_the_generic_tools_rout
         "/v1/tools/custom_tool",
     ))];
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert_eq!(files[0].status, ProviderFileInspectionStatus::Invalid);
     assert!(files[0]
@@ -217,7 +224,8 @@ fn apply_directory_wide_checks_allows_a_tools_subpath_with_extra_segments() {
         "/v1/tools/nested/action",
     ))];
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert_eq!(files[0].status, ProviderFileInspectionStatus::Loaded);
 }
@@ -229,7 +237,8 @@ fn apply_directory_wide_checks_handles_an_empty_directory_without_panicking() {
     let mut files: Vec<ProviderFileInspection> = Vec::new();
     let catalogs: Vec<Option<ProviderCatalog>> = Vec::new();
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert!(files.is_empty());
 }
@@ -261,7 +270,8 @@ fn apply_directory_wide_checks_leaves_the_first_file_loaded_and_invalidates_the_
         Some(tool_catalog("provider-b", "shared_action")),
     ];
 
-    apply_directory_wide_checks(&mut files, &catalogs);
+    let templates: Vec<Option<DynamicResourceTemplate>> = vec![None; files.len()];
+    apply_directory_wide_checks(&mut files, &catalogs, &templates);
 
     assert_eq!(files[0].status, ProviderFileInspectionStatus::Loaded);
     assert_eq!(files[1].status, ProviderFileInspectionStatus::Invalid);

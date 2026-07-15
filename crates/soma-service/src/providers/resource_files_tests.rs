@@ -39,6 +39,45 @@ fn nested_static_resource_maps_path_to_uri() {
     assert_eq!(resource.mime_type.as_deref(), Some("application/json"));
 }
 
+#[test]
+fn nested_static_resources_sharing_a_leaf_name_get_distinct_names() {
+    // Regression: naming a static resource from just the leaf stem made
+    // resources/api/runbook.md and resources/ops/runbook.md both derive
+    // name == "runbook" despite having different, non-colliding URIs --
+    // the global resource-name uniqueness check in build_snapshot() would
+    // then spuriously reject the second one and fail the whole refresh.
+    let temp = tempdir().expect("tempdir");
+    let root = temp.path().canonicalize().expect("canonicalize temp root");
+    let api_dir = temp.path().join("api");
+    let ops_dir = temp.path().join("ops");
+    fs::create_dir(&api_dir).expect("mkdir api");
+    fs::create_dir(&ops_dir).expect("mkdir ops");
+    fs::write(api_dir.join("runbook.md"), "# API Runbook\n").expect("write api runbook");
+    fs::write(ops_dir.join("runbook.md"), "# Ops Runbook\n").expect("write ops runbook");
+
+    let api_provider = ResourceFileProvider::from_file(
+        api_dir.join("runbook.md"),
+        Path::new("api/runbook.md"),
+        &root,
+    )
+    .expect("build api provider");
+    let ops_provider = ResourceFileProvider::from_file(
+        ops_dir.join("runbook.md"),
+        Path::new("ops/runbook.md"),
+        &root,
+    )
+    .expect("build ops provider");
+
+    let api_resource = &api_provider.catalog().resources[0];
+    let ops_resource = &ops_provider.catalog().resources[0];
+    assert_ne!(
+        api_resource.name, ops_resource.name,
+        "distinct URIs must not derive the same resource name"
+    );
+    assert_eq!(api_resource.uri_template, "soma://resources/api/runbook");
+    assert_eq!(ops_resource.uri_template, "soma://resources/ops/runbook");
+}
+
 #[tokio::test]
 async fn read_static_text_resource_returns_text_contents() {
     let temp = tempdir().expect("tempdir");

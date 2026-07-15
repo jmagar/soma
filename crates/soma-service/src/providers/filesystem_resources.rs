@@ -9,7 +9,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::FileProviderLoadError;
+use soma_contracts::providers::{ProviderCatalog, ProviderKind};
+
+use crate::{
+    provider_registry::{DynamicResourceTemplate, Provider},
+    providers::resource_files::{ResourceFileError, ResourceFileProvider},
+};
+
+use super::{FileProviderLoadError, ProviderFileInspection, ProviderFileInspectionStatus};
 
 /// Files under `root/resources/`, recursively, as
 /// `(absolute_path, path_relative_to_resources_dir)` pairs. A symlink whose
@@ -122,6 +129,61 @@ fn walk_resources_dir(
         }
     }
     Ok(())
+}
+
+/// Non-executing inspection of every discovered `resources/` file:
+/// per-file `ProviderFileInspection` results, plus index-aligned catalogs
+/// and dynamic resource templates for the caller's directory-wide
+/// uniqueness pass. `dynamic_resource_templates()` (unlike `catalog()`)
+/// isn't part of `ProviderCatalog` — it's derived from the filename, not
+/// declared data — so it has to be captured here explicitly or a
+/// dynamic-template collision (e.g. `service/[name].ts` vs
+/// `service/[id].ts`) would be invisible to lint even though the live
+/// `ResourceIndex::register` rejects it at real registry construction time.
+pub(super) fn inspect_files(
+    pairs: Vec<(PathBuf, PathBuf, PathBuf)>,
+) -> (
+    Vec<ProviderFileInspection>,
+    Vec<Option<ProviderCatalog>>,
+    Vec<Option<DynamicResourceTemplate>>,
+) {
+    let mut files = Vec::with_capacity(pairs.len());
+    let mut catalogs = Vec::with_capacity(pairs.len());
+    let mut templates = Vec::with_capacity(pairs.len());
+    for (absolute, relative, canonical_root) in pairs {
+        let file_name = relative.display().to_string();
+        match ResourceFileProvider::from_file(absolute.clone(), &relative, &canonical_root) {
+            Ok(provider) => {
+                let template = provider.dynamic_resource_templates().into_iter().next();
+                let catalog = provider.catalog();
+                files.push(ProviderFileInspection {
+                    path: absolute,
+                    file_name,
+                    status: ProviderFileInspectionStatus::Loaded,
+                    provider_id: Some(catalog.provider.name.clone()),
+                    provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
+                    actions: Vec::new(),
+                    error: None,
+                });
+                catalogs.push(Some(catalog));
+                templates.push(template);
+            }
+            Err(ResourceFileError(message)) => {
+                files.push(ProviderFileInspection {
+                    path: absolute,
+                    file_name,
+                    status: ProviderFileInspectionStatus::Invalid,
+                    provider_id: None,
+                    provider_kind: Some(ProviderKind::StaticRust.as_str().to_owned()),
+                    actions: Vec::new(),
+                    error: Some(message),
+                });
+                catalogs.push(None);
+                templates.push(None);
+            }
+        }
+    }
+    (files, catalogs, templates)
 }
 
 #[cfg(test)]
