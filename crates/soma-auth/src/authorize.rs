@@ -306,6 +306,85 @@ impl IntoResponse for RegistrationError {
     }
 }
 
+/// Filter `candidate_redirect_uris` down to those that pass the same
+/// loopback/native-app-scheme/operator-allowlist check DCR-registered
+/// clients are held to via [`is_allowed_redirect_uri`].
+///
+/// CIMD lets a client skip the DCR round-trip, not the redirect-URI trust
+/// boundary. `client_id` is an arbitrary attacker-hosted URL, which means
+/// the attacker also controls the JSON body served there — including
+/// `redirect_uris`. Trusting a CIMD document's `redirect_uris` outright
+/// would let any public HTTPS server declare
+/// `redirect_uris: ["https://attacker.evil/steal-code"]` and have it
+/// honored, making CIMD strictly weaker than DCR at exactly the point DCR
+/// exists to protect. This function is a pure, dependency-free filter so
+/// it's testable without any network/fetch involved.
+fn allowlist_redirect_uris(
+    candidate_redirect_uris: &[String],
+    allowed_patterns: &[String],
+) -> Vec<String> {
+    candidate_redirect_uris
+        .iter()
+        .filter(|uri| is_allowed_redirect_uri(uri, allowed_patterns))
+        .cloned()
+        .collect()
+}
+
+/// Resolve the set of trusted `redirect_uris` for `client_id`, either via
+/// the DCR-registered-clients table or, for an `https://`-shaped
+/// `client_id`, by fetching and validating its CIMD document (see
+/// [`crate::cimd`]) and filtering its declared `redirect_uris` through
+/// [`allowlist_redirect_uris`].
+async fn resolve_client_redirect_uris(
+    state: &AuthState,
+    client_id: &str,
+) -> Result<Vec<String>, AuthError> {
+    if crate::cimd::document::is_cimd_client_id(client_id) {
+        let document =
+            crate::cimd::document::fetch_and_validate_client_metadata(&state.cimd_cache, client_id)
+                .await
+                .map_err(|error| {
+                    warn!(
+                        client_id = %client_id,
+                        kind = error.kind(),
+                        error = %error,
+                        "oauth authorize rejected: CIMD document fetch/validation failed"
+                    );
+                    // Deliberately generic: the detailed CimdError string (which can
+                    // reveal e.g. "resolved only to private addresses" vs "does not
+                    // exist") is logged above but NOT returned to the anonymous
+                    // /authorize caller, to avoid an internal-network-topology
+                    // mapping oracle.
+                    AuthError::Validation(
+                        "client_id metadata document is invalid or unreachable".to_string(),
+                    )
+                })?;
+        let allowed = allowlist_redirect_uris(
+            &document.redirect_uris,
+            &state.config.allowed_client_redirect_uris,
+        );
+        if allowed.is_empty() {
+            warn!(
+                client_id = %client_id,
+                "oauth authorize rejected: CIMD document declares no allowlisted redirect_uris"
+            );
+            return Err(AuthError::Validation(
+                "client_id metadata document declares no allowed redirect_uris".to_string(),
+            ));
+        }
+        return Ok(allowed);
+    }
+
+    let client = state.store.find_client(client_id).await?.ok_or_else(|| {
+        warn!(
+            client_id = %client_id,
+            "oauth authorize rejected: unknown client_id"
+        );
+        AuthError::InvalidGrant("unknown client_id".to_string())
+    })?;
+    Ok(client.redirect_uris)
+}
+
 pub async fn authorize(
     State(state): State<AuthState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
@@ -326,28 +405,13 @@ pub async fn authorize(
         normalized_scope = %scope,
         "oauth authorize request received"
     );
-    let client = state
-        .store
-        .find_client(&query.client_id)
-        .await?
-        .ok_or_else(|| {
-            warn!(
-                client_id = %query.client_id,
-                client_state_id = %client_state_id,
-                "oauth authorize rejected: unknown client_id"
-            );
-            AuthError::InvalidGrant("unknown client_id".to_string())
-        })?;
-    if !client
-        .redirect_uris
-        .iter()
-        .any(|uri| uri == &query.redirect_uri)
-    {
+    let redirect_uris = resolve_client_redirect_uris(&state, &query.client_id).await?;
+    if !redirect_uris.iter().any(|uri| uri == &query.redirect_uri) {
         warn!(
             client_id = %query.client_id,
             redirect_uri = %query.redirect_uri,
             client_state_id = %client_state_id,
-            "oauth authorize rejected: redirect URI does not match registered client"
+            "oauth authorize rejected: redirect URI does not match the registered/CIMD-allowlisted client"
         );
         return Err(AuthError::Validation(
             "redirect_uri does not match the registered client".to_string(),
@@ -985,7 +1049,9 @@ pub mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::{host_pattern_matches, is_allowed_redirect_uri, wildcard_matches};
+    use super::{
+        allowlist_redirect_uris, host_pattern_matches, is_allowed_redirect_uri, wildcard_matches,
+    };
     use crate::config::{AuthConfig, AuthMode, GoogleConfig};
     use crate::google::GoogleProvider;
     use crate::state::AuthState;
@@ -1004,6 +1070,52 @@ pub mod tests {
     fn router(state: AuthState) -> Router {
         crate::routes::router(state)
             .layer(MockConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9001))))
+    }
+
+    #[test]
+    fn allowlist_redirect_uris_keeps_only_patterns_that_pass_is_allowed_redirect_uri() {
+        let candidates = vec![
+            "http://127.0.0.1:7777/callback".to_string(), // loopback, always allowed
+            "https://attacker.evil/steal-code".to_string(), // not in any allowlist pattern
+            "https://callback.example.com/callback/node-a".to_string(), // matches pattern below
+        ];
+        let patterns = vec!["https://callback.example.com/callback/*".to_string()];
+        let allowed = allowlist_redirect_uris(&candidates, &patterns);
+        assert_eq!(
+            allowed,
+            vec![
+                "http://127.0.0.1:7777/callback".to_string(),
+                "https://callback.example.com/callback/node-a".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn allowlist_redirect_uris_returns_empty_when_nothing_matches() {
+        let candidates = vec!["https://attacker.evil/steal-code".to_string()];
+        let allowed = allowlist_redirect_uris(&candidates, &[]);
+        assert!(allowed.is_empty());
+    }
+
+    #[tokio::test]
+    async fn authorize_rejects_a_cimd_client_id_that_targets_a_private_address() {
+        // A `client_id` shaped like a CIMD URL but pointing at a private
+        // address is rejected by the SSRF guard before any network I/O
+        // happens -- this proves the full wire-up (is_cimd_client_id
+        // routing, fetch_and_validate_client_metadata invocation, error
+        // mapping) end to end via a real /authorize HTTP request, without
+        // needing a reachable public HTTPS target.
+        let app = router(test_auth_state().await);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/authorize?response_type=code&client_id=https://127.0.0.1/client.json&redirect_uri=http://127.0.0.1:7777/callback&state=abc&scope=lab&code_challenge=pkce&code_challenge_method=S256")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     }
 
     #[tokio::test]
