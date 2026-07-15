@@ -44,7 +44,7 @@ soma-observability = { path = "../soma-observability", optional = true }
 soma-plugin-support = { path = "../soma-plugin-support", optional = true }
 soma-service = { path = "../soma-service", default-features = false }
 soma-web = { path = "../soma-web", optional = true }
-rmcp = { version = "2.1.0", default-features = false, optional = true }
+rmcp = { version = "2.2.0", default-features = false, optional = true }
 serde_json = { version = "1", optional = true }
 tower-http = { version = "0.7", features = ["cors", "limit", "trace"], optional = true }
 
@@ -97,7 +97,7 @@ tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 wat = "1.252.0"
-rmcp = { version = "2.1.0", default-features = false, features = [
+rmcp = { version = "2.2.0", default-features = false, features = [
   "client",
   "transport-child-process",
 ] }
