@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build or dispatch through the live `ProviderRegistry` — they only parse manifests
   on disk via `FileProviderSource::inspect()`, so they're safe to run before the
   runtime touches TS/WASM/MCP/OpenAPI handlers. See `docs/PROVIDERS.md`.
+- Added `codex-app-server-client`, a standalone, fully-typed async Rust
+  client for the Codex CLI's `app-server` v2 JSON-RPC protocol. Zero
+  path-dependencies on any other crate in this workspace, so it can be lifted
+  into another project wholesale. Protocol types are generated at build time
+  from a vendored JSON Schema; regenerate after upgrading `codex` via
+  `cargo xtask codex-schema regen` (staleness is detected and warned about
+  automatically). See `crates/codex-app-server-client/README.md`.
 
 ### Fixed
 
