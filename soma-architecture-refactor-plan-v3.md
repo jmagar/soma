@@ -120,7 +120,7 @@ soma/
     │   │   ├── server/
     │   │   ├── proxy/
     │   │   └── gateway/
-    │   ├── provider-kit/
+    │   ├── provider-core/
     │   ├── provider-adapters/
     │   ├── web-kit/
     │   ├── cli-kit/
@@ -185,7 +185,7 @@ The physical path determines the architectural layer. The package name determine
 | `crates/shared/mcp/server` | `soma-mcp-server` | `soma_mcp_server` | shared |
 | `crates/shared/mcp/proxy` | `soma-mcp-proxy` | `soma_mcp_proxy` | shared |
 | `crates/shared/mcp/gateway` | `soma-gateway` | `soma_gateway` | shared |
-| `crates/shared/provider-kit` | `soma-provider-kit` | `soma_provider_kit` | shared |
+| `crates/shared/provider-core` | `soma-provider-core` | `soma_provider_core` | shared |
 | `crates/shared/provider-adapters` | `soma-provider-adapters` | `soma_provider_adapters` | shared |
 | `crates/shared/web-kit` | `soma-web-kit` | `soma_web_kit` | shared |
 | `crates/shared/cli-kit` | `soma-cli-kit` | `soma_cli_kit` | shared |
@@ -204,6 +204,8 @@ The physical path determines the architectural layer. The package name determine
 | `crates/soma/web` | `soma-web` | `soma_web` | product |
 
 The nested path is the architectural signal. Existing incoming package names may remain unchanged during the migration to reduce Cargo churn, but brand-neutral shared package names should be a separate explicit decision before publishing these crates outside the repo.
+
+The `-kit` suffix is not required for every shared crate. Prefer `*-core` for foundational contracts that other crates build around, `*-adapters` for concrete implementations, and `*-client`/`*-server`/`*-proxy` for protocol roles. In this plan, the provider contract crate is `provider-core` because it owns the canonical provider/tool model rather than convenience helpers.
 
 ---
 
@@ -504,11 +506,11 @@ soma-integrations::openapi
     delegates execution to soma-openapi
 ```
 
-A reusable provider adapter may also project indexed OpenAPI operations into `soma-provider-kit`:
+A reusable provider adapter may also project indexed OpenAPI operations into `soma-provider-core`:
 
 ```text
 soma-provider-adapters::openapi
-    depends on soma-openapi + soma-provider-kit
+    depends on soma-openapi + soma-provider-core
 ```
 
 Do not create a second OpenAPI executor inside `provider-adapters`, `soma-application`, or `soma-gateway`.
@@ -694,21 +696,43 @@ Keep gateway-owned code limited to routing, projection, and gateway-specific ada
 
 ---
 
-## 3.8 `crates/shared/provider-kit`: reusable provider framework
+## 3.8 `crates/shared/provider-core`: reusable provider framework
 
-**Package:** `soma-provider-kit`
+**Package:** `soma-provider-core`
+
+This crate owns the shared provider contract. Providers feed into `ProviderCatalog`, and each executable operation is described by a `ToolSpec`.
+
+The reusable mental model is:
+
+```text
+provider implementation
+    emits ProviderCatalog
+        contains ToolSpec entries
+            surfaces project into MCP tools, REST routes, CLI commands, Palette actions
+```
+
+`ToolSpec` is the canonical shared type. The current `ActionSpec` shape in `soma-contracts` is a product/static-action precursor that should be migrated into this model. Soma's concrete built-in list may remain named `ACTION_SPECS` or become `SOMA_ACTIONS`, but it should be product-owned and adapted into provider-core `ToolSpec` entries.
+
+`ProviderTool` may remain as a temporary compatibility alias:
+
+```rust
+pub type ProviderTool = ToolSpec;
+```
+
+The alias exists only to reduce migration churn for existing imports, generated docs, tests, and provider manifests while the architecture moves to the clearer `ToolSpec` name. It should not become a second semantic type.
 
 Suggested layout:
 
 ```text
-crates/shared/provider-kit/src/
+crates/shared/provider-core/src/
 ├── lib.rs
 ├── id.rs
 ├── manifest.rs
 ├── schema.rs
 ├── validation.rs
 ├── capability.rs
-├── action.rs
+├── tool.rs
+├── action.rs       # optional builders/aliases for one-action-dispatch ergonomics
 ├── prompt.rs
 ├── resource.rs
 ├── task.rs
@@ -734,7 +758,9 @@ crates/shared/provider-kit/src/
 - provider schema validation
 - capabilities and grants as generic provider concepts
 - provider trait
-- action/tool, prompt, resource, task, and elicitation metadata
+- `ToolSpec` as the canonical executable operation metadata
+- optional `ProviderTool` compatibility alias and `ActionSpec` builder/alias when useful for one-action-dispatch ergonomics
+- prompt, resource, task, and elicitation metadata
 - provider registration
 - immutable snapshots and fingerprints
 - indexes for action names and surface overlays
@@ -746,6 +772,8 @@ crates/shared/provider-kit/src/
 - Soma authorization policy
 - Soma configuration
 - Soma built-in commands
+- Soma's concrete `ACTION_SPECS` / `SOMA_ACTIONS` list
+- `SomaAction` product enum or product request parsing
 - transport-specific HTTP, MCP, or CLI DTOs
 - process startup
 - a concrete OpenAPI engine
@@ -757,7 +785,7 @@ crates/shared/provider-kit/src/
 These are distinct bounded contexts:
 
 ```text
-soma-provider-kit
+soma-provider-core
     In-process provider capability registry and projection model.
 
 soma-gateway
@@ -791,22 +819,22 @@ crates/shared/provider-adapters/src/
 
 ### Owns
 
-Reusable implementations of `soma-provider-kit` contracts, including feature-gated bridges to other shared engines.
+Reusable implementations of `soma-provider-core` contracts, including feature-gated bridges to other shared engines.
 
 Examples:
 
 ```text
 openapi adapter
-    soma-provider-kit + soma-openapi
+    soma-provider-core + soma-openapi
 
 codemode adapter
-    soma-provider-kit + soma-codemode
+    soma-provider-core + soma-codemode
 
 gateway adapter
-    soma-provider-kit + soma-gateway
+    soma-provider-core + soma-gateway
 
 WASM/Python/TypeScript adapters
-    soma-provider-kit + their generic runtimes
+    soma-provider-core + their generic runtimes
 ```
 
 ### Product-specific exception
@@ -915,6 +943,56 @@ Does not own upstream transport implementations, gateway config storage, product
 ### Scope warning
 
 These crates should remain thin wrappers around RMCP. RMCP already supplies protocol primitives. Extract only behavior that Soma, the shared gateway, and another unrelated project can genuinely share.
+
+### MCP tool exposure mode
+
+MCP should support both presentation styles over the same `ToolSpec` and provider dispatch path:
+
+```rust
+pub enum McpToolMode {
+    Router,
+    Individual,
+    Both,
+}
+```
+
+`Router` is the default Soma mode and preserves the current one-tool dispatch pattern:
+
+```text
+tool: soma
+args: { "action": "echo", "message": "hello" }
+```
+
+`Individual` exposes one MCP tool per `ToolSpec`:
+
+```text
+tool: echo
+args: { "message": "hello" }
+```
+
+`Both` is useful for migrations, compatibility testing, and clients that want to compare schemas.
+
+This mode is an MCP adapter concern only. It must not create duplicate business logic. In every mode, the adapter resolves a tool call to the same provider action name and dispatches the same `ToolSpec` through the same application/provider path.
+
+### Surface projection rule
+
+The same operation is implemented once and projected into each surface:
+
+```text
+ToolSpec
+    ├── MCP router action or individual MCP tool
+    ├── REST route metadata, consumed by product API routes
+    ├── CLI command metadata, defaulting command names from the action/tool name
+    └── Palette/UI action metadata when enabled
+
+CLI/API/MCP shims
+    parse protocol-specific input
+    resolve action/tool name
+    call the same application/provider operation
+    format protocol-specific output
+```
+
+REST remains traditional typed endpoints such as `POST /v1/echo` and `GET /v1/status`, not an action-envelope API. CLI commands are named from `ToolSpec.cli.command` when set, otherwise from the tool/action name.
 
 ---
 
@@ -1410,7 +1488,7 @@ soma-integrations
 ├── soma-auth
 ├── soma-observability
 ├── soma-client
-├── soma-provider-kit
+├── soma-provider-core
 ├── soma-provider-adapters
 ├── soma-gateway
 ├── soma-codemode
@@ -1695,7 +1773,7 @@ apps/soma
             ├── soma-auth
             ├── soma-observability
             ├── soma-client
-            ├── soma-provider-kit ───────▶ soma-provider-adapters
+            ├── soma-provider-core ───────▶ soma-provider-adapters
             ├── soma-gateway ────────────▶ soma-mcp-proxy
             │                              ├── soma-mcp-client
             │                              └── soma-mcp-server
@@ -1737,7 +1815,7 @@ soma-domain
 ```text
 soma-application
     may depend on soma-domain
-    may depend on neutral shared contracts such as soma-provider-kit
+    may depend on neutral shared contracts such as soma-provider-core
     defines ports for concrete engines
     may not depend on Axum, Clap, RMCP transport types, Reqwest,
     soma-gateway, soma-codemode, soma-openapi, soma-client, or apps/soma
@@ -1805,7 +1883,7 @@ soma-gateway ─────────────────▶ soma-mcp-pro
 soma-gateway ─────────────────▶ soma-codemode          optional
 soma-gateway ─────────────────▶ soma-openapi           optional
 
-soma-provider-adapters ───────▶ soma-provider-kit
+soma-provider-adapters ───────▶ soma-provider-core
 soma-provider-adapters ───────▶ soma-openapi           optional
 soma-provider-adapters ───────▶ soma-codemode          optional
 soma-provider-adapters ───────▶ soma-gateway           optional
@@ -1950,10 +2028,10 @@ soma.rs or concrete remote HTTP client
     → soma-client
 
 provider_registry.rs and provider_registry/*
-    → soma-provider-kit
+    → soma-provider-core
 
 capabilities.rs and generic provider errors
-    → soma-provider-kit
+    → soma-provider-core
 
 providers/* that are generic
     → soma-provider-adapters
@@ -1969,11 +2047,11 @@ config.rs and env_registry.rs
     → soma-config
 
 providers.rs and provider_validation.rs
-    → soma-provider-kit
+    → soma-provider-core
 
 actions.rs
     split by ownership:
-        generic provider/action metadata → soma-provider-kit
+        generic provider `ToolSpec` metadata → soma-provider-core
         product use-case request/results → soma-application
         invariant product values → soma-domain
         API DTOs → soma-api
@@ -2026,7 +2104,7 @@ members = [
     "crates/shared/codemode",
     "crates/shared/api-kit",
     "crates/shared/mcp/*",
-    "crates/shared/provider-kit",
+    "crates/shared/provider-core",
     "crates/shared/provider-adapters",
     "crates/shared/web-kit",
     "crates/shared/cli-kit",
@@ -2053,7 +2131,7 @@ soma-mcp-client = { path = "crates/shared/mcp/client" }
 soma-mcp-server = { path = "crates/shared/mcp/server" }
 soma-mcp-proxy = { path = "crates/shared/mcp/proxy" }
 soma-gateway = { path = "crates/shared/mcp/gateway" }
-soma-provider-kit = { path = "crates/shared/provider-kit" }
+soma-provider-core = { path = "crates/shared/provider-core" }
 soma-provider-adapters = { path = "crates/shared/provider-adapters" }
 soma-web-kit = { path = "crates/shared/web-kit" }
 soma-cli-kit = { path = "crates/shared/cli-kit" }
@@ -2723,7 +2801,7 @@ API, MCP, and CLI receive only the application/runtime interfaces they need.
 
 ---
 
-## PR 9: Extract `soma-provider-kit`
+## PR 9: Extract `soma-provider-core`
 
 ### Goal
 
@@ -2734,7 +2812,7 @@ Move the generic provider model and registry out of legacy product service/contr
 - provider manifests
 - provider validation
 - capabilities
-- action/tool/prompt/resource/task/elicitation metadata
+- `ToolSpec`, prompt, resource, task, and elicitation metadata
 - provider trait
 - registry builder
 - indexes
@@ -2758,8 +2836,8 @@ Create a standalone fake provider that registers and dispatches without construc
 ### Acceptance
 
 ```bash
-cargo test -p soma-provider-kit --all-features
-cargo tree -p soma-provider-kit --all-features
+cargo test -p soma-provider-core --all-features
+cargo tree -p soma-provider-core --all-features
 ```
 
 The dependency graph is shared-only.
@@ -2790,7 +2868,7 @@ provider-adapters::codemode
     delegates to soma-codemode
 
 provider-adapters::gateway
-    projects gateway catalog/routes through soma-provider-kit
+    projects gateway catalog/routes through soma-provider-core
 ```
 
 ### Upstream MCP decision
@@ -2871,7 +2949,7 @@ remote Soma HTTP client
     → soma-client
 
 generic provider framework
-    → soma-provider-kit
+    → soma-provider-core
 
 generic concrete providers
     → soma-provider-adapters
@@ -2910,7 +2988,7 @@ configuration/environment
     → soma-config
 
 provider manifests and validation
-    → soma-provider-kit
+    → soma-provider-core
 
 application requests/results
     → soma-application
@@ -3150,7 +3228,7 @@ cargo tree -p soma-openapi --all-features
 cargo tree -p soma-codemode --all-features
 cargo tree -p soma-api-kit --all-features
 cargo tree -p soma-gateway --all-features
-cargo tree -p soma-provider-kit --all-features
+cargo tree -p soma-provider-core --all-features
 cargo tree -p soma-provider-adapters --all-features
 cargo tree -p soma-mcp-client --all-features
 cargo tree -p soma-mcp-server --all-features
@@ -3336,7 +3414,7 @@ This order gives Soma the selected map first, then builds the roads without rero
 | generic inbound MCP server helpers | `crates/shared/mcp/server` |
 | generic MCP inbound-to-upstream proxy | `crates/shared/mcp/proxy` |
 | reusable MCP gateway engine | `crates/shared/mcp/gateway` |
-| generic provider registry/contracts | `crates/shared/provider-kit` |
+| generic provider registry/contracts | `crates/shared/provider-core` |
 | generic concrete provider implementations | `crates/shared/provider-adapters` |
 | generic Axum lifecycle/middleware | `crates/shared/web-kit` |
 | generic terminal/CLI helpers | `crates/shared/cli-kit` |
