@@ -6,7 +6,7 @@ use crate::protocol::{
 };
 use crate::transport::{AsyncBufRead, AsyncWrite};
 use crate::{
-    ApprovalHandler, CodexAppServerClient, DenyAllApprovalHandler, Event, EventCollector,
+    ApprovalHandler, CodexAppServerClient, DenyAllApprovalHandler, Error, Event, EventCollector,
     EventStream, Result,
 };
 
@@ -277,7 +277,14 @@ impl CodexSession {
         .await
     }
 
-    async fn run_text_turn_with_params_and_handler<H>(
+    /// Runs a one-shot text turn with explicit `thread/start` params and an
+    /// approval handler.
+    ///
+    /// This is the lowest-level text-turn convenience helper: callers can set
+    /// the full typed [`ThreadStartParams`] instead of only the model, while
+    /// still reusing the shared thread start, turn start, server-request
+    /// handling, and event collection flow.
+    pub async fn run_text_turn_with_params_and_handler<H>(
         &mut self,
         thread_params: ThreadStartParams,
         text: impl Into<String>,
@@ -345,7 +352,7 @@ impl CodexSession {
     {
         while !collector.is_complete() {
             let Some(notification) = self.next_notification(handler).await else {
-                break;
+                return Err(Error::TransportClosed);
             };
             collector.observe_notification(&notification);
         }

@@ -155,6 +155,27 @@ Routes:
 - `POST /v1/text-turn`: starts a fresh Codex session, sends one text prompt,
   waits for turn completion, and returns assistant text, latest diff, and
   turn errors.
+
+`rest::router()` mounts only those conservative helper routes. It rejects
+`approvalPolicy: "allow_all"` plus client `command`, `extraArgs`, and `config`
+overrides because those controls can change what the local Codex process is
+allowed to run.
+
+For a full REST bridge to every callable, mount the trusted router behind your
+own authentication and authorization boundary:
+
+```rust,no_run
+use codex_app_server_client::rest;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let listener = tokio::net::TcpListener::bind("127.0.0.1:43210").await?;
+axum::serve(listener, rest::trusted_bridge_router()).await?;
+# Ok(())
+# }
+```
+
+Trusted bridge routes:
+
 - `POST /v1/call/{method}`: one-shot raw JSON-RPC bridge. The backend starts
   a fresh session, calls the app-server method named by the path (for example
   `/v1/call/config/read` or `/v1/call/thread/start`), and returns the raw
@@ -184,11 +205,6 @@ One-shot text helper request:
   "client": {
     "name": "my_rest_client",
     "version": "0.1.0",
-    "command": "codex",
-    "extraArgs": ["--experimental"],
-    "config": {
-      "model_reasoning_effort": "low"
-    },
     "callTimeoutMs": 120000
   }
 }
@@ -200,6 +216,7 @@ One-shot text helper response:
 {
   "threadId": "019...",
   "turnId": "019...",
+  "turnStatus": "completed",
   "agentMessage": "Hello.",
   "latestDiff": null,
   "errors": []
@@ -312,7 +329,7 @@ Event polling response shapes:
 Request reply examples:
 
 ```json
-{ "result": { "currentTimeMs": 1760000000000 } }
+{ "result": { "currentTimeAt": 1760000000 } }
 ```
 
 ```json
@@ -330,9 +347,10 @@ cargo run -p codex-app-server-client --features rest --example rest_server
 ```
 
 Set `CODEX_APP_SERVER_REST_ADDR=127.0.0.1:43211` to pick a different bind
-address. The default backend can do both short-lived one-shot calls and
-persistent bridge sessions; host applications that want pooling, auth, tenancy,
-or their own process lifecycle can mount `rest::router_with_backend(...)`.
+address. Host applications that want pooling, auth, tenancy, or their own
+process lifecycle can mount `rest::router_with_backend(...)` for conservative
+helper routes, or `rest::router_with_backend_and_options(backend,
+rest::RestRouterOptions::trusted_bridge())` for the full trusted bridge.
 
 ## How the typed protocol layer is built
 

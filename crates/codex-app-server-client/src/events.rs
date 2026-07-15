@@ -8,6 +8,7 @@ pub struct EventCollector {
     agent_message: String,
     latest_diff: Option<String>,
     completed: bool,
+    terminal_status: Option<TurnStatus>,
     errors: Vec<TurnError>,
 }
 
@@ -45,6 +46,7 @@ impl EventCollector {
             ServerNotification::TurnCompleted(completed)
                 if self.matches_turn(&completed.thread_id, &completed.turn.id) =>
             {
+                self.terminal_status = Some(completed.turn.status);
                 self.completed = matches!(
                     completed.turn.status,
                     TurnStatus::Completed | TurnStatus::Interrupted | TurnStatus::Failed
@@ -72,6 +74,10 @@ impl EventCollector {
 
     pub fn is_complete(&self) -> bool {
         self.completed
+    }
+
+    pub fn terminal_status(&self) -> Option<&TurnStatus> {
+        self.terminal_status.as_ref()
     }
 
     pub fn errors(&self) -> &[TurnError] {

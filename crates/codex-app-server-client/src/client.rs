@@ -155,6 +155,15 @@ impl std::fmt::Debug for PendingServerRequest {
 }
 
 impl PendingServerRequest {
+    #[cfg(all(test, feature = "rest"))]
+    pub(crate) fn for_test(request: ServerRequest) -> Self {
+        let (reply_tx, _reply_rx) = oneshot::channel::<OutgoingReply>();
+        Self {
+            request,
+            reply_tx: Some(reply_tx),
+        }
+    }
+
     /// The `RequestId` the app-server expects echoed back in the reply.
     pub fn id(&self) -> &RequestId {
         self.request.id()
@@ -642,7 +651,7 @@ mod tests {
         assert_eq!(pending.id(), &RequestId::Int64(7));
 
         pending
-            .respond(serde_json::json!({ "currentTimeMs": 12345 }))
+            .respond(serde_json::json!({ "currentTimeAt": 12345 }))
             .expect("respond should succeed for a plain serializable value");
 
         let reply = reply_rx
@@ -654,7 +663,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&line).unwrap();
         assert_eq!(
             parsed,
-            serde_json::json!({ "id": 7, "result": { "currentTimeMs": 12345 } })
+            serde_json::json!({ "id": 7, "result": { "currentTimeAt": 12345 } })
         );
     }
 

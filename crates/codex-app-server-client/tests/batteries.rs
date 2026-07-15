@@ -7,7 +7,7 @@ use codex_app_server_client::protocol::{
 };
 use codex_app_server_client::{
     AllowAllApprovalHandler, ApprovalHandler, CodexAppServerClient, CodexDaemon, CodexSession,
-    CompatibilityReport, DenyAllApprovalHandler, EventCollector, ReadOnlyApprovalHandler,
+    CompatibilityReport, DenyAllApprovalHandler, Error, EventCollector, ReadOnlyApprovalHandler,
     ServerRequestReply, SessionOptions, SurfaceSummary, CODEX_SCHEMA_VERSION,
 };
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
@@ -507,6 +507,57 @@ async fn one_call_run_text_turn_uses_default_thread_and_collects_diff() {
 
     assert_eq!(result.agent_message(), "default helper");
     assert_eq!(result.latest_diff(), Some("diff --git a/a b/a"));
+    server.await.unwrap();
+}
+
+#[tokio::test]
+async fn text_turn_errors_if_transport_closes_before_completion() {
+    let (client_io, server_io) = tokio::io::duplex(8192);
+    let (client_read, client_write) = tokio::io::split(client_io);
+    let (server_read, mut server_write) = tokio::io::split(server_io);
+
+    let server = tokio::spawn(async move {
+        let mut reader = BufReader::new(server_read);
+        respond_to_initialize(&mut reader, &mut server_write).await;
+
+        let thread_start = read_json_line(&mut reader).await;
+        respond_json(
+            &mut server_write,
+            thread_start["id"].clone(),
+            fake_thread_start_response("thread-closed", "default-model"),
+        )
+        .await;
+
+        let turn_start = read_json_line(&mut reader).await;
+        respond_json(
+            &mut server_write,
+            turn_start["id"].clone(),
+            serde_json::json!({
+                "turn": {
+                    "id": "turn-closed",
+                    "items": [],
+                    "itemsView": "notLoaded",
+                    "status": "inProgress"
+                }
+            }),
+        )
+        .await;
+        // Drop the writer without sending turn/completed.
+    });
+
+    let mut session = CodexSession::connect_streams(
+        BufReader::new(client_read),
+        client_write,
+        SessionOptions::new("test-client", "0.1.0").with_call_timeout(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+    let err = session
+        .run_text_turn("never completes")
+        .await
+        .expect_err("early transport close must not look like a successful turn");
+
+    assert!(matches!(err, Error::TransportClosed));
     server.await.unwrap();
 }
 

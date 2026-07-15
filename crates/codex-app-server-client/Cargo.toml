@@ -3,11 +3,11 @@ name = "codex-app-server-client"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.96"
-authors.workspace = true
+authors = ["dinglebear.ai <hello@dinglebear.ai>"]
 description = "Standalone, fully-typed async Rust client for the Codex CLI's app-server v2 JSON-RPC protocol."
-homepage.workspace = true
+homepage = "https://soma.dinglebear.ai"
 license = "MIT"
-repository.workspace = true
+repository = "https://github.com/jmagar/soma"
 publish = false
 
 # Deliberately has zero path-dependencies on other crates in this workspace -

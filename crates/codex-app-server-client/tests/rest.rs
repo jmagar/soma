@@ -12,13 +12,14 @@ use axum::{
 };
 use codex_app_server_client::{
     rest::{
-        router_with_backend, RestBackend, RestCallRequest, RestCallResponse, RestClientOptions,
-        RestErrorReplyRequest, RestErrorResponse, RestEventResponse, RestHealthResponse,
-        RestRequestReplyResponse, RestRequestReplyResultRequest, RestResult,
-        RestSessionCreateRequest, RestSessionCreateResponse, RestSessionSummary,
-        RestStatusResponse, RestTextTurnRequest, RestTextTurnResponse,
+        router_with_backend, router_with_backend_and_options, RestBackend, RestCallRequest,
+        RestCallResponse, RestClientOptions, RestErrorReplyRequest, RestErrorResponse,
+        RestEventResponse, RestHealthResponse, RestRequestReplyResponse,
+        RestRequestReplyResultRequest, RestResult, RestRouterOptions, RestSessionCreateRequest,
+        RestSessionCreateResponse, RestSessionSummary, RestStatusResponse, RestTextTurnRequest,
+        RestTextTurnResponse,
     },
-    CompatibilityReport, SurfaceSummary, CODEX_SCHEMA_VERSION,
+    CompatibilityReport, Error, SurfaceSummary, CODEX_SCHEMA_VERSION,
 };
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -32,6 +33,7 @@ struct FakeBackend {
     observed_text: Arc<Mutex<Vec<RestTextTurnRequest>>>,
     observed_calls: Arc<Mutex<Vec<RestCallRequest>>>,
     observed_sessions: Arc<Mutex<Vec<RestSessionCreateRequest>>>,
+    observed_polls: Arc<Mutex<Vec<Option<u64>>>>,
     observed_replies: Arc<Mutex<Vec<ObservedReply>>>,
     deleted_sessions: Arc<Mutex<Vec<String>>>,
 }
@@ -141,8 +143,9 @@ impl RestBackend for FakeBackend {
     fn poll_event(
         &self,
         _session_id: String,
-        _timeout_ms: Option<u64>,
+        timeout_ms: Option<u64>,
     ) -> Pin<Box<dyn Future<Output = RestResult<RestEventResponse>> + Send + 'static>> {
+        self.observed_polls.lock().unwrap().push(timeout_ms);
         let response = self
             .event_response
             .lock()
@@ -224,12 +227,13 @@ async fn rest_text_turn_maps_json_request_to_backend_response() {
     let backend = FakeBackend::with_response(RestTextTurnResponse {
         thread_id: "thread-1".to_owned(),
         turn_id: "turn-1".to_owned(),
+        turn_status: Some("completed".to_owned()),
         agent_message: "hello over REST".to_owned(),
         latest_diff: Some("diff --git a/file b/file".to_owned()),
         errors: Vec::new(),
     });
     let observed = backend.observed_text.clone();
-    let app = router_with_backend(backend);
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
 
     let body = json!({
         "prompt": "say hi",
@@ -251,6 +255,7 @@ async fn rest_text_turn_maps_json_request_to_backend_response() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["threadId"], "thread-1");
     assert_eq!(body["turnId"], "turn-1");
+    assert_eq!(body["turnStatus"], "completed");
     assert_eq!(body["agentMessage"], "hello over REST");
     assert_eq!(body["latestDiff"], "diff --git a/file b/file");
 
@@ -275,6 +280,41 @@ async fn rest_text_turn_maps_json_request_to_backend_response() {
 }
 
 #[tokio::test]
+async fn default_router_rejects_unsafe_text_turn_controls() {
+    let app = router_with_backend(FakeBackend::default());
+
+    let (status, body) = request_json(
+        app.clone(),
+        Method::POST,
+        "/v1/text-turn",
+        Some(json!({
+            "prompt": "run something",
+            "approvalPolicy": "allow_all"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "forbidden");
+
+    let (status, body) = request_json(
+        app,
+        Method::POST,
+        "/v1/text-turn",
+        Some(json!({
+            "prompt": "run something",
+            "client": {
+                "command": "codex-dev",
+                "extraArgs": ["--experimental"],
+                "config": { "sandbox_mode": "danger-full-access" }
+            }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "forbidden");
+}
+
+#[tokio::test]
 async fn rest_text_turn_rejects_malformed_json() {
     let app = router_with_backend(FakeBackend::default());
     let request = Request::builder()
@@ -292,6 +332,20 @@ async fn rest_text_turn_rejects_malformed_json() {
 }
 
 #[tokio::test]
+async fn default_router_does_not_mount_raw_bridge_routes() {
+    let app = router_with_backend(FakeBackend::default());
+    let (status, _body) = request_json(
+        app,
+        Method::POST,
+        "/v1/call/thread/start",
+        Some(json!({ "params": { "model": "gpt-5" } })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn rest_raw_call_bridge_maps_method_path_params_and_client_options() {
     let backend = FakeBackend::default();
     *backend.call_response.lock().unwrap() = Some(Ok(RestCallResponse {
@@ -299,7 +353,7 @@ async fn rest_raw_call_bridge_maps_method_path_params_and_client_options() {
         result: json!({ "thread": { "id": "thread-1" } }),
     }));
     let observed = backend.observed_calls.clone();
-    let app = router_with_backend(backend);
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
 
     let (status, body) = request_json(
         app,
@@ -334,12 +388,55 @@ async fn rest_raw_call_bridge_maps_method_path_params_and_client_options() {
 }
 
 #[tokio::test]
+async fn rest_raw_call_bridge_defaults_missing_params_to_null() {
+    let backend = FakeBackend::default();
+    let observed = backend.observed_calls.clone();
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let (status, body) =
+        request_json(app, Method::POST, "/v1/call/memory/reset", Some(json!({}))).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["method"], "memory/reset");
+
+    let observed = observed.lock().unwrap();
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].params, Value::Null);
+}
+
+#[tokio::test]
+async fn rest_raw_call_bridge_preserves_json_rpc_error_details() {
+    let backend = FakeBackend::default();
+    *backend.call_response.lock().unwrap() = Some(Err(
+        codex_app_server_client::rest::RestError::Client(Error::Rpc {
+            code: -32602,
+            message: "bad params".to_owned(),
+            data: Some(json!({ "field": "params.cwd" })),
+        }),
+    ));
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let (status, body) = request_json(
+        app,
+        Method::POST,
+        "/v1/call/thread/start",
+        Some(json!({ "params": { "cwd": 1 } })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(body["error"], "json_rpc_error");
+    assert_eq!(body["code"], -32602);
+    assert_eq!(body["data"]["field"], "params.cwd");
+}
+
+#[tokio::test]
 async fn rest_stateful_bridge_creates_sessions_calls_methods_and_deletes_sessions() {
     let backend = FakeBackend::default();
     let observed_sessions = backend.observed_sessions.clone();
     let observed_calls = backend.observed_calls.clone();
     let deleted_sessions = backend.deleted_sessions.clone();
-    let app = router_with_backend(backend);
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
 
     let (status, body) = request_json(
         app.clone(),
@@ -418,7 +515,7 @@ async fn rest_stateful_bridge_exposes_events_and_request_replies() {
         }),
     )));
     let observed_replies = backend.observed_replies.clone();
-    let app = router_with_backend(backend);
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
 
     let (status, body) = request_json(
         app.clone(),
@@ -437,7 +534,7 @@ async fn rest_stateful_bridge_exposes_events_and_request_replies() {
         app.clone(),
         Method::POST,
         "/v1/sessions/session-1/requests/pending-1/result",
-        Some(json!({ "result": { "currentTimeMs": 123 } })),
+        Some(json!({ "result": { "currentTimeAt": 123 } })),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -464,7 +561,7 @@ async fn rest_stateful_bridge_exposes_events_and_request_replies() {
                 session_id: "session-1".to_owned(),
                 request_key: "pending-1".to_owned(),
                 body: RestRequestReplyResultRequest {
-                    result: json!({ "currentTimeMs": 123 }),
+                    result: json!({ "currentTimeAt": 123 }),
                 },
             },
             ObservedReply::Error {
@@ -478,6 +575,40 @@ async fn rest_stateful_bridge_exposes_events_and_request_replies() {
             },
         ]
     );
+}
+
+#[tokio::test]
+async fn rest_router_enforces_configured_session_limit_before_backend_create() {
+    let backend = FakeBackend::default();
+    let observed_sessions = backend.observed_sessions.clone();
+    let options = RestRouterOptions::trusted_bridge().with_max_sessions(0);
+    let app = router_with_backend_and_options(backend, options);
+
+    let (status, body) = request_json(app, Method::POST, "/v1/sessions", Some(json!({}))).await;
+
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["error"], "rate_limited");
+    assert!(observed_sessions.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn rest_router_clamps_event_poll_timeout() {
+    let backend = FakeBackend::default();
+    let observed_polls = backend.observed_polls.clone();
+    let options = RestRouterOptions::trusted_bridge().with_max_poll_timeout_ms(50);
+    let app = router_with_backend_and_options(backend, options);
+
+    let (status, body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=5000",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+    assert_eq!(observed_polls.lock().unwrap()[0], Some(50));
 }
 
 async fn request_json(
@@ -496,6 +627,6 @@ async fn request_json(
     let response = app.oneshot(request).await.unwrap();
     let status = response.status();
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-    let body = serde_json::from_slice(&bytes).unwrap();
+    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, body)
 }

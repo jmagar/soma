@@ -1,12 +1,12 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc,
+        Arc, Mutex as StdMutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use axum::{
@@ -18,22 +18,94 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
 use crate::{
-    AllowAllApprovalHandler, CodexAppServerClient, CodexSession, CompatibilityReport,
-    DenyAllApprovalHandler, Error, Event, PendingServerRequest, ReadOnlyApprovalHandler, Result,
-    SessionOptions, TextTurnResult,
+    protocol::ThreadStartParams, AllowAllApprovalHandler, CodexAppServerClient, CodexSession,
+    CompatibilityReport, DenyAllApprovalHandler, Error, Event, PendingServerRequest,
+    ReadOnlyApprovalHandler, SessionOptions, TextTurnResult,
 };
 
 pub type RestResult<T> = std::result::Result<T, RestError>;
 pub type RestFuture<T> = Pin<Box<dyn Future<Output = RestResult<T>> + Send + 'static>>;
+
+/// REST router behavior knobs.
+///
+/// [`Default`] is intentionally conservative: health, compatibility, and the
+/// text-turn helper are mounted, but the raw bridge/session routes and
+/// client-controlled unsafe options are not. Use [`Self::trusted_bridge`] only
+/// when the caller mounts the router behind its own authz boundary.
+#[derive(Clone, Debug, Default)]
+pub struct RestRouterOptions {
+    pub enable_bridge_routes: bool,
+    pub allow_unsafe_client_options: bool,
+    pub limits: RestLimits,
+}
+
+impl RestRouterOptions {
+    /// Enables the full raw callable bridge for trusted deployments.
+    pub fn trusted_bridge() -> Self {
+        Self {
+            enable_bridge_routes: true,
+            allow_unsafe_client_options: true,
+            limits: RestLimits::default(),
+        }
+    }
+
+    pub fn with_max_sessions(mut self, max_sessions: usize) -> Self {
+        self.limits.max_sessions = max_sessions;
+        self
+    }
+
+    pub fn with_max_poll_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.limits.max_poll_timeout = Duration::from_millis(timeout_ms);
+        self
+    }
+}
+
+/// Resource limits used by the default REST backend and route layer.
+#[derive(Clone, Debug)]
+pub struct RestLimits {
+    pub max_sessions: usize,
+    pub max_one_shot_concurrency: usize,
+    pub max_poll_timeout: Duration,
+    pub pending_request_ttl: Duration,
+    pub max_pending_requests_per_session: usize,
+    pub idle_session_ttl: Duration,
+    pub compatibility_ttl: Duration,
+}
+
+impl Default for RestLimits {
+    fn default() -> Self {
+        Self {
+            max_sessions: 16,
+            max_one_shot_concurrency: 4,
+            max_poll_timeout: Duration::from_secs(30),
+            pending_request_ttl: Duration::from_secs(600),
+            max_pending_requests_per_session: 64,
+            idle_session_ttl: Duration::from_secs(30 * 60),
+            compatibility_ttl: Duration::from_secs(30),
+        }
+    }
+}
 
 /// Errors surfaced by the optional REST adapter.
 #[derive(Debug, thiserror::Error)]
 pub enum RestError {
     #[error("{0}")]
     NotFound(String),
+
+    #[error("{0}")]
+    Gone(String),
+
+    #[error("{0}")]
+    Forbidden(String),
+
+    #[error("{0}")]
+    RateLimited(String),
+
+    #[error("{0}")]
+    Conflict(String),
 
     #[error(transparent)]
     Client(#[from] Error),
@@ -83,9 +155,17 @@ pub trait RestBackend: Send + Sync + 'static {
 ///
 /// One-shot calls create a short-lived Codex session. Stateful bridge calls use
 /// sessions created by `POST /v1/sessions`.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CodexRestBackend {
     sessions: Arc<CodexRestSessions>,
+    limits: RestLimits,
+    compatibility: Arc<StdMutex<Option<CachedCompatibility>>>,
+}
+
+impl Default for CodexRestBackend {
+    fn default() -> Self {
+        Self::with_limits(RestLimits::default())
+    }
 }
 
 #[derive(Default)]
@@ -97,62 +177,194 @@ struct CodexRestSessions {
 struct CodexRestSession {
     client: CodexAppServerClient,
     session: Mutex<CodexSession>,
-    pending_requests: Mutex<HashMap<String, PendingServerRequest>>,
+    pending_requests: Mutex<HashMap<String, PendingRestRequest>>,
     next_request_key: AtomicU64,
+    last_used: Mutex<Instant>,
+}
+
+struct PendingRestRequest {
+    request: PendingServerRequest,
+    expires_at: Instant,
+}
+
+struct CachedCompatibility {
+    report: CompatibilityReport,
+    expires_at: Instant,
 }
 
 impl CodexRestBackend {
+    pub fn with_limits(limits: RestLimits) -> Self {
+        Self {
+            sessions: Arc::default(),
+            limits,
+            compatibility: Arc::default(),
+        }
+    }
+
     async fn session(&self, session_id: &str) -> RestResult<Arc<CodexRestSession>> {
-        self.sessions
+        self.prune_idle_sessions().await;
+        let session = self
+            .sessions
             .sessions
             .lock()
             .await
             .get(session_id)
             .cloned()
-            .ok_or_else(|| RestError::NotFound(format!("session `{session_id}` was not found")))
+            .ok_or_else(|| RestError::NotFound(format!("session `{session_id}` was not found")))?;
+        session.touch().await;
+        Ok(session)
     }
+
+    async fn prune_idle_sessions(&self) {
+        let now = Instant::now();
+        let entries = {
+            let sessions = self.sessions.sessions.lock().await;
+            sessions
+                .iter()
+                .map(|(id, session)| (id.clone(), session.clone()))
+                .collect::<Vec<_>>()
+        };
+
+        let mut expired = Vec::new();
+        for (id, session) in entries {
+            let last_used = *session.last_used.lock().await;
+            if now.duration_since(last_used) >= self.limits.idle_session_ttl {
+                expired.push(id);
+            }
+        }
+
+        if expired.is_empty() {
+            return;
+        }
+
+        let mut sessions = self.sessions.sessions.lock().await;
+        for id in expired {
+            sessions.remove(&id);
+        }
+    }
+}
+
+impl CodexRestSession {
+    async fn touch(&self) {
+        *self.last_used.lock().await = Instant::now();
+    }
+
+    async fn prune_expired_pending(&self, now: Instant) {
+        prune_expired_pending_requests(&self.pending_requests, now).await;
+    }
+
+    async fn take_pending_request(&self, request_key: &str) -> RestResult<PendingServerRequest> {
+        take_pending_request(&self.pending_requests, request_key).await
+    }
+}
+
+async fn prune_expired_pending_requests(
+    pending_requests: &Mutex<HashMap<String, PendingRestRequest>>,
+    now: Instant,
+) {
+    let mut pending = pending_requests.lock().await;
+    let expired = pending
+        .iter()
+        .filter(|(_, request)| request.expires_at <= now)
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    for key in expired {
+        pending.remove(&key);
+    }
+}
+
+async fn take_pending_request(
+    pending_requests: &Mutex<HashMap<String, PendingRestRequest>>,
+    request_key: &str,
+) -> RestResult<PendingServerRequest> {
+    let now = Instant::now();
+    let mut pending = pending_requests.lock().await;
+    if pending
+        .get(request_key)
+        .is_some_and(|request| request.expires_at <= now)
+    {
+        pending.remove(request_key);
+        return Err(RestError::Gone(format!(
+            "request `{request_key}` has expired"
+        )));
+    }
+
+    let expired = pending
+        .iter()
+        .filter(|(_, request)| request.expires_at <= now)
+        .map(|(key, _)| key.clone())
+        .collect::<Vec<_>>();
+    for key in expired {
+        pending.remove(&key);
+    }
+
+    pending
+        .remove(request_key)
+        .map(|request| request.request)
+        .ok_or_else(|| RestError::NotFound(format!("request `{request_key}` was not found")))
 }
 
 impl RestBackend for CodexRestBackend {
     fn compatibility_report(&self) -> CompatibilityReport {
-        CompatibilityReport::current()
+        let now = Instant::now();
+        let mut cached = self
+            .compatibility
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(cached) = cached.as_ref() {
+            if cached.expires_at > now {
+                return cached.report.clone();
+            }
+        }
+
+        let report = CompatibilityReport::current();
+        *cached = Some(CachedCompatibility {
+            report: report.clone(),
+            expires_at: now + self.limits.compatibility_ttl,
+        });
+        report
     }
 
     fn run_text_turn(&self, request: RestTextTurnRequest) -> RestFuture<RestTextTurnResponse> {
         Box::pin(async move {
             let session_options = request.session_options();
             let approval_policy = request.approval_policy.unwrap_or_default();
-            let model = request.model.clone();
+            let thread_params = request
+                .model
+                .clone()
+                .map_or_else(ThreadStartParams::new, |model| {
+                    ThreadStartParams::new().model(model)
+                });
             let prompt = request.prompt.clone();
             let mut session = CodexSession::spawn(session_options).await?;
 
             let result = match approval_policy {
                 RestApprovalPolicy::DenyAll => {
-                    run_text_turn_with_handler(
-                        &mut session,
-                        model,
-                        prompt,
-                        &DenyAllApprovalHandler::default(),
-                    )
-                    .await?
+                    session
+                        .run_text_turn_with_params_and_handler(
+                            thread_params,
+                            prompt,
+                            &DenyAllApprovalHandler::default(),
+                        )
+                        .await?
                 }
                 RestApprovalPolicy::ReadOnly => {
-                    run_text_turn_with_handler(
-                        &mut session,
-                        model,
-                        prompt,
-                        &ReadOnlyApprovalHandler,
-                    )
-                    .await?
+                    session
+                        .run_text_turn_with_params_and_handler(
+                            thread_params,
+                            prompt,
+                            &ReadOnlyApprovalHandler,
+                        )
+                        .await?
                 }
                 RestApprovalPolicy::AllowAll => {
-                    run_text_turn_with_handler(
-                        &mut session,
-                        model,
-                        prompt,
-                        &AllowAllApprovalHandler,
-                    )
-                    .await?
+                    session
+                        .run_text_turn_with_params_and_handler(
+                            thread_params,
+                            prompt,
+                            &AllowAllApprovalHandler,
+                        )
+                        .await?
                 }
             };
             Ok(RestTextTurnResponse::from(result))
@@ -165,6 +377,14 @@ impl RestBackend for CodexRestBackend {
     ) -> RestFuture<RestSessionCreateResponse> {
         let backend = self.clone();
         Box::pin(async move {
+            backend.prune_idle_sessions().await;
+            if backend.sessions.sessions.lock().await.len() >= backend.limits.max_sessions {
+                return Err(RestError::RateLimited(format!(
+                    "maximum REST session count ({}) reached",
+                    backend.limits.max_sessions
+                )));
+            }
+
             let session = CodexSession::spawn(session_options_from(
                 request.client,
                 "codex_app_server_rest_session",
@@ -185,13 +405,16 @@ impl RestBackend for CodexRestBackend {
                 session: Mutex::new(session),
                 pending_requests: Mutex::new(HashMap::new()),
                 next_request_key: AtomicU64::new(0),
+                last_used: Mutex::new(Instant::now()),
             });
-            backend
-                .sessions
-                .sessions
-                .lock()
-                .await
-                .insert(session_id.clone(), rest_session);
+            let mut sessions = backend.sessions.sessions.lock().await;
+            if sessions.len() >= backend.limits.max_sessions {
+                return Err(RestError::RateLimited(format!(
+                    "maximum REST session count ({}) reached",
+                    backend.limits.max_sessions
+                )));
+            }
+            sessions.insert(session_id.clone(), rest_session);
             Ok(RestSessionCreateResponse {
                 session_id,
                 initialize_response,
@@ -202,6 +425,7 @@ impl RestBackend for CodexRestBackend {
     fn list_sessions(&self) -> RestFuture<Vec<RestSessionSummary>> {
         let backend = self.clone();
         Box::pin(async move {
+            backend.prune_idle_sessions().await;
             let mut sessions = backend
                 .sessions
                 .sessions
@@ -269,6 +493,7 @@ impl RestBackend for CodexRestBackend {
         session_id: String,
         timeout_ms: Option<u64>,
     ) -> RestFuture<RestEventResponse> {
+        let limits = self.limits.clone();
         let backend = self.clone();
         Box::pin(async move {
             let session = backend.session(&session_id).await?;
@@ -284,6 +509,8 @@ impl RestBackend for CodexRestBackend {
                     serde_json::to_value(notification)?,
                 )),
                 Ok(Some(Event::Request(request))) => {
+                    let now = Instant::now();
+                    session.prune_expired_pending(now).await;
                     let request_key = format!(
                         "request-{}",
                         session.next_request_key.fetch_add(1, Ordering::Relaxed) + 1
@@ -291,11 +518,21 @@ impl RestBackend for CodexRestBackend {
                     let request_id = serde_json::to_value(request.id())?;
                     let method = request.method_name().to_owned();
                     let request_value = serde_json::to_value(&request.request)?;
-                    session
-                        .pending_requests
-                        .lock()
-                        .await
-                        .insert(request_key.clone(), request);
+                    let mut pending = session.pending_requests.lock().await;
+                    if pending.len() >= limits.max_pending_requests_per_session {
+                        request.respond_error(-32000, "REST pending request limit reached", None);
+                        return Err(RestError::RateLimited(format!(
+                            "maximum pending request count ({}) reached",
+                            limits.max_pending_requests_per_session
+                        )));
+                    }
+                    pending.insert(
+                        request_key.clone(),
+                        PendingRestRequest {
+                            request,
+                            expires_at: now + limits.pending_request_ttl,
+                        },
+                    );
                     Ok(RestEventResponse::request(
                         request_key,
                         request_id,
@@ -318,14 +555,7 @@ impl RestBackend for CodexRestBackend {
         let backend = self.clone();
         Box::pin(async move {
             let session = backend.session(&session_id).await?;
-            let pending = session
-                .pending_requests
-                .lock()
-                .await
-                .remove(&request_key)
-                .ok_or_else(|| {
-                    RestError::NotFound(format!("request `{request_key}` was not found"))
-                })?;
+            let pending = session.take_pending_request(&request_key).await?;
             pending.respond(body.result)?;
             Ok(RestRequestReplyResponse {
                 status: "ok".to_owned(),
@@ -342,14 +572,7 @@ impl RestBackend for CodexRestBackend {
         let backend = self.clone();
         Box::pin(async move {
             let session = backend.session(&session_id).await?;
-            let pending = session
-                .pending_requests
-                .lock()
-                .await
-                .remove(&request_key)
-                .ok_or_else(|| {
-                    RestError::NotFound(format!("request `{request_key}` was not found"))
-                })?;
+            let pending = session.take_pending_request(&request_key).await?;
             pending.respond_error(body.code, body.message, body.data);
             Ok(RestRequestReplyResponse {
                 status: "ok".to_owned(),
@@ -361,9 +584,37 @@ impl RestBackend for CodexRestBackend {
 #[derive(Clone)]
 struct RestState {
     backend: Arc<dyn RestBackend>,
+    options: RestRouterOptions,
+    one_shot_gate: Arc<Semaphore>,
+    active_polls: Arc<StdMutex<HashSet<String>>>,
 }
 
-/// Builds a REST router backed by real `codex app-server` processes.
+struct ActivePollGuard {
+    active_polls: Arc<StdMutex<HashSet<String>>>,
+    session_id: String,
+}
+
+impl Drop for ActivePollGuard {
+    fn drop(&mut self) {
+        let mut active = self
+            .active_polls
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        active.remove(&self.session_id);
+    }
+}
+
+/// Builds a conservative REST router backed by real `codex app-server` processes.
+///
+/// The default router exposes health, compatibility, and the text-turn helper.
+/// It does not mount the raw callable bridge/session routes. Use
+/// [`trusted_bridge_router`] or [`router_with_options`] when the router is
+/// mounted behind a trusted authz boundary and should expose the full bridge.
+pub fn router() -> Router {
+    router_with_options(RestRouterOptions::default())
+}
+
+/// Builds a trusted full bridge router backed by real `codex app-server` processes.
 ///
 /// Routes:
 /// - `GET /health`
@@ -377,8 +628,16 @@ struct RestState {
 /// - `GET /v1/sessions/{sessionId}/events`
 /// - `POST /v1/sessions/{sessionId}/requests/{requestKey}/result`
 /// - `POST /v1/sessions/{sessionId}/requests/{requestKey}/error`
-pub fn router() -> Router {
-    router_with_backend(CodexRestBackend::default())
+pub fn trusted_bridge_router() -> Router {
+    router_with_options(RestRouterOptions::trusted_bridge())
+}
+
+/// Builds a REST router backed by real `codex app-server` processes and options.
+pub fn router_with_options(options: RestRouterOptions) -> Router {
+    router_with_backend_and_options(
+        CodexRestBackend::with_limits(options.limits.clone()),
+        options,
+    )
 }
 
 /// Builds a REST router with a caller-provided backend.
@@ -386,33 +645,63 @@ pub fn router_with_backend<B>(backend: B) -> Router
 where
     B: RestBackend,
 {
-    router_with_backend_arc(Arc::new(backend))
+    router_with_backend_and_options(backend, RestRouterOptions::default())
+}
+
+/// Builds a REST router with a caller-provided backend and options.
+pub fn router_with_backend_and_options<B>(backend: B, options: RestRouterOptions) -> Router
+where
+    B: RestBackend,
+{
+    router_with_backend_arc_and_options(Arc::new(backend), options)
 }
 
 /// Builds a REST router from a shared backend trait object.
 pub fn router_with_backend_arc(backend: Arc<dyn RestBackend>) -> Router {
-    Router::new()
+    router_with_backend_arc_and_options(backend, RestRouterOptions::default())
+}
+
+/// Builds a REST router from a shared backend trait object and options.
+pub fn router_with_backend_arc_and_options(
+    backend: Arc<dyn RestBackend>,
+    options: RestRouterOptions,
+) -> Router {
+    let state = RestState {
+        backend,
+        one_shot_gate: Arc::new(Semaphore::new(options.limits.max_one_shot_concurrency)),
+        active_polls: Arc::default(),
+        options: options.clone(),
+    };
+
+    let router = Router::new()
         .route("/health", get(health))
         .route("/v1/health", get(health))
         .route("/v1/compatibility", get(compatibility))
-        .route("/v1/text-turn", post(text_turn))
-        .route("/v1/call/{*method}", post(call_method))
-        .route("/v1/sessions", get(list_sessions).post(create_session))
-        .route("/v1/sessions/{session_id}", delete(delete_session))
-        .route(
-            "/v1/sessions/{session_id}/call/{*method}",
-            post(call_session_method),
-        )
-        .route("/v1/sessions/{session_id}/events", get(poll_event))
-        .route(
-            "/v1/sessions/{session_id}/requests/{request_key}/result",
-            post(reply_request_result),
-        )
-        .route(
-            "/v1/sessions/{session_id}/requests/{request_key}/error",
-            post(reply_request_error),
-        )
-        .with_state(RestState { backend })
+        .route("/v1/text-turn", post(text_turn));
+
+    let router = if options.enable_bridge_routes {
+        router
+            .route("/v1/call/{*method}", post(call_method))
+            .route("/v1/sessions", get(list_sessions).post(create_session))
+            .route("/v1/sessions/{session_id}", delete(delete_session))
+            .route(
+                "/v1/sessions/{session_id}/call/{*method}",
+                post(call_session_method),
+            )
+            .route("/v1/sessions/{session_id}/events", get(poll_event))
+            .route(
+                "/v1/sessions/{session_id}/requests/{request_key}/result",
+                post(reply_request_result),
+            )
+            .route(
+                "/v1/sessions/{session_id}/requests/{request_key}/error",
+                post(reply_request_error),
+            )
+    } else {
+        router
+    };
+
+    router.with_state(state)
 }
 
 /// Health response returned by `GET /health` and `GET /v1/health`.
@@ -490,23 +779,33 @@ impl RestTextTurnRequest {
 pub struct RestTextTurnResponse {
     pub thread_id: String,
     pub turn_id: String,
+    pub turn_status: Option<String>,
     pub agent_message: String,
     pub latest_diff: Option<String>,
-    pub errors: Vec<String>,
+    pub errors: Vec<Value>,
 }
 
 impl From<TextTurnResult> for RestTextTurnResponse {
     fn from(result: TextTurnResult) -> Self {
         let agent_message = result.agent_message().to_owned();
         let latest_diff = result.latest_diff().map(str::to_owned);
+        let turn_status = result.events.terminal_status().and_then(|status| {
+            serde_json::to_value(status)
+                .ok()?
+                .as_str()
+                .map(str::to_owned)
+        });
         let errors = result
             .errors()
             .iter()
-            .map(|error| error.message.clone())
+            .map(|error| {
+                serde_json::to_value(error).unwrap_or_else(|_| Value::String(error.message.clone()))
+            })
             .collect();
         Self {
             thread_id: result.thread.thread.id,
             turn_id: result.turn.turn.id,
+            turn_status,
             agent_message,
             latest_diff,
             errors,
@@ -518,7 +817,7 @@ impl From<TextTurnResult> for RestTextTurnResponse {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RestCallBody {
-    #[serde(default = "empty_object")]
+    #[serde(default)]
     pub params: Value,
     pub client: Option<RestClientOptions>,
 }
@@ -666,10 +965,14 @@ pub struct RestRequestReplyResponse {
 }
 
 /// Structured REST error payload.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct RestErrorResponse {
     pub error: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -699,7 +1002,14 @@ async fn text_turn(
     if request.prompt.trim().is_empty() {
         return invalid_request("prompt must not be empty");
     }
+    if let Err(error) = validate_text_turn_request(&state.options, &request) {
+        return rest_error(error);
+    }
 
+    let _permit = match acquire_one_shot_permit(&state) {
+        Ok(permit) => permit,
+        Err(error) => return rest_error(error),
+    };
     match state.backend.run_text_turn(request).await {
         Ok(response) => Json(response).into_response(),
         Err(error) => rest_error(error),
@@ -718,6 +1028,13 @@ async fn call_method(
     let Json(body) = match body {
         Ok(body) => body,
         Err(error) => return invalid_json(error),
+    };
+    if let Err(error) = validate_client_options(&state.options, body.client.as_ref()) {
+        return rest_error(error);
+    }
+    let _permit = match acquire_one_shot_permit(&state) {
+        Ok(permit) => permit,
+        Err(error) => return rest_error(error),
     };
     let request = RestCallRequest {
         session_id: None,
@@ -739,6 +1056,19 @@ async fn create_session(
         Ok(body) => body,
         Err(error) => return invalid_json(error),
     };
+    if let Err(error) = validate_client_options(&state.options, request.client.as_ref()) {
+        return rest_error(error);
+    }
+    match state.backend.list_sessions().await {
+        Ok(sessions) if sessions.len() >= state.options.limits.max_sessions => {
+            return rest_error(RestError::RateLimited(format!(
+                "maximum REST session count ({}) reached",
+                state.options.limits.max_sessions
+            )));
+        }
+        Ok(_) => {}
+        Err(error) => return rest_error(error),
+    }
     match state.backend.create_session(request).await {
         Ok(response) => Json(response).into_response(),
         Err(error) => rest_error(error),
@@ -775,6 +1105,9 @@ async fn call_session_method(
         Ok(body) => body,
         Err(error) => return invalid_json(error),
     };
+    if let Err(error) = validate_client_options(&state.options, body.client.as_ref()) {
+        return rest_error(error);
+    }
     let request = RestCallRequest {
         session_id: Some(session_id),
         method,
@@ -792,7 +1125,17 @@ async fn poll_event(
     Path(session_id): Path<String>,
     Query(query): Query<EventQuery>,
 ) -> Response {
-    match state.backend.poll_event(session_id, query.timeout_ms).await {
+    let _guard = match acquire_poll_guard(&state, &session_id) {
+        Ok(guard) => guard,
+        Err(error) => return rest_error(error),
+    };
+    let timeout_ms = Some(clamp_poll_timeout_ms(
+        &state.options,
+        query
+            .timeout_ms
+            .unwrap_or(state.options.limits.max_poll_timeout.as_millis() as u64),
+    ));
+    match state.backend.poll_event(session_id, timeout_ms).await {
         Ok(response) => Json(response).into_response(),
         Err(error) => rest_error(error),
     }
@@ -842,6 +1185,8 @@ fn invalid_request(message: impl Into<String>) -> Response {
         Json(RestErrorResponse {
             error: "invalid_request".to_owned(),
             message: message.into(),
+            code: None,
+            data: None,
         }),
     )
         .into_response()
@@ -853,6 +1198,8 @@ fn invalid_json(error: JsonRejection) -> Response {
         Json(RestErrorResponse {
             error: "invalid_json".to_owned(),
             message: error.to_string(),
+            code: None,
+            data: None,
         }),
     )
         .into_response()
@@ -865,6 +1212,62 @@ fn rest_error(error: RestError) -> Response {
             Json(RestErrorResponse {
                 error: "not_found".to_owned(),
                 message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::Gone(message) => (
+            StatusCode::GONE,
+            Json(RestErrorResponse {
+                error: "gone".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::Forbidden(message) => (
+            StatusCode::FORBIDDEN,
+            Json(RestErrorResponse {
+                error: "forbidden".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::RateLimited(message) => (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(RestErrorResponse {
+                error: "rate_limited".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::Conflict(message) => (
+            StatusCode::CONFLICT,
+            Json(RestErrorResponse {
+                error: "conflict".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::Client(Error::Rpc {
+            code,
+            message,
+            data,
+        }) => (
+            StatusCode::BAD_GATEWAY,
+            Json(RestErrorResponse {
+                error: "json_rpc_error".to_owned(),
+                message,
+                code: Some(code),
+                data,
             }),
         )
             .into_response(),
@@ -873,19 +1276,84 @@ fn rest_error(error: RestError) -> Response {
             Json(RestErrorResponse {
                 error: "codex_app_server_error".to_owned(),
                 message: error.to_string(),
+                code: None,
+                data: None,
             }),
         )
             .into_response(),
     }
 }
 
+fn validate_text_turn_request(
+    options: &RestRouterOptions,
+    request: &RestTextTurnRequest,
+) -> RestResult<()> {
+    if !options.allow_unsafe_client_options
+        && matches!(request.approval_policy, Some(RestApprovalPolicy::AllowAll))
+    {
+        return Err(RestError::Forbidden(
+            "`approvalPolicy: allow_all` requires a trusted REST bridge".to_owned(),
+        ));
+    }
+    validate_client_options(options, request.client.as_ref())
+}
+
+fn validate_client_options(
+    options: &RestRouterOptions,
+    client: Option<&RestClientOptions>,
+) -> RestResult<()> {
+    if options.allow_unsafe_client_options {
+        return Ok(());
+    }
+    let Some(client) = client else {
+        return Ok(());
+    };
+    if client.command.is_some() || !client.extra_args.is_empty() || !client.config.is_empty() {
+        return Err(RestError::Forbidden(
+            "client command, extraArgs, and config overrides require a trusted REST bridge"
+                .to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn acquire_one_shot_permit(state: &RestState) -> RestResult<OwnedSemaphorePermit> {
+    state
+        .one_shot_gate
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            RestError::RateLimited(format!(
+                "maximum one-shot REST call concurrency ({}) reached",
+                state.options.limits.max_one_shot_concurrency
+            ))
+        })
+}
+
+fn acquire_poll_guard(state: &RestState, session_id: &str) -> RestResult<ActivePollGuard> {
+    let mut active = state
+        .active_polls
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !active.insert(session_id.to_owned()) {
+        return Err(RestError::Conflict(format!(
+            "an event poll is already active for session `{session_id}`"
+        )));
+    }
+    Ok(ActivePollGuard {
+        active_polls: state.active_polls.clone(),
+        session_id: session_id.to_owned(),
+    })
+}
+
+fn clamp_poll_timeout_ms(options: &RestRouterOptions, timeout_ms: u64) -> u64 {
+    let max = options.limits.max_poll_timeout.as_millis() as u64;
+    timeout_ms.min(max)
+}
+
 fn normalize_method(method: String) -> Option<String> {
     let method = method.trim_matches('/').trim();
     (!method.is_empty()).then(|| method.to_owned())
-}
-
-fn empty_object() -> Value {
-    Value::Object(Default::default())
 }
 
 fn session_options_from(client: Option<RestClientOptions>, default_name: &str) -> SessionOptions {
@@ -894,29 +1362,62 @@ fn session_options_from(client: Option<RestClientOptions>, default_name: &str) -
         .into_session_options(default_name)
 }
 
-async fn run_text_turn_with_handler<H>(
-    session: &mut CodexSession,
-    model: Option<String>,
-    prompt: String,
-    handler: &H,
-) -> Result<TextTurnResult>
-where
-    H: crate::ApprovalHandler,
-{
-    let thread = if let Some(model) = model {
-        session.start_thread_with_model(model).await?
-    } else {
-        session
-            .start_thread(crate::protocol::ThreadStartParams::new())
-            .await?
-    };
-    let turn = session.send_text_turn(&thread.thread.id, prompt).await?;
-    let events = session
-        .wait_for_turn_completed(&thread.thread.id, &turn.turn.id, handler)
-        .await?;
-    Ok(TextTurnResult {
-        thread,
-        turn,
-        events,
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{CurrentTimeReadParams, RequestId, ServerRequest};
+
+    #[tokio::test]
+    async fn expired_pending_request_returns_gone_and_removes_the_key() {
+        let pending_requests = Mutex::new(HashMap::from([(
+            "request-1".to_owned(),
+            PendingRestRequest {
+                request: pending_current_time_request(),
+                expires_at: Instant::now() - Duration::from_secs(1),
+            },
+        )]));
+
+        let err = take_pending_request(&pending_requests, "request-1")
+            .await
+            .expect_err("expired request key should be rejected");
+
+        assert!(matches!(err, RestError::Gone(_)));
+        assert!(pending_requests.lock().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn taking_pending_request_prunes_other_expired_keys() {
+        let pending_requests = Mutex::new(HashMap::from([
+            (
+                "expired".to_owned(),
+                PendingRestRequest {
+                    request: pending_current_time_request(),
+                    expires_at: Instant::now() - Duration::from_secs(1),
+                },
+            ),
+            (
+                "fresh".to_owned(),
+                PendingRestRequest {
+                    request: pending_current_time_request(),
+                    expires_at: Instant::now() + Duration::from_secs(60),
+                },
+            ),
+        ]));
+
+        let request = take_pending_request(&pending_requests, "fresh")
+            .await
+            .expect("fresh request key should be returned");
+
+        assert_eq!(request.method_name(), "currentTime/read");
+        assert!(pending_requests.lock().await.is_empty());
+    }
+
+    fn pending_current_time_request() -> PendingServerRequest {
+        PendingServerRequest::for_test(ServerRequest::CurrentTimeRead {
+            id: RequestId::Int64(7),
+            params: CurrentTimeReadParams {
+                thread_id: "thread-test".to_owned(),
+            },
+        })
+    }
 }
