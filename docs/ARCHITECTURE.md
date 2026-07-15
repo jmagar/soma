@@ -44,7 +44,10 @@ crates/
   soma-contracts/        ← action metadata, config, DTOs, token limits
   soma-api/              ← REST API handlers
   soma-auth/             ← bearer/OAuth auth policy and token handling
+  soma-codemode/         ← reusable Code Mode runtime and runner support
+  soma-gateway/          ← reusable MCP aggregation gateway runtime
   soma-mcp/              ← MCP schemas, tools, prompts, transport
+  soma-openapi/          ← reusable OpenAPI operation registry and dispatcher
   soma-cli/              ← CLI parser, doctor/setup/watch commands
   soma-runtime/          ← AppState, auth policy, shared runtime wiring
   soma-web/              ← static web asset serving and source bundle helpers

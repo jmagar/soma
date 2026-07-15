@@ -15,6 +15,7 @@ members = [
   "crates/soma-cli",
   "crates/soma-contracts",
   "crates/soma-codemode",
+  "crates/soma-gateway",
   "crates/soma-mcp",
   "crates/soma-observability",
   "crates/soma-openapi",
