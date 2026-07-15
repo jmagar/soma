@@ -97,7 +97,10 @@ impl ResourceFileProvider {
         let provider_name = format!("resource-{clean_name}");
 
         if is_dynamic_reader {
-            let description = format!("Dynamic resource reader from {}", relative_path.display());
+            let description = format!(
+                "Dynamic resource reader from {}",
+                resource_uri::display_with_forward_slashes(relative_path)
+            );
             let mut template = DynamicResourceTemplate::from_path_segments(
                 &segment_refs,
                 clean_name,
