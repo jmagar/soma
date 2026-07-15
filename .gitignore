@@ -9,6 +9,7 @@
 .env.*
 *.env
 !.env.example
+!apps/palette/scripts/desktop-smoke.env.example
 .broadcastr
 # ── Local config (runtime settings — never commit) ───────────────────────────
 config.toml
