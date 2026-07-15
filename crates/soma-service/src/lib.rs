@@ -15,8 +15,8 @@ use soma_contracts::{
 pub use app::{ElicitedNameOutcome, ScaffoldIntent, ScaffoldIntentValidationError, SomaService};
 pub use provider_errors::ProviderError;
 pub use provider_registry::{
-    ProviderAuthMode, ProviderCall, ProviderOutput, ProviderPrincipal, ProviderRegistry,
-    ProviderRequestLimits, ProviderSurface, RegistrySnapshot,
+    DynamicResourceTemplate, ProviderAuthMode, ProviderCall, ProviderOutput, ProviderPrincipal,
+    ProviderRegistry, ProviderRequestLimits, ProviderSurface, RegistrySnapshot, ResourceReadOutput,
 };
 pub use providers::filesystem::FileProviderSource;
 pub use providers::remote::RemoteCatalogProvider;

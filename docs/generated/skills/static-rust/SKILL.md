@@ -125,3 +125,7 @@ Show the action reference.
 - MCP: `soma(action="help")`
 - CLI: `soma help`
 - REST: `GET /v1/help`
+
+## Prompts
+
+- `quick_start`: Check the server status and get a personalised greeting to verify the MCP connection is working end-to-end.

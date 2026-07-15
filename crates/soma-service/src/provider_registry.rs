@@ -9,9 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use soma_contracts::{
-    actions::scopes_satisfy,
     provider_validation::{validate_provider_manifest, ProviderValidationError},
-    providers::{HostCapabilities, ProviderCatalog, ProviderTool},
+    providers::{HostCapabilities, ProviderCatalog, ProviderResource, ProviderTool},
 };
 
 use crate::{
@@ -19,14 +18,58 @@ use crate::{
     providers::filesystem::FileProviderSource,
 };
 
+mod enforcement;
 mod refresh;
 mod reports;
+mod resources;
+pub(super) use enforcement::provider_tool_surface_enabled;
+use enforcement::{enforce_call, enforce_output_schema, enforce_response_limit};
 use refresh::ProviderRefreshEvent;
+use resources::ResourceIndex;
+pub use resources::{DynamicResourceTemplate, ResourceReadOutput};
 
 #[async_trait]
 pub trait Provider: Send + Sync {
     fn catalog(&self) -> ProviderCatalog;
     async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError>;
+
+    /// Dynamic resource templates this provider serves. Every provider
+    /// inherits the empty default — only file-based dynamic resource
+    /// readers (`providers/resources/*.ts`) override it.
+    fn dynamic_resource_templates(&self) -> Vec<DynamicResourceTemplate> {
+        Vec::new()
+    }
+
+    /// Whether this provider can actually serve `read_resource` calls.
+    /// `catalog().resources` is a schema-legal field on every provider
+    /// kind's manifest (OpenAPI, MCP, ai-sdk, WASM, Python, generic JSON),
+    /// but only file-based `ResourceFileProvider`s have any mechanism to
+    /// read content back — every other kind inherits `read_resource`'s
+    /// default error. `ResourceIndex::register` uses this to reject a
+    /// manifest that declares resources it can never serve at snapshot-build
+    /// time, rather than letting them appear in `resources/list` and always
+    /// fail `resources/read` with an opaque error.
+    fn supports_resource_reads(&self) -> bool {
+        false
+    }
+
+    /// Reads resource content for a URI the registry has already matched
+    /// against either this provider's `catalog().resources` (exact,
+    /// `params` empty) or one of its `dynamic_resource_templates()`
+    /// (`params` holds captured path parameters).
+    async fn read_resource(
+        &self,
+        uri: &str,
+        params: &BTreeMap<String, String>,
+    ) -> Result<ResourceReadOutput, ProviderError> {
+        let _ = params;
+        Err(ProviderError::validation(
+            &self.catalog().provider.name,
+            uri,
+            "resource_read_not_supported",
+            "this provider does not support resource reads",
+        ))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +196,8 @@ pub struct RegistrySnapshot {
     rest_index: HashMap<(String, String), String>,
     cli_index: HashMap<String, String>,
     primitive_index: HashMap<String, String>,
+    exact_resources: HashMap<String, (String, ProviderResource)>,
+    dynamic_resources: Vec<(String, DynamicResourceTemplate)>,
     pub compiled_validator_count: usize,
     pub cached_openapi_bytes: Arc<Vec<u8>>,
     pub cached_catalog_summary: Arc<Value>,
@@ -282,13 +327,29 @@ impl ProviderRegistry {
             .clone()
     }
 
+    /// Refreshes providers from the file source, if any. Per the drop-in
+    /// provider layout contract ("If a resource disappears or becomes
+    /// invalid, a reload must leave the last valid snapshot active until a
+    /// valid replacement snapshot is available"), a failure anywhere in this
+    /// pipeline (an unreadable directory, a newly-invalid or colliding
+    /// provider file) is logged and this returns the previous snapshot
+    /// rather than propagating the error — one bad drop-in file must not
+    /// take down `list_tools`/`list_prompts`/`read_resource`/etc. for every
+    /// other, unrelated, already-loaded provider.
     pub fn refresh_file_providers(&self) -> Result<Arc<RegistrySnapshot>, ProviderValidationError> {
         let Some(file_source) = &self.file_source else {
             return Ok(self.snapshot());
         };
-        let file_fingerprint = file_source.fingerprint().map_err(|error| {
-            ProviderValidationError::new("provider_file_load_failed", error.to_string())
-        })?;
+        let file_fingerprint = match file_source.fingerprint() {
+            Ok(fingerprint) => fingerprint,
+            Err(error) => {
+                return Ok(self.snapshot_after_refresh_failure(
+                    file_source,
+                    "provider_file_fingerprint_failed",
+                    &error.to_string(),
+                ));
+            }
+        };
         {
             let state = self
                 .state
@@ -298,13 +359,27 @@ impl ProviderRegistry {
                 return Ok(state.snapshot.clone());
             }
         }
-        let dynamic_providers = file_source.load().map_err(|error| {
-            ProviderValidationError::new("provider_file_load_failed", error.to_string())
-        })?;
-        let mut providers = self.base_providers.iter().cloned().collect::<Vec<_>>();
-        providers.extend(dynamic_providers);
-        let providers = provider_map(providers)?;
-        let snapshot = Arc::new(build_snapshot(providers.values().cloned().collect())?);
+
+        let rebuilt: Result<_, ProviderValidationError> = (|| {
+            let dynamic_providers = file_source.load().map_err(|error| {
+                ProviderValidationError::new("provider_file_load_failed", error.to_string())
+            })?;
+            let mut providers = self.base_providers.iter().cloned().collect::<Vec<_>>();
+            providers.extend(dynamic_providers);
+            let providers = provider_map(providers)?;
+            let snapshot = Arc::new(build_snapshot(providers.values().cloned().collect())?);
+            Ok((providers, snapshot))
+        })();
+        let (providers, snapshot) = match rebuilt {
+            Ok(pair) => pair,
+            Err(error) => {
+                return Ok(self.snapshot_after_refresh_failure(
+                    file_source,
+                    error.code(),
+                    error.message(),
+                ));
+            }
+        };
 
         let mut state = self
             .state
@@ -320,6 +395,21 @@ impl ProviderRegistry {
         state.file_fingerprint = Some(file_fingerprint);
         event.log(file_source.root());
         Ok(snapshot)
+    }
+
+    fn snapshot_after_refresh_failure(
+        &self,
+        file_source: &FileProviderSource,
+        code: &str,
+        message: &str,
+    ) -> Arc<RegistrySnapshot> {
+        tracing::warn!(
+            root = %file_source.root().display(),
+            code,
+            message,
+            "provider directory refresh failed; keeping the last valid snapshot active"
+        );
+        self.snapshot()
     }
 
     pub fn validate_reload(
@@ -418,11 +508,13 @@ fn build_snapshot(
     let mut rest_index = HashMap::new();
     let mut cli_index = HashMap::new();
     let mut primitive_index = HashMap::new();
+    let mut resources = ResourceIndex::new();
     let mut compiled_validator_count = 0usize;
 
     for provider in providers {
         let catalog = provider.catalog();
         validate_provider_manifest(&catalog)?;
+        resources.register(&*provider, &catalog.provider.name, &catalog.resources)?;
         for tool in &catalog.tools {
             let input_validator = Arc::new(jsonschema::validator_for(&tool.input_schema).map_err(
                 |error| {
@@ -560,6 +652,8 @@ fn build_snapshot(
         rest_index,
         cli_index,
         primitive_index,
+        exact_resources: resources.exact,
+        dynamic_resources: resources.dynamic,
         compiled_validator_count,
         cached_openapi_bytes,
         cached_catalog_summary,
@@ -673,186 +767,4 @@ fn fingerprint_catalogs(catalogs: &[ProviderCatalog]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     format!("sha256:{hex}")
-}
-
-fn enforce_call(
-    entry: &ToolEntry,
-    call: &ProviderCall,
-    capabilities: &CapabilityBroker,
-) -> Result<(), ProviderError> {
-    enforce_surface(entry, call)?;
-    enforce_scope(entry, call)?;
-    enforce_admin(entry, call)?;
-    enforce_destructive(entry, call)?;
-    enforce_input_limit(entry, call)?;
-    enforce_schema(entry, call)?;
-    capabilities.authorize(&entry.provider, &entry.action, &entry.capabilities)?;
-    Ok(())
-}
-
-fn enforce_surface(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    let allowed = provider_tool_surface_enabled(&entry.tool, call.surface);
-    if allowed {
-        return Ok(());
-    }
-    Err(ProviderError::validation(
-        &entry.provider,
-        &entry.action,
-        "surface_not_exposed",
-        format!(
-            "action `{}` is not exposed on {:?}",
-            entry.action, call.surface
-        ),
-    ))
-}
-
-pub(super) fn provider_tool_surface_enabled(tool: &ProviderTool, surface: ProviderSurface) -> bool {
-    match surface {
-        ProviderSurface::Mcp => tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
-        ProviderSurface::Rest => tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(true),
-        ProviderSurface::Cli => tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),
-        ProviderSurface::Palette => tool
-            .palette
-            .as_ref()
-            .map(|palette| palette.enabled)
-            .unwrap_or(true),
-    }
-}
-
-fn enforce_scope(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    if !matches!(call.auth_mode, ProviderAuthMode::Mounted) {
-        return Ok(());
-    }
-    let Some(scope) = entry.tool.scope.as_deref() else {
-        return Ok(());
-    };
-    if scopes_satisfy(&call.principal.scopes, scope) {
-        return Ok(());
-    }
-    Err(ProviderError::new(
-        "insufficient_scope",
-        &entry.provider,
-        Some(entry.action.clone()),
-        format!("action `{}` requires scope `{scope}`", entry.action),
-        "Authenticate with a token that includes the required scope.",
-    ))
-}
-
-fn enforce_admin(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    if !entry.tool.requires_admin || provider_principal_is_admin(&call.principal) {
-        return Ok(());
-    }
-    Err(ProviderError::new(
-        "admin_required",
-        &entry.provider,
-        Some(entry.action.clone()),
-        format!("action `{}` requires an admin principal", entry.action),
-        "Authenticate with an admin-scoped token and retry.",
-    ))
-}
-
-fn provider_principal_is_admin(principal: &ProviderPrincipal) -> bool {
-    principal
-        .scopes
-        .iter()
-        .any(|scope| scope == "admin" || scope == "soma:admin")
-}
-
-fn enforce_destructive(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    if !entry.tool.destructive || call.destructive_confirmed {
-        return Ok(());
-    }
-    Err(ProviderError::validation(
-        &entry.provider,
-        &entry.action,
-        "confirmation_required",
-        format!(
-            "action `{}` is destructive and requires confirmation",
-            entry.action
-        ),
-    ))
-}
-
-fn enforce_input_limit(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    let max = entry
-        .tool
-        .limits
-        .as_ref()
-        .and_then(|limits| limits.max_input_bytes)
-        .unwrap_or(call.limits.max_input_bytes);
-    let len = serde_json::to_vec(&call.params)
-        .map(|bytes| bytes.len())
-        .unwrap_or(usize::MAX);
-    if len <= max {
-        return Ok(());
-    }
-    Err(ProviderError::validation(
-        &entry.provider,
-        &entry.action,
-        "input_too_large",
-        format!("provider input exceeded {max} bytes"),
-    ))
-}
-
-fn schema_error_details(validator: &Validator, value: &Value) -> Option<String> {
-    let errors = validator
-        .iter_errors(value)
-        .map(|error| format!("{}: {}", error.instance_path(), error))
-        .collect::<Vec<_>>();
-    (!errors.is_empty()).then(|| errors.join("; "))
-}
-
-fn enforce_schema(entry: &ToolEntry, call: &ProviderCall) -> Result<(), ProviderError> {
-    if let Some(details) = schema_error_details(&entry.input_validator, &call.params) {
-        return Err(ProviderError::validation(
-            &entry.provider,
-            &entry.action,
-            "input_schema_failed",
-            details,
-        ));
-    }
-    Ok(())
-}
-
-fn enforce_response_limit(
-    entry: &ToolEntry,
-    call: &ProviderCall,
-    output: &ProviderOutput,
-) -> Result<(), ProviderError> {
-    let max = entry
-        .tool
-        .limits
-        .as_ref()
-        .and_then(|limits| limits.max_response_bytes)
-        .unwrap_or(call.limits.max_response_bytes);
-    let len = serde_json::to_vec(&output.value)
-        .map(|bytes| bytes.len())
-        .unwrap_or(usize::MAX);
-    if len <= max {
-        return Ok(());
-    }
-    Err(ProviderError::new(
-        "response_too_large",
-        &entry.provider,
-        Some(entry.action.clone()),
-        format!("provider response exceeded {max} bytes"),
-        "Reduce the response size or add paging before exposing this provider action.",
-    ))
-}
-
-fn enforce_output_schema(entry: &ToolEntry, output: &ProviderOutput) -> Result<(), ProviderError> {
-    let Some(output_validator) = &entry.output_validator else {
-        return Ok(());
-    };
-    if let Some(details) = schema_error_details(output_validator, &output.value) {
-        return Err(ProviderError::new(
-            "output_schema_failed",
-            &entry.provider,
-            Some(entry.action.clone()),
-            details,
-            "Fix the provider output or its declared output_schema, then retry.",
-        )
-        .with_phase("output_validation"));
-    }
-    Ok(())
 }

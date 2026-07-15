@@ -4,7 +4,7 @@ use soma_contracts::{
     actions::{ActionTransport, SomaAction, ACTION_SPECS},
     providers::{
         CliOverlay, DocsOverlay, McpOverlay, PaletteOverlay, ProviderCatalog, ProviderIdentity,
-        ProviderKind, ProviderManifest, ProviderTool, RestOverlay,
+        ProviderKind, ProviderManifest, ProviderPrompt, ProviderTool, RestOverlay,
     },
 };
 
@@ -85,7 +85,24 @@ fn static_catalog() -> ProviderCatalog {
             enabled: Some(true),
         },
         tools: ACTION_SPECS.iter().map(static_tool).collect(),
-        prompts: Vec::new(),
+        // Reserves `quick_start` in the directory-wide uniqueness namespace
+        // (`filesystem_uniqueness::apply_directory_wide_checks` and
+        // `provider_registry`'s own duplicate-primitive check both seed from
+        // this catalog) so a drop-in provider can't declare a same-named
+        // prompt and silently shadow the built-in one. Content lives in
+        // `soma_mcp::prompts::list_prompts`/`get_prompt` — this entry exists
+        // for name reservation only, not to serve as the source of truth.
+        prompts: vec![ProviderPrompt {
+            name: "quick_start".to_owned(),
+            description: "Check the server status and get a personalised greeting to verify \
+                the MCP connection is working end-to-end."
+                .to_owned(),
+            template: None,
+            arguments_schema: None,
+            scope: None,
+            mcp: None,
+            examples: Vec::new(),
+        }],
         resources: Vec::new(),
         tasks: Vec::new(),
         elicitation: Vec::new(),

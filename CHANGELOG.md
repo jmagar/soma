@@ -46,6 +46,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build or dispatch through the live `ProviderRegistry` — they only parse manifests
   on disk via `FileProviderSource::inspect()`, so they're safe to run before the
   runtime touches TS/WASM/MCP/OpenAPI handlers. See `docs/PROVIDERS.md`.
+- Added Markdown-file-as-MCP-prompt support: dropping a `.md` file into the
+  provider directory exposes it as an MCP prompt (file stem → prompt name,
+  first `# Heading` → description, full file body → prompt template).
+  `README.md` is never treated as a prompt. See `docs/PROVIDERS.md`.
+- Added a structured `providers/{tools,prompts,resources}/` directory layout
+  alongside root-level file loading. `tools/` and `prompts/` reuse the
+  existing root-level file-type rules; `resources/` is new — any file
+  (recursive) becomes an MCP resource, with static files served directly and
+  `.ts` files dispatched as dynamic resource readers (parameterized/catch-all
+  path templates, e.g. `service/[name].ts` → `soma://resources/service/{name}`)
+  through the same sandboxed Node sidecar `ai-sdk` tool providers use.
+  Enforces a path-traversal trust boundary (symlinks cannot escape the
+  provider root) and `resource.scope` enforcement matching `tool.scope`.
+  `resources/list`, `resources/templates/list`, and `resources/read` are
+  wired into the live MCP surface for the first time. A directory refresh
+  failure now keeps the last valid snapshot active instead of failing every
+  provider's requests. See `docs/PROVIDERS.md` and
+  `docs/contracts/drop-in-provider-layout.md`.
 - Added `codex-app-server-client`, a standalone, fully-typed async Rust
   client for the Codex CLI's `app-server` v2 JSON-RPC protocol. Zero
   path-dependencies on any other crate in this workspace, so it can be lifted
@@ -112,6 +130,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sse-stream` to 0.2.4 for rmcp 2.2, and installed a rustls crypto provider
   before building the rmcp streamable HTTP client transport (reqwest 0.13
   panics without one). Warm CI caches had masked all four breakages.
+- Fixed `RegistrySnapshot::inspection_report` omitting `prompt.template` from
+  its JSON, which meant a `SOMA_RUNTIME_MODE=remote` server's
+  `RemoteCatalogProvider` always reconstructed remote Markdown provider
+  prompts with `template: None` and silently dropped them from
+  `prompts/list`/`prompts/get` (`servable_prompts` requires a template),
+  even though the same prompts served correctly in local mode.
+- Fixed three MCP resource gaps: `resources/list` advertised every declared
+  `catalog().resources` entry, including ones from provider kinds that
+  can't serve reads (always failing `resources/read` with `unknown_resource`)
+  — now built from the same live, read-capable index `read_resource`
+  consults. A static resource with `mcp: { enabled: false }` was still
+  indexed and readable via MCP despite the overlay — resource disablement is
+  now honored the same way tools/prompts honor theirs. Two parameterized
+  resource templates whose literal segment falls in a different position
+  (e.g. `foo/[id]` and `[kind]/bar`, both matching `foo/bar`) were not
+  detected as ambiguous because the old check only compared identical
+  segment shapes — ambiguity detection is now a proper pointwise overlap
+  check within each precedence tier.
+- Fixed a TOCTOU in `ProviderRegistry::read_resource`: the URI match and the
+  provider clone were two separate lock acquisitions, so a concurrent
+  `refresh_file_providers()` between them could invoke a newer snapshot's
+  provider using scope/params matched against the older snapshot (e.g. a
+  hot-swapped `resources/foo.md` -> `resources/foo.ts` letting a request
+  matched against the old unscoped static resource run the new
+  `soma:write`-scoped dynamic reader unchecked). Both are now fetched from a
+  single lock acquisition, mirroring `dispatch()`'s pattern for tools.
+- Fixed static resource names being derived from just the leaf filename
+  stem, so `resources/api/runbook.md` and `resources/ops/runbook.md` (two
+  distinct, valid, non-colliding URIs) both derived `name == "runbook"` and
+  tripped the global resource-name uniqueness check, failing the whole
+  directory's refresh. Names now use the same full-path-derived name the
+  provider ID already used.
+- Fixed `soma providers lint`/`inspect` never checking dynamic `.ts`
+  resource readers for template ambiguity — `dynamic_resource_templates()`
+  isn't part of `catalog()`, so two colliding readers (e.g.
+  `resources/service/[name].ts` and `resources/service/[id].ts`) both
+  reported as `Loaded` even though the live registry rejects the pair and
+  keeps the previous snapshot at real construction time.
 
 ## [0.4.7]
 
