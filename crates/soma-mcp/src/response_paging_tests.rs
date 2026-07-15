@@ -12,6 +12,15 @@ fn result_text(result: &rmcp::model::CallToolResult) -> &str {
         .as_str()
 }
 
+fn assert_result_has_no_meta(result: &rmcp::model::CallToolResult) {
+    assert!(result.meta.is_none(), "result meta should stay empty");
+    let serialized = serde_json::to_value(result).expect("result should serialize");
+    assert!(
+        serialized.get("_meta").is_none(),
+        "serialized result included _meta: {serialized}"
+    );
+}
+
 #[test]
 fn tool_result_from_json_adds_action_discriminator() {
     let store = soma_runtime::server::ResponsePageStore::default();
@@ -28,6 +37,7 @@ fn tool_result_from_json_adds_action_discriminator() {
     let parsed: serde_json::Value =
         serde_json::from_str(text).expect("tool text should remain valid JSON");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(parsed["status"], "ok");
     assert_eq!(parsed["_soma_action"], "status");
     assert_eq!(result.structured_content.as_ref(), Some(&parsed));
@@ -51,6 +61,7 @@ fn tool_result_from_json_returns_scrollable_page_envelope() {
     let parsed: serde_json::Value =
         serde_json::from_str(text).expect("paged text should remain valid JSON");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(parsed["kind"], "mcp_response_page");
     assert_eq!(parsed["schema_version"], 1);
     assert_eq!(parsed["code"], "response_page");
@@ -111,6 +122,8 @@ fn tool_result_from_json_returns_requested_continuation_page() {
     .expect("second page should serialize");
     let second_payload: serde_json::Value = serde_json::from_str(result_text(&second)).unwrap();
 
+    assert_result_has_no_meta(&first);
+    assert_result_has_no_meta(&second);
     assert_eq!(second_payload["kind"], "mcp_response_page");
     assert_eq!(second_payload["page"]["offset"], next_offset);
     assert_eq!(second_payload["page"]["page_bytes"], 1024);
@@ -182,6 +195,8 @@ fn response_page_cursor_handles_out_of_range_offsets() {
     .expect("out of range continuation should serialize");
     let payload: serde_json::Value = serde_json::from_str(result_text(&result)).unwrap();
 
+    assert_result_has_no_meta(&first);
+    assert_result_has_no_meta(&result);
     assert_eq!(payload["kind"], "mcp_response_page");
     assert_eq!(payload["page"]["offset"], serialized_bytes);
     assert_eq!(payload["page"]["has_more"], false);
@@ -209,6 +224,7 @@ fn response_page_continuation_preserves_original_arguments() {
     .expect("tool result should serialize");
     let parsed: serde_json::Value = serde_json::from_str(result_text(&result)).unwrap();
 
+    assert_result_has_no_meta(&result);
     assert_eq!(parsed["continuation"]["arguments"]["action"], "echo");
     assert_eq!(
         parsed["continuation"]["arguments"]["message"],

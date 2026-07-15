@@ -10,7 +10,7 @@ This crate targets `rmcp 2.2.0`. RMCP owns wire serialization for `_meta`; this 
 - Preserve bounded `tracestate` and `baggage` privately.
 - Produce `TraceSummary` values safe for logs.
 - Treat inbound metadata as untrusted by default.
-- Keep v00 `traceparent` exact while allowing bounded higher-version additive fields to preserve stable trace/span IDs.
+- Keep v00 `traceparent` exact while allowing bounded higher-version additive fields to preserve stable trace/span ID prefixes.
 
 ## Non-goals
 
@@ -28,7 +28,7 @@ Upstream RMCP debug logs can include raw request values before an application re
 
 ## Soma Integration
 
-Soma reads `RequestContext.meta` in `crates/soma-mcp/src/rmcp_server.rs` after auth context is available. It logs only `TraceSummary` fields: short trace/span identifiers, sampled flag, trust label, tracestate presence, baggage member count, and sensitive baggage member count.
+Soma reads `RequestContext.meta` at the start of `call_tool` in `crates/soma-mcp/src/rmcp_server.rs` so success and rejection logs share the same safe summary. It logs only `TraceSummary` fields: `trace_id_prefix`, `span_id_prefix`, sampled flag, trust label, tracestate presence, baggage member count, sensitive baggage member count, and safe invalid reasons.
 
 Soma does not attach result `_meta` in v1. This prevents trace metadata from bypassing response paging or `MAX_RESPONSE_BYTES`.
 

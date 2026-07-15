@@ -10,9 +10,10 @@ Target: `rmcp 2.2.0`
 
 Implemented a standalone `rmcp-traces` workspace crate and a narrow Soma MCP
 proof path. The crate validates bounded request-side trace metadata and exposes
-log-safe summaries. Soma reads `RequestContext.meta` after auth and logs only
-short trace/span identifiers, sampled state, trust label, optional metadata
-presence/counts, and safe invalid reasons.
+log-safe summaries. Soma summarizes `RequestContext.meta` at the start of
+`call_tool` and logs only
+`trace_id_prefix`/`span_id_prefix`, sampled state, trust label, optional
+metadata presence/counts, and safe invalid reasons.
 
 ## Locked Decisions
 
@@ -39,7 +40,7 @@ presence/counts, and safe invalid reasons.
 ## Review Follow-Ups Addressed
 
 - Removed the public `TraceContext::apply_to_meta` propagation escape hatch.
-- Preserved valid trace IDs when optional metadata is invalid.
+- Preserved valid trace ID prefixes when optional metadata is invalid.
 - Accepted bounded higher-version traceparents with additive fields.
 - Replaced global tracing-subscriber log capture with deterministic adapter tests.
 - Deduplicated baggage key parsing.

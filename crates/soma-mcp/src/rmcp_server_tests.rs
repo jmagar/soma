@@ -1,6 +1,10 @@
-use rmcp::model::{ErrorCode, Meta, ResourceContents};
+use rmcp::{
+    model::{CallToolRequestParams, CallToolResult, ErrorCode, Meta, ResourceContents},
+    ServiceExt,
+};
 use rmcp_traces::TraceTrust;
 use serde_json::json;
+use soma_test_support::{tracing_test_lock, SharedBuf};
 
 use soma_contracts::{
     actions::{SomaAction, ValidationError},
@@ -16,6 +20,15 @@ use super::{
 
 const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
 
+fn assert_result_has_no_meta(result: &CallToolResult) {
+    assert!(result.meta.is_none(), "result meta should stay empty");
+    let serialized = serde_json::to_value(result).expect("result should serialize");
+    assert!(
+        serialized.get("_meta").is_none(),
+        "serialized result included _meta: {serialized}"
+    );
+}
+
 #[test]
 fn validation_errors_become_structured_tool_errors() {
     let error = anyhow::Error::from(ValidationError::MissingField {
@@ -24,6 +37,7 @@ fn validation_errors_become_structured_tool_errors() {
     let payload = classify_service_error(&error).to_mcp_payload("soma", Some("echo"));
     let result = tool_error_result(payload).expect("tool error should serialize");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(result.is_error, Some(true));
     let structured = result
         .structured_content
@@ -50,6 +64,7 @@ fn parser_validation_errors_become_structured_tool_errors() {
     let payload = classify_service_error(&error).to_mcp_payload("soma", Some("echo"));
     let result = tool_error_result(payload).expect("tool error should serialize");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(result.is_error, Some(true));
     let structured = result
         .structured_content
@@ -79,6 +94,7 @@ fn oversized_tool_errors_return_valid_overflow_envelope() {
     let parsed: serde_json::Value =
         serde_json::from_str(text).expect("overflow error text should remain valid JSON");
 
+    assert_result_has_no_meta(&result);
     assert_eq!(result.is_error, Some(true));
     assert_eq!(parsed["kind"], "mcp_tool_error");
     assert_eq!(parsed["code"], "error_payload_too_large");
@@ -133,17 +149,89 @@ fn trace_summary_for_logs_uses_untrusted_fail_soft_policy() {
 
     let summary = trace_summary_from_meta(&meta);
 
-    assert_eq!(summary.trace_id.as_deref(), Some("0af76519"));
-    assert_eq!(summary.span_id.as_deref(), Some("00f067aa"));
-    assert_eq!(summary.sampled, Some(true));
-    assert_eq!(summary.trust, TraceTrust::Untrusted);
-    assert!(summary.has_tracestate);
+    assert_eq!(summary.trace_id_prefix(), Some("0af76519"));
+    assert_eq!(summary.span_id_prefix(), Some("00f067aa"));
+    assert_eq!(summary.sampled(), Some(true));
+    assert_eq!(summary.trust(), TraceTrust::Untrusted);
+    assert!(summary.has_tracestate());
+    assert_eq!(summary.invalid_count(), 1);
     assert_eq!(
-        summary.invalid.as_deref(),
-        Some("baggage exceeded 8192 bytes (actual 9216)")
+        summary.invalid_reasons()[0],
+        "baggage exceeded 8192 bytes (actual 9216)"
     );
-    assert_eq!(summary.baggage_member_count, 0);
-    assert_eq!(summary.sensitive_baggage_member_count, 0);
+    assert_eq!(summary.baggage_member_count(), 0);
+    assert_eq!(summary.sensitive_baggage_member_count(), 0);
+}
+
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "current_thread")]
+async fn call_tool_logs_safe_trace_summary_from_request_meta() {
+    let _lock = tracing_test_lock();
+    let buf = SharedBuf::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(buf.writer())
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::INFO)
+        .finish();
+    let guard = tracing::subscriber::set_default(subscriber);
+
+    let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
+    let server = super::rmcp_server(crate::testing::loopback_state());
+    let server_handle = tokio::spawn(async move {
+        let running = server
+            .serve(server_transport)
+            .await
+            .expect("server should handshake");
+        running.waiting().await.expect("server should stop cleanly");
+    });
+    let mut client = ().serve(client_transport).await.expect("client should handshake");
+
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_tracestate("vendor=value");
+    meta.set_baggage(
+        "email=alice@example.com,accessToken=super-secret-token,x-api-key=abc123,sessionId=s123",
+    );
+    let mut request = CallToolRequestParams::new("soma").with_arguments(
+        serde_json::Map::from_iter([("action".to_owned(), json!("status"))]),
+    );
+    request.meta = Some(meta);
+
+    let result = client
+        .call_tool(request)
+        .await
+        .expect("status call should succeed");
+    assert_result_has_no_meta(&result);
+
+    client.close().await.expect("client should close");
+    server_handle.await.expect("server task should join");
+    drop(guard);
+
+    let logs = buf.contents();
+    assert!(
+        logs.contains("MCP tool execution started"),
+        "logs were: {logs}"
+    );
+    assert!(
+        logs.contains("MCP tool execution completed"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("trace_id_prefix"), "logs were: {logs}");
+    assert!(logs.contains("0af76519"), "logs were: {logs}");
+    assert!(logs.contains("span_id_prefix"), "logs were: {logs}");
+    assert!(logs.contains("00f067aa"), "logs were: {logs}");
+    assert!(logs.contains("baggage_member_count=4"), "logs were: {logs}");
+    assert!(
+        logs.contains("sensitive_baggage_member_count=3"),
+        "logs were: {logs}"
+    );
+    assert!(!logs.contains(VALID_TRACEPARENT), "logs were: {logs}");
+    assert!(!logs.contains("vendor=value"), "logs were: {logs}");
+    assert!(!logs.contains("alice@example.com"), "logs were: {logs}");
+    assert!(!logs.contains("super-secret-token"), "logs were: {logs}");
+    assert!(!logs.contains("abc123"), "logs were: {logs}");
+    assert!(!logs.contains("s123"), "logs were: {logs}");
 }
 
 #[test]

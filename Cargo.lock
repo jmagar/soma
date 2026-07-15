@@ -3625,8 +3625,10 @@ dependencies = [
  "soma-contracts",
  "soma-runtime",
  "soma-service",
+ "soma-test-support",
  "tokio",
  "tracing",
+ "tracing-subscriber",
  "url",
 ]
 

@@ -148,35 +148,34 @@ impl fmt::Debug for TraceContext {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TraceSummary {
-    pub trace_id: Option<String>,
-    pub span_id: Option<String>,
-    pub sampled: Option<bool>,
-    pub trust: TraceTrust,
-    pub has_tracestate: bool,
-    pub baggage_member_count: usize,
-    pub sensitive_baggage_member_count: usize,
-    pub invalid: Option<String>,
+    trace_id_prefix: Option<String>,
+    span_id_prefix: Option<String>,
+    sampled: Option<bool>,
+    trust: TraceTrust,
+    has_tracestate: bool,
+    baggage_member_count: usize,
+    sensitive_baggage_member_count: usize,
+    invalid_reasons: Vec<String>,
 }
 
 impl TraceSummary {
     pub fn absent() -> Self {
         Self {
-            trace_id: None,
-            span_id: None,
+            trace_id_prefix: None,
+            span_id_prefix: None,
             sampled: None,
             trust: TraceTrust::Untrusted,
             has_tracestate: false,
             baggage_member_count: 0,
             sensitive_baggage_member_count: 0,
-            invalid: None,
+            invalid_reasons: Vec::new(),
         }
     }
 
     pub fn invalid(error: &TraceParseError) -> Self {
-        Self {
-            invalid: Some(error.safe_reason()),
-            ..Self::absent()
-        }
+        let mut summary = Self::absent();
+        summary.record_invalid(error);
+        summary
     }
 
     pub fn from_meta(meta: &Meta, trust: TraceTrust) -> Self {
@@ -184,13 +183,20 @@ impl TraceSummary {
     }
 
     pub fn from_meta_with_limits(meta: &Meta, trust: TraceTrust, limits: TraceLimits) -> Self {
-        let traceparent = match parse_meta_traceparent(meta, limits) {
-            Ok(Some(traceparent)) => traceparent,
-            Ok(None) => return Self::absent(),
-            Err(error) => return Self::invalid(&error),
+        let mut summary = match parse_meta_traceparent(meta, limits) {
+            Ok(Some(traceparent)) => Self::from_traceparent(&traceparent, trust),
+            Ok(None) => {
+                let mut summary = Self::absent();
+                summary.trust = trust;
+                summary
+            }
+            Err(error) => {
+                let mut summary = Self::absent();
+                summary.trust = trust;
+                summary.record_invalid(&error);
+                summary
+            }
         };
-
-        let mut summary = Self::from_traceparent(&traceparent, trust);
         match bounded_optional_meta_string(meta, TRACESTATE_KEY, limits.max_tracestate_len) {
             Ok(tracestate) => summary.has_tracestate = tracestate.is_some(),
             Err(error) => summary.record_invalid(&error),
@@ -229,19 +235,55 @@ impl TraceSummary {
 
     fn from_traceparent(traceparent: &TraceParent, trust: TraceTrust) -> Self {
         Self {
-            trace_id: Some(traceparent.trace_id_short().to_owned()),
-            span_id: Some(traceparent.span_id_short().to_owned()),
+            trace_id_prefix: Some(traceparent.trace_id_short().to_owned()),
+            span_id_prefix: Some(traceparent.span_id_short().to_owned()),
             sampled: Some(traceparent.sampled()),
             trust,
             has_tracestate: false,
             baggage_member_count: 0,
             sensitive_baggage_member_count: 0,
-            invalid: None,
+            invalid_reasons: Vec::new(),
         }
     }
 
     fn record_invalid(&mut self, error: &TraceParseError) {
-        self.invalid.get_or_insert_with(|| error.safe_reason());
+        self.invalid_reasons.push(error.safe_reason());
+    }
+
+    pub fn trace_id_prefix(&self) -> Option<&str> {
+        self.trace_id_prefix.as_deref()
+    }
+
+    pub fn span_id_prefix(&self) -> Option<&str> {
+        self.span_id_prefix.as_deref()
+    }
+
+    pub fn sampled(&self) -> Option<bool> {
+        self.sampled
+    }
+
+    pub fn trust(&self) -> TraceTrust {
+        self.trust
+    }
+
+    pub fn has_tracestate(&self) -> bool {
+        self.has_tracestate
+    }
+
+    pub fn baggage_member_count(&self) -> usize {
+        self.baggage_member_count
+    }
+
+    pub fn sensitive_baggage_member_count(&self) -> usize {
+        self.sensitive_baggage_member_count
+    }
+
+    pub fn invalid_reasons(&self) -> &[String] {
+        &self.invalid_reasons
+    }
+
+    pub fn invalid_count(&self) -> usize {
+        self.invalid_reasons.len()
     }
 }
 
@@ -352,6 +394,9 @@ fn parse_traceparent(value: &str) -> Result<TraceParent, TraceParseError> {
         });
     }
     let bytes = value.as_bytes();
+    if !bytes[..TRACEPARENT_V00_LEN].is_ascii() {
+        return Err(TraceParseError::InvalidTraceParentFormat);
+    }
     if bytes[TRACEPARENT_VERSION_END] != b'-'
         || bytes[TRACEPARENT_TRACE_ID_END] != b'-'
         || bytes[TRACEPARENT_SPAN_ID_END] != b'-'
