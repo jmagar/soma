@@ -114,7 +114,7 @@ soma/
     │   ├── observability/
     │   ├── openapi/
     │   ├── codemode/
-    │   ├── api-kit/
+    │   ├── http-api/
     │   ├── mcp/
     │   │   ├── client/
     │   │   ├── server/
@@ -122,8 +122,8 @@ soma/
     │   │   └── gateway/
     │   ├── provider-core/
     │   ├── provider-adapters/
-    │   ├── web-kit/
-    │   ├── cli-kit/
+    │   ├── http-server/
+    │   ├── cli-core/
     │   └── codex-app-server-client/
     │
     └── soma/
@@ -180,15 +180,15 @@ The physical path determines the architectural layer. The package name determine
 | `crates/shared/observability` | `soma-observability` | `soma_observability` | shared |
 | `crates/shared/openapi` | `soma-openapi` | `soma_openapi` | shared |
 | `crates/shared/codemode` | `soma-codemode` | `soma_codemode` | shared |
-| `crates/shared/api-kit` | `soma-api-kit` | `soma_api_kit` | shared |
+| `crates/shared/http-api` | `soma-http-api` | `soma_http_api` | shared |
 | `crates/shared/mcp/client` | `soma-mcp-client` | `soma_mcp_client` | shared |
 | `crates/shared/mcp/server` | `soma-mcp-server` | `soma_mcp_server` | shared |
 | `crates/shared/mcp/proxy` | `soma-mcp-proxy` | `soma_mcp_proxy` | shared |
 | `crates/shared/mcp/gateway` | `soma-gateway` | `soma_gateway` | shared |
 | `crates/shared/provider-core` | `soma-provider-core` | `soma_provider_core` | shared |
 | `crates/shared/provider-adapters` | `soma-provider-adapters` | `soma_provider_adapters` | shared |
-| `crates/shared/web-kit` | `soma-web-kit` | `soma_web_kit` | shared |
-| `crates/shared/cli-kit` | `soma-cli-kit` | `soma_cli_kit` | shared |
+| `crates/shared/http-server` | `soma-http-server` | `soma_http_server` | shared |
+| `crates/shared/cli-core` | `soma-cli-core` | `soma_cli_core` | shared |
 | `crates/shared/codex-app-server-client` | `codex-app-server-client` | `codex_app_server_client` | shared |
 | `crates/soma/domain` | `soma-domain` | `soma_domain` | product |
 | `crates/soma/application` | `soma-application` | `soma_application` | product |
@@ -205,7 +205,7 @@ The physical path determines the architectural layer. The package name determine
 
 The nested path is the architectural signal. Existing incoming package names may remain unchanged during the migration to reduce Cargo churn, but brand-neutral shared package names should be a separate explicit decision before publishing these crates outside the repo.
 
-The `-kit` suffix is not required for every shared crate. Prefer `*-core` for foundational contracts that other crates build around, `*-adapters` for concrete implementations, and `*-client`/`*-server`/`*-proxy` for protocol roles. In this plan, the provider contract crate is `provider-core` because it owns the canonical provider/tool model rather than convenience helpers.
+Avoid `-kit` for shared crate names unless the crate is truly a loose grab bag. Prefer `*-core` for foundational contracts that other crates build around, `*-adapters` for concrete implementations, `*-client`/`*-server`/`*-proxy` for protocol roles, and concrete purpose names such as `http-api` or `http-server` when the boundary is obvious.
 
 ---
 
@@ -284,7 +284,7 @@ local.rs
 http.rs
     Merge soma_api::router(...), soma_mcp::http_router(...),
     auth routes, observability routes, and soma_web fallback.
-    Call soma_web_kit::serve(...).
+    Call soma_http_server::serve(...).
 
 stdio.rs
     Construct the Soma MCP adapter and call soma_mcp_server stdio lifecycle.
@@ -996,16 +996,16 @@ REST remains traditional typed endpoints such as `POST /v1/echo` and `GET /v1/st
 
 ---
 
-## 3.11 `crates/shared/api-kit`: reusable HTTP API surface helpers
+## 3.11 `crates/shared/http-api`: reusable HTTP API surface helpers
 
-**Package:** `soma-api-kit`
+**Package:** `soma-http-api`
 
-`web-kit` owns server lifecycle. `api-kit` owns reusable API surface mechanics.
+`http-server` owns server lifecycle. `http-api` owns reusable API surface mechanics.
 
 Suggested layout:
 
 ```text
-crates/shared/api-kit/src/
+crates/shared/http-api/src/
 ├── lib.rs
 ├── response.rs
 ├── error.rs
@@ -1037,31 +1037,31 @@ crates/shared/api-kit/src/
 - listener binding or graceful shutdown
 - embedded web UI assets
 
-### Relationship to `web-kit`
+### Relationship to `http-server`
 
 ```text
 soma-api
     product routes and request translation
 
-soma-api-kit
+soma-http-api
     reusable API response/error/probe/route-inventory helpers
 
-soma-web-kit
+soma-http-server
     listener, middleware, CORS, static files, shutdown, SSE/WebSocket helpers
 ```
 
-Do not use `web-kit` as a drawer for reusable API contracts. If a helper is about JSON API shape, route metadata, or HTTP error/probe DTOs, it belongs in `api-kit`. If it is about running an Axum service, request middleware, or transport lifecycle, it belongs in `web-kit`.
+Do not use `http-server` as a drawer for reusable API contracts. If a helper is about JSON API shape, route metadata, or HTTP error/probe DTOs, it belongs in `http-api`. If it is about running an Axum service, request middleware, or transport lifecycle, it belongs in `http-server`.
 
 ---
 
-## 3.12 `crates/shared/web-kit`: reusable web-server plumbing
+## 3.12 `crates/shared/http-server`: reusable HTTP server plumbing
 
-**Package:** `soma-web-kit`
+**Package:** `soma-http-server`
 
 Suggested layout:
 
 ```text
-crates/shared/web-kit/src/
+crates/shared/http-server/src/
 ├── lib.rs
 ├── server.rs
 ├── config.rs
@@ -1102,14 +1102,14 @@ crates/shared/web-kit/src/
 
 ---
 
-## 3.13 `crates/shared/cli-kit`: reusable CLI plumbing
+## 3.13 `crates/shared/cli-core`: reusable CLI plumbing
 
-**Package:** `soma-cli-kit`
+**Package:** `soma-cli-core`
 
 Suggested layout:
 
 ```text
-crates/shared/cli-kit/src/
+crates/shared/cli-core/src/
 ├── lib.rs
 ├── common_args.rs
 ├── output.rs
@@ -1599,8 +1599,8 @@ crates/soma/api/src/
 
 ### Uses
 
-- `soma-api-kit` for reusable JSON response, error, probe, pagination, and route-inventory helpers
-- `soma-web-kit` only through app/server composition for listener and middleware lifecycle
+- `soma-http-api` for reusable JSON response, error, probe, pagination, and route-inventory helpers
+- `soma-http-server` only through app/server composition for listener and middleware lifecycle
 
 ### Does not own
 
@@ -1716,7 +1716,7 @@ crates/soma/cli/src/
 
 ### Uses
 
-- `soma-cli-kit` for generic output, terminal, confirmation, and completion helpers
+- `soma-cli-core` for generic output, terminal, confirmation, and completion helpers
 
 ### Does not own
 
@@ -1733,7 +1733,7 @@ The CLI may collect confirmation, but the application validates the confirmation
 
 ### `crates/soma/plugin-support`
 
-Keep Soma plugin packaging, setup, metadata projection, and product plugin behavior here. Extract a generic plugin kit only after another unrelated product consumes the same abstraction.
+Keep Soma plugin packaging, setup, metadata projection, and product plugin behavior here. Extract a generic plugin-support crate only after another unrelated product consumes the same abstraction.
 
 ### `crates/soma/test-support`
 
@@ -1752,7 +1752,7 @@ apps/web
 crates/soma/web
     Rust-side product integration and embedded assets
 
-crates/shared/web-kit
+crates/shared/http-server
     generic server and middleware helpers
 ```
 
@@ -1764,9 +1764,9 @@ crates/shared/web-kit
 
 ```text
 apps/soma
-    ├── soma-cli ─────────────▶ soma-cli-kit
-    ├── soma-api ─────────────▶ soma-api-kit
-    │                           soma-web-kit
+    ├── soma-cli ─────────────▶ soma-cli-core
+    ├── soma-api ─────────────▶ soma-http-api
+    │                           soma-http-server
     ├── soma-mcp ─────────────▶ soma-mcp-server ───▶ rmcp-traces
     ├── soma-runtime ─────────▶ soma-application ──▶ soma-domain
     └── soma-integrations
@@ -1781,7 +1781,7 @@ apps/soma
             └── soma-openapi
 
 soma-api, soma-mcp, and soma-cli also call soma-application for product use cases.
-soma-web-kit is composed by apps/soma and/or soma-api where HTTP serving is needed.
+soma-http-server is composed by apps/soma and/or soma-api where HTTP serving is needed.
 ```
 
 `apps/soma` also depends on configuration, shared observability, runtime, web, and plugin support as required by features.
@@ -1839,7 +1839,7 @@ soma-api
 soma-mcp
 soma-cli
     depend on soma-application
-    depend on their respective shared kit or MCP role crate
+    depend on their respective shared crate or MCP role crate
     may depend on soma-domain value types when needed
     may not construct or directly dispatch provider engines
     may not depend on one another
@@ -1870,7 +1870,7 @@ rmcp-traces                         leaf
 soma-auth                           external + optional rmcp
 soma-observability                  external
 soma-openapi                        leaf
-soma-api-kit                        external + optional axum/openapi
+soma-http-api                       external + optional axum/openapi
 codex-app-server-client             leaf
 
 soma-codemode ────────────────▶ soma-openapi          optional
@@ -1888,8 +1888,8 @@ soma-provider-adapters ───────▶ soma-openapi           optional
 soma-provider-adapters ───────▶ soma-codemode          optional
 soma-provider-adapters ───────▶ soma-gateway           optional
 
-soma-web-kit                        independent
-soma-cli-kit                        independent
+soma-http-server                    independent
+soma-cli-core                       independent
 ```
 
 Do not introduce cycles among shared crates. If gateway and provider adapters need each other in both directions, extract the shared contract or keep one direction through an adapter owned by the higher layer.
@@ -1996,7 +1996,7 @@ Most "business for a tool" belongs in `soma-application`. Only invariant rules a
 | `crates/rmcp-traces` | `crates/shared/traces` | `rmcp-traces` |
 | `crates/soma-auth` | `crates/shared/auth` | `soma-auth` |
 | `crates/soma-observability` | `crates/shared/observability` | `soma-observability` |
-| new extraction from `crates/soma-api` | `crates/shared/api-kit` | `soma-api-kit` |
+| new extraction from `crates/soma-api` | `crates/shared/http-api` | `soma-http-api` |
 | `crates/soma-openapi` | `crates/shared/openapi` | `soma-openapi` |
 | `crates/soma-codemode` | `crates/shared/codemode` | `soma-codemode` |
 | `crates/soma-mcp-client` | `crates/shared/mcp/client` | `soma-mcp-client` |
@@ -2060,7 +2060,7 @@ actions.rs
 
 token_limit.rs
     product response policy → soma-application
-    generic byte/token helper, only if reusable → appropriate shared kit
+    generic byte/token helper, only if reusable → appropriate shared crate
 
 errors.rs
     split by the layer that creates each error
@@ -2073,7 +2073,7 @@ crates/soma/src/routes.rs
     → apps/soma/src/http.rs for composition
     → soma-api for product REST routes
     → soma-mcp for product HTTP MCP adapter
-    → soma-web-kit for generic listener/middleware
+    → soma-http-server for generic listener/middleware
 
 crates/soma/src/runtime.rs
     → apps/soma/src/bootstrap.rs for construction
@@ -2102,12 +2102,12 @@ members = [
     "crates/shared/observability",
     "crates/shared/openapi",
     "crates/shared/codemode",
-    "crates/shared/api-kit",
+    "crates/shared/http-api",
     "crates/shared/mcp/*",
     "crates/shared/provider-core",
     "crates/shared/provider-adapters",
-    "crates/shared/web-kit",
-    "crates/shared/cli-kit",
+    "crates/shared/http-server",
+    "crates/shared/cli-core",
     "crates/shared/codex-app-server-client",
     "crates/soma/*",
     "xtask",
@@ -2126,15 +2126,15 @@ soma-auth = { path = "crates/shared/auth" }
 soma-observability = { path = "crates/shared/observability" }
 soma-openapi = { path = "crates/shared/openapi" }
 soma-codemode = { path = "crates/shared/codemode" }
-soma-api-kit = { path = "crates/shared/api-kit" }
+soma-http-api = { path = "crates/shared/http-api" }
 soma-mcp-client = { path = "crates/shared/mcp/client" }
 soma-mcp-server = { path = "crates/shared/mcp/server" }
 soma-mcp-proxy = { path = "crates/shared/mcp/proxy" }
 soma-gateway = { path = "crates/shared/mcp/gateway" }
 soma-provider-core = { path = "crates/shared/provider-core" }
 soma-provider-adapters = { path = "crates/shared/provider-adapters" }
-soma-web-kit = { path = "crates/shared/web-kit" }
-soma-cli-kit = { path = "crates/shared/cli-kit" }
+soma-http-server = { path = "crates/shared/http-server" }
+soma-cli-core = { path = "crates/shared/cli-core" }
 codex-app-server-client = { path = "crates/shared/codex-app-server-client" }
 
 # Soma product
@@ -2199,11 +2199,11 @@ Suggested shape:
 [features]
 default = ["full"]
 
-cli = ["dep:soma-cli", "dep:soma-cli-kit"]
+cli = ["dep:soma-cli", "dep:soma-cli-core"]
 mcp = ["dep:soma-mcp"]
 mcp-stdio = ["mcp"]
 mcp-http = ["mcp", "api"]
-api = ["dep:soma-api", "dep:soma-api-kit", "dep:soma-web-kit"]
+api = ["dep:soma-api", "dep:soma-http-api", "dep:soma-http-server"]
 auth = ["dep:soma-auth"]
 oauth = ["auth"]
 web = ["api", "dep:soma-web"]
@@ -3051,7 +3051,7 @@ A fake unrelated MCP server can use `soma-mcp-server` without importing a Soma p
 
 ---
 
-## PR 15: Extract `soma-web-kit`
+## PR 15: Extract `soma-http-server`
 
 ### Goal
 
@@ -3083,11 +3083,11 @@ apps/soma/http.rs
 
 ### Acceptance
 
-A fake unrelated Axum router can be served through `soma-web-kit`.
+A fake unrelated Axum router can be served through `soma-http-server`.
 
 ---
 
-## PR 16: Extract `soma-cli-kit`
+## PR 16: Extract `soma-cli-core`
 
 ### Goal
 
@@ -3124,7 +3124,7 @@ Make the binary package an unmistakable composition root.
 ### Finalize
 
 - `bootstrap.rs` builds concrete graph
-- `http.rs` composes product routers and calls `web-kit`
+- `http.rs` composes product routers and calls `http-server`
 - `stdio.rs` starts product MCP through `soma-mcp-server`
 - `local.rs` invokes `soma-cli`
 - `shutdown.rs` owns process signals
@@ -3226,15 +3226,15 @@ cargo tree -p soma-auth --all-features
 cargo tree -p soma-observability --all-features
 cargo tree -p soma-openapi --all-features
 cargo tree -p soma-codemode --all-features
-cargo tree -p soma-api-kit --all-features
+cargo tree -p soma-http-api --all-features
 cargo tree -p soma-gateway --all-features
 cargo tree -p soma-provider-core --all-features
 cargo tree -p soma-provider-adapters --all-features
 cargo tree -p soma-mcp-client --all-features
 cargo tree -p soma-mcp-server --all-features
 cargo tree -p soma-mcp-proxy --all-features
-cargo tree -p soma-web-kit --all-features
-cargo tree -p soma-cli-kit --all-features
+cargo tree -p soma-http-server --all-features
+cargo tree -p soma-cli-core --all-features
 ```
 
 Fail CI when any tree reaches `crates/soma` or `apps/soma`.
@@ -3407,7 +3407,7 @@ This order gives Soma the selected map first, then builds the roads without rero
 | generic trace metadata | `crates/shared/traces` |
 | reusable auth implementation | `crates/shared/auth` |
 | reusable observability helpers | `crates/shared/observability` |
-| reusable API response/error/probe helpers | `crates/shared/api-kit` |
+| reusable API response/error/probe helpers | `crates/shared/http-api` |
 | generic OpenAPI engine | `crates/shared/openapi` |
 | generic Code Mode runtime | `crates/shared/codemode` |
 | generic outbound MCP client | `crates/shared/mcp/client` |
@@ -3416,7 +3416,7 @@ This order gives Soma the selected map first, then builds the roads without rero
 | reusable MCP gateway engine | `crates/shared/mcp/gateway` |
 | generic provider registry/contracts | `crates/shared/provider-core` |
 | generic concrete provider implementations | `crates/shared/provider-adapters` |
-| generic Axum lifecycle/middleware | `crates/shared/web-kit` |
-| generic terminal/CLI helpers | `crates/shared/cli-kit` |
+| generic Axum lifecycle/middleware | `crates/shared/http-server` |
+| generic terminal/CLI helpers | `crates/shared/cli-core` |
 | typed Codex app-server client | `crates/shared/codex-app-server-client` |
 | gateway plus Soma auth adapter | `crates/soma/integrations/gateway_auth.rs` |
