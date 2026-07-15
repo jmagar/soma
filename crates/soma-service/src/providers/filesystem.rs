@@ -14,18 +14,25 @@ use soma_contracts::{
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{DynamicResourceTemplate, Provider, ProviderCall, ProviderOutput},
     providers::{
         ai_sdk::AiSdkProvider,
         mcp::McpProvider,
         openapi::OpenApiProvider,
         python::{load_python_catalog, PythonProvider},
+        resource_files::{ResourceFileError, ResourceFileProvider},
         wasm::WasmProvider,
     },
 };
 
+#[path = "filesystem_prompts.rs"]
+mod filesystem_prompts;
+#[path = "filesystem_resources.rs"]
+mod filesystem_resources;
 #[path = "filesystem_uniqueness.rs"]
 mod filesystem_uniqueness;
+#[path = "filesystem_wasm.rs"]
+mod filesystem_wasm;
 
 #[derive(Debug, Clone)]
 pub struct FileProviderSource {
@@ -74,8 +81,9 @@ impl FileProviderSource {
     }
 
     /// Non-executing inspection of the provider directory: parses manifests
-    /// (JSON/TS/WASM sidecar/Python) but never runs handler code, calls MCP,
-    /// or fetches OpenAPI — safe to run before the runtime loads providers.
+    /// (JSON/TS/WASM sidecar/Python/Markdown) but never runs handler code,
+    /// calls MCP, or fetches OpenAPI — safe to run before the runtime loads
+    /// providers.
     pub fn inspect(&self) -> Result<ProviderDirectoryInspection, FileProviderLoadError> {
         if !self.root.exists() {
             return Ok(ProviderDirectoryInspection {
@@ -96,6 +104,13 @@ impl FileProviderSource {
         // `load()` never registers disabled providers either, so they can't
         // collide with anything at runtime.
         let mut loaded_catalogs: Vec<Option<ProviderCatalog>> = Vec::new();
+        // Parallel to `files`/`loaded_catalogs`: a dynamic `.ts` resource
+        // reader's template, which the live `ResourceIndex::register`
+        // checks for ambiguity but which never appears in `catalog().resources`
+        // (dynamic templates aren't declared data, they're derived from the
+        // filename) — without this, lint can't see two colliding readers
+        // like `service/[name].ts` and `service/[id].ts` at all.
+        let mut dynamic_templates: Vec<Option<DynamicResourceTemplate>> = Vec::new();
 
         for path in self.provider_paths()? {
             let file_name = path
@@ -192,7 +207,23 @@ impl FileProviderSource {
             }
         }
 
-        filesystem_uniqueness::apply_directory_wide_checks(&mut files, &loaded_catalogs);
+        // None of the entries pushed above are resource files, so pad
+        // `dynamic_templates` up to the same length before extending with
+        // the resource files' own (possibly `Some`) entries below — keeps
+        // all three vectors index-aligned with `files` without touching
+        // every earlier push site.
+        dynamic_templates.resize(files.len(), None);
+        let (resource_files, resource_catalogs, resource_templates) =
+            filesystem_resources::inspect_files(self.resource_pairs_with_canonical_root()?);
+        files.extend(resource_files);
+        loaded_catalogs.extend(resource_catalogs);
+        dynamic_templates.extend(resource_templates);
+
+        filesystem_uniqueness::apply_directory_wide_checks(
+            &mut files,
+            &loaded_catalogs,
+            &dynamic_templates,
+        );
         files.sort_by(|left, right| left.file_name.cmp(&right.file_name));
         let providers_loaded = files
             .iter()
@@ -231,6 +262,14 @@ impl FileProviderSource {
             }
             providers.push(provider_for_catalog(path, catalog));
         }
+        for (absolute, relative, canonical_root) in self.resource_pairs_with_canonical_root()? {
+            let provider = ResourceFileProvider::arc(absolute.clone(), &relative, &canonical_root)
+                .map_err(|ResourceFileError(message)| FileProviderLoadError {
+                    path: absolute,
+                    message,
+                })?;
+            providers.push(provider);
+        }
         Ok(providers)
     }
 
@@ -254,7 +293,7 @@ impl FileProviderSource {
         for path in &provider_paths {
             match path.extension().and_then(|extension| extension.to_str()) {
                 Some("wasm") => {
-                    let sidecar = wasm_sidecar_manifest_path(path);
+                    let sidecar = filesystem_wasm::wasm_sidecar_manifest_path(path);
                     if sidecar.is_file() {
                         paths.insert(sidecar);
                     } else {
@@ -275,31 +314,89 @@ impl FileProviderSource {
             collect_python_dependency_paths(&self.root, &mut paths)?;
         }
 
+        for (absolute, _relative) in self.resource_paths()? {
+            paths.insert(absolute);
+        }
+
         Ok(paths.into_iter().collect())
     }
 
+    /// Manifest-backed provider files (`.json`/`.ts`/`.wasm`/`.py`/`.md`),
+    /// from the provider root plus the structured `tools/` and `prompts/`
+    /// subdirectories, if present. Root-level files remain supported for
+    /// compatibility per the drop-in provider layout contract; new docs and
+    /// examples should prefer the structured layout. Neither subdirectory is
+    /// scanned recursively — same flat-directory semantics as root.
     fn provider_paths(&self) -> Result<Vec<PathBuf>, FileProviderLoadError> {
         if !self.root.exists() {
             return Ok(Vec::new());
         }
-        let entries = fs::read_dir(&self.root).map_err(|source| FileProviderLoadError {
-            path: self.root.clone(),
-            message: format!("failed to read provider directory: {source}"),
-        })?;
         let mut paths = Vec::new();
-        for entry in entries {
-            let entry = entry.map_err(|source| FileProviderLoadError {
-                path: self.root.clone(),
-                message: format!("failed to read provider directory entry: {source}"),
+        collect_flat_files(&self.root, &mut paths, |path| {
+            is_provider_file(path) && !is_wasm_sidecar_manifest(path)
+        })?;
+        let tools_dir = self.root.join("tools");
+        if tools_dir.is_dir() {
+            collect_flat_files(&tools_dir, &mut paths, |path| {
+                is_tool_file(path) && !is_wasm_sidecar_manifest(path)
             })?;
-            let path = entry.path();
-            if path.is_file() && is_provider_file(&path) && !is_wasm_sidecar_manifest(&path) {
-                paths.push(path);
-            }
+        }
+        let prompts_dir = self.root.join("prompts");
+        if prompts_dir.is_dir() {
+            collect_flat_files(&prompts_dir, &mut paths, is_markdown_prompt_file)?;
         }
         paths.sort();
         Ok(paths)
     }
+
+    /// Files under the structured `resources/` subdirectory, recursively,
+    /// as `(absolute_path, path_relative_to_resources_dir)` pairs. See
+    /// `filesystem_resources::resource_paths` for the trust-boundary
+    /// enforcement this delegates to.
+    fn resource_paths(&self) -> Result<Vec<(PathBuf, PathBuf)>, FileProviderLoadError> {
+        filesystem_resources::resource_paths(&self.root)
+    }
+
+    /// `resource_paths()` triples with the canonicalized `resources/`
+    /// directory attached to each, so `ResourceFileProvider` can re-verify
+    /// containment at read time against the same root discovery validated,
+    /// closing the TOCTOU window between the two.
+    fn resource_pairs_with_canonical_root(
+        &self,
+    ) -> Result<Vec<(PathBuf, PathBuf, PathBuf)>, FileProviderLoadError> {
+        let pairs = self.resource_paths()?;
+        if pairs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let canonical_root = filesystem_resources::canonical_resources_root(&self.root)?
+            .expect("non-empty resource_paths() implies the resources dir exists");
+        Ok(pairs
+            .into_iter()
+            .map(|(absolute, relative)| (absolute, relative, canonical_root.clone()))
+            .collect())
+    }
+}
+
+fn collect_flat_files(
+    dir: &Path,
+    paths: &mut Vec<PathBuf>,
+    accept: impl Fn(&Path) -> bool,
+) -> Result<(), FileProviderLoadError> {
+    let entries = fs::read_dir(dir).map_err(|source| FileProviderLoadError {
+        path: dir.to_path_buf(),
+        message: format!("failed to read provider directory: {source}"),
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|source| FileProviderLoadError {
+            path: dir.to_path_buf(),
+            message: format!("failed to read provider directory entry: {source}"),
+        })?;
+        let path = entry.path();
+        if path.is_file() && accept(&path) {
+            paths.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn collect_python_dependency_paths(
@@ -440,10 +537,29 @@ impl Provider for FileProvider {
 }
 
 fn is_provider_file(path: &Path) -> bool {
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("json" | "ts" | "wasm" | "py") => true,
+        Some("md") => is_markdown_prompt_file(path),
+        _ => false,
+    }
+}
+
+/// The structured `providers/tools/` directory only owns action-like files —
+/// no `.md`, which belongs to `providers/prompts/` instead.
+fn is_tool_file(path: &Path) -> bool {
     matches!(
         path.extension().and_then(|extension| extension.to_str()),
         Some("json" | "ts" | "wasm" | "py")
     )
+}
+
+/// A `.md` file is a prompt provider unless it's the directory's own README —
+/// `examples/providers/README.md` documents the directory, it isn't a prompt.
+fn is_markdown_prompt_file(path: &Path) -> bool {
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(|stem| !stem.eq_ignore_ascii_case("readme"))
+        .unwrap_or(false)
 }
 
 fn is_wasm_sidecar_manifest(path: &Path) -> bool {
@@ -501,7 +617,7 @@ fn fingerprint_file(
 fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
     let extension = path.extension().and_then(|extension| extension.to_str());
     let catalog = match extension {
-        Some("json") | Some("ts") | Some("wasm") => {
+        Some("json") | Some("ts") | Some("wasm") | Some("md") => {
             let value = load_catalog_value(path)?;
             serde_json::from_value(value).map_err(|source| FileProviderLoadError {
                 path: path.to_path_buf(),
@@ -544,7 +660,8 @@ fn load_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
             })
         }
         Some("ts") => load_ts_catalog_value(path),
-        Some("wasm") => load_wasm_catalog_value(path),
+        Some("wasm") => filesystem_wasm::load_wasm_catalog_value(path),
+        Some("md") => filesystem_prompts::load_markdown_catalog_value(path),
         _ => Err(FileProviderLoadError {
             path: path.to_path_buf(),
             message: "unsupported provider file extension".to_owned(),
@@ -603,88 +720,6 @@ fn extract_ts_manifest(text: &str) -> Option<&str> {
     None
 }
 
-fn load_wasm_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
-    let sidecar_path = wasm_sidecar_manifest_path(path);
-    if sidecar_path.is_file() {
-        return serde_json::from_slice(&fs::read(&sidecar_path).map_err(|source| {
-            FileProviderLoadError {
-                path: sidecar_path.clone(),
-                message: format!("failed to read WASM provider sidecar manifest: {source}"),
-            }
-        })?)
-        .map_err(|source| FileProviderLoadError {
-            path: sidecar_path,
-            message: format!("invalid WASM provider sidecar manifest JSON: {source}"),
-        });
-    }
-
-    let bytes = fs::read(path).map_err(|source| FileProviderLoadError {
-        path: path.to_path_buf(),
-        message: format!("failed to read WASM provider: {source}"),
-    })?;
-    let payload =
-        wasm_custom_section(&bytes, "soma.provider").ok_or_else(|| FileProviderLoadError {
-            path: path.to_path_buf(),
-            message: "WASM provider must contain a `soma.provider` custom section".to_owned(),
-        })?;
-    serde_json::from_slice(payload).map_err(|source| FileProviderLoadError {
-        path: path.to_path_buf(),
-        message: format!("invalid WASM provider manifest JSON: {source}"),
-    })
-}
-
-fn wasm_sidecar_manifest_path(path: &Path) -> PathBuf {
-    path.with_file_name(format!(
-        "{}.json",
-        path.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default()
-    ))
-}
-
-fn wasm_custom_section<'a>(bytes: &'a [u8], wanted_name: &str) -> Option<&'a [u8]> {
-    if bytes.len() < 8 || &bytes[..4] != b"\0asm" || bytes[4..8] != [1, 0, 0, 0] {
-        return None;
-    }
-    let mut offset = 8;
-    while offset < bytes.len() {
-        let section_id = *bytes.get(offset)?;
-        offset += 1;
-        let section_len = read_leb_u32(bytes, &mut offset)? as usize;
-        let section_end = offset.checked_add(section_len)?;
-        if section_end > bytes.len() {
-            return None;
-        }
-        if section_id == 0 {
-            let mut cursor = offset;
-            let name_len = read_leb_u32(bytes, &mut cursor)? as usize;
-            let name_end = cursor.checked_add(name_len)?;
-            if name_end <= section_end && &bytes[cursor..name_end] == wanted_name.as_bytes() {
-                return Some(&bytes[name_end..section_end]);
-            }
-        }
-        offset = section_end;
-    }
-    None
-}
-
-fn read_leb_u32(bytes: &[u8], offset: &mut usize) -> Option<u32> {
-    let mut result = 0u32;
-    let mut shift = 0;
-    loop {
-        let byte = *bytes.get(*offset)?;
-        *offset += 1;
-        result |= u32::from(byte & 0x7f) << shift;
-        if byte & 0x80 == 0 {
-            return Some(result);
-        }
-        shift += 7;
-        if shift >= 32 {
-            return None;
-        }
-    }
-}
-
 fn ensure_kind_matches(
     path: &Path,
     catalog: &ProviderCatalog,
@@ -702,6 +737,10 @@ fn ensure_kind_matches(
         });
     }
 
+    // No `Some("md")` arm: `load_markdown_catalog_value` unconditionally
+    // hardcodes `"kind": "static-rust"`, so a mismatch can't currently occur.
+    // `.md` catalogs fall through to `_ => {}` like any other `static-rust`
+    // manifest (`required_extension_for_kind` returns `None` for it too).
     match extension {
         Some("ts") if catalog.provider.kind != ProviderKind::AiSdk => {
             return Err(FileProviderLoadError {

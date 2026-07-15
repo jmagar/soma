@@ -136,6 +136,7 @@
         "name": { "$ref": "#/$defs/name" },
         "title": { "type": "string" },
         "description": { "type": "string" },
+        "template": { "type": "string" },
         "arguments_schema": { "$ref": "#/$defs/jsonSchema" },
         "scope": { "type": "string" },
         "mcp": { "$ref": "#/$defs/mcpPrimitiveOverlay" },

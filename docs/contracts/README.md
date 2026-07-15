@@ -22,6 +22,25 @@ bash scripts/validate-plugin-layout.sh
 cargo test --test plugin_contract
 ```
 
+## Drop-in provider layout
+
+- Contract: `drop-in-provider-layout.md`
+- Spec: `../specs/drop-in-provider-layout.md`
+- Examples: `examples/providers/resources/`
+
+The structured `providers/tools/`, `providers/prompts/`, and
+`providers/resources/` directories, including the resource URI mapping,
+dynamic `.ts` resource reader contract, and path-traversal trust boundary.
+
+Validate with:
+
+```bash
+cargo test -p soma-service providers::resource_uri
+cargo test -p soma-service providers::resource_files
+cargo test -p soma --test provider_registry
+cargo test -p soma --test drop_provider_probe
+```
+
 ## Scaffold intent
 
 - Schema: `scaffold-intent.schema.json`

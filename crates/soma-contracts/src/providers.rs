@@ -123,6 +123,8 @@ pub struct ProviderPrompt {
     pub name: String,
     pub description: String,
     #[serde(default)]
+    pub template: Option<String>,
+    #[serde(default)]
     pub arguments_schema: Option<Value>,
     #[serde(default)]
     pub scope: Option<String>,

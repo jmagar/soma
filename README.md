@@ -81,8 +81,11 @@ shipped `soma` command is the source of truth for product behavior.
   lists stay small even as provider catalogs grow.
 - One canonical binary: `soma` with explicit `serve`, `mcp`, and CLI modes for
   REST API, Streamable HTTP MCP, stdio MCP, optional web UI, and local actions.
-- Dynamic provider loading from `.json`, `.ts`, `.py`, and `.wasm` files, plus
-  native Rust providers and upstream MCP/OpenAPI provider kinds.
+- Dynamic provider loading from `.json`, `.ts`, `.py`, `.wasm`, and `.md`
+  files, plus native Rust providers and upstream MCP/OpenAPI provider kinds.
+  A structured `providers/{tools,prompts,resources}/` layout is supported
+  alongside root-level files, including path-derived MCP resources (static
+  files and dynamic `.ts` readers) with a path-traversal trust boundary.
 - Provider manifest contracts for tools, prompts, resources, tasks,
   elicitation forms, env requirements, capability grants, and surface overlays.
 - Shared validation, destructive-action confirmation, auth/scope enforcement,
