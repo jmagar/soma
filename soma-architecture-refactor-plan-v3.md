@@ -19,7 +19,7 @@ crates/
 The directory is an architectural signal, not decoration:
 
 - `apps/soma` contains the process entry point and composition root.
-- `crates/shared/*` may be reused by another product without importing Soma product code.
+- `crates/shared/*` and nested shared groups such as `crates/shared/mcp/*` may be reused by another product without importing Soma product code.
 - `crates/soma/*` contains product behavior, policies, routes, tools, commands, and adapters specific to Soma.
 
 The core operational rule remains:
@@ -73,10 +73,11 @@ soma/
     │   ├── traces/
     │   ├── openapi/
     │   ├── codemode/
-    │   ├── mcp-client/
-    │   ├── mcp-server/
-    │   ├── mcp-proxy/
-    │   ├── gateway/
+    │   ├── mcp/
+    │   │   ├── client/
+    │   │   ├── server/
+    │   │   ├── proxy/
+    │   │   └── gateway/
     │   ├── provider-kit/
     │   ├── provider-adapters/
     │   ├── web-kit/
@@ -136,10 +137,10 @@ The physical path determines the architectural layer. The package name determine
 | `crates/shared/traces` | `rmcp-traces` | `rmcp_traces` | shared |
 | `crates/shared/openapi` | `soma-openapi` | `soma_openapi` | shared |
 | `crates/shared/codemode` | `soma-codemode` | `soma_codemode` | shared |
-| `crates/shared/mcp-client` | `soma-mcp-client` | `soma_mcp_client` | shared |
-| `crates/shared/mcp-server` | `soma-mcp-server` | `soma_mcp_server` | shared |
-| `crates/shared/mcp-proxy` | `soma-mcp-proxy` | `soma_mcp_proxy` | shared |
-| `crates/shared/gateway` | `soma-gateway` | `soma_gateway` | shared |
+| `crates/shared/mcp/client` | `soma-mcp-client` | `soma_mcp_client` | shared |
+| `crates/shared/mcp/server` | `soma-mcp-server` | `soma_mcp_server` | shared |
+| `crates/shared/mcp/proxy` | `soma-mcp-proxy` | `soma_mcp_proxy` | shared |
+| `crates/shared/mcp/gateway` | `soma-gateway` | `soma_gateway` | shared |
 | `crates/shared/provider-kit` | `soma-provider-kit` | `soma_provider_kit` | shared |
 | `crates/shared/provider-adapters` | `soma-provider-adapters` | `soma_provider_adapters` | shared |
 | `crates/shared/web-kit` | `soma-web-kit` | `soma_web_kit` | shared |
@@ -160,7 +161,7 @@ The physical path determines the architectural layer. The package name determine
 | `crates/soma/test-support` | `soma-test-support` | `soma_test_support` | product |
 | `crates/soma/web` | `soma-web` | `soma_web` | product |
 
-The `soma-` prefix on a shared package is branding and namespace protection. It does not make the crate product-specific. The path and dependency rules are the source of truth.
+The nested path is the architectural signal. Existing incoming package names may remain unchanged during the migration to reduce Cargo churn, but brand-neutral shared package names should be a separate explicit decision before publishing these crates outside the repo.
 
 ---
 
@@ -431,14 +432,14 @@ The product adapter may map `SOMA_HOME`, product auth context, audit fields, and
 
 ---
 
-## 3.5 `crates/shared/gateway`: reusable upstream MCP gateway
+## 3.5 `crates/shared/mcp/gateway`: reusable upstream MCP gateway
 
 **Package:** `soma-gateway`
 
 Suggested layout:
 
 ```text
-crates/shared/gateway/src/
+crates/shared/mcp/gateway/src/
 ├── lib.rs
 ├── config.rs
 ├── manager.rs
@@ -500,7 +501,7 @@ The gateway is the reusable engine that users instantiate when they want a full 
 This dependency is forbidden:
 
 ```text
-crates/shared/gateway ──X──▶ crates/soma/auth
+crates/shared/mcp/gateway ──X──▶ crates/soma/auth
 ```
 
 The bridge belongs here:
@@ -521,7 +522,7 @@ The reviewed gateway branch currently has these Soma-shaped pieces that must be 
 - special-case routing for a native tool named `soma`.
 - error/remediation text that says "start Soma" instead of naming the host application.
 
-Replace these with explicit gateway configuration, generic policy traits, or product adapters under `crates/soma/integrations`. If a separate product wrapper becomes useful, create it under `crates/soma/gateway`; do not let product defaults live in `crates/shared/gateway`.
+Replace these with explicit gateway configuration, generic policy traits, or product adapters under `crates/soma/integrations`. If a separate product wrapper becomes useful, create it under `crates/soma/gateway`; do not let product defaults live in `crates/shared/mcp/gateway`.
 
 ### Relationship to Code Mode and OpenAPI
 
@@ -684,14 +685,14 @@ Want the full aggregation gateway?        depend on soma-gateway
 
 The role crates are shared infrastructure. None may import Soma product crates, Soma scopes, Soma config defaults, or Soma tool schemas.
 
-### `crates/shared/mcp-client`
+### `crates/shared/mcp/client`
 
 **Package:** `soma-mcp-client`
 
 Suggested layout:
 
 ```text
-crates/shared/mcp-client/src/
+crates/shared/mcp/client/src/
 ├── lib.rs
 ├── config.rs
 ├── session.rs
@@ -716,14 +717,14 @@ Owns outbound MCP client sessions, upstream discovery, tool/resource/prompt call
 
 Does not own inbound `ServerHandler` implementations, route aggregation, protected public routes, or gateway administration.
 
-### `crates/shared/mcp-server`
+### `crates/shared/mcp/server`
 
 **Package:** `soma-mcp-server`
 
 Suggested layout:
 
 ```text
-crates/shared/mcp-server/src/
+crates/shared/mcp/server/src/
 ├── lib.rs
 ├── stdio.rs
 ├── http.rs
@@ -740,14 +741,14 @@ Owns reusable inbound RMCP server lifecycle helpers, stdio and HTTP serving help
 
 Does not own Soma tools, prompts, resources, scopes, product action dispatch, or product-specific MCP error messages.
 
-### `crates/shared/mcp-proxy`
+### `crates/shared/mcp/proxy`
 
 **Package:** `soma-mcp-proxy`
 
 Suggested layout:
 
 ```text
-crates/shared/mcp-proxy/src/
+crates/shared/mcp/proxy/src/
 ├── lib.rs
 ├── routes.rs
 ├── catalog.rs
@@ -1561,8 +1562,9 @@ crates/shared/web-kit
 
 ```text
 crates/shared/*
+crates/shared/mcp/*
     may depend on external crates
-    may depend on crates/shared/*
+    may depend on crates/shared/* or crates/shared/mcp/*
     may not depend on crates/soma/*
     may not depend on apps/*
 ```
@@ -1698,7 +1700,7 @@ crates/soma/integrations
     Implements GatewayControl with SomaGatewayAdapter.
     Translates product types into gateway types.
 
-crates/shared/gateway
+crates/shared/mcp/gateway
     Performs generic gateway reload and route/catalog lifecycle.
 
 apps/soma
@@ -1759,10 +1761,10 @@ Most "business for a tool" belongs in `soma-application`. Only invariant rules a
 | `crates/rmcp-traces` | `crates/shared/traces` | `rmcp-traces` |
 | `crates/soma-openapi` | `crates/shared/openapi` | `soma-openapi` |
 | `crates/soma-codemode` | `crates/shared/codemode` | `soma-codemode` |
-| `crates/soma-mcp-client` | `crates/shared/mcp-client` | `soma-mcp-client` |
-| `crates/soma-mcp-server` | `crates/shared/mcp-server` | `soma-mcp-server` |
-| `crates/soma-mcp-proxy` | `crates/shared/mcp-proxy` | `soma-mcp-proxy` |
-| `crates/soma-gateway` | `crates/shared/gateway` | `soma-gateway` |
+| `crates/soma-mcp-client` | `crates/shared/mcp/client` | `soma-mcp-client` |
+| `crates/soma-mcp-server` | `crates/shared/mcp/server` | `soma-mcp-server` |
+| `crates/soma-mcp-proxy` | `crates/shared/mcp/proxy` | `soma-mcp-proxy` |
+| `crates/soma-gateway` | `crates/shared/mcp/gateway` | `soma-gateway` |
 | `crates/codex-app-server-client` | `crates/shared/codex-app-server-client` | unchanged |
 | `crates/soma-api` | `crates/soma/api` | `soma-api` |
 | `crates/soma-auth` | `crates/soma/auth` | `soma-auth` |
@@ -1859,13 +1861,21 @@ Recommended root structure:
 resolver = "2"
 members = [
     "apps/soma",
-    "crates/shared/*",
+    "crates/shared/traces",
+    "crates/shared/openapi",
+    "crates/shared/codemode",
+    "crates/shared/mcp/*",
+    "crates/shared/provider-kit",
+    "crates/shared/provider-adapters",
+    "crates/shared/web-kit",
+    "crates/shared/cli-kit",
+    "crates/shared/codex-app-server-client",
     "crates/soma/*",
     "xtask",
 ]
 ```
 
-Keep non-Rust frontend directories such as `apps/web` and `apps/palette` outside Cargo membership unless they contain Rust packages.
+Keep non-Rust frontend directories such as `apps/web` and `apps/palette` outside Cargo membership unless they contain Rust packages. Do not use a broad `crates/shared/*` member glob once `crates/shared/mcp/` exists unless the parent directory is explicitly excluded; otherwise Cargo may try to treat the grouping directory as a package.
 
 Centralize all internal paths:
 
@@ -1875,10 +1885,10 @@ Centralize all internal paths:
 rmcp-traces = { path = "crates/shared/traces" }
 soma-openapi = { path = "crates/shared/openapi" }
 soma-codemode = { path = "crates/shared/codemode" }
-soma-mcp-client = { path = "crates/shared/mcp-client" }
-soma-mcp-server = { path = "crates/shared/mcp-server" }
-soma-mcp-proxy = { path = "crates/shared/mcp-proxy" }
-soma-gateway = { path = "crates/shared/gateway" }
+soma-mcp-client = { path = "crates/shared/mcp/client" }
+soma-mcp-server = { path = "crates/shared/mcp/server" }
+soma-mcp-proxy = { path = "crates/shared/mcp/proxy" }
+soma-gateway = { path = "crates/shared/mcp/gateway" }
 soma-provider-kit = { path = "crates/shared/provider-kit" }
 soma-provider-adapters = { path = "crates/shared/provider-adapters" }
 soma-web-kit = { path = "crates/shared/web-kit" }
@@ -2218,10 +2228,10 @@ mkdir -p crates/soma
 git mv crates/rmcp-traces crates/shared/traces
 git mv crates/soma-openapi crates/shared/openapi
 git mv crates/soma-codemode crates/shared/codemode
-git mv crates/soma-mcp-client crates/shared/mcp-client
-git mv crates/soma-mcp-server crates/shared/mcp-server
-git mv crates/soma-mcp-proxy crates/shared/mcp-proxy
-git mv crates/soma-gateway crates/shared/gateway
+git mv crates/soma-mcp-client crates/shared/mcp/client
+git mv crates/soma-mcp-server crates/shared/mcp/server
+git mv crates/soma-mcp-proxy crates/shared/mcp/proxy
+git mv crates/soma-gateway crates/shared/mcp/gateway
 
 # Existing standalone client
 git mv crates/codex-app-server-client crates/shared/codex-app-server-client
@@ -2292,7 +2302,7 @@ Use `cargo metadata --all-features` to classify each internal package by path an
 
 ### Enforce
 
-1. `crates/shared/*` has no dependency on `crates/soma/*` or `apps/*`.
+1. Shared packages under `crates/shared/*` and `crates/shared/mcp/*` have no dependency on `crates/soma/*` or `apps/*`.
 2. The rule includes optional dependencies.
 3. `soma-domain` does not depend on surfaces, runtime, application, integrations, or app.
 4. `soma-application` does not depend on surfaces, runtime, app, or concrete engines.
@@ -3148,10 +3158,10 @@ This order gives Soma the selected map first, then builds the roads without rero
 | generic trace metadata | `crates/shared/traces` |
 | generic OpenAPI engine | `crates/shared/openapi` |
 | generic Code Mode runtime | `crates/shared/codemode` |
-| generic outbound MCP client | `crates/shared/mcp-client` |
-| generic inbound MCP server helpers | `crates/shared/mcp-server` |
-| generic MCP inbound-to-upstream proxy | `crates/shared/mcp-proxy` |
-| reusable MCP gateway engine | `crates/shared/gateway` |
+| generic outbound MCP client | `crates/shared/mcp/client` |
+| generic inbound MCP server helpers | `crates/shared/mcp/server` |
+| generic MCP inbound-to-upstream proxy | `crates/shared/mcp/proxy` |
+| reusable MCP gateway engine | `crates/shared/mcp/gateway` |
 | generic provider registry/contracts | `crates/shared/provider-kit` |
 | generic concrete provider implementations | `crates/shared/provider-adapters` |
 | generic Axum lifecycle/middleware | `crates/shared/web-kit` |
