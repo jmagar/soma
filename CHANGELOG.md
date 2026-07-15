@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `soma-auth`'s Cargo features are now split: `http-axum` gates the
   axum/tower-based HTTP middleware and OAuth route handlers, and
   `upstream-oauth-rmcp` gates the new outbound OAuth runtime. Both default off.
+- `soma-auth` now accepts OAuth Client ID Metadata Documents (CIMD) at
+  `/authorize` as an alternative to Dynamic Client Registration, per the MCP
+  draft authorization spec. An `https://`-shaped `client_id` is fetched
+  (SSRF-guarded: static URL/query/fragment validation, DNS resolution
+  rejecting the whole result set if any resolved address is private,
+  address-pinned no-proxy no-redirect HTTP client, post-connect peer
+  re-validation against the pin, a streaming 64 KiB response cap, and
+  single-flight-locked positive/negative-result caching) and its
+  `redirect_uris` are filtered through the same allowlist DCR-registered
+  clients are held to before being trusted — CIMD does not bypass the
+  redirect-URI trust boundary DCR enforces. Advertised via
+  `client_id_metadata_document_supported: true` in AS metadata. DCR is
+  unchanged and remains fully supported.
 
 ### Changed
 
