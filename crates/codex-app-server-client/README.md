@@ -25,6 +25,11 @@ copied into another project wholesale and will keep working.
   helpers (`PendingServerRequest::respond` / `respond_error`) for the latter.
 - Handles the `initialize` / `initialized` handshake, request-id correlation,
   and JSON-RPC error mapping.
+- Provides batteries-included helpers on top of the generated protocol:
+  `CodexSession` for one-call handshakes, builder constructors for common
+  params, `ApprovalHandler` policies for server requests, `EventCollector`
+  for streamed turn output, `CodexDaemon` socket helpers, and
+  `CompatibilityReport` for schema/version diagnostics.
 
 ## What it deliberately doesn't do
 
@@ -40,46 +45,63 @@ copied into another project wholesale and will keep working.
 ## Quick start
 
 ```rust,no_run
-use codex_app_server_client::protocol::{ClientInfo, InitializeParams};
-use codex_app_server_client::{CodexAppServerClient, Event};
+use codex_app_server_client::protocol::{ThreadStartParams, TurnStartParams};
+use codex_app_server_client::{
+    CodexSession, DenyAllApprovalHandler, EventCollector, SessionOptions,
+};
 
 #[tokio::main]
 async fn main() -> codex_app_server_client::Result<()> {
-    let (client, mut events) = CodexAppServerClient::spawn("codex", &[])?;
-
-    client
-        .initialize(InitializeParams {
-            client_info: ClientInfo {
-                name: "my_integration".into(),
-                title: None,
-                version: "0.1.0".into(),
-            },
-            capabilities: None,
-        })
+    let mut session = CodexSession::spawn(SessionOptions::new("my_integration", "0.1.0")).await?;
+    let thread = session
+        .start_thread(ThreadStartParams::new().model("gpt-5.4"))
         .await?;
-    client.send_initialized()?;
-
-    tokio::spawn(async move {
-        while let Some(event) = events.recv().await {
-            match event {
-                Event::Notification(n) => println!("{n:?}"),
-                Event::Request(req) => req.respond_error(-1, "not handled", None),
-                Event::Closed => break,
-            }
-        }
-    });
-
-    let thread = client
-        .thread_start(serde_json::from_value(serde_json::json!({ "model": "gpt-5.4" }))?)
+    let turn = session
+        .send_turn(TurnStartParams::text(&thread.thread.id, "Say hello in one sentence."))
         .await?;
-    println!("started thread {}", thread.thread.id);
+
+    let mut collector = EventCollector::for_turn(&thread.thread.id, &turn.turn.id);
+    session
+        .collect_until_complete(&mut collector, &DenyAllApprovalHandler::default())
+        .await?;
+
+    println!("{}", collector.agent_message());
     Ok(())
 }
 ```
 
-See `examples/basic.rs` for a runnable version that only calls
-no-auth-required methods, and `tests/smoke.rs` for a live integration test
-against the real binary (skips gracefully if `codex` isn't on `PATH`).
+See:
+
+- `examples/basic.rs` for a no-auth/no-turn smoke using `CodexSession`.
+- `examples/session_turn.rs` for a complete thread + text turn + stream collector.
+- `examples/approval_handler.rs` for routing server requests through a policy.
+- `examples/daemon.rs` for Unix socket connection helpers.
+- `examples/compatibility.rs` for schema/version diagnostics.
+- `tests/smoke.rs` for a live integration test against the real binary
+  (skips gracefully if `codex` isn't on `PATH`).
+
+## Batteries-included surface
+
+The generated low-level methods are still available directly through
+`CodexAppServerClient`, but most integrations should start with:
+
+- `SessionOptions` + `CodexSession::spawn(...)`: spawn, initialize, send
+  `initialized`, keep the client and event stream together, and expose helpers
+  for starting threads, sending turns, and draining events.
+- `ClientInfo::new`, `InitializeParams::for_client`,
+  `ThreadStartParams::new`, `TurnStartParams::text`, `UserInput::text`,
+  `ConfigReadParams::for_cwd`: common constructors that avoid ad hoc JSON for
+  the first mile.
+- `ApprovalHandler`, `DenyAllApprovalHandler`, `FnApprovalHandler`, and
+  `ServerRequestReply`: one place to make approval/elicitation/tool-call
+  policy explicit. Dropped requests still receive fallback errors, but a real
+  integration should handle every request intentionally.
+- `EventCollector`: collect streamed agent text, latest diff, completion, and
+  turn errors from `ServerNotification`s.
+- `CodexDaemon`: build real `codex app-server --listen unix://...` args and
+  connect to an existing Unix socket with the same session handshake.
+- `CompatibilityReport::current()`: compare the installed `codex --version`
+  with the vendored schema stamp and print method-count diagnostics.
 
 ## How the typed protocol layer is built
 
