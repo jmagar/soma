@@ -44,7 +44,7 @@ impl Default for TraceLimits {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-struct TraceParent {
+pub(crate) struct TraceParent {
     trace_id: String,
     span_id: String,
     sampled: bool,
@@ -159,11 +159,15 @@ pub struct TraceSummary {
 
 impl TraceSummary {
     pub fn absent() -> Self {
+        Self::absent_with_trust(TraceTrust::Untrusted)
+    }
+
+    pub(crate) fn absent_with_trust(trust: TraceTrust) -> Self {
         Self {
             trace_id_prefix: None,
             span_id_prefix: None,
             sampled: None,
-            trust: TraceTrust::Untrusted,
+            trust,
             has_tracestate: false,
             baggage_member_count: 0,
             sensitive_baggage_member_count: 0,
@@ -184,14 +188,9 @@ impl TraceSummary {
     pub fn from_meta_with_limits(meta: &Meta, trust: TraceTrust, limits: TraceLimits) -> Self {
         let (mut summary, has_valid_traceparent) = match parse_meta_traceparent(meta, limits) {
             Ok(Some(traceparent)) => (Self::from_traceparent(&traceparent, trust), true),
-            Ok(None) => {
-                let mut summary = Self::absent();
-                summary.trust = trust;
-                (summary, false)
-            }
+            Ok(None) => (Self::absent_with_trust(trust), false),
             Err(error) => {
-                let mut summary = Self::absent();
-                summary.trust = trust;
+                let mut summary = Self::absent_with_trust(trust);
                 summary.record_invalid(&error);
                 (summary, false)
             }
@@ -250,8 +249,30 @@ impl TraceSummary {
         }
     }
 
+    #[cfg(feature = "http")]
+    pub(crate) fn from_valid_traceparent(traceparent: &TraceParent, trust: TraceTrust) -> Self {
+        Self::from_traceparent(traceparent, trust)
+    }
+
     fn record_invalid(&mut self, error: &TraceParseError) {
         self.invalid_reasons.push(error.safe_reason());
+    }
+
+    #[cfg(feature = "http")]
+    pub(crate) fn record_invalid_reason(&mut self, error: &TraceParseError) {
+        self.record_invalid(error);
+    }
+
+    #[cfg(feature = "http")]
+    pub(crate) fn set_has_tracestate_for_http(&mut self) {
+        self.has_tracestate = true;
+    }
+
+    #[cfg(feature = "http")]
+    pub(crate) fn set_baggage_counts_for_http(&mut self, baggage: Option<&str>) {
+        let (baggage_member_count, sensitive_baggage_member_count) = summarize_baggage(baggage);
+        self.baggage_member_count = baggage_member_count;
+        self.sensitive_baggage_member_count = sensitive_baggage_member_count;
     }
 
     pub fn trace_id_prefix(&self) -> Option<&str> {
@@ -320,6 +341,14 @@ pub enum TraceParseError {
     InvalidTraceState,
     DuplicateTraceStateKey,
     InvalidBaggageMember,
+    #[cfg(feature = "http")]
+    MultipleHeaderValues {
+        field: &'static str,
+    },
+    #[cfg(feature = "http")]
+    InvalidHeaderValue {
+        field: &'static str,
+    },
 }
 
 impl TraceParseError {
@@ -348,6 +377,14 @@ impl TraceParseError {
             Self::InvalidTraceState => "tracestate format was invalid".to_owned(),
             Self::DuplicateTraceStateKey => "tracestate contained a duplicate key".to_owned(),
             Self::InvalidBaggageMember => "baggage member format was invalid".to_owned(),
+            #[cfg(feature = "http")]
+            Self::MultipleHeaderValues { field } => {
+                format!("{field} had multiple header values")
+            }
+            #[cfg(feature = "http")]
+            Self::InvalidHeaderValue { field } => {
+                format!("{field} header value was not visible ASCII")
+            }
         }
     }
 }
@@ -413,6 +450,21 @@ fn parse_meta_traceparent(
         });
     }
     parse_traceparent(traceparent).map(Some)
+}
+
+#[cfg(feature = "http")]
+pub(crate) fn parse_traceparent_value(
+    value: &str,
+    limits: TraceLimits,
+) -> Result<TraceParent, TraceParseError> {
+    if value.len() > limits.max_traceparent_len {
+        return Err(TraceParseError::ValueTooLong {
+            field: TRACEPARENT_KEY,
+            actual: value.len(),
+            max: limits.max_traceparent_len,
+        });
+    }
+    parse_traceparent(value)
 }
 
 fn parse_traceparent(value: &str) -> Result<TraceParent, TraceParseError> {
@@ -538,14 +590,47 @@ fn validate_baggage(baggage: Option<&str>, max: usize) -> Result<(), TraceParseE
         if total > max {
             return Err(TraceParseError::TooManyBaggageMembers { actual: total, max });
         }
-        let Some((key, _value)) = member.split_once('=') else {
+        let Some((key, rest)) = member.split_once('=') else {
             return Err(TraceParseError::InvalidBaggageMember);
         };
         if !is_valid_baggage_key(key.trim()) {
             return Err(TraceParseError::InvalidBaggageMember);
         }
+        let mut value_and_props = rest.split(';');
+        let value = value_and_props.next().unwrap_or("").trim();
+        if !is_valid_baggage_value(value) {
+            return Err(TraceParseError::InvalidBaggageMember);
+        }
+        for property in value_and_props {
+            let property = property.trim();
+            if property.is_empty() {
+                return Err(TraceParseError::InvalidBaggageMember);
+            }
+            if let Some((property_key, property_value)) = property.split_once('=') {
+                if !is_valid_baggage_key(property_key.trim())
+                    || !is_valid_baggage_value(property_value.trim())
+                {
+                    return Err(TraceParseError::InvalidBaggageMember);
+                }
+            } else if !is_valid_baggage_key(property) {
+                return Err(TraceParseError::InvalidBaggageMember);
+            }
+        }
     }
     Ok(())
+}
+
+#[cfg(feature = "http")]
+pub(crate) fn validate_tracestate_value(tracestate: Option<&str>) -> Result<(), TraceParseError> {
+    validate_tracestate(tracestate)
+}
+
+#[cfg(feature = "http")]
+pub(crate) fn validate_baggage_value(
+    baggage: Option<&str>,
+    max_members: usize,
+) -> Result<(), TraceParseError> {
+    validate_baggage(baggage, max_members)
 }
 
 fn baggage_keys(baggage: &str) -> impl Iterator<Item = &str> {
@@ -634,6 +719,12 @@ fn is_valid_baggage_key(key: &str) -> bool {
                         | b'~'
                 )
         })
+}
+
+fn is_valid_baggage_value(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| matches!(byte, 0x21 | 0x23..=0x2b | 0x2d..=0x3a | 0x3c..=0x5b | 0x5d..=0x7e))
 }
 
 #[cfg(test)]

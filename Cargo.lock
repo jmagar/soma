@@ -2935,6 +2935,7 @@ dependencies = [
 name = "rmcp-traces"
 version = "0.4.7"
 dependencies = [
+ "http",
  "rmcp",
  "serde_json",
 ]

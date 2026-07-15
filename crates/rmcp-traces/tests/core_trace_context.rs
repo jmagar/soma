@@ -131,6 +131,11 @@ fn summary_rejects_malformed_tracestate_safely() {
         ),
         ("Vendor=value", "tracestate format was invalid"),
         ("vendor", "tracestate format was invalid"),
+        ("vendor=value,,other=two", "tracestate format was invalid"),
+        (
+            "vendor=value,   ,other=two",
+            "tracestate format was invalid",
+        ),
     ] {
         let mut meta = Meta::new();
         meta.set_traceparent(VALID_TRACEPARENT);
@@ -205,6 +210,18 @@ fn absent_or_non_string_trace_metadata_is_fail_soft_for_summaries() {
     let summary = TraceSummary::from_meta(&meta, TraceTrust::Untrusted);
     assert_eq!(summary.invalid_count(), 1);
     assert_eq!(summary.invalid_reasons()[0], "traceparent was not a string");
+}
+
+#[test]
+fn trace_flags_accept_reserved_bits_and_keep_sampled_bit() {
+    let mut meta = Meta::new();
+    meta.set_traceparent("00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-03");
+
+    let summary = TraceSummary::from_meta(&meta, TraceTrust::Untrusted);
+
+    assert_eq!(summary.trace_id_prefix(), Some("0af76519"));
+    assert_eq!(summary.sampled(), Some(true));
+    assert_eq!(summary.invalid_count(), 0);
 }
 
 #[test]
