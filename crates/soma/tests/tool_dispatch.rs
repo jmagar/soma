@@ -210,9 +210,10 @@ async fn test_real_call_tool_path_logs_safe_trace_summary() -> anyhow::Result<()
         .with_writer(buf.writer())
         .with_ansi(false)
         .without_time()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .finish();
-    let guard = tracing::subscriber::set_default(subscriber);
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("tool_dispatch should not install another global subscriber");
 
     let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
     let server_handle = tokio::spawn(async move {
@@ -255,7 +256,6 @@ async fn test_real_call_tool_path_logs_safe_trace_summary() -> anyhow::Result<()
 
     client.cancel().await?;
     server_handle.await??;
-    drop(guard);
 
     let logs = buf.contents();
     assert!(
