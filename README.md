@@ -501,6 +501,9 @@ soma help
 soma providers validate
 soma providers inspect
 soma providers test status
+soma providers list --dir ./examples/providers
+soma providers lint --dir ./examples/providers
+soma providers status --dir ./examples/providers
 soma doctor
 soma setup check
 soma package generate --check
@@ -744,9 +747,14 @@ configuration, and secret-scanning allowlists before publishing.
 ## Troubleshooting
 
 - `soma doctor` checks local configuration, appdata, and connectivity.
-- `soma providers validate` confirms provider manifests and compiled schemas.
+- `soma providers validate` confirms provider manifests and compiled schemas
+  against the *loaded, live* registry.
 - `soma providers inspect` shows provider surfaces, capability posture, and
   generated action inventory.
+- `soma providers list|lint|status` inspect drop-in provider files on disk
+  without loading the registry or executing any handler — safe to run before
+  the runtime touches TS/WASM/MCP/OpenAPI providers. See
+  [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 - Stdio mode keeps logs quiet so JSON-RPC is not corrupted; use HTTP mode or
   file logs when investigating noisy startup failures.
 - If generated docs drift, run `cargo xtask generate-provider-surfaces --write`

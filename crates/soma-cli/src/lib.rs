@@ -14,13 +14,13 @@
 //! ```
 
 use anyhow::{anyhow, Result};
-use serde_json::{json, Value};
+use serde_json::Value;
 use soma_contracts::{
     actions::{ActionSpec, SomaAction},
     config::SomaConfig,
 };
 use soma_service::{
-    dynamic_provider_registry, ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry,
+    dynamic_provider_registry, ProviderAuthMode, ProviderCall, ProviderPrincipal,
     ProviderRequestLimits, ProviderSurface, SomaClient, SomaService,
 };
 use std::io::{BufRead, IsTerminal, Write};
@@ -28,9 +28,13 @@ use std::io::{BufRead, IsTerminal, Write};
 // CUSTOMIZE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
 pub mod doctor;
+mod provider_command;
+mod providers;
 pub mod setup;
 pub mod watch;
 
+pub use provider_command::ProviderCommand;
+use provider_command::{parse_providers_command, run_provider_management_command};
 pub use setup::{apply_plugin_options, run_setup, SetupCommand};
 
 pub const USAGE: &str = "Usage:
@@ -49,6 +53,9 @@ pub const USAGE: &str = "Usage:
   soma providers validate        Validate provider manifests and compiled schemas
   soma providers inspect         Show provider manifests, surfaces, and capability posture
   soma providers test ACTION [--json JSON]  Dispatch one provider action through the registry
+  soma providers list [--dir DIR] [--json]    List drop-in provider files (no execution)
+  soma providers lint [--dir DIR] [--json]    Lint drop-in provider files (no execution)
+  soma providers status [--dir DIR] [--json]  Summarize drop-in provider files (no execution)
   soma package generate [--write|--check]  Refresh generated provider docs, skills, and plugin metadata
 
   soma --help                    Show this help
@@ -104,13 +111,6 @@ pub enum Command {
         write: bool,
     },
     Setup(SetupCommand),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum ProviderCommand {
-    Validate,
-    Inspect,
-    Test { action: String, json: Value },
 }
 
 /// Parse CLI arguments from `std::env::args()`.
@@ -217,6 +217,15 @@ where
 /// - All other commands get only `SomaConfig`; keep it that way.
 /// - Add `--json` support to each new command by forwarding a `json` flag.
 pub async fn run(cmd: Command, cfg: &SomaConfig) -> Result<()> {
+    if let Command::Providers(command) = &cmd {
+        if command.is_non_executing() {
+            let Command::Providers(command) = cmd else {
+                unreachable!()
+            };
+            return providers::run_providers_command(command);
+        }
+    }
+
     if cfg.is_remote_adapter() && run_remote_adapter_command(&cmd, cfg).await? {
         return Ok(());
     }
@@ -411,49 +420,6 @@ fn cli_params(action: &SomaAction) -> serde_json::Value {
     }
 }
 
-async fn run_provider_management_command(
-    command: &ProviderCommand,
-    registry: &ProviderRegistry,
-    destructive_confirmed: bool,
-) -> Result<Value> {
-    match command {
-        ProviderCommand::Validate => Ok(registry.snapshot().validation_summary()),
-        ProviderCommand::Inspect => Ok(registry.snapshot().inspection_report()),
-        ProviderCommand::Test { action, json } => {
-            let provider = registry
-                .snapshot()
-                .provider_for_action(action)
-                .map(str::to_owned);
-            match registry
-                .dispatch(ProviderCall {
-                    provider: String::new(),
-                    action: action.clone(),
-                    params: json.clone(),
-                    principal: ProviderPrincipal::loopback_dev(),
-                    auth_mode: ProviderAuthMode::LoopbackDev,
-                    surface: ProviderSurface::Cli,
-                    destructive_confirmed,
-                    limits: ProviderRequestLimits::default(),
-                    snapshot_id: String::new(),
-                })
-                .await
-            {
-                Ok(output) => Ok(json!({
-                    "schema_version": 1,
-                    "ok": true,
-                    "action": action,
-                    "provider": provider,
-                    "result": output.value
-                })),
-                Err(error) => {
-                    eprintln!("{}", serde_json::to_string_pretty(&error)?);
-                    Err(anyhow!(error.message))
-                }
-            }
-        }
-    }
-}
-
 fn parse_provider_command(command: &str, args: &[String]) -> Result<Command> {
     if reserved_cli_command(command) {
         return Err(anyhow!("`{command}` is a reserved infrastructure command"));
@@ -472,31 +438,6 @@ fn parse_provider_command(command: &str, args: &[String]) -> Result<Command> {
             command: command.to_owned(),
             json: parse_provider_flags(command, args)?,
         }),
-    }
-}
-
-fn parse_providers_command(args: &[String]) -> Result<Command> {
-    match args {
-        [action] if action == "validate" => Ok(Command::Providers(ProviderCommand::Validate)),
-        [action] if action == "inspect" => Ok(Command::Providers(ProviderCommand::Inspect)),
-        [action, provider_action] if action == "test" => {
-            Ok(Command::Providers(ProviderCommand::Test {
-                action: provider_action.clone(),
-                json: json!({}),
-            }))
-        }
-        [action, provider_action, flag, payload] if action == "test" && flag == "--json" => {
-            Ok(Command::Providers(ProviderCommand::Test {
-                action: provider_action.clone(),
-                json: serde_json::from_str(payload).map_err(|error| {
-                    anyhow!("providers test {provider_action} --json must be valid JSON: {error}")
-                })?,
-            }))
-        }
-        [] => Err(anyhow!(
-            "providers requires validate, inspect, or test ACTION"
-        )),
-        [unexpected, ..] => Err(anyhow!("providers does not accept argument `{unexpected}`")),
     }
 }
 
@@ -548,6 +489,10 @@ fn scalar_json(value: &str) -> serde_json::Value {
     }
 }
 
+// Must match soma_contracts::provider_validation's RESERVED_CLI_COMMANDS
+// exactly — that list is what soma providers validate/lint checks against,
+// so a name reserved only here passes manifest validation but is
+// unreachable once it hits this parser.
 fn reserved_cli_command(command: &str) -> bool {
     matches!(
         command,
