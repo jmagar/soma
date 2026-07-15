@@ -699,6 +699,9 @@ jobs:
         with:
           fetch-depth: 0  # full history needed for gitleaks
 
+      - name: Remove stale gitleaks installer temp file
+        run: rm -f /tmp/gitleaks.tmp
+
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
