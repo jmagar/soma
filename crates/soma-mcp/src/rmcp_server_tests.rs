@@ -1,4 +1,5 @@
 use rmcp::model::{ErrorCode, Meta, ResourceContents};
+use rmcp_traces::TraceTrust;
 use serde_json::json;
 
 use soma_contracts::{
@@ -12,6 +13,8 @@ use super::{
     resource_contents_from_output, resource_read_error, rmcp_resource_from_catalog_resource,
     rmcp_tool_from_json, tool_error_result, trace_summary_from_meta, unknown_tool_error,
 };
+
+const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
 
 #[test]
 fn validation_errors_become_structured_tool_errors() {
@@ -122,33 +125,10 @@ fn execution_errors_do_not_expose_raw_error_text() {
 }
 
 #[test]
-fn trace_summary_for_logs_exposes_only_safe_fields() {
+fn trace_summary_for_logs_uses_untrusted_fail_soft_policy() {
     let mut meta = Meta::new();
-    meta.set_traceparent("00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01");
+    meta.set_traceparent(VALID_TRACEPARENT);
     meta.set_tracestate("vendor=value");
-    meta.set_baggage(
-        "email=alice@example.com,accessToken=super-secret-token,x-api-key=abc123,sessionId=s123",
-    );
-
-    let summary = trace_summary_from_meta(&meta);
-    let debug = format!("{summary:?}");
-
-    assert_eq!(summary.trace_id.as_deref(), Some("0af76519"));
-    assert_eq!(summary.span_id.as_deref(), Some("00f067aa"));
-    assert_eq!(summary.sampled, Some(true));
-    assert!(summary.has_tracestate);
-    assert_eq!(summary.baggage_member_count, 4);
-    assert_eq!(summary.sensitive_baggage_member_count, 3);
-    assert!(!debug.contains("alice@example.com"));
-    assert!(!debug.contains("super-secret-token"));
-    assert!(!debug.contains("abc123"));
-    assert!(!debug.contains("s123"));
-}
-
-#[test]
-fn trace_summary_for_logs_preserves_trace_id_when_optional_metadata_is_invalid() {
-    let mut meta = Meta::new();
-    meta.set_traceparent("00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01");
     meta.set_baggage(&"a".repeat(9 * 1024));
 
     let summary = trace_summary_from_meta(&meta);
@@ -156,6 +136,8 @@ fn trace_summary_for_logs_preserves_trace_id_when_optional_metadata_is_invalid()
     assert_eq!(summary.trace_id.as_deref(), Some("0af76519"));
     assert_eq!(summary.span_id.as_deref(), Some("00f067aa"));
     assert_eq!(summary.sampled, Some(true));
+    assert_eq!(summary.trust, TraceTrust::Untrusted);
+    assert!(summary.has_tracestate);
     assert_eq!(
         summary.invalid.as_deref(),
         Some("baggage exceeded 8192 bytes (actual 9216)")

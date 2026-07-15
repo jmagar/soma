@@ -7,6 +7,16 @@ pub const TRACEPARENT_KEY: &str = "traceparent";
 pub const TRACESTATE_KEY: &str = "tracestate";
 pub const BAGGAGE_KEY: &str = "baggage";
 
+const TRACEPARENT_V00_LEN: usize = 55;
+const TRACEPARENT_VERSION_END: usize = 2;
+const TRACEPARENT_TRACE_ID_START: usize = 3;
+const TRACEPARENT_TRACE_ID_END: usize = 35;
+const TRACEPARENT_SPAN_ID_START: usize = 36;
+const TRACEPARENT_SPAN_ID_END: usize = 52;
+const TRACEPARENT_FLAGS_START: usize = 53;
+const TRACEPARENT_FLAGS_END: usize = 55;
+const TRACEPARENT_NEXT_SEPARATOR: usize = 55;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TraceTrust {
     Untrusted,
@@ -106,17 +116,9 @@ impl TraceContext {
         trust: TraceTrust,
         limits: TraceLimits,
     ) -> Result<Option<Self>, TraceParseError> {
-        let Some(traceparent) = optional_meta_str(meta, TRACEPARENT_KEY)? else {
+        let Some(traceparent) = parse_meta_traceparent(meta, limits)? else {
             return Ok(None);
         };
-        if traceparent.len() > limits.max_traceparent_len {
-            return Err(TraceParseError::ValueTooLong {
-                field: TRACEPARENT_KEY,
-                actual: traceparent.len(),
-                max: limits.max_traceparent_len,
-            });
-        }
-        let traceparent = parse_traceparent(traceparent)?;
         let tracestate =
             bounded_optional_meta_string(meta, TRACESTATE_KEY, limits.max_tracestate_len)?;
         let baggage = bounded_optional_meta_string(meta, BAGGAGE_KEY, limits.max_baggage_len)?;
@@ -182,29 +184,16 @@ impl TraceSummary {
     }
 
     pub fn from_meta_with_limits(meta: &Meta, trust: TraceTrust, limits: TraceLimits) -> Self {
-        let traceparent = match optional_meta_str(meta, TRACEPARENT_KEY) {
-            Ok(Some(value)) => value,
+        let traceparent = match parse_meta_traceparent(meta, limits) {
+            Ok(Some(traceparent)) => traceparent,
             Ok(None) => return Self::absent(),
-            Err(error) => return Self::invalid(&error),
-        };
-        if traceparent.len() > limits.max_traceparent_len {
-            return Self::invalid(&TraceParseError::ValueTooLong {
-                field: TRACEPARENT_KEY,
-                actual: traceparent.len(),
-                max: limits.max_traceparent_len,
-            });
-        }
-        let traceparent = match parse_traceparent(traceparent) {
-            Ok(traceparent) => traceparent,
             Err(error) => return Self::invalid(&error),
         };
 
         let mut summary = Self::from_traceparent(&traceparent, trust);
         match bounded_optional_meta_string(meta, TRACESTATE_KEY, limits.max_tracestate_len) {
             Ok(tracestate) => summary.has_tracestate = tracestate.is_some(),
-            Err(error) => {
-                summary.invalid.get_or_insert_with(|| error.safe_reason());
-            }
+            Err(error) => summary.record_invalid(&error),
         };
         match bounded_optional_meta_string(meta, BAGGAGE_KEY, limits.max_baggage_len) {
             Ok(baggage) => {
@@ -217,12 +206,12 @@ impl TraceSummary {
                         summary.sensitive_baggage_member_count = sensitive_baggage_member_count;
                     }
                     Err(error) => {
-                        summary.invalid.get_or_insert_with(|| error.safe_reason());
+                        summary.record_invalid(&error);
                     }
                 }
             }
             Err(error) => {
-                summary.invalid.get_or_insert_with(|| error.safe_reason());
+                summary.record_invalid(&error);
             }
         };
         summary
@@ -249,6 +238,10 @@ impl TraceSummary {
             sensitive_baggage_member_count: 0,
             invalid: None,
         }
+    }
+
+    fn record_invalid(&mut self, error: &TraceParseError) {
+        self.invalid.get_or_insert_with(|| error.safe_reason());
     }
 }
 
@@ -335,20 +328,40 @@ fn bounded_optional_meta_string(
     Ok(Some(value.to_owned()))
 }
 
+fn parse_meta_traceparent(
+    meta: &Meta,
+    limits: TraceLimits,
+) -> Result<Option<TraceParent>, TraceParseError> {
+    let Some(traceparent) = optional_meta_str(meta, TRACEPARENT_KEY)? else {
+        return Ok(None);
+    };
+    if traceparent.len() > limits.max_traceparent_len {
+        return Err(TraceParseError::ValueTooLong {
+            field: TRACEPARENT_KEY,
+            actual: traceparent.len(),
+            max: limits.max_traceparent_len,
+        });
+    }
+    parse_traceparent(traceparent).map(Some)
+}
+
 fn parse_traceparent(value: &str) -> Result<TraceParent, TraceParseError> {
-    if value.len() < 55 {
+    if value.len() < TRACEPARENT_V00_LEN {
         return Err(TraceParseError::InvalidTraceParentLength {
             actual: value.len(),
         });
     }
     let bytes = value.as_bytes();
-    if bytes[2] != b'-' || bytes[35] != b'-' || bytes[52] != b'-' {
+    if bytes[TRACEPARENT_VERSION_END] != b'-'
+        || bytes[TRACEPARENT_TRACE_ID_END] != b'-'
+        || bytes[TRACEPARENT_SPAN_ID_END] != b'-'
+    {
         return Err(TraceParseError::InvalidTraceParentFormat);
     }
-    let version = &value[0..2];
-    let trace_id = &value[3..35];
-    let span_id = &value[36..52];
-    let flags = &value[53..55];
+    let version = &value[..TRACEPARENT_VERSION_END];
+    let trace_id = &value[TRACEPARENT_TRACE_ID_START..TRACEPARENT_TRACE_ID_END];
+    let span_id = &value[TRACEPARENT_SPAN_ID_START..TRACEPARENT_SPAN_ID_END];
+    let flags = &value[TRACEPARENT_FLAGS_START..TRACEPARENT_FLAGS_END];
     if !is_lower_hex(version)
         || !is_lower_hex(trace_id)
         || !is_lower_hex(span_id)
@@ -359,12 +372,15 @@ fn parse_traceparent(value: &str) -> Result<TraceParent, TraceParseError> {
     if version == "ff" {
         return Err(TraceParseError::UnsupportedVersion);
     }
-    if version == "00" && value.len() != 55 {
+    if version == "00" && value.len() != TRACEPARENT_V00_LEN {
         return Err(TraceParseError::InvalidTraceParentLength {
             actual: value.len(),
         });
     }
-    if version != "00" && value.len() > 55 && bytes[55] != b'-' {
+    if version != "00"
+        && value.len() > TRACEPARENT_V00_LEN
+        && bytes[TRACEPARENT_NEXT_SEPARATOR] != b'-'
+    {
         return Err(TraceParseError::InvalidTraceParentFormat);
     }
     if trace_id.bytes().all(|b| b == b'0') {

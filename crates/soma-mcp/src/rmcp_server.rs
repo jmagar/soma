@@ -98,7 +98,6 @@ impl ServerHandler for SomaRmcpServer {
 
         let response_page = response_page_request(request.arguments.as_ref())?;
         let auth = require_auth_context(&self.state, &context)?;
-        let trace_summary = trace_summary_from_context(&context);
         if self.state.config.conformance_fixtures {
             if let Some(result) = conformance::call_tool(&tool_name) {
                 return Ok(result);
@@ -132,6 +131,7 @@ impl ServerHandler for SomaRmcpServer {
         let auth_mode = provider_auth_mode(&self.state.auth_policy);
 
         let started = Instant::now();
+        let trace_summary = trace_summary_from_context(&context);
         tracing::info!(
             tool = %tool_name,
             action = %action,
