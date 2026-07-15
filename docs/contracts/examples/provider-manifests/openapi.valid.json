@@ -34,7 +34,10 @@
         "enabled": true,
         "method": "POST",
         "path": "/v1/weather/current",
-        "tags": ["weather"]
+        "tags": ["weather"],
+        "path_params": {},
+        "query_params": {},
+        "request_body_schema": { "type": "object" }
       },
       "cli": {
         "enabled": true,

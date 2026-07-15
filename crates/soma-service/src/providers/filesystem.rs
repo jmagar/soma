@@ -5,9 +5,12 @@ use std::{
 };
 
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use soma_contracts::providers::{ProviderCatalog, ProviderKind};
+use soma_contracts::{
+    provider_validation::{validate_manifest_schema, validate_provider_manifest},
+    providers::{ProviderCatalog, ProviderKind},
+};
 
 use crate::{
     provider_errors::ProviderError,
@@ -21,9 +24,44 @@ use crate::{
     },
 };
 
+#[path = "filesystem_uniqueness.rs"]
+mod filesystem_uniqueness;
+
 #[derive(Debug, Clone)]
 pub struct FileProviderSource {
     root: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderDirectoryInspection {
+    pub root: PathBuf,
+    pub exists: bool,
+    pub files: Vec<ProviderFileInspection>,
+    pub providers_loaded: usize,
+    pub providers_disabled: usize,
+    pub providers_invalid: usize,
+    pub providers_skipped: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderFileInspection {
+    pub path: PathBuf,
+    pub file_name: String,
+    pub status: ProviderFileInspectionStatus,
+    pub provider_id: Option<String>,
+    pub provider_kind: Option<String>,
+    pub actions: Vec<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderFileInspectionStatus {
+    Loaded,
+    Disabled,
+    Invalid,
+    /// File extension requires executing code to introspect (currently just
+    /// `.py`) — non-executing inspection deliberately does not load it.
+    Skipped,
 }
 
 impl FileProviderSource {
@@ -33,6 +71,155 @@ impl FileProviderSource {
 
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Non-executing inspection of the provider directory: parses manifests
+    /// (JSON/TS/WASM sidecar/Python) but never runs handler code, calls MCP,
+    /// or fetches OpenAPI — safe to run before the runtime loads providers.
+    pub fn inspect(&self) -> Result<ProviderDirectoryInspection, FileProviderLoadError> {
+        if !self.root.exists() {
+            return Ok(ProviderDirectoryInspection {
+                root: self.root.clone(),
+                exists: false,
+                files: Vec::new(),
+                providers_loaded: 0,
+                providers_disabled: 0,
+                providers_invalid: 0,
+                providers_skipped: 0,
+            });
+        }
+
+        let mut files = Vec::new();
+        // Parallel to `files`, index-aligned: the parsed catalog for any file
+        // that is (so far) `Loaded`, used by the directory-wide uniqueness
+        // pass below. `Disabled` catalogs are intentionally excluded here —
+        // `load()` never registers disabled providers either, so they can't
+        // collide with anything at runtime.
+        let mut loaded_catalogs: Vec<Option<ProviderCatalog>> = Vec::new();
+
+        for path in self.provider_paths()? {
+            let file_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("<unknown>")
+                .to_owned();
+
+            // Python catalogs are extracted by importing (and thus executing) the
+            // module in a sidecar process — there is no metadata-only path. Never
+            // run that from a non-executing inspection; report it as skipped
+            // instead of silently exec'ing arbitrary import-time code.
+            if is_python_provider_source(&path) {
+                files.push(ProviderFileInspection {
+                    path,
+                    file_name,
+                    status: ProviderFileInspectionStatus::Skipped,
+                    provider_id: None,
+                    provider_kind: Some(ProviderKind::Python.as_str().to_owned()),
+                    actions: Vec::new(),
+                    error: Some(
+                        "Python providers can only be introspected by executing the module; \
+                         non-executing inspection does not run them. Use `soma providers \
+                         validate` or `soma providers inspect` to check this file."
+                            .to_owned(),
+                    ),
+                });
+                loaded_catalogs.push(None);
+                continue;
+            }
+
+            match load_catalog(&path) {
+                Ok(catalog) => {
+                    let semantic_check = load_catalog_value(&path)
+                        .map_err(|error| error.to_string())
+                        .and_then(|value| {
+                            validate_manifest_schema(&value).map_err(|error| error.to_string())
+                        })
+                        .and_then(|()| {
+                            validate_provider_manifest(&catalog).map_err(|error| error.to_string())
+                        })
+                        .and_then(|()| compile_tool_schemas(&catalog));
+                    match semantic_check {
+                        Ok(()) => {
+                            let status = if catalog.provider.enabled == Some(false) {
+                                ProviderFileInspectionStatus::Disabled
+                            } else {
+                                ProviderFileInspectionStatus::Loaded
+                            };
+                            let actions = catalog
+                                .tools
+                                .iter()
+                                .map(|tool| tool.name.clone())
+                                .collect::<Vec<_>>();
+                            files.push(ProviderFileInspection {
+                                path,
+                                file_name,
+                                status,
+                                provider_id: Some(catalog.provider.name.clone()),
+                                provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
+                                actions,
+                                error: None,
+                            });
+                            loaded_catalogs.push(
+                                (status == ProviderFileInspectionStatus::Loaded).then_some(catalog),
+                            );
+                        }
+                        Err(message) => {
+                            files.push(ProviderFileInspection {
+                                path,
+                                file_name,
+                                status: ProviderFileInspectionStatus::Invalid,
+                                provider_id: Some(catalog.provider.name),
+                                provider_kind: Some(catalog.provider.kind.as_str().to_owned()),
+                                actions: Vec::new(),
+                                error: Some(message),
+                            });
+                            loaded_catalogs.push(None);
+                        }
+                    }
+                }
+                Err(error) => {
+                    files.push(ProviderFileInspection {
+                        path,
+                        file_name,
+                        status: ProviderFileInspectionStatus::Invalid,
+                        provider_id: None,
+                        provider_kind: None,
+                        actions: Vec::new(),
+                        error: Some(error.to_string()),
+                    });
+                    loaded_catalogs.push(None);
+                }
+            }
+        }
+
+        filesystem_uniqueness::apply_directory_wide_checks(&mut files, &loaded_catalogs);
+        files.sort_by(|left, right| left.file_name.cmp(&right.file_name));
+        let providers_loaded = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Loaded)
+            .count();
+        let providers_disabled = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Disabled)
+            .count();
+        let providers_invalid = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Invalid)
+            .count();
+        let providers_skipped = files
+            .iter()
+            .filter(|file| file.status == ProviderFileInspectionStatus::Skipped)
+            .count();
+
+        Ok(ProviderDirectoryInspection {
+            root: self.root.clone(),
+            exists: true,
+            files,
+            providers_loaded,
+            providers_disabled,
+            providers_invalid,
+            providers_skipped,
+        })
     }
 
     pub fn load(&self) -> Result<Vec<std::sync::Arc<dyn Provider>>, FileProviderLoadError> {
@@ -265,6 +452,29 @@ fn is_wasm_sidecar_manifest(path: &Path) -> bool {
         .is_some_and(|name| name.ends_with(".wasm.json"))
 }
 
+fn is_python_provider_source(path: &Path) -> bool {
+    path.extension().and_then(|extension| extension.to_str()) == Some("py")
+}
+
+/// Mirrors the schema-compilation pass `provider_registry::build_snapshot()`
+/// runs for every tool — a manifest can deserialize and pass
+/// `validate_provider_manifest()` while still carrying an `input_schema` or
+/// `output_schema` that fails to compile as JSON Schema (e.g. `properties`
+/// given as an array instead of an object). Non-executing inspection must
+/// catch that too, or `lint` can bless a provider the live registry rejects.
+fn compile_tool_schemas(catalog: &ProviderCatalog) -> Result<(), String> {
+    for tool in &catalog.tools {
+        jsonschema::validator_for(&tool.input_schema)
+            .map_err(|error| format!("tool `{}` has invalid input_schema: {error}", tool.name))?;
+        if let Some(output_schema) = &tool.output_schema {
+            jsonschema::validator_for(output_schema).map_err(|error| {
+                format!("tool `{}` has invalid output_schema: {error}", tool.name)
+            })?;
+        }
+    }
+    Ok(())
+}
+
 fn fingerprint_file(
     hasher: &mut Sha256,
     root: &Path,
@@ -291,18 +501,13 @@ fn fingerprint_file(
 fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
     let extension = path.extension().and_then(|extension| extension.to_str());
     let catalog = match extension {
-        Some("json") => {
-            serde_json::from_slice(&fs::read(path).map_err(|source| FileProviderLoadError {
-                path: path.to_path_buf(),
-                message: format!("failed to read provider manifest: {source}"),
-            })?)
-            .map_err(|source| FileProviderLoadError {
+        Some("json") | Some("ts") | Some("wasm") => {
+            let value = load_catalog_value(path)?;
+            serde_json::from_value(value).map_err(|source| FileProviderLoadError {
                 path: path.to_path_buf(),
                 message: format!("invalid provider manifest JSON: {source}"),
             })?
         }
-        Some("ts") => load_ts_catalog(path)?,
-        Some("wasm") => load_wasm_catalog(path)?,
         Some("py") => load_python_catalog(path).map_err(|source| FileProviderLoadError {
             path: path.to_path_buf(),
             message: format!("invalid Python provider: {source}"),
@@ -318,7 +523,36 @@ fn load_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
     Ok(catalog)
 }
 
-fn load_ts_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
+/// Parses a JSON/TS/WASM-sidecar provider file to a raw `Value`, one step
+/// short of `load_catalog`'s typed `ProviderCatalog`. Used by non-executing
+/// inspection to validate against `provider-manifest.schema.json` (schema-only
+/// constraints like `rest.path`'s pattern) before that information is lost to
+/// `#[serde(default)]` fields round-tripping through `Option::None` as JSON
+/// `null`, which the schema — correctly — does not accept in place of an
+/// absent key.
+fn load_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
+    let extension = path.extension().and_then(|extension| extension.to_str());
+    match extension {
+        Some("json") => {
+            serde_json::from_slice(&fs::read(path).map_err(|source| FileProviderLoadError {
+                path: path.to_path_buf(),
+                message: format!("failed to read provider manifest: {source}"),
+            })?)
+            .map_err(|source| FileProviderLoadError {
+                path: path.to_path_buf(),
+                message: format!("invalid provider manifest JSON: {source}"),
+            })
+        }
+        Some("ts") => load_ts_catalog_value(path),
+        Some("wasm") => load_wasm_catalog_value(path),
+        _ => Err(FileProviderLoadError {
+            path: path.to_path_buf(),
+            message: "unsupported provider file extension".to_owned(),
+        }),
+    }
+}
+
+fn load_ts_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
     let text = fs::read_to_string(path).map_err(|source| FileProviderLoadError {
         path: path.to_path_buf(),
         message: format!("failed to read TypeScript provider: {source}"),
@@ -369,7 +603,7 @@ fn extract_ts_manifest(text: &str) -> Option<&str> {
     None
 }
 
-fn load_wasm_catalog(path: &Path) -> Result<ProviderCatalog, FileProviderLoadError> {
+fn load_wasm_catalog_value(path: &Path) -> Result<Value, FileProviderLoadError> {
     let sidecar_path = wasm_sidecar_manifest_path(path);
     if sidecar_path.is_file() {
         return serde_json::from_slice(&fs::read(&sidecar_path).map_err(|source| {

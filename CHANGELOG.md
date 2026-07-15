@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added non-executing drop-in provider inspection: `soma providers list|lint|status
+  [--dir DIR] [--json]`. Unlike `soma providers validate|inspect|test`, these never
+  build or dispatch through the live `ProviderRegistry` — they only parse manifests
+  on disk via `FileProviderSource::inspect()`, so they're safe to run before the
+  runtime touches TS/WASM/MCP/OpenAPI handlers. See `docs/PROVIDERS.md`.
+
 ### Fixed
 
 - Restored clean-build compatibility with the dependency versions already
