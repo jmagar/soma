@@ -494,7 +494,7 @@ fn normalize(vars: impl IntoIterator<Item = (String, String)>) -> HashMap<String
 }
 
 fn default_auth_dir() -> PathBuf {
-    home_dir().map_or_else(|| PathBuf::from(".lab"), |home| home.join(".lab"))
+    home_dir().map_or_else(|| PathBuf::from(".soma"), |home| home.join(".soma"))
 }
 
 fn home_dir() -> Option<PathBuf> {

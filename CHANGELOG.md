@@ -13,6 +13,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `soma-auth` gained an `upstream/` module (behind the new `upstream-oauth-rmcp`
+  feature) implementing the outbound `authorization_code` + PKCE flow for
+  connecting to OAuth-protected upstream MCP servers: per-`(upstream, subject)`
+  token storage, single-flight refresh, AEAD encryption-at-rest, and a cached
+  `AuthClient` pool. It is fully self-contained — no dependency on any
+  gateway/runtime crate — via a minimal local `UpstreamConfig` shape scoped to
+  just the fields the OAuth runtime reads.
+- `soma-auth` gained an RFC 8252 §7.1-style native-app OAuth flow (behind the
+  existing `http-axum` feature): `/native/callback` and `/native/poll` routes
+  let desktop/mobile clients with no loopback listener or custom URI scheme
+  complete sign-in via a server-hosted callback and poll for the resulting
+  code.
+- `soma-auth`'s Cargo features are now split: `http-axum` gates the
+  axum/tower-based HTTP middleware and OAuth route handlers, and
+  `upstream-oauth-rmcp` gates the new outbound OAuth runtime. Both default off.
+- `soma-auth` now accepts OAuth Client ID Metadata Documents (CIMD) at
+  `/authorize` as an alternative to Dynamic Client Registration, per the MCP
+  draft authorization spec. An `https://`-shaped `client_id` is fetched
+  (SSRF-guarded: static URL/query/fragment validation, DNS resolution
+  rejecting the whole result set if any resolved address is private,
+  address-pinned no-proxy no-redirect HTTP client, post-connect peer
+  re-validation against the pin, a streaming 64 KiB response cap, and
+  single-flight-locked positive/negative-result caching) and its
+  `redirect_uris` are filtered through the same allowlist DCR-registered
+  clients are held to before being trusted — CIMD does not bypass the
+  redirect-URI trust boundary DCR enforces. Advertised via
+  `client_id_metadata_document_supported: true` in AS metadata. DCR is
+  unchanged and remains fully supported.
 - Added non-executing drop-in provider inspection: `soma providers list|lint|status
   [--dir DIR] [--json]`. Unlike `soma providers validate|inspect|test`, these never
   build or dispatch through the live `ProviderRegistry` — they only parse manifests
@@ -35,7 +63,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without its full (potentially sensitive) payload. See
   `crates/codex-app-server-client/README.md`.
 
+### Changed
+
+- `soma-auth` no longer forces a Google re-consent screen on every dynamic
+  client registration attempt — `force_consent` is now only set the first
+  time a gateway has never issued a refresh token, avoiding a slow
+  interactive round trip that could time out impatient MCP clients on retry.
+- `soma-auth`'s default auth-database directory is now `~/.soma` instead of
+  the inherited `~/.lab`.
+
 ### Fixed
+
+- `soma-auth` module size: `authorize.rs` (869 effective lines) and
+  `upstream/manager.rs` (1080 effective lines) exceeded the repo's
+  `xtask patterns` file-size hard limit (700). Split DCR client
+  registration and redirect_uri resolution out of `authorize.rs` into new
+  `registration.rs` and `redirect_uri.rs` modules, and split
+  `AuthClient`/OAuth-client-config construction out of
+  `upstream/manager.rs` into a new `upstream/manager/client.rs` child
+  module (a second `impl` block for the same type, not a new
+  abstraction). No behavior change; `authorize.rs` is now 539 effective
+  lines and `upstream/manager.rs` is 664.
+
+- `soma-auth` CIMD (Client ID Metadata Document) hardening found by
+  independent multi-agent code review: `DocumentCache`'s per-URL
+  single-flight lock map (`build_locks`) is now bounded and swept of idle
+  locks, closing an unauthenticated memory-exhaustion vector on
+  `/authorize`; cached fetch failures now preserve their original
+  `CimdError` variant instead of being downgraded to a generic
+  `cimd_fetch_failed`, so security-relevant `kind()` classification (e.g.
+  `ssrf_blocked`) survives cache hits; the document cache's own capacity
+  cap is now actually enforced under sustained fresh-entry load instead of
+  only pruning already-expired entries; the post-connect peer
+  re-validation now fails closed (rejects the fetch) rather than silently
+  skipping verification when the underlying HTTP client can't report a
+  peer address; and the SSRF IP denylist now also blocks IPv4 Class E
+  (`240.0.0.0/4`) and IPv6 multicast (`ff00::/8`), matching what it already
+  claimed to block.
+
+- `soma-auth` error/log messages that referenced token TTL environment
+  variables no longer hardcode the `LAB_` prefix; they now interpolate the
+  configured `env_prefix` so the message matches the variable an operator
+  actually needs to set.
 
 - Restored clean-build compatibility with the dependency versions already
   pinned in `Cargo.lock`: ported schema validation to the jsonschema 0.47
