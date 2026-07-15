@@ -126,11 +126,17 @@ fn flatten_base_plus_oneof_bails_on_a_branch_with_no_properties() {
 }
 
 #[test]
-fn build_combined_v2_wins_collisions_but_keeps_masters_position() {
+fn build_combined_v2_wins_collisions_and_keeps_master_only_keys() {
     // "RequestId" is on EXPECTED_DIVERGENT_COLLISIONS, so the two bundles are
     // allowed to disagree on its content here without check_collision_compatibility
     // rejecting the merge (see the dedicated bail/allow tests below for that
     // check's own behavior).
+    //
+    // Deliberately does not assert on `defs.keys()`' iteration order: without
+    // the (removed - see xtask/Cargo.toml) `preserve_order` feature,
+    // `serde_json::Map` is a `BTreeMap` and always iterates sorted regardless
+    // of insertion sequence, so no order guarantee is meaningful to test here
+    // - only which keys are present and which value won each collision.
     let master = json!({
         "definitions": {
             "A": {"marker": "master"},
@@ -146,12 +152,12 @@ fn build_combined_v2_wins_collisions_but_keeps_masters_position() {
     });
     let combined = build_combined(&master, &v2).unwrap();
     let defs = combined["definitions"].as_object().unwrap();
-    let keys: Vec<&str> = defs.keys().map(String::as_str).collect();
-    // A, RequestId stay at master's position; C is a genuinely new key, appended.
-    assert_eq!(keys, vec!["A", "RequestId", "C"]);
+    let mut keys: Vec<&str> = defs.keys().map(String::as_str).collect();
+    keys.sort_unstable();
+    assert_eq!(keys, vec!["A", "C", "RequestId"]);
     assert_eq!(defs["A"]["marker"], "master");
     assert_eq!(defs["RequestId"]["marker"], "v2"); // v2 wins the value
-    assert_eq!(defs["C"]["marker"], "v2");
+    assert_eq!(defs["C"]["marker"], "v2"); // genuinely new key from v2, included
 }
 
 #[test]
@@ -325,19 +331,24 @@ fn notification_entries_serialize_without_a_response_type_field() {
         params_type: None,
         params_optional: false,
     };
-    let value = serde_json::to_value(&entry).unwrap();
-    let obj = value.as_object().unwrap();
-    assert!(!obj.contains_key("response_type"));
-    assert_eq!(
-        obj.keys().collect::<Vec<_>>(),
-        vec![
-            "method",
-            "variant_name",
-            "fn_name",
-            "params_type",
-            "params_optional"
-        ]
-    );
+    // Serialized directly to a string (as `regen.rs` does - see its comment
+    // on avoiding a `serde_json::Value` intermediate), not via
+    // `serde_json::to_value(&entry).as_object().keys()`: a struct's field
+    // order is only guaranteed through the direct string path. Routing
+    // through `Value` first loses it, since `Value::Object`'s `Map`
+    // re-sorts keys without the (deliberately not enabled - see
+    // xtask/Cargo.toml) `preserve_order` feature.
+    let text = serde_json::to_string(&entry).unwrap();
+    assert!(!text.contains("response_type"));
+    let method_pos = text.find("\"method\"").unwrap();
+    let variant_pos = text.find("\"variant_name\"").unwrap();
+    let fn_pos = text.find("\"fn_name\"").unwrap();
+    let params_type_pos = text.find("\"params_type\"").unwrap();
+    let params_optional_pos = text.find("\"params_optional\"").unwrap();
+    assert!(method_pos < variant_pos);
+    assert!(variant_pos < fn_pos);
+    assert!(fn_pos < params_type_pos);
+    assert!(params_type_pos < params_optional_pos);
 }
 
 #[test]
@@ -350,17 +361,16 @@ fn request_entries_serialize_with_response_type_last() {
         params_optional: false,
         response_type: Some("ThreadStartResponse".to_string()),
     };
-    let value = serde_json::to_value(&entry).unwrap();
-    let obj = value.as_object().unwrap();
-    assert_eq!(
-        obj.keys().collect::<Vec<_>>(),
-        vec![
-            "method",
-            "variant_name",
-            "fn_name",
-            "params_type",
-            "params_optional",
-            "response_type"
-        ]
-    );
+    let text = serde_json::to_string(&entry).unwrap();
+    let method_pos = text.find("\"method\"").unwrap();
+    let variant_pos = text.find("\"variant_name\"").unwrap();
+    let fn_pos = text.find("\"fn_name\"").unwrap();
+    let params_type_pos = text.find("\"params_type\"").unwrap();
+    let params_optional_pos = text.find("\"params_optional\"").unwrap();
+    let response_type_pos = text.find("\"response_type\"").unwrap();
+    assert!(method_pos < variant_pos);
+    assert!(variant_pos < fn_pos);
+    assert!(fn_pos < params_type_pos);
+    assert!(params_type_pos < params_optional_pos);
+    assert!(params_optional_pos < response_type_pos);
 }

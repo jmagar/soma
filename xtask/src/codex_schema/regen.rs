@@ -45,9 +45,15 @@ pub fn regen(gen_dir: &Path) -> Result<()> {
     assert_no_v2_refs(&protocol_text)?;
 
     let manifest = merge::build_methods_manifest(&combined_defs)?;
-    let methods_value = serde_json::to_value(&manifest).context("serialize methods manifest")?;
+    // Serializes the struct directly to a string rather than going through an
+    // intermediate `serde_json::Value` first: `RequestEntry`/`NotificationEntry`
+    // derive `Serialize`, so a struct's field order is always its declaration
+    // order regardless of `serde_json::Map`'s own key-ordering behavior - but
+    // routing through `to_value()` first would lose that guarantee, since the
+    // resulting `Value::Object`'s `Map` re-sorts keys unless the crate-wide
+    // (and workspace-unifying) `preserve_order` feature is enabled.
     let methods_text =
-        serde_json::to_string_pretty(&methods_value).context("serialize methods manifest")?;
+        serde_json::to_string_pretty(&manifest).context("serialize methods manifest")?;
 
     fs::write(PROTOCOL_SCHEMA_PATH, &protocol_text)
         .with_context(|| format!("write {PROTOCOL_SCHEMA_PATH}"))?;

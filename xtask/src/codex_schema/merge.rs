@@ -205,10 +205,11 @@ pub fn build_combined(master: &Value, v2: &Value) -> Result<Value> {
     let mut combined_defs = master_flat_rewritten;
     for (k, v) in v2_defs {
         // v2 wins name collisions - `Map::insert` on an existing key updates
-        // its value in place without moving its position, matching Python's
-        // `{**master_flat_rewritten, **v2["definitions"]}` merge semantics
-        // (verified: `{**{"a":1,"b":2}, **{"b":3,"c":4}}` == `{"a":1,"b":3,"c":4}`
-        // with key order `[a, b, c]`).
+        // its value, matching Python's `{**master_flat_rewritten,
+        // **v2["definitions"]}` merge semantics. Iteration order of the
+        // result is NOT meaningful (see xtask/Cargo.toml's serde_json entry -
+        // `preserve_order` was removed after it leaked into unrelated
+        // generated docs), only which value wins per key.
         combined_defs.insert(k.clone(), v.clone());
     }
 
