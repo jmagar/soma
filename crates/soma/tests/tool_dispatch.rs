@@ -258,13 +258,19 @@ async fn test_real_call_tool_path_logs_safe_trace_summary() -> anyhow::Result<()
     drop(guard);
 
     let logs = buf.contents();
-    assert!(logs.contains("trace_id"), "missing trace id summary: {logs}");
+    assert!(
+        logs.contains("trace_id"),
+        "missing trace id summary: {logs}"
+    );
     assert!(logs.contains("0af76519"), "missing short trace id: {logs}");
     assert!(
         logs.contains("baggage_member_count"),
         "missing baggage count: {logs}"
     );
-    assert!(!logs.contains("alice@example.com"), "raw email leaked: {logs}");
+    assert!(
+        !logs.contains("alice@example.com"),
+        "raw email leaked: {logs}"
+    );
     assert!(
         !logs.contains("super-secret-token"),
         "raw token leaked: {logs}"

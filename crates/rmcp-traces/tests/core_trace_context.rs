@@ -2,8 +2,7 @@ use rmcp::model::Meta;
 use rmcp_traces::{TraceContext, TraceLimits, TraceParent, TraceTrust};
 use serde_json::json;
 
-const VALID_TRACEPARENT: &str =
-    "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
+const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
 
 #[test]
 fn traceparent_round_trips_through_meta() {
@@ -67,11 +66,9 @@ fn oversized_values_are_rejected_before_parsing() {
 #[test]
 fn absent_or_non_string_trace_metadata_is_fail_soft() {
     let meta = Meta::new();
-    assert!(
-        TraceContext::from_meta(&meta, TraceTrust::Untrusted)
-            .unwrap()
-            .is_none()
-    );
+    assert!(TraceContext::from_meta(&meta, TraceTrust::Untrusted)
+        .unwrap()
+        .is_none());
 
     let mut meta = Meta::new();
     meta.insert("traceparent".to_owned(), json!(123));

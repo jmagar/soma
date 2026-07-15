@@ -21,6 +21,6 @@
 mod trace_context;
 
 pub use trace_context::{
-    BAGGAGE_KEY, TRACEPARENT_KEY, TRACESTATE_KEY, TraceContext, TraceLimits, TraceParent,
-    TraceParseError, TraceSummary, TraceTrust,
+    TraceContext, TraceLimits, TraceParent, TraceParseError, TraceSummary, TraceTrust, BAGGAGE_KEY,
+    TRACEPARENT_KEY, TRACESTATE_KEY,
 };
