@@ -7,6 +7,8 @@
 //! this repo's per-file budget; there is no architectural boundary between
 //! the two beyond that.
 
+use std::time::Instant;
+
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
 
@@ -54,6 +56,38 @@ fn line_preview(line: &str) -> String {
             "{preview}... ({} bytes total, truncated for logging)",
             line.len()
         )
+    }
+}
+
+fn deliver_notification(events_tx: &mpsc::Sender<Event>, notification: ServerNotification) {
+    let method = notification.method_name();
+    match events_tx.try_send(Event::Notification(notification)) {
+        Ok(()) => {}
+        Err(mpsc::error::TrySendError::Full(Event::Notification(notification)))
+            if matches!(notification, ServerNotification::TurnCompleted(_)) =>
+        {
+            let events_tx = events_tx.clone();
+            tokio::spawn(async move {
+                if events_tx
+                    .send(Event::Notification(notification))
+                    .await
+                    .is_err()
+                {
+                    tracing::warn!(
+                        cause = "EventStream dropped",
+                        method,
+                        "dropping a terminal server notification"
+                    );
+                }
+            });
+        }
+        Err(err) => {
+            let cause = match err {
+                mpsc::error::TrySendError::Full(_) => "channel full",
+                mpsc::error::TrySendError::Closed(_) => "EventStream dropped",
+            };
+            tracing::warn!(cause, method, "dropping a server notification");
+        }
     }
 }
 
@@ -149,6 +183,7 @@ pub(super) fn dispatch_incoming_line(
                         if let Err(err) = events_tx.try_send(Event::Request(PendingServerRequest {
                             request,
                             reply_tx: Some(reply_tx),
+                            reply_deadline: Instant::now() + PENDING_SERVER_REQUEST_TIMEOUT,
                         })) {
                             // The consumer isn't draining EventStream fast enough (Full) or
                             // has dropped it entirely (Closed). `PendingServerRequest`'s own
@@ -164,7 +199,7 @@ pub(super) fn dispatch_incoming_line(
                                  replying with a fallback error instead of leaving this \
                                  server->client request unanswered"
                             );
-                            psr.respond_error(
+                            let _ = psr.respond_error(
                                 -32000,
                                 "codex-app-server-client: event channel unavailable, request \
                                  could not be delivered",
@@ -202,19 +237,11 @@ pub(super) fn dispatch_incoming_line(
             None => {
                 match serde_json::from_value::<ServerNotification>(serde_json::Value::Object(map)) {
                     Ok(notification) => {
-                        // Fire-and-forget: unlike Event::Request, nothing on the other end
-                        // is waiting for a reply, so it's safe to just drop this under
-                        // backpressure rather than block the reader task. Deliberately not
-                        // logging the notification payload itself (could be arbitrarily
-                        // large, e.g. a big diff) - just its method and that one was dropped.
-                        let method = notification.method_name();
-                        if let Err(err) = events_tx.try_send(Event::Notification(notification)) {
-                            let cause = match err {
-                                mpsc::error::TrySendError::Full(_) => "channel full",
-                                mpsc::error::TrySendError::Closed(_) => "EventStream dropped",
-                            };
-                            tracing::warn!(cause, method, "dropping a server notification");
-                        }
+                        // Fire-and-forget notifications are generally best-effort under
+                        // backpressure, but a terminal turn event is the state transition
+                        // `wait_for_turn_completed` depends on. Let that one wait for channel
+                        // capacity in a tiny forwarding task instead of silently dropping it.
+                        deliver_notification(events_tx, notification);
                     }
                     Err(err) => {
                         // Notifications never expect a reply, so there's nothing

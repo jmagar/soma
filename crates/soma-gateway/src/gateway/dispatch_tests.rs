@@ -16,6 +16,30 @@ fn default_manager() -> GatewayManager {
     GatewayManager::new(GatewayConfig::default()).unwrap()
 }
 
+fn python_command() -> String {
+    std::env::var("SOMA_PYTHON_COMMAND")
+        .ok()
+        .and_then(|value| bare_command_name(&value))
+        .unwrap_or_else(default_python_command)
+}
+
+fn bare_command_name(value: &str) -> Option<String> {
+    value
+        .trim()
+        .trim_matches('"')
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn default_python_command() -> String {
+    if cfg!(windows) {
+        "python".to_owned()
+    } else {
+        "python3".to_owned()
+    }
+}
 #[tokio::test]
 async fn read_access_can_list_but_cannot_admin_test() {
     let manager = default_manager();
@@ -98,7 +122,7 @@ async fn gateway_test_connects_and_discovers_stdio_upstream() {
         "gateway.test",
         serde_json::json!({
             "name": "probe",
-            "command": if cfg!(windows) { "python" } else { "python3" },
+            "command": python_command(),
             "args": [script.to_string_lossy()]
         }),
     )

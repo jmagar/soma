@@ -6,9 +6,10 @@ use codex_app_server_client::protocol::{
     UserInput,
 };
 use codex_app_server_client::{
-    AllowAllApprovalHandler, ApprovalHandler, CodexAppServerClient, CodexDaemon, CodexSession,
-    CompatibilityReport, DenyAllApprovalHandler, Error, EventCollector, ReadOnlyApprovalHandler,
-    ServerRequestReply, SessionOptions, SurfaceSummary, CODEX_SCHEMA_VERSION,
+    AllowAllApprovalHandler, ApprovalFuture, ApprovalHandler, AsyncFnApprovalHandler,
+    CodexAppServerClient, CodexDaemon, CodexSession, CompatibilityReport, DenyAllApprovalHandler,
+    Error, EventCollector, ReadOnlyApprovalHandler, ServerRequestReply, SessionOptions,
+    SurfaceSummary, CODEX_SCHEMA_VERSION,
 };
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 
@@ -115,8 +116,8 @@ fn event_collector_aggregates_text_diff_completion_and_errors() {
     assert_eq!(collector.errors().len(), 0);
 }
 
-#[test]
-fn deny_all_approval_handler_replies_with_structured_error() {
+#[tokio::test]
+async fn deny_all_approval_handler_replies_with_structured_error() {
     let request = ServerRequest::CurrentTimeRead {
         id: codex_app_server_client::protocol::RequestId::Int64(7),
         params: CurrentTimeReadParams {
@@ -125,10 +126,40 @@ fn deny_all_approval_handler_replies_with_structured_error() {
     };
     let handler = DenyAllApprovalHandler::default();
 
-    let reply = handler.handle(&request);
+    let reply = handler.handle(&request).await;
     assert!(matches!(
         reply,
         ServerRequestReply::Error { code: -32000, .. }
+    ));
+}
+
+#[tokio::test]
+async fn async_fn_approval_handler_can_await_a_decision() {
+    let request = ServerRequest::CurrentTimeRead {
+        id: codex_app_server_client::protocol::RequestId::Int64(7),
+        params: CurrentTimeReadParams {
+            thread_id: "thread-1".to_owned(),
+        },
+    };
+    let handler = AsyncFnApprovalHandler::new(|request| -> ApprovalFuture<'_> {
+        Box::pin(async move {
+            tokio::task::yield_now().await;
+            ServerRequestReply::Error {
+                code: -32000,
+                message: format!("async policy denied {}", request.method_name()),
+                data: None,
+            }
+        })
+    });
+
+    let reply = handler.handle(&request).await;
+    assert!(matches!(
+        reply,
+        ServerRequestReply::Error {
+            code: -32000,
+            message,
+            ..
+        } if message.contains("currentTime/read")
     ));
 }
 
@@ -561,8 +592,8 @@ async fn text_turn_errors_if_transport_closes_before_completion() {
     server.await.unwrap();
 }
 
-#[test]
-fn approval_presets_serialize_expected_schema_replies() {
+#[tokio::test]
+async fn approval_presets_serialize_expected_schema_replies() {
     let command_request = serde_json::from_value::<ServerRequest>(serde_json::json!({
         "method": "item/commandExecution/requestApproval",
         "id": 1,
@@ -616,29 +647,31 @@ fn approval_presets_serialize_expected_schema_replies() {
     let read_only = ReadOnlyApprovalHandler;
 
     assert_eq!(
-        reply_result_json(allow_all.handle(&command_request)),
+        reply_result_json(allow_all.handle(&command_request).await),
         serde_json::json!({ "decision": "accept" })
     );
     assert_eq!(
-        reply_result_json(allow_all.handle(&file_request)),
+        reply_result_json(allow_all.handle(&file_request).await),
         serde_json::json!({ "decision": "accept" })
     );
     assert_eq!(
-        reply_result_json(allow_all.handle(&permissions_request)),
+        reply_result_json(allow_all.handle(&permissions_request).await),
         serde_json::json!({
             "permissions": { "network": { "enabled": true } },
             "scope": "turn"
         })
     );
     assert_eq!(
-        reply_result_json(read_only.handle(&command_request)),
+        reply_result_json(read_only.handle(&command_request).await),
         serde_json::json!({ "decision": "decline" })
     );
     assert_eq!(
-        reply_result_json(read_only.handle(&file_request)),
+        reply_result_json(read_only.handle(&file_request).await),
         serde_json::json!({ "decision": "decline" })
     );
-    assert!(reply_result_json(read_only.handle(&current_time_request))["currentTimeAt"].is_i64());
+    assert!(
+        reply_result_json(read_only.handle(&current_time_request).await)["currentTimeAt"].is_i64()
+    );
 }
 
 async fn respond_to_initialize<R, W>(reader: &mut R, writer: &mut W)
