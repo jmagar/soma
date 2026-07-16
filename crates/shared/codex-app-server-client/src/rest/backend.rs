@@ -1,18 +1,20 @@
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc, Mutex as StdMutex,
     },
     time::{Duration, Instant},
 };
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
+use uuid::Uuid;
 
 use crate::{
-    protocol::ThreadStartParams, AllowAllApprovalHandler, CodexAppServerClient, CodexSession,
-    CompatibilityReport, DenyAllApprovalHandler, Event, PendingServerRequest,
-    ReadOnlyApprovalHandler,
+    protocol::{AskForApproval, SandboxMode, ThreadStartParams, TurnInterruptParams},
+    AllowAllApprovalHandler, ApprovalHandler, CodexAppServerClient, CodexSession,
+    CompatibilityReport, DenyAllApprovalHandler, Error, Event, EventCollector,
+    PendingServerRequest, ReadOnlyApprovalHandler, TextTurnResult,
 };
 
 use super::types::{
@@ -32,6 +34,7 @@ pub struct CodexRestBackend {
     sessions: Arc<CodexRestSessions>,
     limits: RestLimits,
     compatibility: Arc<StdMutex<Option<CachedCompatibility>>>,
+    session_call_gate: Arc<Semaphore>,
 }
 
 impl Default for CodexRestBackend {
@@ -40,18 +43,23 @@ impl Default for CodexRestBackend {
     }
 }
 
-#[derive(Default)]
 struct CodexRestSessions {
-    next_session_id: AtomicU64,
     sessions: Mutex<HashMap<String, Arc<CodexRestSession>>>,
+    slots: Arc<Semaphore>,
 }
 
 struct CodexRestSession {
     client: CodexAppServerClient,
     session: Mutex<CodexSession>,
     pending_requests: Mutex<HashMap<String, PendingRestRequest>>,
-    next_request_key: AtomicU64,
-    last_used: Mutex<Instant>,
+    last_used: StdMutex<Instant>,
+    active_operations: AtomicUsize,
+    call_gate: Arc<Semaphore>,
+    _session_slot: OwnedSemaphorePermit,
+}
+
+struct SessionLease {
+    session: Arc<CodexRestSession>,
 }
 
 struct PendingRestRequest {
@@ -66,14 +74,42 @@ struct CachedCompatibility {
 
 impl CodexRestBackend {
     pub fn with_limits(limits: RestLimits) -> Self {
+        let max_sessions = limits.max_sessions;
+        let max_session_call_concurrency = limits.max_session_call_concurrency;
         Self {
-            sessions: Arc::default(),
+            sessions: Arc::new(CodexRestSessions {
+                sessions: Mutex::new(HashMap::new()),
+                slots: Arc::new(Semaphore::new(max_sessions)),
+            }),
             limits,
             compatibility: Arc::default(),
+            session_call_gate: Arc::new(Semaphore::new(max_session_call_concurrency)),
         }
     }
 
-    async fn session(&self, session_id: &str) -> RestResult<Arc<CodexRestSession>> {
+    fn cached_compatibility(&self, now: Instant) -> Option<CompatibilityReport> {
+        let cached = self
+            .compatibility
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        cached
+            .as_ref()
+            .filter(|cached| cached.expires_at > now)
+            .map(|cached| cached.report.clone())
+    }
+
+    fn store_compatibility(&self, report: CompatibilityReport, now: Instant) {
+        let mut cached = self
+            .compatibility
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *cached = Some(CachedCompatibility {
+            report,
+            expires_at: now + self.limits.compatibility_ttl,
+        });
+    }
+
+    async fn session(&self, session_id: &str) -> RestResult<SessionLease> {
         self.prune_idle_sessions().await;
         let session = self
             .sessions
@@ -84,41 +120,117 @@ impl CodexRestBackend {
             .cloned()
             .ok_or_else(|| RestError::NotFound(format!("session `{session_id}` was not found")))?;
         session.touch().await;
-        Ok(session)
+        session.active_operations.fetch_add(1, Ordering::AcqRel);
+        Ok(SessionLease { session })
     }
 
     async fn prune_idle_sessions(&self) {
         let now = Instant::now();
-        let entries = {
-            let sessions = self.sessions.sessions.lock().await;
-            sessions
-                .iter()
-                .map(|(id, session)| (id.clone(), session.clone()))
-                .collect::<Vec<_>>()
-        };
-
-        let mut expired = Vec::new();
-        for (id, session) in entries {
-            let last_used = *session.last_used.lock().await;
-            if now.duration_since(last_used) >= self.limits.idle_session_ttl {
-                expired.push(id);
-            }
-        }
-
-        if expired.is_empty() {
-            return;
-        }
-
         let mut sessions = self.sessions.sessions.lock().await;
-        for id in expired {
-            sessions.remove(&id);
+        sessions.retain(|_, session| {
+            let is_active = session.active_operations.load(Ordering::Acquire) > 0;
+            let last_used = *session
+                .last_used
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            is_active || now.duration_since(last_used) < self.limits.idle_session_ttl
+        });
+    }
+}
+
+fn rest_text_turn_thread_params(model: Option<String>) -> ThreadStartParams {
+    let mut params = ThreadStartParams::new().ephemeral(true);
+    params.model = model;
+    params.approval_policy = Some(AskForApproval::Untrusted);
+    params.sandbox = Some(SandboxMode::ReadOnly);
+    params
+}
+
+async fn run_limited_text_turn<H>(
+    session: &mut CodexSession,
+    thread_params: ThreadStartParams,
+    prompt: String,
+    handler: &H,
+    limits: &RestLimits,
+) -> RestResult<TextTurnResult>
+where
+    H: ApprovalHandler,
+{
+    let thread = session.start_thread(thread_params).await?;
+    let turn = session.send_text_turn(&thread.thread.id, prompt).await?;
+    let thread_id = thread.thread.id.clone();
+    let turn_id = turn.turn.id.clone();
+    let collect_result = tokio::time::timeout(
+        limits.max_text_turn_duration,
+        collect_turn_with_output_limit(
+            session,
+            &thread_id,
+            &turn_id,
+            handler,
+            limits.max_text_turn_output_bytes,
+        ),
+    )
+    .await;
+    let events = match collect_result {
+        Ok(Ok(events)) => events,
+        Ok(Err(error)) => return Err(error),
+        Err(_elapsed) => {
+            interrupt_turn(session, &thread_id, &turn_id).await;
+            return Err(RestError::TimedOut(format!(
+                "text turn did not complete within {:?}",
+                limits.max_text_turn_duration
+            )));
+        }
+    };
+    Ok(TextTurnResult {
+        thread,
+        turn,
+        events,
+    })
+}
+
+async fn collect_turn_with_output_limit<H>(
+    session: &mut CodexSession,
+    thread_id: &str,
+    turn_id: &str,
+    handler: &H,
+    max_output_bytes: usize,
+) -> RestResult<EventCollector>
+where
+    H: ApprovalHandler,
+{
+    let mut collector = EventCollector::for_turn(thread_id, turn_id);
+    while !collector.is_complete() {
+        let Some(notification) = session.next_notification(handler).await else {
+            return Err(RestError::Client(Error::TransportClosed));
+        };
+        collector.observe_notification(&notification);
+        if collector.output_bytes() > max_output_bytes {
+            interrupt_turn(session, thread_id, turn_id).await;
+            return Err(RestError::PayloadTooLarge(format!(
+                "text turn output exceeded {max_output_bytes} bytes"
+            )));
         }
     }
+    Ok(collector)
+}
+
+async fn interrupt_turn(session: &CodexSession, thread_id: &str, turn_id: &str) {
+    let _ = session
+        .client()
+        .turn_interrupt(TurnInterruptParams {
+            thread_id: thread_id.to_owned(),
+            turn_id: turn_id.to_owned(),
+        })
+        .await;
 }
 
 impl CodexRestSession {
     async fn touch(&self) {
-        *self.last_used.lock().await = Instant::now();
+        *self
+            .last_used
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Instant::now();
     }
 
     async fn prune_expired_pending(&self, now: Instant) {
@@ -127,6 +239,27 @@ impl CodexRestSession {
 
     async fn take_pending_request(&self, request_key: &str) -> RestResult<PendingServerRequest> {
         take_pending_request(&self.pending_requests, request_key).await
+    }
+}
+
+impl std::ops::Deref for SessionLease {
+    type Target = CodexRestSession;
+
+    fn deref(&self) -> &Self::Target {
+        &self.session
+    }
+}
+
+impl Drop for SessionLease {
+    fn drop(&mut self) {
+        self.session
+            .active_operations
+            .fetch_sub(1, Ordering::AcqRel);
+        *self
+            .session
+            .last_used
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Instant::now();
     }
 }
 
@@ -177,66 +310,63 @@ async fn take_pending_request(
 }
 
 impl RestBackend for CodexRestBackend {
-    fn compatibility_report(&self) -> CompatibilityReport {
-        let now = Instant::now();
-        let mut cached = self
-            .compatibility
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(cached) = cached.as_ref() {
-            if cached.expires_at > now {
-                return cached.report.clone();
+    fn compatibility_report(&self) -> RestFuture<CompatibilityReport> {
+        let backend = self.clone();
+        Box::pin(async move {
+            let now = Instant::now();
+            if let Some(report) = backend.cached_compatibility(now) {
+                return Ok(report);
             }
-        }
 
-        let report = CompatibilityReport::current();
-        *cached = Some(CachedCompatibility {
-            report: report.clone(),
-            expires_at: now + self.limits.compatibility_ttl,
-        });
-        report
+            let report = tokio::task::spawn_blocking(CompatibilityReport::current)
+                .await
+                .map_err(|error| {
+                    RestError::Internal(format!("compatibility check task failed: {error}"))
+                })?;
+            backend.store_compatibility(report.clone(), now);
+            Ok(report)
+        })
     }
 
     fn run_text_turn(&self, request: RestTextTurnRequest) -> RestFuture<RestTextTurnResponse> {
+        let limits = self.limits.clone();
         Box::pin(async move {
             let session_options = request.session_options();
             let approval_policy = request.approval_policy.unwrap_or_default();
-            let thread_params = request
-                .model
-                .clone()
-                .map_or_else(ThreadStartParams::new, |model| {
-                    ThreadStartParams::new().model(model)
-                });
+            let thread_params = rest_text_turn_thread_params(request.model.clone());
             let prompt = request.prompt.clone();
             let mut session = CodexSession::spawn(session_options).await?;
 
             let result = match approval_policy {
                 RestApprovalPolicy::DenyAll => {
-                    session
-                        .run_text_turn_with_params_and_handler(
-                            thread_params,
-                            prompt,
-                            &DenyAllApprovalHandler::default(),
-                        )
-                        .await?
+                    run_limited_text_turn(
+                        &mut session,
+                        thread_params,
+                        prompt,
+                        &DenyAllApprovalHandler::default(),
+                        &limits,
+                    )
+                    .await?
                 }
                 RestApprovalPolicy::ReadOnly => {
-                    session
-                        .run_text_turn_with_params_and_handler(
-                            thread_params,
-                            prompt,
-                            &ReadOnlyApprovalHandler,
-                        )
-                        .await?
+                    run_limited_text_turn(
+                        &mut session,
+                        thread_params,
+                        prompt,
+                        &ReadOnlyApprovalHandler,
+                        &limits,
+                    )
+                    .await?
                 }
                 RestApprovalPolicy::AllowAll => {
-                    session
-                        .run_text_turn_with_params_and_handler(
-                            thread_params,
-                            prompt,
-                            &AllowAllApprovalHandler,
-                        )
-                        .await?
+                    run_limited_text_turn(
+                        &mut session,
+                        thread_params,
+                        prompt,
+                        &AllowAllApprovalHandler,
+                        &limits,
+                    )
+                    .await?
                 }
             };
             Ok(RestTextTurnResponse::from(result))
@@ -250,12 +380,18 @@ impl RestBackend for CodexRestBackend {
         let backend = self.clone();
         Box::pin(async move {
             backend.prune_idle_sessions().await;
-            if backend.sessions.sessions.lock().await.len() >= backend.limits.max_sessions {
-                return Err(RestError::RateLimited(format!(
-                    "maximum REST session count ({}) reached",
-                    backend.limits.max_sessions
-                )));
-            }
+            let session_slot =
+                backend
+                    .sessions
+                    .slots
+                    .clone()
+                    .try_acquire_owned()
+                    .map_err(|_| {
+                        RestError::RateLimited(format!(
+                            "maximum REST session count ({}) reached",
+                            backend.limits.max_sessions
+                        ))
+                    })?;
 
             let session = CodexSession::spawn(session_options_from(
                 request.client,
@@ -264,28 +400,19 @@ impl RestBackend for CodexRestBackend {
             .await?;
             let initialize_response = serde_json::to_value(session.initialize_response())?;
             let client = session.client().clone();
-            let session_id = format!(
-                "session-{}",
-                backend
-                    .sessions
-                    .next_session_id
-                    .fetch_add(1, Ordering::Relaxed)
-                    + 1
-            );
+            let session_id = format!("session-{}", Uuid::new_v4().simple());
             let rest_session = Arc::new(CodexRestSession {
                 client,
                 session: Mutex::new(session),
                 pending_requests: Mutex::new(HashMap::new()),
-                next_request_key: AtomicU64::new(0),
-                last_used: Mutex::new(Instant::now()),
+                last_used: StdMutex::new(Instant::now()),
+                active_operations: AtomicUsize::new(0),
+                call_gate: Arc::new(Semaphore::new(
+                    backend.limits.max_session_call_concurrency_per_session,
+                )),
+                _session_slot: session_slot,
             });
             let mut sessions = backend.sessions.sessions.lock().await;
-            if sessions.len() >= backend.limits.max_sessions {
-                return Err(RestError::RateLimited(format!(
-                    "maximum REST session count ({}) reached",
-                    backend.limits.max_sessions
-                )));
-            }
             sessions.insert(session_id.clone(), rest_session);
             Ok(RestSessionCreateResponse {
                 session_id,
@@ -341,6 +468,23 @@ impl RestBackend for CodexRestBackend {
             let method = request.method.clone();
             let result = if let Some(session_id) = request.session_id.as_deref() {
                 let session = backend.session(session_id).await?;
+                let _global_permit = backend
+                    .session_call_gate
+                    .clone()
+                    .try_acquire_owned()
+                    .map_err(|_| {
+                        RestError::RateLimited(format!(
+                            "maximum REST session call concurrency ({}) reached",
+                            backend.limits.max_session_call_concurrency
+                        ))
+                    })?;
+                let _session_permit =
+                    session.call_gate.clone().try_acquire_owned().map_err(|_| {
+                        RestError::RateLimited(format!(
+                            "maximum REST session call concurrency per session ({}) reached",
+                            backend.limits.max_session_call_concurrency_per_session
+                        ))
+                    })?;
                 session
                     .client
                     .call_raw_method(method.clone(), request.params)
@@ -371,7 +515,7 @@ impl RestBackend for CodexRestBackend {
             let session = backend.session(&session_id).await?;
             let timeout = Duration::from_millis(timeout_ms.unwrap_or(30_000));
             let event = tokio::time::timeout(timeout, async {
-                let mut session_guard = session.session.lock().await;
+                let mut session_guard = session.session.session.lock().await;
                 session_guard.next_event().await
             })
             .await;
@@ -383,26 +527,39 @@ impl RestBackend for CodexRestBackend {
                 Ok(Some(Event::Request(request))) => {
                     let now = Instant::now();
                     session.prune_expired_pending(now).await;
-                    let request_key = format!(
-                        "request-{}",
-                        session.next_request_key.fetch_add(1, Ordering::Relaxed) + 1
-                    );
                     let request_id = serde_json::to_value(request.id())?;
                     let method = request.method_name().to_owned();
                     let request_value = serde_json::to_value(&request.request)?;
                     let mut pending = session.pending_requests.lock().await;
                     if pending.len() >= limits.max_pending_requests_per_session {
-                        request.respond_error(-32000, "REST pending request limit reached", None);
+                        let _ = request.respond_error(
+                            -32000,
+                            "REST pending request limit reached",
+                            None,
+                        );
                         return Err(RestError::RateLimited(format!(
                             "maximum pending request count ({}) reached",
                             limits.max_pending_requests_per_session
                         )));
                     }
+                    let reply_deadline = request.reply_deadline();
+                    if reply_deadline <= now {
+                        let _ = request.respond_error(
+                            -32000,
+                            "REST request reply deadline already expired",
+                            None,
+                        );
+                        return Err(RestError::Gone(
+                            "server request can no longer be answered".to_owned(),
+                        ));
+                    }
+                    let expires_at = (now + limits.pending_request_ttl).min(reply_deadline);
+                    let request_key = format!("request-{}", Uuid::new_v4().simple());
                     pending.insert(
                         request_key.clone(),
                         PendingRestRequest {
                             request,
-                            expires_at: now + limits.pending_request_ttl,
+                            expires_at,
                         },
                     );
                     Ok(RestEventResponse::request(
@@ -428,7 +585,9 @@ impl RestBackend for CodexRestBackend {
         Box::pin(async move {
             let session = backend.session(&session_id).await?;
             let pending = session.take_pending_request(&request_key).await?;
-            pending.respond(body.result)?;
+            pending.respond(body.result).map_err(|_| {
+                RestError::Gone(format!("request `{request_key}` can no longer be answered"))
+            })?;
             Ok(RestRequestReplyResponse {
                 status: "ok".to_owned(),
             })
@@ -445,7 +604,11 @@ impl RestBackend for CodexRestBackend {
         Box::pin(async move {
             let session = backend.session(&session_id).await?;
             let pending = session.take_pending_request(&request_key).await?;
-            pending.respond_error(body.code, body.message, body.data);
+            pending
+                .respond_error(body.code, body.message, body.data)
+                .map_err(|_| {
+                    RestError::Gone(format!("request `{request_key}` can no longer be answered"))
+                })?;
             Ok(RestRequestReplyResponse {
                 status: "ok".to_owned(),
             })

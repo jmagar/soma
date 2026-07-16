@@ -1,7 +1,8 @@
 //! Shows how to route app-server requests through a custom policy.
 //!
 //! For canned policies, use `DenyAllApprovalHandler`, `ReadOnlyApprovalHandler`,
-//! or `AllowAllApprovalHandler` directly.
+//! or `AllowAllApprovalHandler` directly. For UI or channel-backed policy,
+//! use `AsyncFnApprovalHandler` or implement `ApprovalHandler` directly.
 
 use codex_app_server_client::protocol::ThreadStartParams;
 use codex_app_server_client::{

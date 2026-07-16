@@ -3,7 +3,7 @@ mod dispatch;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tokio::process::Child;
 use tokio::sync::{mpsc, oneshot};
@@ -144,6 +144,7 @@ impl EventStream {
 pub struct PendingServerRequest {
     pub request: ServerRequest,
     reply_tx: Option<oneshot::Sender<OutgoingReply>>,
+    reply_deadline: Instant,
 }
 
 impl std::fmt::Debug for PendingServerRequest {
@@ -161,6 +162,7 @@ impl PendingServerRequest {
         Self {
             request,
             reply_tx: Some(reply_tx),
+            reply_deadline: Instant::now() + PENDING_SERVER_REQUEST_TIMEOUT,
         }
     }
 
@@ -185,48 +187,46 @@ impl PendingServerRequest {
         self.request.expected_response_type_name()
     }
 
+    /// Absolute deadline after which the internal forwarding task no longer
+    /// accepts a reply for this request.
+    pub fn reply_deadline(&self) -> Instant {
+        self.reply_deadline
+    }
+
     /// Send a successful reply. `result` must serialize to the response
     /// shape the app-server expects for this specific method - see
     /// [`Self::expected_response_type_name`] for exactly which
     /// `crate::protocol` type that is. `Err` only means `result` failed to
-    /// serialize; a returned `Ok(())` means the reply was accepted, not that
-    /// it was necessarily delivered - if the forwarding task already gave up
-    /// on this request (its own timeout already fired), delivery is no
-    /// longer possible and that's logged, but it's too late to matter which
-    /// of the two happened.
+    /// serialize or the forwarding task already stopped accepting replies.
     pub fn respond(mut self, result: impl serde::Serialize) -> Result<()> {
         let id = self.id().clone();
         let value = serde_json::to_value(result)?;
-        self.send_reply(OutgoingReply::Result { id, result: value });
-        Ok(())
+        self.send_reply(OutgoingReply::Result { id, result: value })
     }
 
-    /// Send an error reply. Unlike [`Self::respond`], this can't fail - it
-    /// builds a fixed-shape error object rather than serializing an
-    /// arbitrary caller-supplied value - so it deliberately returns `()`
-    /// rather than a `Result` that could only ever be `Ok`.
+    /// Send an error reply.
     pub fn respond_error(
         mut self,
         code: i64,
         message: impl Into<String>,
         data: Option<serde_json::Value>,
-    ) {
+    ) -> Result<()> {
         let id = self.id().clone();
         self.send_reply(OutgoingReply::Error {
             id,
             code,
             message: message.into(),
             data,
-        });
+        })
     }
 
     /// Takes `reply_tx` (leaving `None` so [`Drop`] becomes a no-op) and
     /// sends `reply` through it, logging - rather than silently discarding -
     /// the case where the forwarding task already gave up and dropped its
     /// receiving end.
-    fn send_reply(&mut self, reply: OutgoingReply) {
+    fn send_reply(&mut self, reply: OutgoingReply) -> Result<()> {
         let Some(tx) = self.reply_tx.take() else {
-            return;
+            return Err(Error::TransportClosed);
         };
         if tx.send(reply).is_err() {
             tracing::debug!(
@@ -234,7 +234,9 @@ impl PendingServerRequest {
                 "reply channel already closed (the forwarding task must have already given up, \
                  e.g. its own timeout fired) - this reply was accepted but could not be delivered"
             );
+            return Err(Error::TransportClosed);
         }
+        Ok(())
     }
 }
 
@@ -622,6 +624,7 @@ mod tests {
                 },
             },
             reply_tx: Some(reply_tx),
+            reply_deadline: Instant::now() + PENDING_SERVER_REQUEST_TIMEOUT,
         };
         assert_eq!(
             pending.expected_response_type_name(),
@@ -646,6 +649,7 @@ mod tests {
                 },
             },
             reply_tx: Some(reply_tx),
+            reply_deadline: Instant::now() + PENDING_SERVER_REQUEST_TIMEOUT,
         };
         assert_eq!(pending.method_name(), "currentTime/read");
         assert_eq!(pending.id(), &RequestId::Int64(7));
@@ -679,9 +683,10 @@ mod tests {
                 },
             },
             reply_tx: Some(reply_tx),
+            reply_deadline: Instant::now() + PENDING_SERVER_REQUEST_TIMEOUT,
         };
 
-        pending.respond_error(-32000, "denied", None);
+        pending.respond_error(-32000, "denied", None).unwrap();
 
         let reply = reply_rx
             .await
@@ -713,6 +718,7 @@ mod tests {
                 },
             },
             reply_tx: Some(reply_tx),
+            reply_deadline: Instant::now() + PENDING_SERVER_REQUEST_TIMEOUT,
         };
 
         drop(pending); // no .respond()/.respond_error() call
@@ -868,6 +874,67 @@ mod tests {
         let reply: serde_json::Value = serde_json::from_slice(&buf[..n]).unwrap();
         assert_eq!(reply["id"], 9);
         assert_eq!(reply["error"]["code"], -32000);
+    }
+
+    /// Regression test: `turn/completed` is the terminal event
+    /// `wait_for_turn_completed` needs in order to stop waiting. Ordinary
+    /// notifications can still be dropped under backpressure, but this one
+    /// must survive a full event channel.
+    #[tokio::test]
+    async fn turn_completed_notification_is_delivered_when_the_event_channel_is_full() {
+        let (client_io, mut server_io) = tokio::io::duplex(1024 * 1024);
+        let (client_read, client_write) = tokio::io::split(client_io);
+        let (_client, mut events) =
+            CodexAppServerClient::connect_streams(BufReader::new(client_read), client_write);
+
+        for index in 0..EVENTS_CHANNEL_CAPACITY {
+            let delta = serde_json::json!({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "itemId": format!("item-{index}"),
+                    "delta": "x"
+                }
+            });
+            server_io
+                .write_all(format!("{delta}\n").as_bytes())
+                .await
+                .unwrap();
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let completed = serde_json::json!({
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thread-1",
+                "turn": {
+                    "id": "turn-1",
+                    "items": [],
+                    "status": "completed"
+                }
+            }
+        });
+        server_io
+            .write_all(format!("{completed}\n").as_bytes())
+            .await
+            .unwrap();
+
+        for _ in 0..=EVENTS_CHANNEL_CAPACITY {
+            let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
+                .await
+                .expect("event stream should not stall")
+                .expect("event stream should remain open");
+            if matches!(
+                event,
+                Event::Notification(ServerNotification::TurnCompleted(_))
+            ) {
+                return;
+            }
+        }
+
+        panic!("turn/completed was not delivered after draining the full event channel");
     }
 
     /// Regression test: the reader task detecting a dead connection (EOF from

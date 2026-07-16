@@ -17,6 +17,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("codex app-server REST adapter listening on http://{addr}");
     println!("POST /v1/text-turn will start a fresh codex app-server session per request");
 
-    axum::serve(listener, codex_app_server_client::rest::router()).await?;
+    axum::serve(listener, codex_app_server_client::rest::text_turn_router()).await?;
     Ok(())
 }
