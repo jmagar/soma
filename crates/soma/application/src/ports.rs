@@ -1,0 +1,67 @@
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde_json::Value;
+
+use crate::{
+    CodeModeExecuteRequest, ExecutionContext, GatewayExecuteRequest, GatewayReloadRequest,
+    OpenApiExecuteRequest,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortError {
+    pub code: String,
+    pub message: String,
+    pub retryable: bool,
+    pub remediation: String,
+}
+
+impl PortError {
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            retryable: false,
+            remediation: "Check the engine configuration and retry.".to_owned(),
+        }
+    }
+}
+
+#[async_trait]
+pub trait GatewayPort: Send + Sync {
+    async fn status(&self, context: &ExecutionContext) -> Result<Value, PortError>;
+    async fn reload(
+        &self,
+        request: GatewayReloadRequest,
+        context: &ExecutionContext,
+    ) -> Result<Value, PortError>;
+    async fn execute(
+        &self,
+        request: GatewayExecuteRequest,
+        context: &ExecutionContext,
+    ) -> Result<Value, PortError>;
+}
+
+#[async_trait]
+pub trait CodeModePort: Send + Sync {
+    async fn execute(
+        &self,
+        request: CodeModeExecuteRequest,
+        context: &ExecutionContext,
+    ) -> Result<Value, PortError>;
+}
+
+#[async_trait]
+pub trait OpenApiPort: Send + Sync {
+    async fn execute(
+        &self,
+        request: OpenApiExecuteRequest,
+        context: &ExecutionContext,
+    ) -> Result<Value, PortError>;
+}
+
+pub struct ApplicationPorts {
+    pub gateway: Arc<dyn GatewayPort>,
+    pub codemode: Arc<dyn CodeModePort>,
+    pub openapi: Arc<dyn OpenApiPort>,
+}
