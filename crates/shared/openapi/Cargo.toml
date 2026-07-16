@@ -6,6 +6,9 @@ rust-version = "1.96"
 license = "MIT"
 publish = false
 
+[package.metadata.soma-architecture]
+layer = "shared"
+
 [dependencies]
 futures = "0.3"
 percent-encoding = "2"

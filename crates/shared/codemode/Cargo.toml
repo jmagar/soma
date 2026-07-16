@@ -7,6 +7,9 @@ license = "MIT"
 publish = false
 autobins = false
 
+[package.metadata.soma-architecture]
+layer = "shared"
+
 [[bin]]
 name = "soma-codemode-runner"
 path = "src/bin/soma-codemode-runner.rs"

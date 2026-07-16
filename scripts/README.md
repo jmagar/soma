@@ -223,6 +223,19 @@ automation drift:
 Used in CI as a guardrail. It intentionally reports coupled-file concerns rather
 than trying to infer every valid exception.
 
+### `ci/pre_push.py`
+
+```bash
+python3 scripts/ci/pre_push.py --dry-run
+SOMA_FULL_PRE_PUSH=1 python3 scripts/ci/pre_push.py
+```
+
+Runs the path-aware local pre-push plan used by `lefthook`, `just pre-push`,
+and `just pre-push-plan`. Rust-category changes run version sync, script syntax
+checks, workflow linting, coupled-file checks, `cargo xtask check-architecture`,
+clippy, focused nextest, schema docs, and release version gates. Set
+`SOMA_FULL_PRE_PUSH=1` or use `just pre-push-full` for the full local suite.
+
 ### `conformance_report.py`
 
 ```bash

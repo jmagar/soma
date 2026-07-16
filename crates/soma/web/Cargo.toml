@@ -10,6 +10,9 @@ license = "MIT"
 repository.workspace = true
 publish = false
 
+[package.metadata.soma-architecture]
+layer = "product-surface"
+
 [features]
 default = ["web"]
 web = []

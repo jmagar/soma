@@ -12,6 +12,9 @@ readme = "README.md"
 keywords = ["mcp", "rmcp", "trace", "trace-context", "baggage"]
 categories = ["development-tools", "network-programming"]
 
+[package.metadata.soma-architecture]
+layer = "shared"
+
 [features]
 default = []
 http = ["dep:http"]
