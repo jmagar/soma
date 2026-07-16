@@ -39,15 +39,32 @@ Allowed exceptions:
 ## 1. Module Architecture — Strict Layering
 
 ```
+apps/
+  soma/                    ← thin binary/facade package, routes, integration tests
+
 crates/
-  soma/        ← thin binary/facade package, routes, integration tests
-  soma-service/    ← upstream client + SomaService business layer
-  soma-contracts/  ← action metadata, config, DTOs, token limits
-  soma-api/        ← REST API handlers
-  soma-mcp/        ← MCP schemas, tools, prompts, transport
-  soma-cli/        ← CLI parser, doctor/setup/watch commands
-  soma-runtime/    ← AppState, auth policy, shared runtime wiring
-  soma-web/        ← static web asset serving and source bundle helpers
+  soma/
+    api/                  ← REST API handlers
+    cli/                  ← CLI parser, doctor/setup/watch commands
+    contracts/            ← action metadata, config, DTOs, token limits
+    mcp/                  ← Soma-specific MCP schemas, tools, prompts, transport
+    runtime/              ← AppState, auth policy, shared runtime wiring
+    service/              ← upstream client + SomaService business layer
+    test-support/         ← Soma integration-test helpers
+    web/                  ← static web asset serving and source bundle helpers
+  shared/
+    auth/                 ← reusable bearer/OAuth/JWT support
+    codemode/             ← reusable Code Mode runtime
+    mcp/
+      client/             ← reusable upstream MCP client support
+      gateway/            ← neutral MCP gateway engine
+      proxy/              ← reusable MCP proxy support
+      server/             ← reusable MCP server support
+    observability/        ← reusable logging/metrics helpers
+    openapi/              ← reusable OpenAPI provider support
+    traces/               ← reusable RMCP trace capture/support
+    codex-app-server-client/
+                          ← generated reusable Codex app-server client
 
 Rule: keep business logic out of transports, but DO NOT force all logic into one giant file.
 The service layer may be split across multiple focused modules under `crates/soma/service/src/`; what matters

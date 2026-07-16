@@ -86,7 +86,7 @@ cargo xtask update-aurora-web
 use include_dir::{Dir, include_dir};
 
 // Compiled at build time — zero runtime file I/O
-static WEB_ASSETS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/apps/web/out");
+static WEB_ASSETS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../../apps/web/out");
 
 pub fn web_assets_available() -> bool {
     WEB_ASSETS.get_file("index.html").is_some()

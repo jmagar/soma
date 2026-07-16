@@ -84,7 +84,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 
 | File | Type | Entry points | What it does |
 |---|---|---|---|
-| `ci/changed_paths.py` | Python | `scripts/ci/pre_push.py`, future CI routing | Classifies changed paths into coarse categories such as rust, web, docker, MCP, release, security, and Soma. |
+| `ci/changed_paths.py` | Python | `scripts/ci/pre_push.py`, future CI routing | Classifies changed paths into coarse categories such as rust, web, docker, MCP, release, security, and Soma; keep its path taxonomy in parity with `cargo xtask changed-paths`. |
 | `ci/pre_push.py` | Python | `lefthook` pre-push, `just pre-push`, `just pre-push-plan` | Runs a path-aware local pre-push plan. Full local validation is opt-in with `SOMA_FULL_PRE_PUSH=1` or `just pre-push-full`. |
 | `with_timeout.sh` | Bash | `lefthook.yml` | Applies a wall-clock budget to local hook commands so one check cannot stall commits indefinitely. |
 | `check_lefthook_pre_commit_speed.py` | Python | `lefthook.yml`, `just lefthook-speed-check`, CI | Fails if the pre-commit stage grows workspace-scale cargo/test/build commands. |

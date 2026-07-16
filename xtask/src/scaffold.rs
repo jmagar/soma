@@ -328,7 +328,7 @@ impl ActionManifest {
 
     pub(crate) fn render_snippets(&self, service_type: &str) -> String {
         let mut output = String::new();
-        output.push_str("### crates/soma/service/src/actions.rs\n\n```rust\n");
+        output.push_str("### crates/soma/contracts/src/actions.rs\n\n```rust\n");
         output.push_str(&self.render_action_specs_snippet());
         output.push_str("```\n\n### crates/soma/mcp/src/tools.rs\n\n```rust\n");
         output.push_str(&self.render_tools_snippet());
@@ -1149,8 +1149,7 @@ fn render_adapt_plan(root: &Path) -> Result<String> {
     output.push_str("- Update `.env.example` and `config.soma.toml` with real required credentials and non-secret defaults.\n");
 
     output.push_str("\n## 2. Business actions\n\n");
-    output
-        .push_str("- Add action metadata and dispatch in `crates/soma/service/src/actions.rs`.\n");
+    output.push_str("- Add action metadata in `crates/soma/contracts/src/actions.rs`.\n");
     output.push_str("- Regenerate MCP schema docs and OpenAPI after changing action metadata.\n");
     output.push_str("- Keep MCP, CLI, and REST shims registry-driven.\n");
     if has_api {

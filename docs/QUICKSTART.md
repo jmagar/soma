@@ -129,7 +129,7 @@ Use this when creating a real service from soma:
 - [ ] Replace every occurrence of `soma`/`Example`/`EXAMPLE` with your service name
 - [ ] Implement API client in `crates/soma/service/src/soma.rs` (transport only — no logic)
 - [ ] Add service methods to `crates/soma/service/src/app.rs` (ALL logic here)
-- [ ] Add native actions to `crates/soma/service/src/actions.rs` and keep MCP/CLI/REST shims registry-driven
+- [ ] Add native actions to `crates/soma/contracts/src/actions.rs` and keep MCP/CLI/REST shims registry-driven
 - [ ] Regenerate schema docs and OpenAPI after changing the service registry
 - [ ] Update `crates/soma/contracts/src/config.rs` with service-specific config fields
 - [ ] Add elicitation to destructive actions (or `confirm=true` flag fallback)

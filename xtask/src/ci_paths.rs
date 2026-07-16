@@ -132,7 +132,7 @@ fn classify(event: &str, paths: &[String]) -> BTreeMap<String, bool> {
         )
     });
     let rust = any(paths, |p| {
-        starts(p, &["crates/", "xtask/"])
+        starts(p, &["apps/soma/", "crates/", "xtask/"])
             || matches!(
                 p,
                 "Cargo.toml" | "Cargo.lock" | "rust-toolchain.toml" | ".cargo/config.toml"
@@ -341,6 +341,17 @@ mod tests {
         let out = classify_paths(&["crates/soma/mcp/src/tool.rs"]);
         assert!(out["rust"]);
         assert!(out["mcp"]);
+        assert!(out["native"]);
+        assert!(out["docker"]);
+        assert!(out["soma"]);
+        assert!(out["security"]);
+        assert!(out["release"]);
+    }
+
+    #[test]
+    fn soma_app_changes_enable_runtime_dependents() {
+        let out = classify_paths(&["apps/soma/src/lib.rs"]);
+        assert!(out["rust"]);
         assert!(out["native"]);
         assert!(out["docker"]);
         assert!(out["soma"]);

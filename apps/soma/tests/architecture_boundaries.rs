@@ -11,7 +11,7 @@
 //! mention inside a doc comment or help string is not a false positive.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn workspace_root() -> PathBuf {
@@ -89,6 +89,27 @@ fn rel(path: &std::path::Path) -> String {
         .to_string()
 }
 
+fn rel_slash(path: &Path) -> String {
+    rel(path).replace('\\', "/")
+}
+
+fn cargo_metadata() -> serde_json::Value {
+    let stdout = cargo(&["metadata", "--format-version", "1", "--no-deps"]);
+    serde_json::from_str(&stdout).expect("cargo metadata should be valid JSON")
+}
+
+fn package_root(package: &serde_json::Value) -> PathBuf {
+    PathBuf::from(
+        package
+            .get("manifest_path")
+            .and_then(serde_json::Value::as_str)
+            .expect("package has manifest_path"),
+    )
+    .parent()
+    .expect("manifest path has a parent")
+    .to_path_buf()
+}
+
 fn imports_symbol(src: &str, symbol: &str) -> bool {
     src.lines()
         .map(str::trim_start)
@@ -140,6 +161,51 @@ fn mcp_tools_shim_reaches_the_shared_service_seam() {
         src.contains("dispatch_action") || imports_symbol(&src, "SomaService"),
         "tools.rs should reach the service layer via dispatch_action / SomaService"
     );
+}
+
+#[test]
+fn shared_crates_do_not_depend_on_soma_product_crates() {
+    let metadata = cargo_metadata();
+    let packages = metadata
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .expect("cargo metadata has packages");
+    let mut failures = Vec::new();
+
+    for package in packages {
+        let package_root = package_root(package);
+        let package_rel = rel_slash(&package_root);
+        if !package_rel.starts_with("crates/shared/") {
+            continue;
+        }
+
+        let package_name = package
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .expect("package has name");
+        let dependencies = package
+            .get("dependencies")
+            .and_then(serde_json::Value::as_array)
+            .expect("package has dependencies");
+
+        for dependency in dependencies {
+            let Some(path) = dependency.get("path").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let dependency_rel = rel_slash(Path::new(path));
+            if dependency_rel == "apps/soma" || dependency_rel.starts_with("crates/soma/") {
+                let dependency_name = dependency
+                    .get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("<unknown>");
+                failures.push(format!(
+                    "{package_name} ({package_rel}) must stay reusable but depends on {dependency_name} at {dependency_rel}"
+                ));
+            }
+        }
+    }
+
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[test]

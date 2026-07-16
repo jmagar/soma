@@ -34,33 +34,41 @@ REST shim      (crates/soma/api/src/api.rs)       → parse HTTP JSON → call s
 ## Module layout
 
 ```
+apps/
+  soma/                    ← thin binary/facade package
+    src/bin/soma.rs        ← canonical soma mode dispatch: serve, mcp, CLI
+    src/routes.rs          ← axum router: wires mcp + api + auth + SPA fallback
+    src/lib.rs             ← public facade + test helpers (testing::*)
+    tests/                 ← integration tests and mcporter harness
+
 crates/
-  soma/        ← thin binary/facade package
-    src/bin/soma.rs     ← canonical soma mode dispatch: serve, mcp, CLI
-    src/routes.rs       ← axum router: wires mcp + api + auth + SPA fallback
-    src/lib.rs          ← public facade + test helpers (testing::*)
-    tests/              ← integration tests and mcporter harness
-  soma-service/          ← SomaClient + SomaService business layer
-  soma-contracts/        ← action metadata, config, DTOs, token limits
-  soma-api/              ← REST API handlers
-  soma-auth/             ← bearer/OAuth auth policy and token handling
-  soma-codemode/         ← reusable Code Mode runtime and runner support
-  soma-gateway/          ← reusable MCP aggregation gateway runtime
-  soma-mcp-client/       ← reusable outbound MCP upstream client runtime
-  soma-mcp-proxy/        ← reusable MCP proxy route projection helpers
-  soma-mcp-server/       ← reusable inbound MCP server protocol helpers
-  soma-mcp/              ← MCP schemas, tools, prompts, transport
-  soma-openapi/          ← reusable OpenAPI operation registry and dispatcher
-  soma-cli/              ← CLI parser, doctor/setup/watch commands
-  soma-runtime/          ← AppState, auth policy, shared runtime wiring
-  soma-web/              ← static web asset serving and source bundle helpers
-  soma-observability/    ← tracing/metrics wiring
-  soma-test-support/     ← shared test fixtures and harness helpers
+  soma/
+    api/                   ← REST API handlers
+    cli/                   ← CLI parser, doctor/setup/watch commands
+    contracts/             ← action metadata, config, DTOs, token limits
+    mcp/                   ← Soma-specific MCP schemas, tools, prompts, transport
+    runtime/               ← AppState, auth policy, shared runtime wiring
+    service/               ← SomaClient + SomaService business layer
+    test-support/          ← shared Soma test fixtures and harness helpers
+    web/                   ← static web asset serving and source bundle helpers
+  shared/
+    auth/                  ← reusable bearer/OAuth auth policy and token handling
+    codemode/              ← reusable Code Mode runtime and runner support
+    mcp/
+      client/              ← reusable outbound MCP upstream client runtime
+      gateway/             ← reusable MCP aggregation gateway runtime
+      proxy/               ← reusable MCP proxy route projection helpers
+      server/              ← reusable inbound MCP server protocol helpers
+    observability/         ← reusable tracing/metrics wiring
+    openapi/               ← reusable OpenAPI operation registry and dispatcher
+    traces/                ← reusable RMCP trace capture/support
+    codex-app-server-client/
+                           ← generated reusable Codex app-server client
 ```
 
-Two crates in this workspace sit outside the layered architecture above by
-design - each contains a standalone, self-contained tool that doesn't follow
-(or need to follow) the client → service → shim pattern:
+Shared crates are reusable building blocks below the Soma product layer and must
+not depend back on `apps/soma` or `crates/soma/**`. Two pieces sit outside the
+client → service → shim pattern:
 
 - `crates/shared/codex-app-server-client/` - a fully-typed async Rust client for the
   Codex CLI's `app-server` v2 JSON-RPC protocol, with zero path-dependencies
