@@ -177,6 +177,69 @@ fn mcp_tools_shim_reaches_the_application_facade() {
 }
 
 #[test]
+fn runtime_state_exposes_the_application_facade_not_legacy_engines() {
+    let metadata = cargo_metadata();
+    let runtime = metadata
+        .get("packages")
+        .and_then(serde_json::Value::as_array)
+        .expect("cargo metadata has packages")
+        .iter()
+        .find(|package| {
+            package.get("name").and_then(serde_json::Value::as_str) == Some("soma-runtime")
+        })
+        .expect("workspace contains soma-runtime");
+    let dependencies = runtime
+        .get("dependencies")
+        .and_then(serde_json::Value::as_array)
+        .expect("soma-runtime has dependencies");
+    let dependency_names = dependencies
+        .iter()
+        .filter_map(|dependency| dependency.get("name").and_then(serde_json::Value::as_str))
+        .collect::<Vec<_>>();
+
+    assert!(
+        dependency_names.contains(&"soma-application"),
+        "soma-runtime must own the initialized SomaApplication handle"
+    );
+    assert!(
+        !dependency_names.contains(&"soma-service"),
+        "soma-runtime must not depend directly on the legacy service crate"
+    );
+
+    let runtime_sources = collect_rs_files("crates/soma/runtime/src");
+    for source in &runtime_sources {
+        let contents = fs::read_to_string(source)
+            .unwrap_or_else(|error| panic!("failed to read {}: {error}", source.display()));
+        for forbidden in ["SomaService", "ProviderRegistry", "ProviderCall"] {
+            assert!(
+                !contents.contains(forbidden),
+                "{} must not expose or import legacy runtime engine {forbidden}",
+                rel(source)
+            );
+        }
+    }
+
+    let routes = read_workspace_file("apps/soma/src/routes.rs");
+    assert!(
+        routes.contains("state.application_handle()") && !routes.contains("application_for_state"),
+        "HTTP adapters must receive the stored application facade instead of rebuilding it"
+    );
+
+    let composition = read_workspace_file("apps/soma/src/application_ports.rs");
+    assert_eq!(
+        composition.matches("SomaRuntime::new(").count(),
+        1,
+        "the composition root must construct the application and runtime together"
+    );
+    assert!(
+        !runtime_sources.iter().any(|source| {
+            fs::read_to_string(source).is_ok_and(|contents| contents.contains("pub fn gateway("))
+        }),
+        "runtime state must expose narrow gateway operations, not the raw gateway engine"
+    );
+}
+
+#[test]
 fn shared_crates_do_not_depend_on_soma_product_crates() {
     let metadata = cargo_metadata();
     let packages = metadata
@@ -424,19 +487,53 @@ fn codemode_openapi_sources_do_not_reintroduce_labby_runtime_names() {
 }
 
 #[test]
-fn application_ports_are_available_to_both_mcp_transports() {
+fn application_ports_are_available_to_all_composition_profiles() {
     let source = fs::read_to_string(workspace_root().join("apps/soma/src/lib.rs"))
         .expect("read Soma facade source");
     let lines = source.lines().map(str::trim).collect::<Vec<_>>();
 
     assert!(
-        lines.windows(2).any(|lines| {
-            lines
-                == [
-                    "#[cfg(any(feature = \"mcp-stdio\", feature = \"mcp-http\"))]",
-                    "mod application_ports;",
-                ]
-        }),
-        "application_ports must compile for both MCP transport features"
+        source.contains("feature = \"mcp-stdio\"") && source.contains("feature = \"mcp-http\"")
+    );
+    assert!(lines.contains(&"mod application_ports;"));
+}
+
+#[test]
+fn bare_mcp_profile_compiles_without_client_or_observability_features() {
+    cargo(&[
+        "check",
+        "-p",
+        "soma",
+        "--no-default-features",
+        "--features",
+        "mcp",
+    ]);
+    let tree = cargo(&[
+        "tree",
+        "-p",
+        "soma",
+        "--no-default-features",
+        "--features",
+        "mcp",
+        "-e",
+        "normal",
+        "-f",
+        "{p} {f}",
+    ]);
+    let service = tree
+        .lines()
+        .find(|line| line.contains("soma-service v"))
+        .expect("bare MCP graph contains soma-service");
+    assert!(
+        !service.contains("client"),
+        "unexpected client feature: {service}"
+    );
+    assert!(
+        !service.contains("observability"),
+        "unexpected observability feature: {service}"
+    );
+    assert!(
+        !tree_mentions_package(&tree, "soma-observability"),
+        "bare MCP production graph must not include soma-observability"
     );
 }

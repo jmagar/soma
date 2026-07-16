@@ -34,7 +34,14 @@ pub use soma_contracts::token_limit;
 #[cfg(feature = "web")]
 pub use soma_web as web;
 
-#[cfg(any(feature = "mcp-stdio", feature = "mcp-http"))]
+#[cfg(any(
+    feature = "mcp-stdio",
+    feature = "mcp-http",
+    all(
+        any(test, feature = "test-support"),
+        any(feature = "cli", feature = "mcp", feature = "api")
+    )
+))]
 mod application_ports;
 #[cfg(feature = "oauth")]
 mod gateway_auth;
@@ -66,10 +73,13 @@ pub mod testing {
     use crate::{
         app::SomaService,
         config::{McpConfig, SomaConfig},
-        server::{AppState, AuthPolicy},
+        server::{AppState, AuthPolicy, GatewayProductState},
         soma::SomaClient,
     };
     use soma_runtime::server::empty_gateway_product_state;
+    #[cfg(feature = "auth")]
+    use soma_runtime::server::gateway_product_state_from_config;
+    use soma_service::ProviderRegistry;
 
     fn stub_service() -> SomaService {
         let client = SomaClient::new(&SomaConfig {
@@ -81,21 +91,42 @@ pub mod testing {
         SomaService::new(client)
     }
 
+    fn state(
+        config: McpConfig,
+        auth_policy: AuthPolicy,
+        service: SomaService,
+        provider_registry: ProviderRegistry,
+        gateway: GatewayProductState,
+    ) -> AppState {
+        let runtime =
+            crate::application_ports::runtime_for_components(service, provider_registry, gateway);
+        AppState::new(config, auth_policy, runtime, Default::default())
+    }
+
     /// `AppState` with no auth (loopback trust boundary).
     /// Use this for unit tests that don't need auth.
     pub fn loopback_state() -> AppState {
         let service = stub_service();
         let provider_registry =
             soma_service::static_provider_registry(service.clone()).expect("static registry");
-        AppState {
-            config: McpConfig::default(),
-            auth_policy: AuthPolicy::LoopbackDev,
+        state(
+            McpConfig::default(),
+            AuthPolicy::LoopbackDev,
             service,
             provider_registry,
-            gateway: empty_gateway_product_state(),
-            remote_adapter: false,
-            response_pages: Default::default(),
-        }
+            empty_gateway_product_state(),
+        )
+    }
+
+    /// Loopback state backed by an explicit provider registry.
+    pub fn loopback_state_with_registry(provider_registry: ProviderRegistry) -> AppState {
+        state(
+            McpConfig::default(),
+            AuthPolicy::LoopbackDev,
+            stub_service(),
+            provider_registry,
+            empty_gateway_product_state(),
+        )
     }
 
     /// `AppState` requiring a static bearer token.
@@ -103,20 +134,19 @@ pub mod testing {
         let service = stub_service();
         let provider_registry =
             soma_service::static_provider_registry(service.clone()).expect("static registry");
-        AppState {
-            config: McpConfig {
+        state(
+            McpConfig {
                 api_token: Some(token.to_string()),
                 ..McpConfig::default()
             },
-            auth_policy: mounted_test_policy(),
+            mounted_test_policy(),
             service,
             provider_registry,
-            gateway: empty_gateway_product_state(),
-            remote_adapter: false,
-            response_pages: Default::default(),
-        }
+            empty_gateway_product_state(),
+        )
     }
 
+    #[cfg(feature = "mcp")]
     pub fn mcp_state(state: &AppState) -> soma_mcp::McpState {
         crate::application_ports::mcp_state_for_state(state)
     }
@@ -124,27 +154,44 @@ pub mod testing {
     /// `AppState` with full OAuth (requires data directory for SQLite + key file).
     #[cfg(feature = "auth")]
     pub async fn oauth_state(data_dir: &std::path::Path) -> AppState {
+        oauth_state_with_gateway(data_dir, soma_gateway::config::GatewayConfig::default()).await
+    }
+
+    /// OAuth state backed by an explicit gateway configuration.
+    #[cfg(feature = "auth")]
+    pub async fn oauth_state_with_gateway(
+        data_dir: &std::path::Path,
+        gateway_config: soma_gateway::config::GatewayConfig,
+    ) -> AppState {
+        let gateway = gateway_product_state_from_config(gateway_config).expect("gateway state");
+        oauth_state_with_gateway_product_state(data_dir, gateway).await
+    }
+
+    /// OAuth state backed by a preconfigured gateway runtime.
+    #[cfg(feature = "auth")]
+    pub async fn oauth_state_with_gateway_product_state(
+        data_dir: &std::path::Path,
+        gateway: GatewayProductState,
+    ) -> AppState {
         let auth_state = build_auth_state(data_dir).await;
         let service = stub_service();
         let provider_registry =
             soma_service::static_provider_registry(service.clone()).expect("static registry");
-        AppState {
-            config: McpConfig {
+        state(
+            McpConfig {
                 auth: soma_contracts::config::AuthConfig {
                     public_url: Some("https://example.example.com".to_string()),
                     ..Default::default()
                 },
                 ..McpConfig::default()
             },
-            auth_policy: AuthPolicy::Mounted {
+            AuthPolicy::Mounted {
                 auth_state: Some(Arc::new(auth_state)),
             },
             service,
             provider_registry,
-            gateway: empty_gateway_product_state(),
-            remote_adapter: false,
-            response_pages: Default::default(),
-        }
+            gateway,
+        )
     }
 
     #[cfg(feature = "auth")]

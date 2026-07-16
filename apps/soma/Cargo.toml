@@ -41,7 +41,7 @@ axum = { version = "0.8", optional = true }
 futures = { version = "0.3", optional = true }
 soma-runtime = { path = "../../crates/soma/runtime", default-features = false }
 soma-api = { path = "../../crates/soma/api", optional = true }
-soma-application = { path = "../../crates/soma/application" }
+soma-application = { path = "../../crates/soma/application", default-features = false }
 soma-auth = { path = "../../crates/shared/auth", optional = true, features = ["http-axum"] }
 soma-cli = { path = "../../crates/soma/cli", optional = true }
 soma-contracts = { path = "../../crates/soma/contracts" }
@@ -60,7 +60,12 @@ tower-http = { version = "0.7", features = ["cors", "limit", "trace"], optional 
 
 [features]
 default = ["full"]
-cli = ["dep:soma-cli", "soma-service/client"]
+cli = [
+  "dep:serde_json",
+  "dep:soma-cli",
+  "soma-application/client",
+  "soma-service/client",
+]
 mcp = ["dep:soma-mcp"]
 mcp-stdio = [
   "mcp",
@@ -68,10 +73,11 @@ mcp-stdio = [
   "dep:serde_json",
   "rmcp/transport-io",
   "soma-gateway/protected-routes",
+  "soma-application/client",
   "soma-mcp/stdio",
   "soma-service/client",
 ]
-api = ["auth", "dep:soma-api"]
+api = ["auth", "dep:serde_json", "dep:soma-api"]
 auth = [
   "dep:soma-auth",
   "soma-api?/auth",
@@ -88,7 +94,11 @@ oauth = [
   "soma-mcp?/oauth",
   "soma-runtime/oauth",
 ]
-observability = ["dep:soma-observability", "soma-service/observability"]
+observability = [
+  "dep:soma-observability",
+  "soma-application/observability",
+  "soma-service/observability",
+]
 plugin = ["cli"]
 mcp-http = [
   "api",
@@ -99,7 +109,9 @@ mcp-http = [
   "dep:tower",
   "dep:tower-http",
   "soma-gateway/protected-routes",
+  "soma-application/client",
   "soma-mcp/http",
+  "soma-runtime/protected-routes",
   "soma-service/client",
 ]
 web = ["api", "dep:soma-web"]
@@ -110,9 +122,9 @@ test-support = ["soma-mcp?/test-support"]
 
 [dev-dependencies]
 axum = "0.8"
-soma = { path = ".", package = "soma", features = ["test-support"] }
+soma = { path = ".", package = "soma", default-features = false, features = ["test-support"] }
 soma-contracts = { path = "../../crates/soma/contracts" }
-soma-service = { path = "../../crates/soma/service" }
+soma-service = { path = "../../crates/soma/service", default-features = false }
 soma-test-support = { path = "../../crates/soma/test-support" }
 serde_json = "1"
 tempfile = "3"

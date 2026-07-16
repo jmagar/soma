@@ -11,7 +11,7 @@ use serde_json::json;
 use soma::{
     actions::SomaAction,
     mcp::{execute_tool_without_peer_for_test, rmcp_server},
-    testing::{bearer_state, loopback_state, mcp_state},
+    testing::{bearer_state, loopback_state, loopback_state_with_registry, mcp_state},
 };
 use soma_contracts::providers::{
     ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool,
@@ -143,9 +143,9 @@ async fn test_status_returns_ok() {
 
 #[tokio::test]
 async fn test_dynamic_provider_action_dispatches_without_static_action_enum() {
-    let mut state = loopback_state();
-    state.provider_registry =
-        ProviderRegistry::new(vec![Arc::new(DynamicProvider)]).expect("dynamic registry");
+    let state = loopback_state_with_registry(
+        ProviderRegistry::new(vec![Arc::new(DynamicProvider)]).expect("dynamic registry"),
+    );
 
     let result = execute_tool_without_peer_for_test(
         &mcp_state(&state),

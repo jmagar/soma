@@ -25,7 +25,7 @@ use crate::api::{
     health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
     v1_greet, v1_help, v1_provider_tool_action, v1_providers, v1_service_status,
 };
-use crate::application_ports::{application_for_state, authorization_mode, mcp_state_for_state};
+use crate::application_ports::{authorization_mode, mcp_state_for_state};
 use crate::gateway_api::v1_gateway_action;
 use soma_api::ApiState;
 use soma_mcp::{allowed_origins, streamable_http_config, streamable_http_service};
@@ -153,9 +153,9 @@ pub fn router(state: AppState) -> Router {
         .layer(cors_layer(&state.config))
 }
 
-fn api_state(state: &AppState) -> ApiState {
+pub(crate) fn api_state(state: &AppState) -> ApiState {
     ApiState::new(
-        application_for_state(state),
+        state.application_handle(),
         authorization_mode(state),
         state.config.server_name.clone(),
     )

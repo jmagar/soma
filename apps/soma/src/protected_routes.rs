@@ -37,10 +37,7 @@ pub async fn protected_route_resource_metadata(
     let Some(host) = request_host(&request) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let Some(route) = state
-        .gateway
-        .resolve_protected_route_metadata(&host, request.uri().path())
-    else {
+    let Some(route) = state.resolve_protected_route_metadata(&host, request.uri().path()) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     protected_route_metadata_response(&state, route)
@@ -57,7 +54,6 @@ pub async fn protected_mcp_intercept(
     let route = request_host(&request).and_then(|host| {
         state
             .runtime
-            .gateway
             .resolve_protected_route(&host, request.uri().path())
     });
     let Some(route) = route else {
@@ -246,7 +242,6 @@ fn refresh_protected_route_resource_scopes(
 ) {
     auth_state.set_allowed_resource_scopes(
         state
-            .gateway
             .protected_route_list()
             .into_iter()
             .filter(|route| route.enabled)
