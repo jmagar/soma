@@ -6,6 +6,6 @@ fn structured_errors_have_stable_shape() {
     let json = error.to_json();
 
     assert_eq!(json["isError"], true);
-    assert_eq!(json["schema_version"], "soma.gateway.error.v1");
+    assert_eq!(json["schema_version"], GATEWAY_ERROR_SCHEMA_VERSION);
     assert_eq!(json["tool"], "gateway");
 }

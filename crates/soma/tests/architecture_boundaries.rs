@@ -10,23 +10,9 @@
 //! call-site forms (`use … SomaClient`, `SomaClient::`, `reqwest`) so a
 //! mention inside a doc comment or help string is not a false positive.
 
-use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
-
-const GATEWAY_FORBIDDEN_DIRECT: &[&str] = &[
-    "soma",
-    "soma-api",
-    "soma-cli",
-    "soma-contracts",
-    "soma-mcp",
-    "soma-runtime",
-    "soma-service",
-];
-
-const GATEWAY_OPTIONAL_LEAF_SOMA_DEPS: &[&str] = &["soma-auth", "soma-codemode", "soma-openapi"];
 
 fn workspace_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is `crates/soma`; the workspace root is two up.
@@ -40,6 +26,67 @@ fn workspace_root() -> PathBuf {
 fn read_shim(relative: &str) -> String {
     let path = workspace_root().join(relative);
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
+}
+
+fn read_workspace_file(relative: &str) -> String {
+    let path = workspace_root().join(relative);
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
+}
+
+fn cargo(args: &[&str]) -> String {
+    let output = Command::new("cargo")
+        .args(args)
+        .current_dir(workspace_root())
+        .output()
+        .unwrap_or_else(|e| panic!("failed to run cargo {}: {e}", args.join(" ")));
+    assert!(
+        output.status.success(),
+        "cargo {} failed\nstdout:\n{}\nstderr:\n{}",
+        args.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("cargo output should be utf-8")
+}
+
+fn tree_mentions_package(tree: &str, package: &str) -> bool {
+    tree.lines().any(|line| {
+        let without_path = line.split(" (").next().unwrap_or(line);
+        without_path.split_whitespace().any(|word| word == package)
+    })
+}
+
+fn collect_rs_files(root: &str) -> Vec<PathBuf> {
+    fn walk(path: PathBuf, files: &mut Vec<PathBuf>) {
+        let entries = fs::read_dir(&path)
+            .unwrap_or_else(|e| panic!("failed to read directory {}: {e}", path.display()));
+        for entry in entries {
+            let entry = entry.unwrap_or_else(|e| panic!("failed to read directory entry: {e}"));
+            let path = entry.path();
+            if path.is_dir() {
+                walk(path, files);
+            } else if path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                files.push(path);
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    let root = workspace_root().join(root);
+    assert!(
+        root.exists(),
+        "expected crate source root {}",
+        root.display()
+    );
+    walk(root, &mut files);
+    files
+}
+
+fn rel(path: &std::path::Path) -> String {
+    path.strip_prefix(workspace_root())
+        .unwrap_or(path)
+        .display()
+        .to_string()
 }
 
 fn imports_symbol(src: &str, symbol: &str) -> bool {
@@ -96,129 +143,203 @@ fn mcp_tools_shim_reaches_the_shared_service_seam() {
 }
 
 #[test]
-fn soma_gateway_has_no_forbidden_direct_dependencies() {
-    let metadata = cargo_metadata();
-    let package = package_by_name(&metadata, "soma-gateway");
-    let direct_dependencies = package["dependencies"]
-        .as_array()
-        .expect("dependencies must be an array");
+fn codemode_openapi_crates_have_no_forbidden_internal_dependencies() {
+    let root_manifest = read_workspace_file("Cargo.toml");
+    for member in ["crates/soma-openapi", "crates/soma-codemode"] {
+        assert!(
+            root_manifest.contains(&format!("\"{member}\"")),
+            "workspace Cargo.toml must include {member}"
+        );
+    }
 
-    for dependency in direct_dependencies {
-        let name = dependency["name"].as_str().expect("dependency name");
-        assert!(
-            !name.starts_with("labby-"),
-            "soma-gateway must not depend on Labby crate {name}"
-        );
-        assert!(
-            !GATEWAY_FORBIDDEN_DIRECT.contains(&name),
-            "soma-gateway must not depend on forbidden Soma crate {name}"
-        );
-        if name.starts_with("soma-") {
+    let openapi_manifest = read_workspace_file("crates/soma-openapi/Cargo.toml");
+    let codemode_manifest = read_workspace_file("crates/soma-codemode/Cargo.toml");
+
+    for (name, manifest) in [
+        ("soma-openapi", openapi_manifest.as_str()),
+        ("soma-codemode", codemode_manifest.as_str()),
+    ] {
+        for forbidden in [
+            "labby-",
+            "labby_",
+            "labby-runtime",
+            "labby-primitives",
+            "labby-winjob",
+            "rmcp-openapi",
+            "soma-api",
+            "soma-auth",
+            "soma-cli",
+            "soma-contracts",
+            "soma-mcp",
+            "soma-observability",
+            "soma-plugin-support",
+            "soma-runtime",
+            "soma-service",
+            "soma-test-support",
+            "soma-web",
+        ] {
+            if name == "soma-codemode" && forbidden == "soma-openapi" {
+                continue;
+            }
             assert!(
-                GATEWAY_OPTIONAL_LEAF_SOMA_DEPS.contains(&name),
-                "unexpected internal Soma dependency {name}"
+                !manifest.contains(forbidden),
+                "{name} manifest must not depend on or mention forbidden internal crate {forbidden}"
             );
         }
     }
+
+    let openapi_tree = cargo(&["tree", "-p", "soma-openapi"]);
+    assert!(
+        !tree_mentions_package(&openapi_tree, "labby-runtime")
+            && !tree_mentions_package(&openapi_tree, "labby-primitives")
+            && !tree_mentions_package(&openapi_tree, "labby-winjob")
+            && !tree_mentions_package(&openapi_tree, "soma-codemode"),
+        "soma-openapi cargo tree must stay independent:\n{openapi_tree}"
+    );
 }
 
 #[test]
-fn soma_gateway_resolved_graph_has_no_labby_or_product_crates() {
-    let metadata = cargo_metadata();
-    let packages = package_names_by_id(&metadata);
-    let gateway_id = package_id_by_name(&metadata, "soma-gateway");
-    let closure = resolved_dependency_closure(&metadata, &gateway_id);
-
-    for package_id in closure {
-        let name = packages
-            .get(&package_id)
-            .unwrap_or_else(|| panic!("missing package id {package_id}"));
-        assert!(
-            !name.starts_with("labby-"),
-            "soma-gateway resolved graph includes Labby crate {name}"
-        );
-        assert!(
-            !GATEWAY_FORBIDDEN_DIRECT.contains(&name.as_str()),
-            "soma-gateway resolved graph includes forbidden crate {name}"
-        );
-    }
-}
-
-fn cargo_metadata() -> Value {
-    let output = Command::new(env!("CARGO"))
-        .args(["metadata", "--format-version", "1", "--all-features"])
-        .current_dir(workspace_root())
-        .output()
-        .expect("cargo metadata should run");
+fn codemode_openapi_feature_graph_is_explicit() {
+    let manifest = read_workspace_file("crates/soma-codemode/Cargo.toml");
     assert!(
-        output.status.success(),
-        "cargo metadata failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+        manifest.contains("default = []"),
+        "soma-codemode must have empty default features"
     );
-    serde_json::from_slice(&output.stdout).expect("cargo metadata must be json")
+    assert!(
+        manifest.contains("openapi = [\"dep:reqwest\", \"dep:soma-openapi\"]"),
+        "soma-codemode openapi feature must use explicit dep: edges"
+    );
+    assert!(
+        manifest.contains("reqwest = ")
+            && manifest.contains("optional = true")
+            && manifest.contains("soma-openapi = { path = \"../soma-openapi\", optional = true }"),
+        "soma-codemode reqwest and soma-openapi dependencies must be optional"
+    );
+
+    let no_feature_tree = cargo(&["tree", "-p", "soma-codemode", "--no-default-features"]);
+    for forbidden in [
+        "soma-openapi",
+        "reqwest",
+        "soma-api",
+        "soma-auth",
+        "soma-cli",
+        "soma-contracts",
+        "soma-mcp",
+        "soma-runtime",
+        "soma-service",
+        "soma-web",
+    ] {
+        assert!(
+            !tree_mentions_package(&no_feature_tree, forbidden),
+            "no-feature soma-codemode tree must not contain {forbidden}:\n{no_feature_tree}"
+        );
+    }
+    for forbidden in ["labby-runtime", "labby-primitives", "labby-winjob"] {
+        assert!(
+            !tree_mentions_package(&no_feature_tree, forbidden),
+            "no-feature soma-codemode tree must not contain {forbidden}:\n{no_feature_tree}"
+        );
+    }
+
+    let openapi_tree = cargo(&["tree", "-p", "soma-codemode", "--features", "openapi"]);
+    assert!(
+        tree_mentions_package(&openapi_tree, "soma-openapi"),
+        "openapi feature tree must include soma-openapi:\n{openapi_tree}"
+    );
 }
 
-fn package_by_name<'a>(metadata: &'a Value, name: &str) -> &'a Value {
-    metadata["packages"]
-        .as_array()
-        .expect("packages must be an array")
-        .iter()
-        .find(|package| package["name"] == name)
-        .unwrap_or_else(|| panic!("package {name} not found"))
-}
+#[test]
+fn codemode_openapi_sources_have_sibling_tests_and_size_caps() {
+    let mut failures = Vec::new();
+    for root in ["crates/soma-openapi", "crates/soma-codemode"] {
+        let root_path = workspace_root().join(root);
+        let mod_rs = root_path.join("src").join("mod.rs");
+        assert!(!mod_rs.exists(), "{} must not exist", mod_rs.display());
 
-fn package_id_by_name(metadata: &Value, name: &str) -> String {
-    package_by_name(metadata, name)["id"]
-        .as_str()
-        .expect("package id")
-        .to_owned()
-}
+        for file in collect_rs_files(root) {
+            let contents = fs::read_to_string(&file)
+                .unwrap_or_else(|e| panic!("failed to read {}: {e}", file.display()));
+            let line_count = contents.lines().count();
+            if line_count > 500 {
+                failures.push(format!("{} has {line_count} physical LOC", rel(&file)));
+            }
 
-fn package_names_by_id(metadata: &Value) -> BTreeMap<String, String> {
-    metadata["packages"]
-        .as_array()
-        .expect("packages must be an array")
-        .iter()
-        .map(|package| {
-            (
-                package["id"].as_str().expect("package id").to_owned(),
-                package["name"].as_str().expect("package name").to_owned(),
-            )
-        })
-        .collect()
-}
+            let name = file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            let is_integration_test = file
+                .strip_prefix(workspace_root().join(root))
+                .ok()
+                .and_then(|path| path.components().next())
+                .and_then(|component| component.as_os_str().to_str())
+                == Some("tests");
+            if !is_integration_test
+                && name != "lib.rs"
+                && name != "main.rs"
+                && !name.ends_with("_tests.rs")
+            {
+                let stem = name.strip_suffix(".rs").expect("rust file has .rs suffix");
+                let sibling = file.with_file_name(format!("{stem}_tests.rs"));
+                if !sibling.exists() {
+                    failures.push(format!(
+                        "{} is missing sibling {}",
+                        rel(&file),
+                        sibling.file_name().unwrap().to_string_lossy()
+                    ));
+                }
+            }
 
-fn resolved_dependency_closure(metadata: &Value, root_id: &str) -> BTreeSet<String> {
-    let nodes = metadata["resolve"]["nodes"]
-        .as_array()
-        .expect("resolve nodes must be an array");
-    let deps_by_id: BTreeMap<String, Vec<String>> = nodes
-        .iter()
-        .map(|node| {
-            let id = node["id"].as_str().expect("node id").to_owned();
-            let deps = node["deps"]
-                .as_array()
-                .expect("node deps must be an array")
-                .iter()
-                .map(|dep| dep["pkg"].as_str().expect("dep package id").to_owned())
-                .collect();
-            (id, deps)
-        })
-        .collect();
-
-    let mut seen = BTreeSet::new();
-    let mut stack = deps_by_id
-        .get(root_id)
-        .unwrap_or_else(|| panic!("resolve node for {root_id} not found"))
-        .clone();
-    while let Some(package_id) = stack.pop() {
-        if !seen.insert(package_id.clone()) {
-            continue;
-        }
-        if let Some(deps) = deps_by_id.get(&package_id) {
-            stack.extend(deps.iter().cloned());
+            if contents.contains("mod tests {") || contents.contains("mod tests\n{") {
+                failures.push(format!("{} contains inline mod tests", rel(&file)));
+            }
         }
     }
-    seen
+
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn codemode_openapi_sources_do_not_reintroduce_labby_runtime_names() {
+    let mut failures = Vec::new();
+    for root in ["crates/soma-openapi", "crates/soma-codemode"] {
+        for file in collect_rs_files(root) {
+            let name = file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            let contents = fs::read_to_string(&file)
+                .unwrap_or_else(|e| panic!("failed to read {}: {e}", file.display()));
+            for forbidden in [
+                "labby-runtime",
+                "labby_primitives",
+                "labby_runtime",
+                "labby-winjob",
+                "LABBY_",
+                "~/.labby",
+                ".labby/",
+                "labby.service",
+            ] {
+                if contents.contains(forbidden) {
+                    failures.push(format!(
+                        "{} contains stale Lab runtime name {forbidden}",
+                        rel(&file)
+                    ));
+                }
+            }
+
+            if !name.ends_with("_tests.rs") {
+                for forbidden in ["labby-", "labby_"] {
+                    if contents.contains(forbidden) {
+                        failures.push(format!(
+                            "{} contains forbidden Lab crate spelling {forbidden}",
+                            rel(&file)
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

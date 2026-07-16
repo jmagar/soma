@@ -16,14 +16,6 @@ fn default_manager() -> GatewayManager {
     GatewayManager::new(GatewayConfig::default()).unwrap()
 }
 
-fn python_command() -> &'static str {
-    if cfg!(windows) {
-        "python"
-    } else {
-        "python3"
-    }
-}
-
 #[tokio::test]
 async fn read_access_can_list_but_cannot_admin_test() {
     let manager = default_manager();
@@ -106,7 +98,7 @@ async fn gateway_test_connects_and_discovers_stdio_upstream() {
         "gateway.test",
         serde_json::json!({
             "name": "probe",
-            "command": python_command(),
+            "command": if cfg!(windows) { "python" } else { "python3" },
             "args": [script.to_string_lossy()]
         }),
     )

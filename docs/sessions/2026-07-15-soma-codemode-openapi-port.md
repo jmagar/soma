@@ -1,181 +1,140 @@
----
-date: 2026-07-15 15:37:58 EDT
-repo: git@github.com:jmagar/soma.git
-branch: main
-head: 0f06b08fbfd4f4f3609842c9df14e39ff6f2f12f
-working directory: /home/jmagar/workspace/soma
-worktree: /home/jmagar/workspace/soma 0f06b08 [main]
-pr: #135 Port Code Mode and OpenAPI into standalone Soma crates https://github.com/jmagar/soma/pull/135
-beads: rmcp-template-ehml, rmcp-template-ehml.1, rmcp-template-ehml.2, rmcp-template-ehml.3, rmcp-template-ehml.4, rmcp-template-ehml.5, rmcp-template-ehml.6, rmcp-template-ehml.7, rmcp-template-ehml.8, rmcp-template-ehml.9, rmcp-template-ehml.10, rmcp-template-ehml.11, rmcp-template-ehml.12, rmcp-template-ehml.13, rmcp-template-ehml.14
----
+# Soma Code Mode/OpenAPI Port
 
-# Soma Code Mode/OpenAPI port session
+## Summary
 
-## User Request
+Implemented self-contained `soma-openapi` and `soma-codemode` ports from Lab,
+with `soma-codemode/openapi` as the only dependency edge between them.
 
-Port Lab's Code Mode and OpenAPI crates into Soma as self-contained crates, with no Lab crate dependencies, no existing Soma crate dependencies, sibling test files, no Rust file over 500 LOC, and all review findings fixed in-session. The follow-up request was to make sure this session log lands on `main`.
+## Commits
 
-## Session Overview
+- `926cad2` `chore: scaffold standalone codemode and openapi crates`
+- `8f675a8` `feat(openapi): port self-contained config and registry core`
+- `2eb735c` `feat(openapi): port hardened HTTP dispatch`
+- `4e29f9b` `feat(codemode): port support primitives and protocol`
+- `a08c200` `feat(codemode): port runner and pool core`
+- `97eb4c4` `feat(codemode): port local providers`
+- `0ebada0` `feat(codemode): gate openapi integration`
+- `HEAD` `docs: record codemode openapi port verification`
 
-Implemented and reviewed PR #135, which adds standalone `soma-openapi` and `soma-codemode` crates. The final Code Mode/OpenAPI PR branch was `codex/soma-codemode-openapi-port` at `bac5ab9`, with CI Gate, MSRV Gate, and Official MCP Conformance all green.
+## Verification
 
-This session log was then added directly on `main` as a path-limited documentation commit so the log does not depend on the PR branch being merged first.
+| Command | Result | Duration | Cache mode |
+|---|---|---:|---|
+| `git fetch --prune origin` | pass | 0.35s | network |
+| `cargo fmt --all -- --check` | pass | 0.34s | warm |
+| `cargo test -p soma-openapi` | pass, 54 unit tests, live smoke compile with 1 ignored network test | 0.58s | warm |
+| `cargo test -p soma-codemode --no-default-features` | pass, 109 unit/bin tests | 2.25s | warm |
+| `cargo test -p soma-codemode --features openapi` | pass, 114 unit/bin tests | 2.18s | warm |
+| `cargo clippy -p soma-openapi -p soma-codemode --all-targets --all-features -- -D warnings` | pass | 6.11s | warm |
+| `cargo tree -p soma-openapi` | pass | recorded during run | warm |
+| `cargo tree -p soma-codemode --no-default-features` | pass | recorded during run | warm |
+| `cargo tree -p soma-codemode --features openapi` | pass | recorded during run | warm |
+| `cargo tree -p soma-openapi \| rg 'labby-\|soma-' \| rg -v '^soma-openapi '` | pass, no forbidden dependency hits beyond crate root | recorded during run | warm |
+| `cargo tree -p soma-codemode --no-default-features \| rg 'labby-\|soma-openapi\|soma-(...)'` | pass, no matches | recorded during run | warm |
+| `cargo tree -p soma-codemode --features openapi \| rg 'soma-openapi'` | pass, intended optional edge present | recorded during run | warm |
+| `cargo tree -p soma-codemode --features openapi \| rg 'labby-\|soma-(...)'` | pass, no forbidden existing Soma/Lab matches | recorded during run | warm |
+| `find crates/soma-codemode crates/soma-openapi -type f -name '*.rs' ... wc -l ...` | pass, no file over 500 LOC | 0.05s | warm |
+| `test -z "$(find crates/soma-codemode crates/soma-openapi -name mod.rs -print -quit)"` | pass | 0.00s | warm |
+| `cargo xtask check-test-siblings` | pass | 0.11s | warm |
+| `cargo xtask patterns` | pass with pre-existing warnings outside new crates | 0.33s | warm |
+| `cargo xtask generate-provider-surfaces --check` | pass | 0.28s | warm |
+| `cargo test -p soma --test workflow_shapes --all-features` | pass, 3 tests | 4.65s | warm |
+| `cargo test -p xtask release_versions --all-features` | pass, 13 filtered tests | 4.77s | warm |
+| `cargo test --workspace` | pass | ~98s | warm |
+| `cargo xtask check-version-sync` | pass | 0.40s | warm |
+| `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr` | pass | 0.13s | warm |
+| `cargo xtask release-plan --head HEAD --mode main --json` | pass | 0.53s | warm |
+| cold `cargo test -p soma-openapi` | pass, 54 unit tests, live smoke compile with 1 ignored network test | 34.38s | cold |
+| cold `cargo test -p soma-codemode --no-default-features` | pass, 109 unit/bin tests | 22.61s | cold |
+| cold `cargo test -p soma-codemode --features openapi` | pass, 114 unit/bin tests | 23.82s | cold |
+| post-rebase `cargo fmt --all -- --check` | pass | 0.61s | warm |
+| post-rebase `cargo test -p soma-openapi` | pass, 54 unit tests, live smoke compile with 1 ignored network test | 4.81s | warm |
+| post-rebase `cargo test -p soma-codemode --no-default-features` | pass, 109 unit/bin tests | 3.17s | warm |
+| post-rebase `cargo test -p soma-codemode --features openapi` | pass, 114 unit/bin tests | 6.54s | warm |
+| post-rebase `cargo clippy -p soma-openapi -p soma-codemode --all-targets --all-features -- -D warnings` | pass | 37.55s | warm |
+| post-rebase `cargo test -p soma --test architecture_boundaries codemode_openapi -- --nocapture` | pass, 4 filtered boundary tests | 34.12s | warm |
 
-## Sequence of Events
+## Notes
 
-1. Planned the Code Mode/OpenAPI split from live Lab sources and Soma constraints.
-2. Ported `soma-openapi` with self-contained config, registry, SSRF policy, hardened HTTP dispatch, and tests.
-3. Ported `soma-codemode` with protocol/support primitives, QuickJS runner, runner pool, local providers, artifacts, snippets, state/git helpers, and optional OpenAPI integration.
-4. Ran research and engineering review, then applied all review findings back into the implementation.
-5. Fixed CI-only failures: historical gitleaks fixture allowlisting, stale self-hosted `/tmp/gitleaks.tmp`, Linux runner `javy`/`bindgen` dependency drift, and native Windows runner executable test naming.
-6. Verified the PR on GitHub and saved this session log to `main`.
+- `soma-openapi` intentionally hardens beyond Lab by rejecting IPv4 Class E and
+  IPv6 multicast.
+- `soma-codemode --no-default-features` does not link `soma-openapi` or
+  `reqwest`.
+- No Lab crates or existing Soma crates are dependencies of the standalone
+  crates.
+- The plan's negative `soma-openapi` tree grep was adapted to exclude the root
+  package line, because `cargo tree -p soma-openapi` necessarily prints
+  `soma-openapi` as the first line.
 
-## Key Findings
+## Post-review addendum
 
-- `soma-codemode --no-default-features` must not link `soma-openapi` or `reqwest`; architecture-boundary tests enforce that contract.
-- `soma-openapi` intentionally hardens beyond Lab by rejecting IPv4 Class E and IPv6 multicast destinations.
-- The native Windows runner resolver tests originally hardcoded `soma-codemode-runner`, while production resolves `soma-codemode-runner.exe` on Windows. This was fixed in `crates/soma-codemode/src/runner_exe_tests.rs`.
-- The initial external `javy` dependency pulled `rquickjs/bindgen` and required `libclang` on Linux CI. The final implementation uses direct `rquickjs` plus a small local compatibility surface.
-- The PR rollup on `bac5ab9` showed `CI Gate`, `Build Windows`, `Build Linux`, `MSRV Gate`, and `Official MCP Conformance` all passed.
+- Replaced the incomplete in-process broker path with a real parent-side
+  subprocess bridge. The broker now carries caller, surface, scope,
+  execution_id, and UI capture into the runner request, and the JS wrapper
+  exposes `callTool`, `codemode.*`, snippets, steps, and artifact writes over the
+  framed runner protocol.
+- Tightened runner executable resolution so library callers spawn the actual
+  `soma-codemode-runner` binary via `SOMA_CODE_MODE_RUNNER_EXE` or side-by-side
+  discovery instead of accepting any executable as the current process.
+- Hardened OpenAPI path handling after review: allowed operation path templates
+  must start with `/`, reject backslashes, reject `.` / `..` segments, and base
+  path containment is component-aware.
+- Split state edit-plan handling into `state/workspace_edit.rs` and added
+  sibling tests, keeping all `soma-codemode` and `soma-openapi` Rust files under
+  the hard 500 LOC cap.
+- Added trace redaction for tool params/results and replaced provider-shaped
+  secret fixtures with neutral redaction canaries.
 
-## Technical Decisions
+Final verification after the post-review fixes:
 
-- Keep `soma-openapi` and `soma-codemode` independent of existing Soma product/runtime crates and all Lab crates.
-- Permit exactly one optional internal edge: `soma-codemode` may depend on `soma-openapi` only when the `openapi` feature is enabled.
-- Use a separate `soma-codemode-runner` process with a framed protocol rather than running untrusted JS in the host process.
-- Keep OpenAPI dispatch outside the state/git local-provider lock because it has no shared local mutable state.
-- Preserve per-request OpenAPI DNS/private-address/pinned-peer checks instead of caching a long-lived client in a way that could weaken the safety model.
+- `cargo test -p soma-openapi`: pass, 58 unit tests plus ignored live Petstore
+  network smoke compiled.
+- `cargo test -p soma-codemode --no-default-features`: pass, 118 lib tests plus
+  runner binary test.
+- `cargo test -p soma-codemode --features openapi`: pass, 123 lib tests plus
+  runner binary test.
+- `cargo clippy -p soma-openapi -p soma-codemode --all-targets --all-features -- -D warnings`:
+  pass.
+- `cargo test --workspace`: pass.
+- Cold-cache proof with fresh `CARGO_TARGET_DIR`, `RUSTC_WRAPPER=`, and
+  `CARGO_BUILD_RUSTC_WRAPPER=` passed for `soma-openapi`,
+  `soma-codemode --no-default-features`, and `soma-codemode --features openapi`.
+- Soma gates passed: `cargo xtask check-test-siblings`,
+  `cargo xtask test-soma-features`, `cargo xtask patterns`,
+  `cargo xtask check-openapi --check`, `cargo xtask check-schema-docs --check`,
+  `cargo xtask check-provider-manifest-contract`,
+  `cargo xtask check-scaffold-intent-contract`, `cargo xtask check-stale-claims`,
+  `cargo xtask check-version-sync`, and
+  `cargo xtask check-release-versions --base origin/main --head HEAD --mode pr`.
 
-## Files Changed
+## CI rescue addendum
 
-The PR changed 235 files and added the new crates plus supporting documentation, CI, and tests. The main categories were:
+- The first pushed run exposed a pre-existing full-history gitleaks finding in
+  commit `03ec0523ed3aa7d428e73bac3afff14034de0b5a`, where the removed
+  `crates/rtemplate-auth/src/authorize.rs` template contained a static RSA test
+  fixture. Converted the repo gitleaks config from deprecated `[allowlist]` to
+  current `[[allowlists]]` syntax and allowed that historical fixture commit.
+- Verified the same full-history scan locally with `gitleaks detect --redact
+  --verbose`: pass, 393 commits scanned, no leaks found.
+- Reproduced CI's workspace clippy lane with `cargo clippy --all-targets -- -D
+  warnings`: pass.
+- Verified TOML formatting with `taplo check`: pass.
 
-| status | path | previous path | purpose | evidence |
-|---|---|---|---|---|
-| created | `crates/soma-openapi/**` | - | Standalone OpenAPI support crate | PR #135 file list and CI |
-| created | `crates/soma-codemode/**` | - | Standalone Code Mode support crate and runner | PR #135 file list and CI |
-| created | `crates/soma/tests/architecture_boundaries.rs` | - | Dependency, feature, sibling-test, and LOC contract checks | PR #135 file list |
-| modified | `Cargo.toml` | - | Workspace membership for new crates | PR #135 file list |
-| modified | `Cargo.lock` | - | Dependency lock updates | PR #135 file list |
-| modified | `.gitleaks.toml` | - | Current gitleaks allowlist syntax and historical fixture exception | PR #135 file list |
-| modified | `.github/workflows/ci.yml` | - | Remove stale self-hosted gitleaks temp file before secret scan | PR #135 file list |
-| created | `docs/sessions/2026-07-15-soma-codemode-openapi-port.md` | - | Session log landed on `main` | This commit |
+## CI runner addendum
 
-## Beads Activity
-
-| bead | title | action(s) | final status | why it mattered |
-|---|---|---|---|---|
-| `rmcp-template-ehml` | Port Lab Code Mode and OpenAPI as self-contained Soma crates | Worked, commented, closed | closed | Parent epic for the port and review closeout |
-| `rmcp-template-ehml.1` through `.8` | Port implementation child beads | Worked and closed | closed | Covered scaffold, OpenAPI, Code Mode, local providers, feature gating, and final verification slices |
-| `rmcp-template-ehml.9` | Review: repair Code Mode OpenAPI execution path | Created and closed | closed | Fixed broker-level OpenAPI execution and structured error preservation |
-| `rmcp-template-ehml.10` | Review: budgets/artifact containment | Created and closed | closed | Enforced operation counts, result/log caps, artifact quotas, and run-id validation |
-| `rmcp-template-ehml.11` | Review: runner pool/git/state provider | Created and closed | closed | Added real runner pool checkout/release, git failure handling, and ported state methods |
-| `rmcp-template-ehml.12` | Review: Windows/stderr portability | Created and closed | closed | Fixed Windows HANDLE/null handling and stderr line caps |
-| `rmcp-template-ehml.13` | Review: gitleaks temp cleanup | Created and closed | closed | Fixed self-hosted CI secret scan failure caused by stale `/tmp/gitleaks.tmp` |
-| `rmcp-template-ehml.14` | Review: make runner resolver tests platform-name aware | Created, commented, closed | closed | Fixed native Windows CI by deriving the expected runner executable name in tests |
-
-## Repository Maintenance
-
-### Plans
-
-Checked `docs/plans/` from `/home/jmagar/workspace/soma`; no files were found there to move to `docs/plans/complete/`. Untracked `docs/superpowers/plans/2026-07-15-self-contained-soma-gateway.md` was observed, but it is outside the `docs/plans/` scope and was left untouched.
-
-### Beads
-
-Read recent Beads issue and interaction state. The relevant Code Mode/OpenAPI beads were already closed and pushed with `bd dolt push` during the PR remediation. No additional bead state changes were required for this documentation-only main commit.
-
-### Worktrees and branches
-
-Inspected `git worktree list --porcelain`, local branches, and remote branches. Active worktrees included `codex/soma-codemode-openapi-port`, `codex/soma-gateway-self-contained`, `codex/soma-architecture-refactor-pr0`, `codex/rmcp-traces-issue-76`, and protected `marketplace-no-mcp`. None were deleted because they were active PR or protected branches, or their ownership was not safe to infer.
-
-### Stale docs
-
-The session note itself was stale or absent on `main`; this commit adds it directly to `main`. The earlier observation that `.gitleaks.toml` has broad path allowlists remains a suggested tightening item, not a change made in this session-log commit.
-
-### Transparency
-
-The main checkout had unrelated untracked files before this save: `docs/superpowers/plans/2026-07-15-self-contained-soma-gateway.md` and `soma-architecture-refactor-plan-v3.md`. They were left untracked and were not staged or committed.
-
-## Tools and Skills Used
-
-- `vibin:save-to-md`: Used for the session-log workflow and path-limited commit requirement.
-- Lavra skills: Used earlier for planning, research, engineering review, and final review remediation.
-- Superpowers skills: Used earlier for plan writing, receiving review feedback, and verification-before-completion discipline.
-- Shell commands: Used for git, GitHub CLI, Cargo, Beads, gitleaks, taplo, and actionlint checks.
-- GitHub CLI: Used to inspect PR #135 and GitHub Actions rollup.
-- Beads CLI: Used to create, comment on, close, inspect, and push relevant issue-tracker state.
-- Subagents/review agents: Used during Lavra review to surface security, architecture, performance, Rust, simplicity, and behavior findings.
-
-## Commands Executed
-
-| command | result |
-|---|---|
-| `cargo fmt --all -- --check` | passed during PR verification |
-| `cargo test -p soma-openapi` | passed during PR verification |
-| `cargo test -p soma-codemode --no-default-features` | passed during PR verification |
-| `cargo test -p soma-codemode --features openapi` | passed during PR verification |
-| `cargo clippy -p soma-codemode -p soma-openapi --all-targets --all-features -- -D warnings` | passed during PR verification |
-| `cargo clippy --all-targets -- -D warnings` | passed during PR review remediation |
-| `cargo nextest run --profile ci` | passed during PR review remediation |
-| `cargo test -p soma-codemode --features openapi --target x86_64-pc-windows-gnu runner_exe_tests --no-run` | passed before pushing the Windows test-name fix |
-| `gitleaks detect --redact --verbose` | passed locally after gitleaks configuration updates |
-| `taplo check` | passed locally and in CI |
-| `gh pr view 135 --json ...` | confirmed PR #135 checks were green on `bac5ab9` |
-| `git worktree list --porcelain` | confirmed active/protected worktrees were not safe cleanup targets |
-| `bd dolt push` | pushed Beads state after remediation |
-
-## Errors Encountered
-
-- GitHub Secret Scan initially failed because a stale `/tmp/gitleaks.tmp` existed on a self-hosted runner. CI now removes that temp file before running gitleaks.
-- Linux CI initially failed because the external `javy` dependency enabled `rquickjs/bindgen` and required `libclang`. The implementation switched to direct `rquickjs` without bindgen.
-- Native Windows CI failed because runner resolver tests created `soma-codemode-runner` instead of `soma-codemode-runner.exe`. Tests now derive the expected platform binary name.
-- A shell poll command briefly used zsh's read-only `status` variable while watching CI. It was rerun with `run_status`.
-
-## Behavior Changes (Before/After)
-
-| area | before | after |
-|---|---|---|
-| Code Mode/OpenAPI availability | Lab implementations existed only in Lab crates and depended on Lab support crates | Soma has standalone `soma-codemode` and `soma-openapi` crates |
-| Default Code Mode feature graph | OpenAPI could be easy to accidentally couple | `soma-codemode --no-default-features` excludes `soma-openapi` and `reqwest` |
-| OpenAPI dispatch | Not present in standalone Soma Code Mode | Feature-gated broker path supports `openapi.call` and `openapi::<label>.<operation>` |
-| Runner execution | Review found incomplete/in-process behavior in earlier port state | Parent-side subprocess bridge drives a separate QuickJS runner |
-| Windows runner tests | Native Windows looked for `.exe` but tests created Unix names | Tests use the platform runner binary name |
-
-## Verification Evidence
-
-| command | expected | actual | status |
-|---|---|---|---|
-| `gh pr view 135 --json statusCheckRollup` | PR checks green | CI Gate, MSRV Gate, Official MCP Conformance, Build Windows, Build Linux all succeeded on `bac5ab9` | pass |
-| `git status --short --branch` on PR worktree after push | clean and tracking origin | `## codex/soma-codemode-openapi-port...origin/codex/soma-codemode-openapi-port` | pass |
-| `git status --short --branch` on main before session-log commit | only unrelated untracked files | showed `docs/superpowers/...` and `soma-architecture-refactor-plan-v3.md` untracked | pass |
-| `git show --name-only --format= --stat HEAD` after session-log commit | only this session log | verified after commit in final save step | pass |
-
-## Risks and Rollback
-
-- The session-log commit is documentation-only. Roll back with `git revert <session-log-commit>` if it needs removal.
-- The PR itself is large and adds two new crates; rollback of the feature port is the PR branch, not this main documentation commit.
-- The `.gitleaks.toml` broad path allowlists are worth narrowing before or after merge, but this session-log commit does not change that file.
-
-## Decisions Not Taken
-
-- Did not merge PR #135 into `main`; the user only asked to ensure the session log lands on `main`.
-- Did not delete stale-looking worktrees or branches; active PR/protected branch ownership made cleanup unsafe.
-- Did not stage unrelated untracked files in the main checkout.
-- Did not change `.gitleaks.toml` during the session-log commit; that would violate the path-limited save contract.
-
-## References
-
-- PR #135: https://github.com/jmagar/soma/pull/135
-- CI run for final PR head: https://github.com/jmagar/soma/actions/runs/29415838247
-- Session log path: `docs/sessions/2026-07-15-soma-codemode-openapi-port.md`
-
-## Open Questions
-
-- Whether to narrow `.gitleaks.toml` allowlists before merging PR #135 remains a recommended tightening item.
-- The untracked `docs/superpowers/plans/2026-07-15-self-contained-soma-gateway.md` and `soma-architecture-refactor-plan-v3.md` were observed in the main checkout but were outside this session-log request.
-
-## Next Steps
-
-- Review and merge PR #135 when ready.
-- Consider a small follow-up commit on the PR branch to narrow `.gitleaks.toml` path allowlists if desired.
-- Keep future additions to `crates/soma-codemode/src/state/workspace.rs`, `state/workspace_meta.rs`, and `runner/runtime.rs` split into smaller sibling modules before they approach the 500 LOC cap.
+- The fresh pushed CI run then exposed a Linux runner dependency issue:
+  `javy 7.0.0` unconditionally enabled `rquickjs/bindgen`, which made
+  `rquickjs-sys` require `libclang` during the Test, Clippy, and MSRV jobs.
+- Removed the external `javy` dependency, depended on `rquickjs` directly
+  without the `bindgen` feature, and inlined the tiny Javy compatibility surface
+  used by the runner (`Runtime`, `Config`, `Args`, `to_js_error`, and
+  `val_to_string`) inside `soma-codemode`.
+- Verified `cargo tree -p soma-codemode -e features` has no `javy` or
+  `rquickjs/bindgen` path.
+- Re-ran local proof after the fix: `cargo test -p soma-codemode
+  --no-default-features`, `cargo test -p soma-codemode --features openapi`,
+  `cargo clippy --all-targets -- -D warnings`, `cargo build --bin soma`,
+  `cargo nextest run --profile ci` (1072 passed, 1 skipped), `cargo fmt --all
+  -- --check`, `cargo xtask check-test-siblings`, full-history `gitleaks detect
+  --redact --verbose` (394 commits, no leaks), `taplo check`, and the 500 LOC
+  gate for `soma-codemode`/`soma-openapi`.

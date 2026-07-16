@@ -28,16 +28,13 @@ pub enum CodeModeError {
 
 #[must_use]
 pub fn namespace_tool_id(namespace: &str, tool: &str) -> String {
-    format!("{namespace}::{tool}")
+    soma_codemode::namespaced_tool_id(namespace, tool)
 }
 
 pub fn parse_namespace_tool_id(id: &str) -> Result<CodeModeToolId, CodeModeError> {
-    let Some((namespace, tool)) = id.split_once("::") else {
+    let Some((namespace, tool)) = soma_codemode::split_namespaced_id(id) else {
         return Err(CodeModeError::InvalidToolId);
     };
-    if namespace.is_empty() || tool.is_empty() || tool.contains("::") {
-        return Err(CodeModeError::InvalidToolId);
-    }
     Ok(CodeModeToolId {
         namespace: namespace.to_owned(),
         tool: tool.to_owned(),

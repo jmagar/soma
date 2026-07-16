@@ -15,7 +15,7 @@ use soma_contracts::providers::{ProviderCatalog, ProviderTool};
 #[cfg(test)]
 use soma_service::StaticRustProvider;
 
-use crate::response_paging::ACTION_DISCRIMINATOR_FIELD;
+use crate::ACTION_DISCRIMINATOR_FIELD;
 
 /// Cached JSON schema definitions (static data, built once at first call).
 #[cfg(test)]
@@ -127,7 +127,7 @@ fn structured_output_schema(catalogs: &[ProviderCatalog]) -> Value {
         "description": "Structured JSON object returned in CallToolResult.structuredContent. Successful action results include _soma_action as the MCP adapter discriminator; inspect oneOf, x-soma-action-output-schemas, and x-soma-action-metadata for per-action contracts.",
         "additionalProperties": true,
         "properties": {
-            "_soma_action": {
+            ACTION_DISCRIMINATOR_FIELD: {
                 "type": "string",
                 "description": "MCP adapter discriminator identifying the invoked Soma action for successful non-paged tool results."
             },
@@ -191,7 +191,7 @@ fn loose_action_output_schema(action: &str) -> Value {
         "additionalProperties": true,
         "required": [ACTION_DISCRIMINATOR_FIELD],
         "properties": {
-            "_soma_action": {
+            ACTION_DISCRIMINATOR_FIELD: {
                 "const": action,
                 "description": format!("MCP adapter discriminator for action `{action}`."),
             }

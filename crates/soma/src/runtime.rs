@@ -195,10 +195,18 @@ async fn configure_gateway_upstream_oauth(
     auth_config: &soma_auth::config::AuthConfig,
 ) -> Result<()> {
     let key = std::env::var("SOMA_MCP_OAUTH_ENCRYPTION_KEY").ok();
-    gateway
-        .configure_upstream_oauth(auth_config, key.as_deref())
-        .await
-        .map_err(|error| anyhow::anyhow!("Gateway upstream OAuth init error: {error}"))
+    let upstreams = gateway
+        .config_view()
+        .upstream
+        .iter()
+        .filter_map(|upstream| gateway.upstream_config(&upstream.name))
+        .collect::<Vec<_>>();
+    if let Some(runtime) =
+        crate::gateway_auth::build_runtime(&upstreams, auth_config, key.as_deref()).await?
+    {
+        gateway.install_upstream_oauth_runtime(runtime);
+    }
+    Ok(())
 }
 
 #[cfg(feature = "oauth")]

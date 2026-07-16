@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add an `rmcp-traces` platform crate targeting `rmcp 2.2.0` with bounded request trace metadata parsing and redacted Soma MCP trace summaries.
 - `soma-auth` gained an `upstream/` module (behind the new `upstream-oauth-rmcp`
   feature) implementing the outbound `authorization_code` + PKCE flow for
   connecting to OAuth-protected upstream MCP servers: per-`(upstream, subject)`

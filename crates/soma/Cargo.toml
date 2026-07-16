@@ -34,18 +34,19 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 axum = { version = "0.8", optional = true }
+futures = { version = "0.3", optional = true }
 soma-runtime = { path = "../soma-runtime", default-features = false }
 soma-api = { path = "../soma-api", optional = true }
 soma-auth = { path = "../soma-auth", optional = true, features = ["http-axum"] }
 soma-cli = { path = "../soma-cli", optional = true }
 soma-contracts = { path = "../soma-contracts" }
 soma-gateway = { path = "../soma-gateway" }
+mcp-client = { package = "soma-mcp-client", path = "../soma-mcp-client", optional = true, features = ["oauth"] }
 soma-mcp = { path = "../soma-mcp", optional = true }
 soma-observability = { path = "../soma-observability", optional = true }
-soma-plugin-support = { path = "../soma-plugin-support", optional = true }
 soma-service = { path = "../soma-service", default-features = false }
 soma-web = { path = "../soma-web", optional = true }
-rmcp = { version = "2.1.0", default-features = false, optional = true }
+rmcp = { version = "=2.2.0", default-features = false, optional = true }
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls-no-provider", "stream"], optional = true }
 serde_json = { version = "1", optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
@@ -72,12 +73,15 @@ auth = [
 oauth = [
   "auth",
   "soma-api?/oauth",
+  "dep:mcp-client",
+  "dep:futures",
+  "soma-auth/upstream-oauth-rmcp",
   "soma-gateway/oauth",
   "soma-mcp?/oauth",
   "soma-runtime/oauth",
 ]
 observability = ["dep:soma-observability", "soma-service/observability"]
-plugin = ["cli", "dep:soma-plugin-support"]
+plugin = ["cli"]
 mcp-http = [
   "api",
   "mcp",
@@ -105,10 +109,11 @@ soma-service = { path = "../soma-service" }
 soma-test-support = { path = "../soma-test-support" }
 serde_json = "1"
 tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
 wat = "1.252.0"
-rmcp = { version = "2.1.0", default-features = false, features = [
+rmcp = { version = "=2.2.0", default-features = false, features = [
   "client",
   "transport-child-process",
 ] }

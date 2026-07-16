@@ -2,15 +2,18 @@
 
 pub mod defaults;
 pub mod protected_routes;
-pub mod upstream;
 pub mod virtual_servers;
+
+pub mod upstream {
+    pub use soma_mcp_client::config::*;
+}
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub use defaults::GatewayPaths;
 pub use protected_routes::{ProtectedGatewaySubsetTarget, ProtectedMcpRouteConfig};
-pub use upstream::{
+pub use soma_mcp_client::config::{
     GatewayUpstreamOauthConfig, GatewayUpstreamOauthMode, GatewayUpstreamOauthRegistration,
     UpstreamConfig, UpstreamConfigView,
 };
@@ -47,6 +50,16 @@ impl ConfigError {
         Self::Io {
             path: path.display().to_string(),
             source,
+        }
+    }
+}
+
+impl From<soma_mcp_client::ConfigError> for ConfigError {
+    fn from(error: soma_mcp_client::ConfigError) -> Self {
+        match error {
+            soma_mcp_client::ConfigError::InvalidField { field, message } => {
+                Self::InvalidField { field, message }
+            }
         }
     }
 }

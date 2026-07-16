@@ -45,6 +45,12 @@ pub enum GatewayManagerError {
     OAuth(String),
 }
 
+impl From<soma_mcp_client::ConfigError> for GatewayManagerError {
+    fn from(error: soma_mcp_client::ConfigError) -> Self {
+        Self::Config(error.into())
+    }
+}
+
 pub struct GatewayManager {
     config: RwLock<GatewayConfig>,
     pool: RwLock<Arc<UpstreamPool>>,
@@ -52,7 +58,7 @@ pub struct GatewayManager {
     usage: Arc<dyn UsageSink>,
     store: Option<FsGatewayConfigStore>,
     #[cfg(feature = "oauth")]
-    oauth_runtime: RwLock<Option<Arc<soma_auth::upstream::runtime::UpstreamOauthRuntime>>>,
+    oauth_runtime: RwLock<Option<Arc<soma_mcp_client::oauth::UpstreamOAuthRuntime>>>,
 }
 
 impl GatewayManager {
@@ -255,7 +261,7 @@ impl GatewayManager {
             .expect("gateway oauth runtime poisoned")
             .as_ref()
         {
-            pool.install_oauth_cache(runtime.cache.clone());
+            pool.install_oauth_provider(runtime.provider());
         }
         *self.config.write().expect("gateway config poisoned") = next;
         *self.pool.write().expect("gateway pool poisoned") = Arc::new(pool);
@@ -263,40 +269,19 @@ impl GatewayManager {
     }
 
     #[cfg(feature = "oauth")]
-    pub async fn configure_upstream_oauth(
+    pub fn install_upstream_oauth_runtime(
         &self,
-        auth_config: &soma_auth::config::AuthConfig,
-        encryption_key_raw: Option<&str>,
-    ) -> Result<(), GatewayManagerError> {
-        let upstreams = self
-            .config
+        runtime: soma_mcp_client::oauth::UpstreamOAuthRuntime,
+    ) {
+        let runtime = Arc::new(runtime);
+        self.pool
             .read()
-            .expect("gateway config poisoned")
-            .upstream
-            .iter()
-            .filter(|upstream| upstream.oauth.is_some())
-            .map(crate::gateway::oauth::to_soma_auth_upstream_config)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
-        let runtime = soma_auth::upstream::runtime::build_upstream_oauth_runtime(
-            &upstreams,
-            auth_config,
-            encryption_key_raw,
-        )
-        .await
-        .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
-        if let Some(runtime) = runtime {
-            let runtime = Arc::new(runtime);
-            self.pool
-                .read()
-                .expect("gateway pool poisoned")
-                .install_oauth_cache(runtime.cache.clone());
-            *self
-                .oauth_runtime
-                .write()
-                .expect("gateway oauth runtime poisoned") = Some(runtime);
-        }
-        Ok(())
+            .expect("gateway pool poisoned")
+            .install_oauth_provider(runtime.provider());
+        *self
+            .oauth_runtime
+            .write()
+            .expect("gateway oauth runtime poisoned") = Some(runtime);
     }
 
     fn with_reloading<T>(
