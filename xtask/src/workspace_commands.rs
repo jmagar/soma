@@ -2,51 +2,54 @@ use anyhow::{bail, Context, Result};
 use walkdir::WalkDir;
 
 use crate::{
-    command_exists, generated_surfaces, mcp_registry, patterns, provider_manifest, run_cargo,
-    run_cmd, scripts_lane_b, scripts_lane_d, test_siblings, web_source,
+    architecture, command_exists, generated_surfaces, mcp_registry, patterns, provider_manifest,
+    run_cargo, run_cmd, scripts_lane_b, scripts_lane_d, test_siblings, web_source,
 };
 
 pub(crate) fn contract_audit() -> Result<()> {
     println!("==> contract-audit: local static/spec checks only");
-    println!("==> [1/12] cargo xtask patterns");
+    println!("==> [1/13] cargo xtask check-architecture");
+    architecture::check(std::path::Path::new(".")).context("architecture check failed")?;
+
+    println!("==> [2/13] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default()).context("patterns contract check failed")?;
 
-    println!("==> [2/12] cargo xtask check-test-siblings");
+    println!("==> [3/13] cargo xtask check-test-siblings");
     test_siblings::check().context("test sibling check failed")?;
 
-    println!("==> [3/12] cargo xtask check-docs");
+    println!("==> [4/13] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [4/12] cargo xtask check-stale-claims");
+    println!("==> [5/13] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [5/12] cargo xtask check-schema-docs --check");
+    println!("==> [6/13] cargo xtask check-schema-docs --check");
     scripts_lane_d::check_schema_docs(&["--check".to_owned()])
         .context("schema docs check failed")?;
 
-    println!("==> [6/12] cargo xtask check-openapi --check");
+    println!("==> [7/13] cargo xtask check-openapi --check");
     scripts_lane_d::check_openapi(&["--check".to_owned()]).context("OpenAPI docs check failed")?;
 
-    println!("==> [7/12] cargo xtask check-mcp-registry");
+    println!("==> [8/13] cargo xtask check-mcp-registry");
     mcp_registry::check_default(std::path::Path::new("."))
         .context("MCP registry manifest check failed")?;
 
-    println!("==> [8/12] cargo xtask check-provider-manifest-contract");
+    println!("==> [9/13] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [9/12] cargo xtask check-palette-manifest --check");
+    println!("==> [10/13] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [10/12] cargo xtask generate-provider-surfaces --check");
+    println!("==> [11/13] cargo xtask generate-provider-surfaces --check");
     generated_surfaces::provider_surfaces(&["--check".to_owned()])
         .context("provider surfaces check failed")?;
 
-    println!("==> [11/12] cargo xtask check-scaffold-intent-contract");
+    println!("==> [12/13] cargo xtask check-scaffold-intent-contract");
     scripts_lane_d::check_scaffold_intent_contract()
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [12/12] cargo xtask test-soma-features");
+    println!("==> [13/13] cargo xtask test-soma-features");
     scripts_lane_b::test_soma_features(std::path::Path::new("."))
         .context("Soma feature smoke failed")?;
 
@@ -88,13 +91,16 @@ pub(crate) fn dist() -> Result<()> {
 }
 
 pub(crate) fn ci() -> Result<()> {
-    println!("==> [1/13] cargo fmt --check");
+    println!("==> [1/14] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/13] cargo clippy");
+    println!("==> [2/14] cargo xtask check-architecture");
+    architecture::check(std::path::Path::new(".")).context("architecture check failed")?;
+
+    println!("==> [3/14] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [3/13] cargo nextest run --profile ci");
+    println!("==> [4/14] cargo nextest run --profile ci");
     if command_exists("cargo-nextest") {
         run_cargo(&["nextest", "run", "--profile", "ci"]).context("nextest failed")?;
     } else {
@@ -102,41 +108,41 @@ pub(crate) fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [4/13] taplo check");
+    println!("==> [5/14] taplo check");
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
     } else {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/13] cargo xtask patterns");
+    println!("==> [6/14] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [6/13] cargo xtask check-test-siblings");
+    println!("==> [7/14] cargo xtask check-test-siblings");
     test_siblings::check().context("test sibling check failed")?;
 
-    println!("==> [7/13] cargo xtask check-docs");
+    println!("==> [8/14] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [8/13] cargo xtask check-stale-claims");
+    println!("==> [9/14] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [9/13] cargo xtask check-mcp-registry");
+    println!("==> [10/14] cargo xtask check-mcp-registry");
     mcp_registry::check_default(std::path::Path::new("."))
         .context("MCP registry manifest check failed")?;
 
-    println!("==> [10/13] cargo xtask check-provider-manifest-contract");
+    println!("==> [11/14] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [11/13] cargo xtask check-palette-manifest --check");
+    println!("==> [12/14] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [12/13] cargo xtask check-web-source-sync");
+    println!("==> [13/14] cargo xtask check-web-source-sync");
     web_source::check().context("web source bundle drifted from apps/web")?;
 
-    println!("==> [13/13] cargo audit");
+    println!("==> [14/14] cargo audit");
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
     } else {
@@ -264,6 +270,7 @@ COMMANDS:
   ci                    Run all CI checks: fmt, clippy, nextest, taplo, audit
   symlink-docs          Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
   check-env             Validate required environment variables are set
+  check-architecture    Validate workspace dependency-layer boundaries
   check-test-siblings   Verify every src/*.rs has a sibling *_tests.rs
   patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
   contract-audit        Run local static/spec checks without live upstream calls

@@ -10,6 +10,9 @@ license = "MIT"
 repository.workspace = true
 publish = false
 
+[package.metadata.soma-architecture]
+layer = "legacy"
+
 [dependencies]
 anyhow = "1"
 dirs = "6"

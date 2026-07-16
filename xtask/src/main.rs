@@ -7,6 +7,7 @@
 //!   ci           Run all CI checks: fmt, clippy, nextest, taplo, audit
 //!   symlink-docs Create AGENTS.md and GEMINI.md symlinks next to every CLAUDE.md
 //!   check-env    Validate required environment variables are set
+//!   check-architecture Validate workspace dependency-layer boundaries
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
 //!   scaffold     Plan, generate, or verify a new project from Soma
@@ -46,6 +47,8 @@
 use anyhow::{bail, Context, Result};
 use std::process::{Command, Stdio};
 
+mod architecture;
+mod architecture_graph;
 mod cargo_generate;
 mod cargo_generate_post;
 mod ci_paths;
@@ -95,6 +98,7 @@ fn main() -> Result<()> {
         Some("generate-docs") => workspace_commands::generate_docs(),
         Some("generate-provider-surfaces") => generated_surfaces::provider_surfaces(&args[1..]),
         Some("check-docs") => workspace_commands::check_docs(),
+        Some("check-architecture") => architecture::check(workspace_root),
         Some("check-mcp-registry") => mcp_registry::check_cmd(workspace_root, &args[1..]),
         Some("check-stale-claims") => workspace_commands::check_stale_claims(),
         Some("check-cargo-generate") => scripts_lane_d::check_cargo_generate(&args[1..]),

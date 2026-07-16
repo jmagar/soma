@@ -23,7 +23,7 @@ just soma-check
 cargo xtask pre-release-check
 ```
 
-`just ci` delegates to `cargo xtask ci`, which runs formatting, clippy, tests, TOML checks, pattern checks, and audit when supporting tools are installed.
+`just ci` delegates to `cargo xtask ci`, which runs formatting, architecture boundary checks, clippy, tests, TOML checks, pattern checks, and audit when supporting tools are installed.
 
 ## GitHub workflows
 
@@ -85,6 +85,7 @@ Jobs:
 - `changes`: classifies changed files into CI routing categories
 - `actionlint`: validates workflow syntax and self-hosted labels
 - `fmt`: `cargo fmt -- --check`
+- `architecture`: `cargo xtask check-architecture`; runs beside clippy and nextest and is enforced by `CI Gate`
 - `clippy`: `cargo clippy -- -D warnings`
 - `test`: builds the stdio binary, runs `cargo nextest run --profile ci`, and uploads the JUnit report
 - `frontend-assets`: `pnpm install --frozen-lockfile`, `pnpm audit`, `pnpm lint`, `pnpm typecheck`, `pnpm build`

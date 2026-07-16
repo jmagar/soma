@@ -95,7 +95,12 @@ def command_plan(paths: list[str], categories: dict[str, bool], full: bool) -> l
         )
 
     if categories["rust"]:
-        plan.append(("clippy", "cargo clippy --all-targets -- -D warnings"))
+        plan.extend(
+            [
+                ("architecture", "cargo xtask check-architecture"),
+                ("clippy", "cargo clippy --all-targets -- -D warnings"),
+            ]
+        )
 
     if categories["web"]:
         plan.append(("web-check", "pnpm -C apps/web validate"))

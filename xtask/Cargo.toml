@@ -22,6 +22,9 @@ repository.workspace = true
 # Exclude from crates.io — this is a private automation crate.
 publish = false
 
+[package.metadata.soma-architecture]
+layer = "legacy"
+
 [dependencies]
 # CUSTOMIZE: anyhow for ergonomic errors, walkdir for filesystem traversal.
 #           These are the only deps needed for the four required commands.

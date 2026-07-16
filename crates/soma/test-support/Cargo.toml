@@ -10,6 +10,9 @@ license = "MIT"
 repository.workspace = true
 publish = false
 
+[package.metadata.soma-architecture]
+layer = "product-support"
+
 [dependencies]
 soma-api = { path = "../api", features = ["auth"] }
 soma-auth = { path = "../../shared/auth", features = ["http-axum"] }
