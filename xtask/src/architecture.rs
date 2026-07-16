@@ -15,6 +15,22 @@ const CONCRETE_SHARED_ENGINE_PATHS: &[&str] = &[
 
 const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[
     ArchitectureException {
+        from_path: "crates/soma/application",
+        to_path: "crates/soma/service",
+        owner: "architecture-refactor",
+        reason: "the application facade delegates to the legacy service during strangler migration",
+        removal_pr: "PR 12",
+        expiration_milestone: "legacy service decomposition",
+    },
+    ArchitectureException {
+        from_path: "crates/soma/application",
+        to_path: "crates/soma/contracts",
+        owner: "architecture-refactor",
+        reason: "the application facade exposes legacy provider catalog values during migration",
+        removal_pr: "PR 13",
+        expiration_milestone: "legacy contracts decomposition",
+    },
+    ArchitectureException {
         from_path: "crates/soma/api",
         to_path: "crates/shared/mcp/gateway",
         owner: "architecture-refactor",

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `soma-domain` product values and a transport-neutral `soma-application`
+  facade over the legacy service/provider registry, with abstract gateway,
+  Code Mode, and OpenAPI ports for incremental surface migration.
 - Add an `rmcp-traces` platform crate targeting `rmcp 2.2.0` with bounded request trace metadata parsing and redacted Soma MCP trace summaries.
 - `soma-auth` gained an `upstream/` module (behind the new `upstream-oauth-rmcp`
   feature) implementing the outbound `authorization_code` + PKCE flow for
