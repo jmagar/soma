@@ -36,28 +36,31 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
+use crate::scripts_lane_d::CheckMode;
+
 const TS_CLIENT_DIR: &str = "crates/shared/codex-app-server-client/clients/typescript";
 
-const USAGE: &str = "Usage: cargo xtask check-ts-client [--write|--check]
+const USAGE: &str = "Usage: cargo xtask check-ts-client [--write] [--check]
 
   --write  Regenerate src/generated/openapi-types.ts from ../../openapi.json
            (via `pnpm run generate`) and overwrite the checked-in file.
   --check  (default) Verify src/generated/openapi-types.ts is byte-identical
            to what `pnpm run generate` would produce, then run `pnpm run
-           typecheck` (`tsc --noEmit`) over the whole package.
+           typecheck` (`tsc --noEmit`) and `pnpm test` over the whole package.
 
 Requires `node` and `pnpm` on PATH. If either is missing, this prints a skip
 message and exits 0 rather than failing - see xtask/src/ts_client.rs's module
 docs for why.";
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Mode {
-    Check,
-    Write,
-}
-
 pub fn run(args: &[String]) -> Result<()> {
-    let mode = parse_mode(args)?;
+    // Shares `CheckMode` with `check-openapi`/`check-schema-docs` rather than
+    // hand-rolling a third parser for the same two flags: they are the same
+    // grammar for the same job (regenerate-or-verify a checked-in generated
+    // artifact), and a divergence between them would be an accident rather
+    // than a decision.
+    let Some(mode) = CheckMode::parse(args, USAGE)? else {
+        return Ok(());
+    };
     let root = current_dir()?;
     let package_dir = root.join(TS_CLIENT_DIR);
     if !package_dir.join("package.json").is_file() {
@@ -81,44 +84,35 @@ pub fn run(args: &[String]) -> Result<()> {
         "`pnpm install --frozen-lockfile` failed for the TypeScript REST client package",
     )?;
 
-    match mode {
-        Mode::Write => {
-            run_pnpm(&package_dir, &["run", "generate"]).context("`pnpm run generate` failed")?;
-            println!("check-ts-client: wrote {TS_CLIENT_DIR}/src/generated/openapi-types.ts");
-        }
-        Mode::Check => {
-            run_pnpm(&package_dir, &["run", "check-sync"]).context(
-                "TypeScript REST client types are out of sync with openapi.json - regenerate \
-                 with `cargo xtask check-ts-client --write` and commit the diff",
-            )?;
-            run_pnpm(&package_dir, &["run", "typecheck"])
-                .context("TypeScript REST client failed to typecheck (`pnpm run typecheck`)")?;
-            println!(
-                "check-ts-client: {TS_CLIENT_DIR} is in sync with openapi.json and type-checks"
-            );
-        }
+    // Ordered write-then-check so `--write --check` (`CheckMode::CheckAndWrite`)
+    // regenerates and then verifies the result, matching what the same flag
+    // pair does for `check-openapi`.
+    if mode.should_write() {
+        run_pnpm(&package_dir, &["run", "generate"]).context("`pnpm run generate` failed")?;
+        println!("check-ts-client: wrote {TS_CLIENT_DIR}/src/generated/openapi-types.ts");
+    }
+    if mode.should_check() {
+        run_pnpm(&package_dir, &["run", "check-sync"]).context(
+            "TypeScript REST client types are out of sync with openapi.json - regenerate \
+             with `cargo xtask check-ts-client --write` and commit the diff",
+        )?;
+        run_pnpm(&package_dir, &["run", "typecheck"])
+            .context("TypeScript REST client failed to typecheck (`pnpm run typecheck`)")?;
+        // The client hand-rolls SSE wire-format parsing and path-segment
+        // encoding, neither of which `tsc` can say anything about. Both had
+        // real bugs that only a test could catch - a stream that leaked its
+        // connection on early exit, and `..` segments that silently retargeted
+        // a request to a different route. The suite is zero-dependency
+        // (`node:test`) and runs in well under a second, so there's no reason
+        // for the gate to stop at typecheck.
+        run_pnpm(&package_dir, &["test"])
+            .context("TypeScript REST client test suite failed (`pnpm test`)")?;
+        println!(
+            "check-ts-client: {TS_CLIENT_DIR} is in sync with openapi.json, type-checks, and \
+             passes its tests"
+        );
     }
     Ok(())
-}
-
-fn parse_mode(args: &[String]) -> Result<Mode> {
-    let mut write = false;
-    let mut check = false;
-    for arg in args {
-        match arg.as_str() {
-            "--write" => write = true,
-            "--check" => check = true,
-            "--help" | "-h" => {
-                println!("{USAGE}");
-                std::process::exit(0);
-            }
-            unknown => bail!("unknown option: {unknown}\n\n{USAGE}"),
-        }
-    }
-    if write && check {
-        bail!("--write and --check are mutually exclusive\n\n{USAGE}");
-    }
-    Ok(if write { Mode::Write } else { Mode::Check })
 }
 
 /// `None` when both `node` and `pnpm` are usable; otherwise a human-readable
@@ -152,30 +146,49 @@ fn current_dir() -> Result<PathBuf> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parse_mode_defaults_to_check() {
-        assert_eq!(parse_mode(&[]).unwrap(), Mode::Check);
+    // These pin the flag grammar *as this command consumes it*. The parser
+    // itself is `CheckMode`, shared with `check-openapi`/`check-schema-docs`
+    // and unit-tested there; what's worth pinning here is that this command
+    // agrees with the others - most importantly that `--write --check` means
+    // "regenerate, then verify" rather than being rejected, which is what it
+    // used to do back when this file hand-rolled its own parser.
+    fn parse(args: &[&str]) -> Result<Option<CheckMode>> {
+        let owned: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+        CheckMode::parse(&owned, USAGE)
     }
 
     #[test]
-    fn parse_mode_accepts_check_flag() {
-        assert_eq!(parse_mode(&["--check".to_owned()]).unwrap(), Mode::Check);
+    fn defaults_to_check() {
+        let mode = parse(&[]).unwrap().expect("no --help was passed");
+        assert!(mode.should_check());
+        assert!(!mode.should_write());
     }
 
     #[test]
-    fn parse_mode_accepts_write_flag() {
-        assert_eq!(parse_mode(&["--write".to_owned()]).unwrap(), Mode::Write);
+    fn accepts_write_flag() {
+        let mode = parse(&["--write"]).unwrap().expect("no --help was passed");
+        assert!(mode.should_write());
+        assert!(!mode.should_check());
     }
 
     #[test]
-    fn parse_mode_rejects_both_flags() {
-        let error = parse_mode(&["--write".to_owned(), "--check".to_owned()]).unwrap_err();
-        assert!(error.to_string().contains("mutually exclusive"));
+    fn write_and_check_together_regenerate_then_verify() {
+        let mode = parse(&["--write", "--check"])
+            .unwrap()
+            .expect("no --help was passed");
+        assert!(mode.should_write());
+        assert!(mode.should_check());
     }
 
     #[test]
-    fn parse_mode_rejects_unknown_flag() {
-        let error = parse_mode(&["--bogus".to_owned()]).unwrap_err();
+    fn help_short_circuits_without_running_the_command() {
+        assert_eq!(parse(&["--help"]).unwrap(), None);
+        assert_eq!(parse(&["-h"]).unwrap(), None);
+    }
+
+    #[test]
+    fn rejects_unknown_flag() {
+        let error = parse(&["--bogus"]).unwrap_err();
         assert!(error.to_string().contains("unknown option"));
     }
 

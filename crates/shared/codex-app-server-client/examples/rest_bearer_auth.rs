@@ -30,7 +30,7 @@
 //!   need credentials wired through. `GET /v1/compatibility` is never
 //!   exempt — it reveals the installed `codex --version`, which the health
 //!   routes deliberately do not. Set
-//!   `CODEX_APP_SERVER_REST_REQUIRE_AUTH_FOR_HEALTH=1` to require the token
+//!   `REST_BEARER_AUTH_EXAMPLE_REQUIRE_AUTH_FOR_HEALTH=1` to require the token
 //!   on the health routes too, for deployments that want every request
 //!   authenticated uniformly regardless of what it reveals.
 //! - **Unsafe client options.** `command`/`extraArgs`/`config` overrides and
@@ -91,7 +91,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    let require_auth_for_health = env_flag("CODEX_APP_SERVER_REST_REQUIRE_AUTH_FOR_HEALTH");
+    // Deliberately outside the `CODEX_APP_SERVER_REST_*` prefix, unlike
+    // `CODEX_APP_SERVER_REST_ADDR`/`_TOKEN` below. Every name under that
+    // prefix is a real knob the shipped library or binary reads, enumerated in
+    // `RestLimits`'s doc table; this one is understood only by this example
+    // file. An operator grepping the tree for `CODEX_APP_SERVER_REST_` to find
+    // what they can tune should not find a lookalike that does nothing outside
+    // this example.
+    let require_auth_for_health = env_flag("REST_BEARER_AUTH_EXAMPLE_REQUIRE_AUTH_FOR_HEALTH");
 
     let addr = std::env::var("CODEX_APP_SERVER_REST_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:43230".to_owned())

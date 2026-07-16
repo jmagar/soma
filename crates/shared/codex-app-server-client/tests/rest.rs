@@ -1229,3 +1229,113 @@ async fn request_json(
     let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, body)
 }
+
+/// `?timeoutMs=0` on the streaming route must be clamped up to
+/// [`RestLimits::min_stream_poll_timeout`], not passed through to the backend.
+///
+/// Without the floor, one request drives an unbounded run of back-to-back
+/// `poll_event` calls (measured at ~935k frames/sec over a real socket), each
+/// paying a session lock, an idle-session scan, an allocation, and a
+/// serialized `timeout` frame to report that nothing happened.
+#[tokio::test]
+async fn sse_event_stream_clamps_a_zero_timeout_up_to_the_stream_floor() {
+    let backend = FakeBackend::default();
+    backend.queue_events([Ok(RestEventResponse::closed())]);
+    let observed_polls = backend.observed_polls.clone();
+    let options = RestRouterOptions::trusted_bridge();
+    let floor_ms = options.limits.min_stream_poll_timeout.as_millis() as u64;
+    let app = router_with_backend_and_options(backend, options);
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/sessions/session-1/events/stream?timeoutMs=0")
+        .body(Body::empty())
+        .unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(5), app.oneshot(request))
+        .await
+        .expect("SSE handler should return the response promptly")
+        .unwrap();
+    let _ = tokio::time::timeout(
+        Duration::from_secs(5),
+        to_bytes(response.into_body(), usize::MAX),
+    )
+    .await
+    .expect("SSE stream should terminate after the Closed frame")
+    .unwrap();
+
+    assert_eq!(*observed_polls.lock().unwrap(), vec![Some(floor_ms)]);
+}
+
+/// The long-poll route must keep accepting `?timeoutMs=0` verbatim.
+///
+/// Pinned separately from the streaming floor above because the two routes
+/// share `RestLimits` but not their clamping rules: `timeoutMs=0` is a
+/// legitimate non-blocking "is anything waiting?" poll here, paced by one HTTP
+/// round trip per call, and applying the stream's floor to it would silently
+/// turn every such call into a 250ms block.
+#[tokio::test]
+async fn long_poll_route_still_accepts_a_zero_timeout_verbatim() {
+    let backend = FakeBackend::default();
+    let observed_polls = backend.observed_polls.clone();
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let (status, body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=0",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+    assert_eq!(*observed_polls.lock().unwrap(), vec![Some(0)]);
+}
+
+/// A backend whose `poll_event` future resolves synchronously must not starve
+/// the executor.
+///
+/// `RestBackend` is a public trait host applications implement, and resolving
+/// on the first poll is legal and natural for a backend that already has an
+/// event buffered - `FakeBackend` here does exactly that. Before
+/// `EventPollStream` yielded on its own, such a backend meant `poll_next`
+/// never returned `Poll::Pending`, so the task never handed control back to
+/// the runtime and the stream looped forever with no upper bound.
+///
+/// This test would hang rather than fail without that fix: `#[tokio::test]`
+/// runs a current-thread runtime, so a stream that never yields also prevents
+/// the timer below from ever firing. The outer `timeout` is what converts a
+/// regression into a failed assertion.
+#[tokio::test]
+async fn sse_event_stream_yields_to_the_executor_with_a_synchronous_backend() {
+    // Default FakeBackend answers every poll with an immediate `timeout` and
+    // never queues a terminal event, so this stream is infinite by design.
+    let app = router_with_backend_and_options(
+        FakeBackend::default(),
+        RestRouterOptions::trusted_bridge(),
+    );
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/sessions/session-1/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(5), app.oneshot(request))
+        .await
+        .expect("SSE handler should return the response promptly")
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Reading an infinite stream must time out, not hang: the timer firing at
+    // all is the proof that the stream handed the runtime control back.
+    let drained = tokio::time::timeout(
+        Duration::from_millis(250),
+        to_bytes(response.into_body(), usize::MAX),
+    )
+    .await;
+    assert!(
+        drained.is_err(),
+        "an infinite SSE stream should still be pending when the timer fires; \
+         if this resolved, the fake backend stopped being infinite"
+    );
+}

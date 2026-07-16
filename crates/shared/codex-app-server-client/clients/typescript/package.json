@@ -11,6 +11,7 @@
     "generate": "node scripts/generate.mjs",
     "check-sync": "node scripts/generate.mjs --check",
     "typecheck": "tsc --noEmit",
+    "test": "node --test",
     "smoke": "node examples/smoke.ts",
     "live-smoke": "node scripts/live-smoke.mjs"
   },

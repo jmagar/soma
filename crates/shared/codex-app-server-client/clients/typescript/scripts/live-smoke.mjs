@@ -69,6 +69,44 @@ async function waitForHealth(client, attempts = 50) {
   throw new Error("server did not become healthy in time");
 }
 
+/**
+ * Sends `SIGTERM`, then waits for the child to actually exit before
+ * returning - not just for the signal to be delivered. `ChildProcess.killed`
+ * (what the code here used to check) flips to `true` synchronously the
+ * moment `kill()` is called; it does not mean the process has exited, so a
+ * `if (!server.killed) server.kill("SIGKILL")` fallback right after it is
+ * dead code that can never run. Escalates to `SIGKILL` if the process is
+ * still running after `gracefulTimeoutMs`, so a slow-to-exit
+ * `codex-app-server-rest` doesn't get orphaned when this script exits.
+ */
+async function stopServer(server, gracefulTimeoutMs = 2000) {
+  if (server.exitCode !== null || server.signalCode !== null) {
+    return;
+  }
+  server.kill("SIGTERM");
+  if (await waitForExit(server, gracefulTimeoutMs)) {
+    return;
+  }
+  server.kill("SIGKILL");
+  if (!(await waitForExit(server, 5000))) {
+    console.error(`  [live-smoke] warning: pid ${server.pid} did not exit even after SIGKILL`);
+  }
+}
+
+function waitForExit(server, timeoutMs) {
+  return new Promise((resolve) => {
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      server.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+    server.once("exit", onExit);
+  });
+}
+
 async function main() {
   const binaryPath = findBinary();
   if (binaryPath === null) {
@@ -112,11 +150,7 @@ async function main() {
 
     console.log("\nlive smoke OK: both routes answered with real, schema-shaped responses.");
   } finally {
-    server.kill("SIGTERM");
-    await delay(200);
-    if (!server.killed) {
-      server.kill("SIGKILL");
-    }
+    await stopServer(server);
   }
 }
 

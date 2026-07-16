@@ -14,12 +14,12 @@ use crate::{
     protocol::{AskForApproval, SandboxMode, ThreadStartParams, TurnInterruptParams},
     AllowAllApprovalHandler, ApprovalHandler, CodexAppServerClient, CodexSession,
     CompatibilityReport, DenyAllApprovalHandler, Error, Event, EventCollector,
-    PendingServerRequest, ReadOnlyApprovalHandler, TextTurnResult,
+    PendingServerRequest, ReadOnlyApprovalHandler, SessionOptions, TextTurnResult,
 };
 
 use super::types::{
     session_options_from, RestApprovalPolicy, RestBackend, RestCallRequest, RestCallResponse,
-    RestError, RestErrorReplyRequest, RestEventResponse, RestFuture, RestLimits,
+    RestClientOptions, RestError, RestErrorReplyRequest, RestEventResponse, RestFuture, RestLimits,
     RestRequestReplyResponse, RestRequestReplyResultRequest, RestResult, RestSessionCreateRequest,
     RestSessionCreateResponse, RestSessionSummary, RestStatusResponse, RestTextTurnRequest,
     RestTextTurnResponse,
@@ -136,6 +136,25 @@ impl CodexRestBackend {
             is_active || now.duration_since(last_used) < self.limits.idle_session_ttl
         });
     }
+}
+
+/// Builds the [`SessionOptions`] used to spawn every session this backend
+/// creates - one-shot text-turn sessions, stateful bridge sessions from
+/// `POST /v1/sessions`, and session-less raw calls alike - threading
+/// [`RestLimits::events_channel_capacity`] through via
+/// [`SessionOptions::with_events_capacity`] so that configured limit
+/// actually bounds the spawned session's event channel instead of every
+/// session silently falling back to [`crate::DEFAULT_EVENTS_CHANNEL_CAPACITY`].
+/// Centralized here (rather than inlined at each call site) so the three
+/// `RestBackend` methods that spawn sessions can't drift out of sync with
+/// this limit - see the unit test below for direct proof this actually
+/// applies it.
+fn session_options_with_limits(
+    client: Option<RestClientOptions>,
+    default_name: &str,
+    limits: &RestLimits,
+) -> SessionOptions {
+    session_options_from(client, default_name).with_events_capacity(limits.events_channel_capacity)
 }
 
 fn rest_text_turn_thread_params(model: Option<String>) -> ThreadStartParams {
@@ -331,7 +350,11 @@ impl RestBackend for CodexRestBackend {
     fn run_text_turn(&self, request: RestTextTurnRequest) -> RestFuture<RestTextTurnResponse> {
         let limits = self.limits.clone();
         Box::pin(async move {
-            let session_options = request.session_options();
+            let session_options = session_options_with_limits(
+                request.client.clone(),
+                "codex_app_server_rest",
+                &limits,
+            );
             let approval_policy = request.approval_policy.unwrap_or_default();
             let thread_params = rest_text_turn_thread_params(request.model.clone());
             let prompt = request.prompt.clone();
@@ -393,9 +416,10 @@ impl RestBackend for CodexRestBackend {
                         ))
                     })?;
 
-            let session = CodexSession::spawn(session_options_from(
+            let session = CodexSession::spawn(session_options_with_limits(
                 request.client,
                 "codex_app_server_rest_session",
+                &backend.limits,
             ))
             .await?;
             let initialize_response = serde_json::to_value(session.initialize_response())?;
@@ -490,9 +514,10 @@ impl RestBackend for CodexRestBackend {
                     .call_raw_method(method.clone(), request.params)
                     .await?
             } else {
-                let session = CodexSession::spawn(session_options_from(
+                let session = CodexSession::spawn(session_options_with_limits(
                     request.client,
                     "codex_app_server_rest_call",
+                    &backend.limits,
                 ))
                 .await?;
                 session
@@ -620,6 +645,34 @@ impl RestBackend for CodexRestBackend {
 mod tests {
     use super::*;
     use crate::protocol::{CurrentTimeReadParams, RequestId, ServerRequest};
+
+    /// Regression test: `session_options_with_limits` is the single place
+    /// all three `RestBackend` methods that spawn a session
+    /// (`run_text_turn`, `create_session`, `call_method`'s session-less
+    /// branch) go through to build `SessionOptions`. Exercises that exact
+    /// production function directly with a non-default
+    /// `events_channel_capacity` to prove the limit actually reaches the
+    /// `SessionOptions` handed to `CodexSession::spawn` - a knob nothing
+    /// reads is worse than no knob. (The complementary half of this proof -
+    /// that a given `SessionOptions::events_capacity` actually bounds the
+    /// resulting session's event channel - is covered by
+    /// `client.rs`'s `connect_streams_with_events_capacity_bounds_the_channel_to_the_requested_size`.)
+    #[test]
+    fn session_options_with_limits_applies_the_configured_events_channel_capacity() {
+        let limits = RestLimits {
+            events_channel_capacity: 7,
+            ..RestLimits::default()
+        };
+        assert_ne!(
+            limits.events_channel_capacity,
+            RestLimits::default().events_channel_capacity,
+            "test setup bug: this must be a non-default value to prove anything"
+        );
+
+        let options = session_options_with_limits(None, "test-default-name", &limits);
+
+        assert_eq!(options.events_capacity, Some(7));
+    }
 
     #[tokio::test]
     async fn expired_pending_request_returns_gone_and_removes_the_key() {

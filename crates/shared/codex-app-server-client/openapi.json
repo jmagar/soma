@@ -905,7 +905,7 @@
             }
           },
           {
-            "description": "Long-poll budget in milliseconds. Defaults to, and is clamped down to, the server's configured `RestLimits::max_poll_timeout` (default 30000ms, overridable via `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS`) - a caller-requested value above that ceiling is silently lowered to it, never rejected.",
+            "description": "Long-poll budget in milliseconds. Defaults to, and is clamped down to, the server's configured `RestLimits::max_poll_timeout` (default 30000ms, overridable via `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS`) - a caller-requested value above that ceiling is silently lowered to it, never rejected. There is no lower bound: `0` means `report an event only if one is already waiting`, which is a supported non-blocking poll.",
             "in": "query",
             "name": "timeoutMs",
             "required": false,
@@ -995,7 +995,7 @@
             }
           },
           {
-            "description": "Long-poll budget in milliseconds. Defaults to, and is clamped down to, the server's configured `RestLimits::max_poll_timeout` (default 30000ms, overridable via `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS`) - a caller-requested value above that ceiling is silently lowered to it, never rejected.",
+            "description": "How long the server waits for the next event before emitting a `timeout` frame and waiting again, in milliseconds. Clamped into `[RestLimits::min_stream_poll_timeout, RestLimits::max_poll_timeout]` (default 250ms to 30000ms, overridable via `CODEX_APP_SERVER_REST_MIN_STREAM_POLL_TIMEOUT_MS` and `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS`) - a value outside that range is silently moved into it, never rejected. Unlike the long-poll route, this one enforces a floor: a stream has no per-event HTTP round trip to pace it, so a zero timeout would make one request loop the backend without bound. The floor does not delay real events - it only caps how often an idle stream reports that nothing happened.",
             "in": "query",
             "name": "timeoutMs",
             "required": false,

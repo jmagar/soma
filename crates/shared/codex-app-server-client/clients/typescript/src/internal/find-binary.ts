@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 /**
  * `crates/shared/codex-app-server-client/clients/typescript/src/internal/` is
- * five directories below the repo root, which is where `cargo build`'s
+ * seven directories below the repo root, which is where `cargo build`'s
  * default `target/debug/` lives.
  */
 export function defaultBinaryPath(): string {

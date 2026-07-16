@@ -36,13 +36,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **SSE**: `GET /v1/sessions/{sessionId}/events/stream` streams the same
     payloads as the long-poll `.../events` route as Server-Sent Events. A
     session still allows only one event consumer; a second reader of either
-    kind gets `409 Conflict`.
+    kind gets `409 Conflict`. The stream yields to the executor on a bounded
+    number of consecutive synchronous backend polls, and `?timeoutMs=` is
+    clamped up to `RestLimits::min_stream_poll_timeout` (250ms) on this route
+    only — without either, a backend that resolves `poll_event` synchronously
+    (legal for the public `RestBackend` trait, and what a buffered event looks
+    like) let one request loop the runtime without bound. The long-poll route
+    keeps accepting `timeoutMs=0` verbatim: there it means "only if an event
+    is already waiting", and each repeat is paced by an HTTP round trip.
   - **Operational knobs**: every `RestLimits` field (session TTL, max
-    sessions, concurrency caps, response byte cap, text-turn timeout, SSE
-    keep-alive, ...) gained a documented default and a
+    sessions, concurrency caps, response byte cap, text-turn timeout, event
+    buffer size, SSE keep-alive, ...) gained a documented default and a
     `CODEX_APP_SERVER_REST_*` override via `RestLimits::from_env()` /
     `try_from_env()`. A malformed value is a hard error, never a silent
-    fallback.
+    fallback. Event buffer size reaches the real per-session channel via the
+    new `SessionOptions::with_events_capacity` and
+    `CodexAppServerClient::{spawn,connect_streams,connect_unix}_with_events_capacity`,
+    so the REST limit configures it without misrepresenting the underlying
+    constant (now `DEFAULT_EVENTS_CHANNEL_CAPACITY`) as REST-specific.
   - **Safety examples**: `rest_loopback_dev`, `rest_bearer_auth`,
     `rest_trusted_gateway`, and `rest_admin_unsafe` document the four
     deployment postures and what each does and does not protect.
@@ -163,6 +174,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `codex-app-server-client` module size: `src/rest/openapi.rs` (1154 effective
+  lines) exceeded the `xtask patterns` file-size hard limit (700). Split into
+  `openapi/{json,route_table,schemas,paths}.rs` along the document's own
+  seams; `openapi.json` is byte-identical through the move, which its parity
+  test proves. `xtask patterns` also now exempts checked-in generator output
+  under a `src/generated/` directory (deliberately narrow, so a hand-written
+  module cannot opt out by naming): splitting is not an option for a file its
+  generator rewrites wholesale and a parity test guards, so the warning could
+  never be actionable.
+- `cargo xtask check-openapi --help` and `check-schema-docs --help` printed
+  usage and then ran the command anyway. `CheckMode::parse` now returns `None`
+  for `--help` so the caller stops. `check-ts-client` shares that parser
+  rather than hand-rolling a third copy of the same `--write`/`--check`
+  grammar, and its `--help` no longer triggers a `pnpm install`.
 - `soma-auth` module size: `authorize.rs` (869 effective lines) and
   `upstream/manager.rs` (1080 effective lines) exceeded the repo's
   `xtask patterns` file-size hard limit (700). Split DCR client

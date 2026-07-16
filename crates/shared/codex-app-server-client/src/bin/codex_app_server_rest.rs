@@ -24,7 +24,7 @@
 //! outlier. The actual argument grammar here is small and fixed (five named
 //! flags, all `--flag value` or `--flag=value`, no subcommands, no
 //! positional arguments, no combinable short flags) - well within what a
-//! ~40-line hand-rolled loop can parse correctly and exhaustively unit-test,
+//! small hand-rolled loop can parse correctly and exhaustively unit-test,
 //! which is the real risk `clap` mitigates for larger/more dynamic grammars.
 //! [`parse_cli`] is that loop; [`tests::cli`] exercises both `--flag value`
 //! and `--flag=value` forms, unknown-flag rejection, and duplicate-flag
@@ -203,25 +203,14 @@ fn print_effective_config(config: &ResolvedConfig, limits: &RestLimits, addr: So
             "disabled"
         }
     );
-    println!(
-        "  limits:                max_sessions={} max_one_shot_concurrency={} \
-         max_session_call_concurrency={} max_session_call_concurrency_per_session={} \
-         max_poll_timeout={:?} max_text_turn_duration={:?} max_text_turn_output_bytes={} \
-         pending_request_ttl={:?} max_pending_requests_per_session={} idle_session_ttl={:?} \
-         compatibility_ttl={:?} sse_keep_alive_interval={:?}",
-        limits.max_sessions,
-        limits.max_one_shot_concurrency,
-        limits.max_session_call_concurrency,
-        limits.max_session_call_concurrency_per_session,
-        limits.max_poll_timeout,
-        limits.max_text_turn_duration,
-        limits.max_text_turn_output_bytes,
-        limits.pending_request_ttl,
-        limits.max_pending_requests_per_session,
-        limits.idle_session_ttl,
-        limits.compatibility_ttl,
-        limits.sse_keep_alive_interval,
-    );
+    // Printed via `RestLimits`'s `Debug` derive rather than a hand-listed
+    // format string. The point of this banner is to show an operator what they
+    // actually got, so a field it forgets to mention is worse than useless -
+    // and a hand-written list forgets by default: it silently omits every
+    // field added to `RestLimits` after it was written (which is exactly what
+    // happened to `min_stream_poll_timeout` and `events_channel_capacity`).
+    // The derive cannot drift.
+    println!("  limits:                {limits:?}");
 }
 
 /// Router mode selected by `--mode`/`CODEX_APP_SERVER_REST_MODE`.
@@ -536,6 +525,41 @@ fn check_safety(config: &ResolvedConfig) -> Result<SafetyOutcome, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The startup banner must name every limit, so an operator can see what
+    /// they actually got rather than what they hoped for.
+    ///
+    /// Pinned because the banner used to hand-list the fields and silently
+    /// dropped two that were added to `RestLimits` later. It renders via the
+    /// `Debug` derive now, which can't drift - this test fails if someone
+    /// replaces that with a hand-written list again, or adds a field whose
+    /// `Debug` output is suppressed.
+    #[test]
+    fn effective_config_banner_names_every_limits_field() {
+        let rendered = format!("{:?}", RestLimits::default());
+        for field in [
+            "max_sessions",
+            "max_one_shot_concurrency",
+            "max_session_call_concurrency",
+            "max_session_call_concurrency_per_session",
+            "max_poll_timeout",
+            "min_stream_poll_timeout",
+            "max_text_turn_duration",
+            "max_text_turn_output_bytes",
+            "pending_request_ttl",
+            "max_pending_requests_per_session",
+            "events_channel_capacity",
+            "idle_session_ttl",
+            "compatibility_ttl",
+            "sse_keep_alive_interval",
+        ] {
+            assert!(
+                rendered.contains(field),
+                "the startup banner renders RestLimits via Debug, but `{field}` is missing from \
+                 that output: {rendered}"
+            );
+        }
+    }
 
     fn env_map(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
         let pairs: Vec<(String, String)> = pairs

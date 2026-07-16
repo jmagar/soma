@@ -495,14 +495,26 @@ value) or `RestLimits::try_from_env()` (returns `RestLimitsEnvError`), then
 | `MAX_ONE_SHOT_CONCURRENCY` | `4` | in-flight `/v1/text-turn` + `/v1/call/*` |
 | `MAX_SESSION_CALL_CONCURRENCY` | `64` | in-flight session calls, all sessions |
 | `MAX_SESSION_CALL_CONCURRENCY_PER_SESSION` | `8` | in-flight session calls, one session |
-| `MAX_POLL_TIMEOUT_MS` | `30000` | cap on `?timeoutMs=` for both event routes |
+| `MAX_POLL_TIMEOUT_MS` | `30000` | ceiling on `?timeoutMs=` for both event routes |
+| `MIN_STREAM_POLL_TIMEOUT_MS` | `250` | floor on `?timeoutMs=`, SSE route only |
 | `MAX_TEXT_TURN_DURATION_MS` | `600000` | wall-clock budget for one text turn |
 | `MAX_TEXT_TURN_OUTPUT_BYTES` | `1048576` | response byte cap for one text turn |
 | `PENDING_REQUEST_TTL_MS` | `600000` | how long an unanswered server request lives |
 | `MAX_PENDING_REQUESTS_PER_SESSION` | `64` | unanswered server requests per session |
+| `EVENTS_CHANNEL_CAPACITY` | `1024` | event buffer per session; events drop once full |
 | `IDLE_SESSION_TTL_MS` | `1800000` | idle session reaping |
 | `COMPATIBILITY_TTL_MS` | `30000` | `/v1/compatibility` cache |
 | `SSE_KEEP_ALIVE_MS` | `15000` | SSE keep-alive frame interval |
+
+Only the SSE route has a floor on `?timeoutMs=`, and the asymmetry is
+deliberate. On the long-poll route `timeoutMs=0` means "tell me only if an
+event is already waiting" — a useful non-blocking poll, and each repeat costs
+the caller an HTTP round trip that paces it. A stream has neither: it is one
+request that loops server-side for as long as the client reads, so a zero
+timeout there turns a single request into an unbounded run of back-to-back
+backend polls. The floor costs real events nothing — `poll_event` returns as
+soon as an event arrives, so the timeout only bounds the *idle* wait — it just
+caps how often an idle stream reports that nothing happened.
 
 A variable that is present but unparseable is a hard error, never a silent
 fallback to the default — that is how a 10x-wrong limit ships unnoticed.

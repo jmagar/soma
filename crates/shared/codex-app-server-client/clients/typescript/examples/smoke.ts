@@ -24,7 +24,7 @@
 // should not assume - see README.md's "Running the example" section.
 
 import { setTimeout as delay } from "node:timers/promises";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 
 import { CodexAppServerRestClient, CodexAppServerRestError } from "../src/client.ts";
 import { findBinary } from "../src/internal/find-binary.ts";
@@ -92,18 +92,63 @@ async function main(): Promise<void> {
           break;
         }
       }
-      console.log(`consumed ${seen} SSE frame(s) (each request's server-side stream ends when this loop stops reading it)`);
+      // Breaking out of the loop above does correctly end this request's
+      // server-side stream - `streamEvents`'s `finally` block cancels the
+      // underlying fetch, which the server observes as its connection
+      // closing (see `src/client.ts`'s `streamEvents` doc comment). That is
+      // NOT automatic just because "the loop stopped reading it", though:
+      // it is `CodexAppServerRestClient` correctly reacting to being torn
+      // down (`reader.cancel()`, not merely `reader.releaseLock()`) - a
+      // client that only released its reader lock without canceling would
+      // leave the socket, and the server-side handler blocked on it, open
+      // indefinitely no matter how thoroughly the loop stopped reading.
+      console.log(`consumed ${seen} SSE frame(s)`);
     } finally {
       await client.deleteSession(session.sessionId);
       console.log(`deleted session ${session.sessionId}`);
     }
   } finally {
-    server.kill("SIGTERM");
-    await delay(200);
-    if (!server.killed) {
-      server.kill("SIGKILL");
-    }
+    await stopServer(server);
   }
+}
+
+/**
+ * Sends `SIGTERM`, then waits for the child to actually exit before
+ * returning - not just for the signal to be delivered. `ChildProcess.killed`
+ * (what the code here used to check) flips to `true` synchronously the
+ * moment `kill()` is called; it does not mean the process has exited, so a
+ * `if (!server.killed) server.kill("SIGKILL")` fallback right after it is
+ * dead code that can never run. Escalates to `SIGKILL` if the process is
+ * still running after `gracefulTimeoutMs`, so a slow-to-exit
+ * `codex-app-server-rest` (e.g. mid model call) doesn't get orphaned when
+ * this script exits.
+ */
+async function stopServer(server: ChildProcess, gracefulTimeoutMs = 2000): Promise<void> {
+  if (server.exitCode !== null || server.signalCode !== null) {
+    return;
+  }
+  server.kill("SIGTERM");
+  if (await waitForExit(server, gracefulTimeoutMs)) {
+    return;
+  }
+  server.kill("SIGKILL");
+  if (!(await waitForExit(server, 5000))) {
+    console.error(`  [smoke] warning: pid ${server.pid} did not exit even after SIGKILL`);
+  }
+}
+
+function waitForExit(server: ChildProcess, timeoutMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const onExit = (): void => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      server.off("exit", onExit);
+      resolve(false);
+    }, timeoutMs);
+    server.once("exit", onExit);
+  });
 }
 
 async function waitForHealth(client: CodexAppServerRestClient, attempts = 50): Promise<void> {

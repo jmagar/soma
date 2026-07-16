@@ -384,7 +384,7 @@ async fn poll_event_stream(
         Ok(guard) => guard,
         Err(error) => return rest_error(error),
     };
-    let timeout_ms = clamp_poll_timeout_ms(
+    let timeout_ms = clamp_stream_poll_timeout_ms(
         &state.options,
         query
             .timeout_ms
@@ -397,6 +397,7 @@ async fn poll_event_stream(
         pending: None,
         guard: Some(guard),
         done: false,
+        synchronous_polls: 0,
     };
     Sse::new(stream)
         .keep_alive(KeepAlive::new().interval(state.options.limits.sse_keep_alive_interval))
@@ -430,7 +431,37 @@ struct EventPollStream {
     /// than waiting for hyper to finish tearing down the now-finished body.
     guard: Option<ActivePollGuard>,
     done: bool,
+    /// Consecutive `poll_next` calls that resolved a `poll_event` future
+    /// without the executor ever getting control back. Reset to 0 whenever
+    /// this stream parks (returns `Poll::Pending`). See
+    /// [`YIELD_AFTER_SYNCHRONOUS_POLLS`].
+    synchronous_polls: u32,
 }
+
+/// How many back-to-back synchronously-resolving `poll_event` calls this
+/// stream will service before forcing itself to yield to the executor.
+///
+/// [`RestBackend`] is a public trait that host applications implement, and a
+/// `poll_event` future is free to resolve on its first poll - a backend with
+/// an already-buffered event does exactly that, and it is the natural shape
+/// for one. When that happens this stream never returns `Poll::Pending`, so
+/// the task driving it never hands control back to the runtime: on a
+/// current-thread runtime (which `codex-app-server-rest` uses) one such
+/// stream starves every other task in the process, and there is no upper
+/// bound on how long it continues.
+///
+/// The default [`crate::rest::CodexRestBackend`] happens not to trigger the
+/// unbounded case, because its `poll_event` bottoms out in tokio's mpsc and
+/// timer primitives, which park at least once. That is incidental, not a
+/// contract this stream can rely on: a bursty session (events already queued)
+/// and any third-party backend both break the assumption. So the bound is
+/// enforced here, where the loop actually lives, rather than being left to
+/// the backend's good behavior.
+///
+/// The value only needs to be small enough to bound starvation and large
+/// enough not to add a park to every event on a busy-but-well-behaved
+/// session; 32 is comfortably both.
+const YIELD_AFTER_SYNCHRONOUS_POLLS: u32 = 32;
 
 impl Stream for EventPollStream {
     type Item = Result<SseEvent, Infallible>;
@@ -439,6 +470,15 @@ impl Stream for EventPollStream {
         let this = self.get_mut();
         if this.done {
             return Poll::Ready(None);
+        }
+        if this.synchronous_polls >= YIELD_AFTER_SYNCHRONOUS_POLLS {
+            // Hand control back to the executor, then ask to be polled again
+            // immediately. This is what `tokio::task::yield_now()` does; it is
+            // open-coded because `poll_next` is a manual `poll` fn and cannot
+            // `.await`.
+            this.synchronous_polls = 0;
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
         }
         if this.pending.is_none() {
             this.pending = Some(
@@ -451,9 +491,15 @@ impl Stream for EventPollStream {
             .as_mut()
             .expect("pending future was just populated above");
         match pending.as_mut().poll(cx) {
-            Poll::Pending => Poll::Pending,
+            Poll::Pending => {
+                // Parked on the backend: the executor has control back, so the
+                // starvation budget is spent and resets.
+                this.synchronous_polls = 0;
+                Poll::Pending
+            }
             Poll::Ready(result) => {
                 this.pending = None;
+                this.synchronous_polls = this.synchronous_polls.saturating_add(1);
                 match result {
                     Ok(response) => {
                         if matches!(response, RestEventResponse::Closed) {
@@ -571,88 +617,43 @@ fn invalid_json(error: JsonRejection) -> Response {
 /// just has nowhere to put the status code, since `200 OK` and the SSE
 /// content-type are already committed by the time a frame can be written.
 fn rest_error_response(error: RestError) -> (StatusCode, RestErrorResponse) {
+    /// The shape every variant below shares except the two `Client` ones:
+    /// a status, a stable machine-readable `error` kind, and the message the
+    /// variant already carries. Factored out so adding a variant is one line
+    /// and cannot accidentally disagree with its neighbours about the
+    /// `code`/`data` fields, which only the JSON-RPC passthrough populates.
+    fn simple(status: StatusCode, kind: &str, message: String) -> (StatusCode, RestErrorResponse) {
+        (
+            status,
+            RestErrorResponse {
+                error: kind.to_owned(),
+                message,
+                code: None,
+                data: None,
+            },
+        )
+    }
+
     match error {
-        RestError::NotFound(message) => (
-            StatusCode::NOT_FOUND,
-            RestErrorResponse {
-                error: "not_found".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::Gone(message) => (
-            StatusCode::GONE,
-            RestErrorResponse {
-                error: "gone".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::Forbidden(message) => (
-            StatusCode::FORBIDDEN,
-            RestErrorResponse {
-                error: "forbidden".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::InvalidRequest(message) => (
-            StatusCode::BAD_REQUEST,
-            RestErrorResponse {
-                error: "invalid_request".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::RateLimited(message) => (
-            StatusCode::TOO_MANY_REQUESTS,
-            RestErrorResponse {
-                error: "rate_limited".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::Conflict(message) => (
-            StatusCode::CONFLICT,
-            RestErrorResponse {
-                error: "conflict".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::TimedOut(message) => (
-            StatusCode::GATEWAY_TIMEOUT,
-            RestErrorResponse {
-                error: "timeout".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::PayloadTooLarge(message) => (
-            StatusCode::PAYLOAD_TOO_LARGE,
-            RestErrorResponse {
-                error: "payload_too_large".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
-        RestError::Internal(message) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            RestErrorResponse {
-                error: "internal".to_owned(),
-                message,
-                code: None,
-                data: None,
-            },
-        ),
+        RestError::NotFound(message) => simple(StatusCode::NOT_FOUND, "not_found", message),
+        RestError::Gone(message) => simple(StatusCode::GONE, "gone", message),
+        RestError::Forbidden(message) => simple(StatusCode::FORBIDDEN, "forbidden", message),
+        RestError::InvalidRequest(message) => {
+            simple(StatusCode::BAD_REQUEST, "invalid_request", message)
+        }
+        RestError::RateLimited(message) => {
+            simple(StatusCode::TOO_MANY_REQUESTS, "rate_limited", message)
+        }
+        RestError::Conflict(message) => simple(StatusCode::CONFLICT, "conflict", message),
+        RestError::TimedOut(message) => simple(StatusCode::GATEWAY_TIMEOUT, "timeout", message),
+        RestError::PayloadTooLarge(message) => {
+            simple(StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large", message)
+        }
+        RestError::Internal(message) => {
+            simple(StatusCode::INTERNAL_SERVER_ERROR, "internal", message)
+        }
+        // The only variants that don't fit `simple`: a JSON-RPC error from the
+        // app-server is passed through with its own `code`/`data` intact.
         RestError::Client(Error::Rpc {
             code,
             message,
@@ -666,14 +667,10 @@ fn rest_error_response(error: RestError) -> (StatusCode, RestErrorResponse) {
                 data,
             },
         ),
-        RestError::Client(error) => (
+        RestError::Client(error) => simple(
             StatusCode::BAD_GATEWAY,
-            RestErrorResponse {
-                error: "codex_app_server_error".to_owned(),
-                message: error.to_string(),
-                code: None,
-                data: None,
-            },
+            "codex_app_server_error",
+            error.to_string(),
         ),
     }
 }
@@ -748,6 +745,34 @@ fn acquire_poll_guard(state: &RestState, session_id: &str) -> RestResult<ActiveP
 fn clamp_poll_timeout_ms(options: &RestRouterOptions, timeout_ms: u64) -> u64 {
     let max = options.limits.max_poll_timeout.as_millis() as u64;
     timeout_ms.min(max)
+}
+
+/// Like [`clamp_poll_timeout_ms`], but also enforces
+/// [`RestLimits::min_stream_poll_timeout`] as a floor.
+///
+/// The long-poll route deliberately has no floor: there, `timeoutMs=0` means
+/// "tell me if an event is already waiting, otherwise return immediately",
+/// which is a legitimate non-blocking-poll idiom, and each repeat costs the
+/// caller a full HTTP round trip that paces it.
+///
+/// The streaming route has no such pacing - it is one request that loops
+/// server-side for as long as the client reads - and no equivalent use for a
+/// zero timeout, since a stream by definition wants to wait for the next
+/// event. Without a floor, `?timeoutMs=0` turns one request into an unbounded
+/// run of back-to-back `poll_event` calls, each costing a session-map lock, an
+/// idle-session scan, a heap-allocated future, and a serialized `timeout`
+/// frame - all to report that nothing happened.
+///
+/// This costs real events nothing: `poll_event` resolves as soon as an event
+/// arrives, so the timeout only bounds the *idle* wait. The floor therefore
+/// only limits how often an idle stream emits `timeout` frames.
+fn clamp_stream_poll_timeout_ms(options: &RestRouterOptions, timeout_ms: u64) -> u64 {
+    let min = options.limits.min_stream_poll_timeout.as_millis() as u64;
+    let max = options.limits.max_poll_timeout.as_millis() as u64;
+    // `min` wins a misconfigured `min > max`: the floor is a resource-abuse
+    // backstop, and clamping into an empty range has to fail toward "poll less
+    // often", never toward the unbounded spin the floor exists to prevent.
+    timeout_ms.min(max).max(min)
 }
 
 fn normalize_method(method: String) -> Option<String> {

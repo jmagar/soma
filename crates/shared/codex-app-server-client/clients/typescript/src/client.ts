@@ -9,8 +9,15 @@
 // name below is cross-referenced to its OpenAPI `operationId` in a comment.
 
 import type { components } from "./generated/openapi-types.ts";
+import { parseSseStream, CodexAppServerRestStreamTruncatedError } from "./internal/sse.ts";
 
 type Schemas = components["schemas"];
+
+// Re-exported so callers of `streamEvents` can `instanceof`-check for it
+// alongside `CodexAppServerRestError` - see that class's doc comment for the
+// three normal termination paths this one is distinct from. The parsing
+// internals it's thrown from (`src/internal/sse.ts`) stay unexported.
+export { CodexAppServerRestStreamTruncatedError };
 
 export type RestHealthResponse = Schemas["RestHealthResponse"];
 export type CompatibilityReport = Schemas["CompatibilityReport"];
@@ -37,6 +44,9 @@ export type RestRequestReplyResponse = Schemas["RestRequestReplyResponse"];
  * there since no HTTP status line can follow a committed `200`
  * `text/event-stream` response, exactly as `openapi.json`'s
  * `getV1SessionsBySessionIdEventsStream` operation description documents.
+ * `streamEvents` can also throw {@link CodexAppServerRestStreamTruncatedError}
+ * for a different, transport-level failure - see that class's doc comment
+ * for how it differs from this one.
  *
  * Deliberately no constructor parameter properties here (`constructor(public
  * readonly status: ...)`) - that TypeScript syntax lowers to real runtime
@@ -73,6 +83,35 @@ export interface CodexAppServerRestClientOptions {
 }
 
 /**
+ * Rejects a single path segment that would be silently rewritten by URL
+ * resolution: `.` and `..` are unreserved characters, so `encodeURIComponent`
+ * passes them through unchanged, and the WHATWG `URL` constructor (used by
+ * `buildUrl` below) then normalizes those dot-segments away during relative
+ * resolution against `baseUrl`. Concretely, a `sessionId`/`requestKey`/
+ * method-segment value of `".."` would retarget a request to a different
+ * route - `client.sessionCall("..", "foo", {})` would escape the intended
+ * session scope and land on `POST /v1/call/foo` instead of erroring - while
+ * this client still attaches the `Authorization` header meant for the
+ * intended route. Rejecting (rather than stripping or otherwise
+ * normalizing) is deliberate: silently rewriting a caller-supplied
+ * identifier is its own kind of surprise, and a value built from untrusted
+ * input deserves a loud, synchronous failure here rather than a request
+ * that quietly reaches the wrong place - consistent with the existing
+ * `"method must not be empty"` throw below.
+ */
+function assertSafePathSegment(value: string, paramName: string): string {
+  if (value.length === 0 || value === "." || value === "..") {
+    throw new TypeError(`${paramName} must not be empty, "." or ".."`);
+  }
+  return value;
+}
+
+/** `encodeURIComponent`, guarded by {@link assertSafePathSegment}. */
+function encodePathSegment(value: string, paramName: string): string {
+  return encodeURIComponent(assertSafePathSegment(value, paramName));
+}
+
+/**
  * Joins a JSON-RPC method name (e.g. `"thread/start"`) onto a REST path
  * segment without collapsing it into a single percent-encoded token.
  *
@@ -90,7 +129,10 @@ export interface CodexAppServerRestClientOptions {
  * *within* each `/`-delimited segment and leaves `/` itself unescaped, since
  * that's the form `openapi.json` documents as the real shape of this
  * parameter, and it is not dependent on axum's specific percent-decode
- * behavior the way a raw `encodeURIComponent(method)` would be.
+ * behavior the way a raw `encodeURIComponent(method)` would be. Each
+ * individual segment is still validated via {@link assertSafePathSegment} -
+ * a method of `"../sessions"` or `"thread/.."` must not be able to escape
+ * `/v1/call/` the same way a raw `sessionId`/`requestKey` of `".."` must not.
  */
 export function encodeMethodPath(method: string): string {
   const trimmed = method.replace(/^\/+|\/+$/g, "");
@@ -99,69 +141,8 @@ export function encodeMethodPath(method: string): string {
   }
   return trimmed
     .split("/")
-    .map((segment) => encodeURIComponent(segment))
+    .map((segment) => encodeURIComponent(assertSafePathSegment(segment, "method")))
     .join("/");
-}
-
-/** One parsed Server-Sent Events frame (an `event:`/`data:` pair, `data:` may span multiple lines). */
-interface SseFrame {
-  event?: string;
-  data: string;
-}
-
-/**
- * Parses a `text/event-stream` body into whole frames. Hand-rolled (no
- * `eventsource-parser`/`EventSource` dependency) because the client stays at
- * zero runtime dependencies - see README.md. Handles exactly what this
- * server emits (`event:` + one-or-more `data:` lines per frame, blank-line
- * delimited, `:`-prefixed comment/keep-alive lines ignored) rather than the
- * full SSE spec (no `id:`/`retry:` support, since this server never sends
- * them - see `openapi.json`'s SSE operation description).
- */
-async function* parseSseStream(body: ReadableStream<Uint8Array>): AsyncGenerator<SseFrame> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary !== -1) {
-        const frame = parseSseFrame(buffer.slice(0, boundary));
-        if (frame) {
-          yield frame;
-        }
-        buffer = buffer.slice(boundary + 2);
-        boundary = buffer.indexOf("\n\n");
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-function parseSseFrame(raw: string): SseFrame | null {
-  let event: string | undefined;
-  const dataLines: string[] = [];
-  for (const line of raw.split("\n")) {
-    if (line.length === 0 || line.startsWith(":")) {
-      continue;
-    }
-    if (line.startsWith("event:")) {
-      event = line.slice("event:".length).trim();
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice("data:".length).trim());
-    }
-  }
-  if (dataLines.length === 0) {
-    return null;
-  }
-  const data = dataLines.join("\n");
-  return event === undefined ? { data } : { event, data };
 }
 
 /**
@@ -223,7 +204,10 @@ export class CodexAppServerRestClient {
 
   /** `DELETE /v1/sessions/{sessionId}` (`operationId: deleteV1SessionsBySessionId`). */
   deleteSession(sessionId: string): Promise<RestStatusResponse> {
-    return this.requestJson<RestStatusResponse>("DELETE", `v1/sessions/${encodeURIComponent(sessionId)}`);
+    return this.requestJson<RestStatusResponse>(
+      "DELETE",
+      `v1/sessions/${encodePathSegment(sessionId, "sessionId")}`,
+    );
   }
 
   /**
@@ -238,7 +222,7 @@ export class CodexAppServerRestClient {
   ): Promise<RestCallResponse> {
     return this.requestJson<RestCallResponse>(
       "POST",
-      `v1/sessions/${encodeURIComponent(sessionId)}/call/${encodeMethodPath(method)}`,
+      `v1/sessions/${encodePathSegment(sessionId, "sessionId")}/call/${encodeMethodPath(method)}`,
       body,
     );
   }
@@ -252,7 +236,7 @@ export class CodexAppServerRestClient {
     const query = timeoutMs === undefined ? undefined : { timeoutMs: String(timeoutMs) };
     return this.requestJson<RestEventResponse>(
       "GET",
-      `v1/sessions/${encodeURIComponent(sessionId)}/events`,
+      `v1/sessions/${encodePathSegment(sessionId, "sessionId")}/events`,
       undefined,
       query,
     );
@@ -262,15 +246,39 @@ export class CodexAppServerRestClient {
    * `GET /v1/sessions/{sessionId}/events/stream` (`operationId: getV1SessionsBySessionIdEventsStream`),
    * the SSE counterpart to {@link pollEvents}. Yields one `RestEventResponse` per SSE frame
    * (including `timeout` heartbeats - callers that only care about real events should skip
-   * those) until a `closed` event, the stream ends, or a terminal `event: error` frame is
-   * received (surfaced as a thrown {@link CodexAppServerRestError} with `status: null` -
-   * see that class's doc comment).
+   * those) until one of: a `closed` event; the stream ending right after one; a terminal
+   * `event: error` frame (surfaced as a thrown {@link CodexAppServerRestError} with
+   * `status: null` - see that class's doc comment); or the stream being cut off mid-frame
+   * (surfaced as a thrown {@link CodexAppServerRestStreamTruncatedError}).
+   *
+   * Stopping iteration early - `for await (const e of client.streamEvents(id)) { ...; break; }`
+   * - correctly tears down the underlying connection: breaking (or `return`ing, or throwing)
+   * out of a `for await` loop makes the JS engine call this generator's (and, transitively,
+   * the SSE parser's) `return()`, which runs their `finally` blocks and cancels the in-flight
+   * fetch. The server observes that cancellation as the connection closing and releases
+   * whatever it was holding for this request (e.g. its `ActivePollGuard`) - it is not left
+   * waiting for a stream that will never be read again. Pass `signal` to cancel proactively
+   * from outside the loop (e.g. on a timeout) instead of only reactively via `break`.
    */
-  async *streamEvents(sessionId: string, timeoutMs?: number): AsyncGenerator<RestEventResponse> {
+  async *streamEvents(
+    sessionId: string,
+    timeoutMs?: number,
+    signal?: AbortSignal,
+  ): AsyncGenerator<RestEventResponse> {
     const query = timeoutMs === undefined ? undefined : { timeoutMs: String(timeoutMs) };
+    const init: RequestInit = { headers: this.authHeaders() };
+    if (signal !== undefined) {
+      // Built conditionally, not `{ headers, signal }` directly: lib.dom.d.ts
+      // declares `RequestInit["signal"]` as `AbortSignal | null` (optional,
+      // no explicit `| undefined`), and with `exactOptionalPropertyTypes` on,
+      // explicitly writing `signal: undefined` into an object literal is a
+      // distinct (and rejected) assignment from omitting the key entirely -
+      // same reasoning as `requestJson`'s conditional `body`/`content-type` below.
+      init.signal = signal;
+    }
     const response = await this.fetchImpl(
-      this.buildUrl(`v1/sessions/${encodeURIComponent(sessionId)}/events/stream`, query),
-      { headers: this.authHeaders() },
+      this.buildUrl(`v1/sessions/${encodePathSegment(sessionId, "sessionId")}/events/stream`, query),
+      init,
     );
     if (!response.ok || response.body === null) {
       throw new CodexAppServerRestError(response.status, await this.parseErrorBody(response));
@@ -298,7 +306,8 @@ export class CodexAppServerRestClient {
   ): Promise<RestRequestReplyResponse> {
     return this.requestJson<RestRequestReplyResponse>(
       "POST",
-      `v1/sessions/${encodeURIComponent(sessionId)}/requests/${encodeURIComponent(requestKey)}/result`,
+      `v1/sessions/${encodePathSegment(sessionId, "sessionId")}/requests/` +
+        `${encodePathSegment(requestKey, "requestKey")}/result`,
       body,
     );
   }
@@ -314,7 +323,8 @@ export class CodexAppServerRestClient {
   ): Promise<RestRequestReplyResponse> {
     return this.requestJson<RestRequestReplyResponse>(
       "POST",
-      `v1/sessions/${encodeURIComponent(sessionId)}/requests/${encodeURIComponent(requestKey)}/error`,
+      `v1/sessions/${encodePathSegment(sessionId, "sessionId")}/requests/` +
+        `${encodePathSegment(requestKey, "requestKey")}/error`,
       body,
     );
   }

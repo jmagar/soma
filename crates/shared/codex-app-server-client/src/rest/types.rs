@@ -3,7 +3,9 @@ use std::{collections::HashMap, env, future::Future, pin::Pin, time::Duration};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{CompatibilityReport, Error, SessionOptions, TextTurnResult};
+use crate::{
+    CompatibilityReport, Error, SessionOptions, TextTurnResult, DEFAULT_EVENTS_CHANNEL_CAPACITY,
+};
 
 pub type RestResult<T> = std::result::Result<T, RestError>;
 pub type RestFuture<T> = Pin<Box<dyn Future<Output = RestResult<T>> + Send + 'static>>;
@@ -111,10 +113,12 @@ impl RestRouterOptions {
 /// | [`max_session_call_concurrency`](Self::max_session_call_concurrency) | `CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY` | `64` |
 /// | [`max_session_call_concurrency_per_session`](Self::max_session_call_concurrency_per_session) | `CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY_PER_SESSION` | `8` |
 /// | [`max_poll_timeout`](Self::max_poll_timeout) | `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS` | `30000` (30s) |
+/// | [`min_stream_poll_timeout`](Self::min_stream_poll_timeout) | `CODEX_APP_SERVER_REST_MIN_STREAM_POLL_TIMEOUT_MS` | `250` |
 /// | [`max_text_turn_duration`](Self::max_text_turn_duration) | `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS` | `600000` (10m) |
 /// | [`max_text_turn_output_bytes`](Self::max_text_turn_output_bytes) | `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES` | `1048576` (1 MiB) |
 /// | [`pending_request_ttl`](Self::pending_request_ttl) | `CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS` | `600000` (10m) |
 /// | [`max_pending_requests_per_session`](Self::max_pending_requests_per_session) | `CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION` | `64` |
+/// | [`events_channel_capacity`](Self::events_channel_capacity) | `CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY` | `1024` |
 /// | [`idle_session_ttl`](Self::idle_session_ttl) | `CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS` | `1800000` (30m) |
 /// | [`compatibility_ttl`](Self::compatibility_ttl) | `CODEX_APP_SERVER_REST_COMPATIBILITY_TTL_MS` | `30000` (30s) |
 /// | [`sse_keep_alive_interval`](Self::sse_keep_alive_interval) | `CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS` | `15000` (15s) |
@@ -146,6 +150,19 @@ pub struct RestLimits {
     /// value is clamped down to this. Env:
     /// `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS`. Default: `30000` (30s).
     pub max_poll_timeout: Duration,
+    /// Lower bound on `?timeoutMs=` for `GET
+    /// /v1/sessions/{sessionId}/events/stream` only; a smaller requested value
+    /// is clamped up to this.
+    ///
+    /// The long-poll route has no floor on purpose (`timeoutMs=0` there is a
+    /// legitimate "is anything waiting right now?" non-blocking poll, paced by
+    /// one HTTP round trip per call). A stream has no such pacing and no use
+    /// for a zero timeout, so without a floor one request can drive an
+    /// unbounded run of back-to-back backend polls. Costs real events nothing:
+    /// the timeout only bounds the *idle* wait, so this just caps how often an
+    /// idle stream emits `timeout` frames. Env:
+    /// `CODEX_APP_SERVER_REST_MIN_STREAM_POLL_TIMEOUT_MS`. Default: `250`.
+    pub min_stream_poll_timeout: Duration,
     /// Wall-clock budget for `POST /v1/text-turn` to reach a terminal turn
     /// state; the turn is interrupted and the request fails with
     /// [`RestError::TimedOut`] past this point. Env:
@@ -176,6 +193,22 @@ pub struct RestLimits {
     /// `CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION`. Default:
     /// `64`.
     pub max_pending_requests_per_session: usize,
+    /// Capacity of each REST-spawned session's internal event channel -
+    /// exactly the channel documented on [`crate::EventStream`], applied via
+    /// [`crate::SessionOptions::with_events_capacity`] to every session this
+    /// backend spawns (`POST /v1/text-turn`, `POST /v1/sessions`, and
+    /// session-less `POST /v1/call/{method}`). REST/SSE consumers reading
+    /// events over a network are exactly the "slow or stalled consumer" case
+    /// that channel's bound and drop policy exist for: notifications are
+    /// dropped once it's full, but server-originated requests always get a
+    /// fallback error reply first rather than being lost - see
+    /// [`crate::EventStream`]'s doc comment for the exact per-variant policy.
+    /// A `0` value is rejected when the session is actually spawned (see
+    /// [`crate::CodexAppServerClient::spawn_with_events_capacity`]), not
+    /// silently accepted here. Env:
+    /// `CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY`. Default: `1024`
+    /// (matching [`DEFAULT_EVENTS_CHANNEL_CAPACITY`]).
+    pub events_channel_capacity: usize,
     /// How long a stateful bridge session may sit with no in-flight
     /// operation before it is pruned (and its `codex app-server` process
     /// torn down) on the next backend access. Env:
@@ -206,10 +239,12 @@ impl Default for RestLimits {
             max_session_call_concurrency: 64,
             max_session_call_concurrency_per_session: 8,
             max_poll_timeout: Duration::from_secs(30),
+            min_stream_poll_timeout: Duration::from_millis(250),
             max_text_turn_duration: Duration::from_secs(10 * 60),
             max_text_turn_output_bytes: 1024 * 1024,
             pending_request_ttl: Duration::from_secs(600),
             max_pending_requests_per_session: 64,
+            events_channel_capacity: DEFAULT_EVENTS_CHANNEL_CAPACITY,
             idle_session_ttl: Duration::from_secs(30 * 60),
             compatibility_ttl: Duration::from_secs(30),
             sse_keep_alive_interval: Duration::from_secs(15),
@@ -277,6 +312,10 @@ impl RestLimits {
                 "CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS",
                 default.max_poll_timeout,
             )?,
+            min_stream_poll_timeout: env_duration_ms(
+                "CODEX_APP_SERVER_REST_MIN_STREAM_POLL_TIMEOUT_MS",
+                default.min_stream_poll_timeout,
+            )?,
             max_text_turn_duration: env_duration_ms(
                 "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS",
                 default.max_text_turn_duration,
@@ -292,6 +331,10 @@ impl RestLimits {
             max_pending_requests_per_session: env_usize(
                 "CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION",
                 default.max_pending_requests_per_session,
+            )?,
+            events_channel_capacity: env_nonzero_usize(
+                "CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY",
+                default.events_channel_capacity,
             )?,
             idle_session_ttl: env_duration_ms(
                 "CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS",
@@ -313,6 +356,27 @@ impl RestLimits {
 /// variable is entirely absent. A variable that is set to anything that
 /// doesn't parse as a `usize` (empty, negative, non-numeric, non-UTF-8) is
 /// reported via `Err`, never silently mapped to `default`.
+/// Like [`env_usize`], but rejects `0`.
+///
+/// For most limits `0` is merely a useless setting (a semaphore nobody can
+/// acquire), which is the operator's business. For a channel capacity it is an
+/// *invalid* one: `tokio::sync::mpsc::channel(0)` panics. Catching it here
+/// means a bad value fails at `RestLimits::from_env()` - at startup, naming
+/// the variable - instead of surviving the config load and blowing up on the
+/// first session spawn, which is exactly the "present but unusable" case the
+/// hard-error rule on [`RestLimits`] exists to prevent.
+fn env_nonzero_usize(var: &'static str, default: usize) -> Result<usize, RestLimitsEnvError> {
+    let value = env_usize(var, default)?;
+    if value == 0 {
+        return Err(RestLimitsEnvError {
+            var,
+            value: "0".to_owned(),
+            expected: "a positive integer (a zero-capacity channel is not constructible)",
+        });
+    }
+    Ok(value)
+}
+
 fn env_usize(var: &'static str, default: usize) -> Result<usize, RestLimitsEnvError> {
     match env::var(var) {
         Ok(value) => value
@@ -790,6 +854,7 @@ mod tests {
         "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES",
         "CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS",
         "CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION",
+        "CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY",
         "CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS",
         "CODEX_APP_SERVER_REST_COMPATIBILITY_TTL_MS",
         "CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS",
@@ -820,6 +885,10 @@ mod tests {
             default.max_session_call_concurrency_per_session
         );
         assert_eq!(limits.max_poll_timeout, default.max_poll_timeout);
+        assert_eq!(
+            limits.events_channel_capacity,
+            default.events_channel_capacity
+        );
         assert_eq!(
             limits.sse_keep_alive_interval,
             default.sse_keep_alive_interval
@@ -889,6 +958,59 @@ mod tests {
             .expect_err("a negative override must not silently fall back to the default");
 
         assert_eq!(error.var, "CODEX_APP_SERVER_REST_MAX_SESSIONS");
+    }
+
+    /// A zero events capacity has to fail here, at config load, rather than
+    /// parsing cleanly and panicking inside `tokio::sync::mpsc::channel` the
+    /// first time a session is spawned - by which point the process has
+    /// already printed a startup banner claiming the configuration is good.
+    #[test]
+    fn try_from_env_rejects_a_zero_events_channel_capacity_at_load_time() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _bad = EnvVarGuard::set("CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY", "0");
+
+        let error = RestLimits::try_from_env()
+            .expect_err("a zero events channel capacity is not constructible and must be rejected");
+
+        assert_eq!(error.var, "CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY");
+        assert!(
+            error.to_string().contains("positive"),
+            "the error should say what was expected, got: {error}"
+        );
+    }
+
+    #[test]
+    fn try_from_env_parses_a_valid_events_channel_capacity_override() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _capacity = EnvVarGuard::set("CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY", "7");
+
+        let limits = RestLimits::try_from_env().expect("a well-formed override should parse");
+
+        assert_eq!(limits.events_channel_capacity, 7);
+    }
+
+    #[test]
+    fn try_from_env_reports_a_malformed_events_channel_capacity_instead_of_defaulting() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _bad = EnvVarGuard::set(
+            "CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY",
+            "not-a-number",
+        );
+
+        let error = RestLimits::try_from_env()
+            .expect_err("a malformed override must not silently fall back to the default");
+
+        assert_eq!(error.var, "CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY");
+        assert_eq!(error.value, "not-a-number");
     }
 
     #[test]
