@@ -153,6 +153,9 @@ jobs:
       - name: cargo clippy -- -D warnings
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: codex app-server REST clippy
+        run: cargo clippy -p codex-app-server-client --all-targets --features rest -- -D warnings
+
       - name: soma-gateway clippy all features
         run: cargo clippy -p soma-gateway --all-targets --all-features -- -D warnings
 
@@ -189,6 +192,9 @@ jobs:
 
       - name: soma-gateway all-features tests
         run: cargo test -p soma-gateway --all-features
+
+      - name: codex app-server REST tests
+        run: cargo test -p codex-app-server-client --features rest --locked
 
       - name: Upload nextest report
         if: always()
@@ -392,6 +398,14 @@ jobs:
           }
 
           exit $process.ExitCode
+
+      - name: codex app-server REST tests
+        shell: pwsh
+        env:
+          RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          cargo test -p codex-app-server-client --features rest --locked
 
       - name: cargo build local binary
         shell: pwsh

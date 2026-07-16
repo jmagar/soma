@@ -20,7 +20,7 @@
 //! let mut session = CodexSession::spawn(SessionOptions::new("my_integration", "0.1.0")).await?;
 //! let result = session
 //!     .run_text_turn_with_model_and_handler(
-//!         "gpt-5.4",
+//!         "gpt-5",
 //!         "Say hello in one sentence.",
 //!         &DenyAllApprovalHandler::default(),
 //!     )
@@ -47,8 +47,8 @@ mod session;
 mod transport;
 
 pub use approvals::{
-    AllowAllApprovalHandler, ApprovalHandler, DenyAllApprovalHandler, FnApprovalHandler,
-    ReadOnlyApprovalHandler, ServerRequestReply,
+    AllowAllApprovalHandler, ApprovalFuture, ApprovalHandler, AsyncFnApprovalHandler,
+    DenyAllApprovalHandler, FnApprovalHandler, ReadOnlyApprovalHandler, ServerRequestReply,
 };
 pub use client::{
     CodexAppServerClient, Event, EventStream, PendingServerRequest, DEFAULT_CALL_TIMEOUT,

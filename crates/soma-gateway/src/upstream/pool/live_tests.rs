@@ -30,12 +30,14 @@ fn capability_absence_matches_json_rpc_method_not_found() {
     assert!(!capability_is_absent("connection refused"));
 }
 
-fn python_command() -> &'static str {
-    if cfg!(windows) {
-        "python"
-    } else {
-        "python3"
-    }
+fn python_command() -> String {
+    std::env::var("SOMA_PYTHON_COMMAND").unwrap_or_else(|_| {
+        if cfg!(windows) {
+            "python".to_owned()
+        } else {
+            "python3".to_owned()
+        }
+    })
 }
 
 #[tokio::test]
@@ -47,7 +49,7 @@ async fn stdio_live_discovery_and_call_routes_echo() {
     let pool = UpstreamPool::default();
     pool.register_config(UpstreamConfig {
         name: "py".to_owned(),
-        command: Some(python_command().to_owned()),
+        command: Some(python_command()),
         args: vec![script.to_string_lossy().to_string()],
         ..UpstreamConfig::default()
     })

@@ -16,12 +16,14 @@ fn default_manager() -> GatewayManager {
     GatewayManager::new(GatewayConfig::default()).unwrap()
 }
 
-fn python_command() -> &'static str {
-    if cfg!(windows) {
-        "python"
-    } else {
-        "python3"
-    }
+fn python_command() -> String {
+    std::env::var("SOMA_PYTHON_COMMAND").unwrap_or_else(|_| {
+        if cfg!(windows) {
+            "python".to_owned()
+        } else {
+            "python3".to_owned()
+        }
+    })
 }
 
 #[tokio::test]

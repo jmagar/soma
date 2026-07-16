@@ -5,9 +5,41 @@
 
 use codex_app_server_client::protocol::{ClientInfo, InitializeParams};
 use codex_app_server_client::{CodexAppServerClient, Error, Event};
+use std::ffi::{OsStr, OsString};
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        if let Some(previous) = &self.previous {
+            std::env::set_var(self.key, previous);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
 
 #[tokio::test]
 async fn handshake_and_no_auth_round_trip() {
+    let tmp = tempfile::tempdir().expect("temporary Codex home should be created");
+    let codex_home = tmp.path().join("codex-home");
+    let home = tmp.path().join("home");
+    std::fs::create_dir_all(&codex_home).expect("temporary CODEX_HOME should be created");
+    std::fs::create_dir_all(&home).expect("temporary HOME should be created");
+    let _codex_home = EnvVarGuard::set("CODEX_HOME", &codex_home);
+    let _home = EnvVarGuard::set("HOME", &home);
+
     let (client, mut events) = match CodexAppServerClient::spawn("codex", &[]) {
         Ok(pair) => pair,
         Err(Error::Spawn { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
@@ -20,7 +52,7 @@ async fn handshake_and_no_auth_round_trip() {
     tokio::spawn(async move {
         while let Some(event) = events.recv().await {
             if let Event::Request(req) = event {
-                req.respond_error(-32000, "no handler in smoke test", None);
+                let _ = req.respond_error(-32000, "no handler in smoke test", None);
             }
         }
     });
