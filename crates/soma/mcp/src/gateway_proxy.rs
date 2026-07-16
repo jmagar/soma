@@ -4,16 +4,15 @@ use rmcp::model::{
     CallToolResult, GetPromptResult, Prompt, ReadResourceResult, Resource, Tool, ToolAnnotations,
 };
 use serde_json::{json, Map, Value};
-use soma_gateway::gateway::{manager::GatewayManagerError, protected_routes::ProtectedRouteScope};
-use soma_runtime::server::GatewayProductState;
+use soma_application::{ApplicationError, ExecutionContext, GatewayRouteScope, SomaApplication};
 
 pub async fn list_tools_for_subject_and_scope(
-    gateway: &GatewayProductState,
-    subject: Option<&str>,
-    scope: Option<&ProtectedRouteScope>,
+    application: &SomaApplication,
+    scope: Option<&GatewayRouteScope>,
+    context: &ExecutionContext,
 ) -> Result<Vec<Tool>, rmcp::ErrorData> {
-    let routes = gateway
-        .tool_routes_for_subject_and_scope(subject, scope)
+    let routes = application
+        .gateway_mcp_tools(scope, context)
         .await
         .map_err(protocol_error)?;
     Ok(routes
@@ -21,27 +20,27 @@ pub async fn list_tools_for_subject_and_scope(
         .map(|route| {
             let mut tool = Tool::new_with_raw(
                 route.name,
-                route.descriptor.description.map(Cow::Owned),
-                schema_object(route.descriptor.input_schema),
+                route.description.map(Cow::Owned),
+                schema_object(route.input_schema),
             );
-            if let Some(output_schema) = schema_object_opt(route.descriptor.output_schema) {
+            if let Some(output_schema) = schema_object_opt(route.output_schema) {
                 tool = tool.with_raw_output_schema(output_schema);
             }
-            tool.with_annotations(ToolAnnotations::new().destructive(route.descriptor.destructive))
+            tool.with_annotations(ToolAnnotations::new().destructive(route.destructive))
         })
         .collect())
 }
 
 pub async fn call_tool_for_subject_and_scope(
-    gateway: &GatewayProductState,
+    application: &SomaApplication,
     name: &str,
     args: Option<Map<String, Value>>,
-    subject: Option<&str>,
-    scope: Option<&ProtectedRouteScope>,
+    scope: Option<&GatewayRouteScope>,
+    context: &ExecutionContext,
 ) -> Option<CallToolResult> {
     let params = Value::Object(args.unwrap_or_default());
-    match gateway
-        .call_mcp_tool_for_subject_and_scope(name, params, subject, scope)
+    match application
+        .gateway_call_mcp_tool(name, params, scope, context)
         .await
     {
         Ok(Some(value)) => Some(CallToolResult::structured(value)),
@@ -55,12 +54,12 @@ pub async fn call_tool_for_subject_and_scope(
 }
 
 pub async fn list_resources_for_subject_and_scope(
-    gateway: &GatewayProductState,
-    subject: Option<&str>,
-    scope: Option<&ProtectedRouteScope>,
+    application: &SomaApplication,
+    scope: Option<&GatewayRouteScope>,
+    context: &ExecutionContext,
 ) -> Result<Vec<Resource>, rmcp::ErrorData> {
-    let routes = gateway
-        .resource_routes_for_subject_and_scope(subject, scope)
+    let routes = application
+        .gateway_mcp_resources(scope, context)
         .await
         .map_err(protocol_error)?;
     Ok(routes
@@ -68,23 +67,20 @@ pub async fn list_resources_for_subject_and_scope(
         .map(|route| {
             Resource::new(
                 route.uri,
-                route
-                    .descriptor
-                    .name
-                    .unwrap_or_else(|| route.native_uri.clone()),
+                route.name.unwrap_or_else(|| route.native_uri.clone()),
             )
         })
         .collect())
 }
 
 pub async fn read_resource_for_subject_and_scope(
-    gateway: &GatewayProductState,
+    application: &SomaApplication,
     uri: &str,
-    subject: Option<&str>,
-    scope: Option<&ProtectedRouteScope>,
+    scope: Option<&GatewayRouteScope>,
+    context: &ExecutionContext,
 ) -> Result<Option<ReadResourceResult>, rmcp::ErrorData> {
-    match gateway
-        .read_mcp_resource_for_subject_and_scope(uri, subject, scope)
+    match application
+        .gateway_read_mcp_resource(uri, scope, context)
         .await
     {
         Ok(Some(value)) => serde_json::from_value(value)
@@ -96,29 +92,29 @@ pub async fn read_resource_for_subject_and_scope(
 }
 
 pub async fn list_prompts_for_subject_and_scope(
-    gateway: &GatewayProductState,
-    subject: Option<&str>,
-    scope: Option<&ProtectedRouteScope>,
+    application: &SomaApplication,
+    scope: Option<&GatewayRouteScope>,
+    context: &ExecutionContext,
 ) -> Result<Vec<Prompt>, rmcp::ErrorData> {
-    let routes = gateway
-        .prompt_routes_for_subject_and_scope(subject, scope)
+    let routes = application
+        .gateway_mcp_prompts(scope, context)
         .await
         .map_err(protocol_error)?;
     Ok(routes
         .into_iter()
-        .map(|route| Prompt::new(route.name, route.descriptor.description.as_deref(), None))
+        .map(|route| Prompt::new(route.name, route.description.as_deref(), None))
         .collect())
 }
 
 pub async fn get_prompt_for_subject_and_scope(
-    gateway: &GatewayProductState,
+    application: &SomaApplication,
     name: &str,
     arguments: Option<Map<String, Value>>,
-    subject: Option<&str>,
-    scope: Option<&ProtectedRouteScope>,
+    scope: Option<&GatewayRouteScope>,
+    context: &ExecutionContext,
 ) -> Result<Option<GetPromptResult>, rmcp::ErrorData> {
-    match gateway
-        .get_mcp_prompt_for_subject_and_scope(name, arguments, subject, scope)
+    match application
+        .gateway_get_mcp_prompt(name, arguments, scope, context)
         .await
     {
         Ok(Some(value)) => serde_json::from_value(value)
@@ -145,14 +141,14 @@ fn schema_object_opt(value: Option<Value>) -> Option<Arc<Map<String, Value>>> {
     }
 }
 
-fn protocol_error(error: GatewayManagerError) -> rmcp::ErrorData {
+fn protocol_error(error: ApplicationError) -> rmcp::ErrorData {
     rmcp::ErrorData::internal_error(
         error.to_string(),
         Some(error_payload("gateway_proxy_failed", "gateway", error)),
     )
 }
 
-fn error_payload(code: &str, tool: &str, error: GatewayManagerError) -> Value {
+fn error_payload(code: &str, tool: &str, error: ApplicationError) -> Value {
     json!({
         "kind": "mcp_tool_error",
         "schema_version": 1,

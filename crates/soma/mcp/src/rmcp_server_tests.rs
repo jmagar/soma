@@ -7,28 +7,42 @@ use rmcp_traces::TraceTrust;
 use serde_json::json;
 use soma_test_support::{tracing_test_lock, SharedBuf};
 
-use soma_contracts::{
-    actions::{SomaAction, ValidationError},
-    providers::ProviderResource,
-    token_limit::MAX_RESPONSE_BYTES,
-};
-use soma_service::{classify_service_error, ProviderError, ResourceReadOutput};
+use soma_application::{ApplicationError, ApplicationErrorDetails, ResourceContent};
+use soma_contracts::{providers::ProviderResource, token_limit::MAX_RESPONSE_BYTES};
 
 use crate::assert_result_has_no_meta;
 
 use super::{
-    resource_contents_from_output, resource_read_error, rmcp_resource_from_catalog_resource,
-    rmcp_tool_from_json, tool_error_result, trace_summary_from_meta, unknown_tool_error,
+    application_error_payload, resource_contents_from_output, resource_read_error,
+    rmcp_resource_from_catalog_resource, rmcp_tool_from_json, tool_error_result,
+    trace_context_from_meta, trace_summary_from_meta, unknown_tool_error,
 };
 
 const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
 
 #[test]
-fn validation_errors_become_structured_tool_errors() {
-    let error = anyhow::Error::from(ValidationError::MissingField {
-        field: "message".to_owned(),
-    });
-    let payload = classify_service_error(&error).to_mcp_payload("soma", Some("echo"));
+fn valid_mcp_trace_metadata_becomes_application_trace_context() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_tracestate("vendor=value");
+
+    let trace = trace_context_from_meta(&meta).expect("valid trace context");
+    assert_eq!(trace.traceparent.as_deref(), Some(VALID_TRACEPARENT));
+    assert_eq!(trace.tracestate.as_deref(), Some("vendor=value"));
+
+    meta.set_traceparent("not-a-traceparent");
+    assert!(trace_context_from_meta(&meta).is_none());
+}
+
+#[test]
+fn application_errors_become_structured_tool_errors() {
+    let error = anyhow::Error::new(ApplicationError::new(
+        "missing_field",
+        "missing required field `message`",
+        false,
+        "Provide `message` and retry.",
+    ));
+    let payload = application_error_payload(&error, "soma", Some("echo"));
     let result = tool_error_result(payload).expect("tool error should serialize");
 
     assert_result_has_no_meta(&result);
@@ -42,33 +56,62 @@ fn validation_errors_become_structured_tool_errors() {
     assert_eq!(structured["code"], "missing_field");
     assert_eq!(structured["tool"], "soma");
     assert_eq!(structured["action"], "echo");
-    assert_eq!(structured["field"], "message");
     assert!(structured["remediation"]
         .as_str()
         .unwrap_or_default()
-        .contains("action=help"));
+        .contains("message"));
 }
 
 #[test]
-fn parser_validation_errors_become_structured_tool_errors() {
-    let error = SomaAction::from_mcp_args(&json!({
-        "action": "echo"
-    }))
-    .expect_err("missing echo message should fail parsing");
-    let payload = classify_service_error(&error).to_mcp_payload("soma", Some("echo"));
-    let result = tool_error_result(payload).expect("tool error should serialize");
+fn provider_application_errors_preserve_mcp_taxonomy() {
+    let error = anyhow::Error::new(
+        ApplicationError::new(
+            "provider_execution_failed",
+            "Provider execution failed. Check server logs for details.",
+            true,
+            "Check provider status and retry.",
+        )
+        .with_details(ApplicationErrorDetails::Provider {
+            schema_version: 1,
+            provider: "weather".to_owned(),
+            action: Some("weather_current".to_owned()),
+            provider_error_kind: "provider_error".to_owned(),
+        }),
+    );
 
-    assert_result_has_no_meta(&result);
-    assert_eq!(result.is_error, Some(true));
-    let structured = result
-        .structured_content
-        .as_ref()
-        .expect("structured content should be present");
-    assert_eq!(structured["kind"], "mcp_tool_error");
-    assert_eq!(structured["code"], "missing_field");
-    assert_eq!(structured["tool"], "soma");
-    assert_eq!(structured["action"], "echo");
-    assert_eq!(structured["field"], "message");
+    let payload = application_error_payload(&error, "soma", Some("fallback"));
+
+    assert_eq!(payload["provider"], "weather");
+    assert_eq!(payload["action"], "weather_current");
+    assert_eq!(payload["provider_error_kind"], "provider_error");
+    assert_eq!(payload["retryable"], true);
+}
+
+#[test]
+fn service_application_errors_preserve_validation_context() {
+    let error = anyhow::Error::new(
+        ApplicationError::new(
+            "invalid_crate_name",
+            "invalid crate name",
+            true,
+            "Use a Cargo-compatible crate name.",
+        )
+        .with_details(ApplicationErrorDetails::Service {
+            schema_version: 1,
+            service_error_kind: "validation".to_owned(),
+            field: Some("crate_name".to_owned()),
+            bad_value: None,
+            expected_pattern: Some("^[a-z][a-z0-9-]*$".to_owned()),
+            reason_kind: None,
+            available_actions: Vec::new(),
+        }),
+    );
+
+    let payload = application_error_payload(&error, "soma", Some("scaffold_intent"));
+
+    assert_eq!(payload["service_error_kind"], "validation");
+    assert_eq!(payload["field"], "crate_name");
+    assert_eq!(payload["expected_pattern"], "^[a-z][a-z0-9-]*$");
 }
 
 #[test]
@@ -114,7 +157,7 @@ fn unknown_tool_stays_protocol_error_with_structured_data() {
 #[test]
 fn execution_errors_do_not_expose_raw_error_text() {
     let raw_error = anyhow::anyhow!("upstream timeout talking to secret-api-key");
-    let payload = classify_service_error(&raw_error).to_mcp_payload("soma", Some("status"));
+    let payload = application_error_payload(&raw_error, "soma", Some("status"));
 
     assert_eq!(
         payload,
@@ -122,13 +165,13 @@ fn execution_errors_do_not_expose_raw_error_text() {
             "kind": "mcp_tool_error",
             "schema_version": 1,
             "code": "execution_error",
-            "service_error_kind": "timeout",
-            "reason_kind": "timeout",
             "tool": "soma",
             "action": "status",
             "message": "Tool execution failed. Check server logs for details.",
             "retryable": true,
             "remediation": "Check service configuration and upstream availability, then retry. Use action=status or action=help for diagnostics.",
+            "service_error_kind": "timeout",
+            "reason_kind": "timeout",
         })
     );
     assert!(!payload.to_string().contains("secret-api-key"));
@@ -155,6 +198,19 @@ fn trace_summary_for_logs_uses_untrusted_fail_soft_policy() {
     );
     assert_eq!(summary.baggage_member_count(), 0);
     assert_eq!(summary.sensitive_baggage_member_count(), 0);
+}
+
+#[test]
+fn valid_traceparent_survives_invalid_optional_trace_metadata() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_tracestate("invalid tracestate");
+    meta.set_baggage("a".repeat(9 * 1024));
+
+    let trace = trace_context_from_meta(&meta).expect("valid traceparent should propagate");
+
+    assert_eq!(trace.traceparent.as_deref(), Some(VALID_TRACEPARENT));
+    assert_eq!(trace.tracestate, None);
 }
 
 #[allow(clippy::await_holding_lock)]
@@ -388,11 +444,11 @@ fn rmcp_tool_conversion_preserves_output_schema() {
 
 #[test]
 fn resource_read_error_maps_unknown_resource_to_invalid_params() {
-    let error = ProviderError::validation(
-        "registry",
-        "soma://resources/missing",
+    let error = ApplicationError::new(
         "unknown_resource",
         "unknown resource",
+        false,
+        "List available resources and retry.",
     );
     let mapped = resource_read_error("soma://resources/missing", &error);
     assert_eq!(mapped.code, ErrorCode::INVALID_PARAMS);
@@ -401,11 +457,10 @@ fn resource_read_error_maps_unknown_resource_to_invalid_params() {
 
 #[test]
 fn resource_read_error_maps_insufficient_scope_to_invalid_request() {
-    let error = ProviderError::new(
+    let error = ApplicationError::new(
         "insufficient_scope",
-        "demo",
-        None,
         "resource `soma://resources/runbook` requires scope `soma:write`",
+        false,
         "Authenticate with a token that includes the required scope.",
     );
     let mapped = resource_read_error("soma://resources/runbook", &error);
@@ -421,7 +476,7 @@ fn resource_read_error_maps_every_other_code_to_internal_error() {
         "resource_escapes_root",
         "provider_not_loaded",
     ] {
-        let error = ProviderError::validation("demo", "soma://resources/x", code, "boom");
+        let error = ApplicationError::new(code, "boom", false, "Retry later.");
         let mapped = resource_read_error("soma://resources/x", &error);
         assert_eq!(
             mapped.code,
@@ -435,7 +490,7 @@ fn resource_read_error_maps_every_other_code_to_internal_error() {
 fn resource_contents_from_output_preserves_text_and_mime_type() {
     let contents = resource_contents_from_output(
         "soma://resources/runbook",
-        ResourceReadOutput::Text {
+        ResourceContent::Text {
             text: "hello".to_owned(),
             mime_type: Some("text/markdown".to_owned()),
         },
@@ -465,7 +520,7 @@ fn resource_contents_from_output_falls_back_to_text_plain_when_reader_omits_mime
     // wire rather than `null`.
     let contents = resource_contents_from_output(
         "soma://resources/runbook",
-        ResourceReadOutput::Text {
+        ResourceContent::Text {
             text: "hello".to_owned(),
             mime_type: None,
         },
@@ -483,7 +538,7 @@ fn resource_contents_from_output_falls_back_to_text_plain_when_reader_omits_mime
 fn resource_contents_from_output_preserves_blob_and_mime_type() {
     let contents = resource_contents_from_output(
         "soma://resources/logo",
-        ResourceReadOutput::Blob {
+        ResourceContent::Blob {
             blob_base64: "AAAA".to_owned(),
             mime_type: Some("image/png".to_owned()),
         },

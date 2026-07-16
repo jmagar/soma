@@ -63,8 +63,7 @@ fn server_info_includes_implementation_metadata() {
 
 #[test]
 fn server_info_uses_configured_server_name() {
-    let mut state = loopback_state();
-    state.config.server_name = "custom-soma".into();
+    let state = loopback_state().with_server_name("custom-soma");
     let server = super::rmcp_server(state);
     let info = server.get_info();
 

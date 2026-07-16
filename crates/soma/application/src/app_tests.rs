@@ -2,22 +2,26 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
-use soma_contracts::{actions::READ_SCOPE, config::SomaConfig, providers::ProviderCatalog};
+use soma_contracts::{
+    actions::{READ_SCOPE, WRITE_SCOPE},
+    config::SomaConfig,
+    providers::{ProviderCatalog, ProviderResource},
+};
 use soma_domain::{
     AuthorizationMode, Confirmation, Principal, RequestId, ScopeSet, Surface, TraceContext,
 };
 use soma_service::{
-    provider_registry::Provider, ProviderCall, ProviderOutput, ProviderRegistry, SomaClient,
-    SomaService, StaticRustProvider,
+    provider_registry::Provider, DynamicResourceTemplate, ProviderCall, ProviderError,
+    ProviderOutput, ProviderRegistry, SomaClient, SomaService, StaticRustProvider,
 };
 
 use super::{
     CodeModeExecuteRequest, ExecuteActionRequest, GatewayExecuteRequest, GatewayReloadRequest,
-    OpenApiExecuteRequest, SomaApplication,
+    OpenApiExecuteRequest, ScaffoldIntentRequest, SomaApplication,
 };
 use crate::{
-    ApplicationError, ApplicationPorts, CodeModePort, ExecutionContext, GatewayPort, OpenApiPort,
-    PortError,
+    ApplicationError, ApplicationErrorDetails, ApplicationPorts, CodeModePort, ExecutionContext,
+    GatewayPort, OpenApiPort, PortError,
 };
 
 struct RecordingProvider {
@@ -38,6 +42,22 @@ impl Provider for RecordingProvider {
     ) -> Result<ProviderOutput, soma_service::ProviderError> {
         self.calls.lock().unwrap().push(call);
         Ok(ProviderOutput::json(self.output.clone()))
+    }
+
+    fn dynamic_resource_templates(&self) -> Vec<DynamicResourceTemplate> {
+        let mut template = DynamicResourceTemplate::from_path_segments(
+            &["recording", "[id]"],
+            "recording item",
+            "A scoped dynamic resource",
+            Some("text/markdown".to_owned()),
+        )
+        .unwrap();
+        template.scope = Some(WRITE_SCOPE.to_owned());
+        vec![template]
+    }
+
+    fn supports_resource_reads(&self) -> bool {
+        true
     }
 }
 
@@ -82,6 +102,59 @@ impl GatewayPort for RecordingEngines {
     ) -> Result<Value, PortError> {
         Ok(self.record(&format!("gateway.{}", request.action), context))
     }
+
+    async fn list_mcp_tools(
+        &self,
+        _scope: Option<&crate::GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Vec<crate::GatewayToolRoute>, PortError> {
+        Ok(Vec::new())
+    }
+
+    async fn call_mcp_tool(
+        &self,
+        _name: &str,
+        _params: Value,
+        _scope: Option<&crate::GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError> {
+        Ok(None)
+    }
+
+    async fn list_mcp_resources(
+        &self,
+        _scope: Option<&crate::GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Vec<crate::GatewayResourceRoute>, PortError> {
+        Ok(Vec::new())
+    }
+
+    async fn read_mcp_resource(
+        &self,
+        _uri: &str,
+        _scope: Option<&crate::GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError> {
+        Ok(None)
+    }
+
+    async fn list_mcp_prompts(
+        &self,
+        _scope: Option<&crate::GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Vec<crate::GatewayPromptRoute>, PortError> {
+        Ok(Vec::new())
+    }
+
+    async fn get_mcp_prompt(
+        &self,
+        _name: &str,
+        _arguments: Option<serde_json::Map<String, Value>>,
+        _scope: Option<&crate::GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError> {
+        Ok(None)
+    }
 }
 
 #[async_trait]
@@ -120,6 +193,15 @@ fn application(
     catalog.tools[0].destructive = destructive;
     catalog.prompts[0].template = Some("Run {{action}}".to_owned());
     catalog.prompts[0].scope = Some(READ_SCOPE.to_owned());
+    catalog.resources.push(ProviderResource {
+        uri_template: "soma://resources/recording/runbook.md".to_owned(),
+        name: "recording runbook".to_owned(),
+        description: "A scoped exact resource".to_owned(),
+        mime_type: Some("text/markdown".to_owned()),
+        scope: Some(WRITE_SCOPE.to_owned()),
+        mcp: None,
+        annotations: json!({}),
+    });
     let provider = Arc::new(RecordingProvider {
         catalog,
         output,
@@ -317,7 +399,7 @@ async fn catalog_status_readiness_and_doctor_use_legacy_internals() {
     let context = mounted_context(Confirmation::Missing, None);
 
     assert_eq!(application.catalog_snapshot().catalogs.len(), 1);
-    assert_eq!(application.list_prompts(&context).len(), 1);
+    assert_eq!(application.list_prompts().len(), 1);
     assert_eq!(
         application
             .get_prompt("quick_start", &context)
@@ -325,7 +407,8 @@ async fn catalog_status_readiness_and_doctor_use_legacy_internals() {
             .name,
         "quick_start"
     );
-    assert!(application.list_resources(&context).is_empty());
+    assert_eq!(application.list_resources().len(), 1);
+    assert_eq!(application.list_resource_templates().len(), 1);
     application.readiness().await.unwrap();
     assert_eq!(application.status().await.unwrap()["status"], "ok");
     let doctor = application.doctor().await;
@@ -334,19 +417,97 @@ async fn catalog_status_readiness_and_doctor_use_legacy_internals() {
 }
 
 #[test]
-fn prompt_discovery_filters_mounted_scopes() {
+fn prompt_discovery_is_unfiltered_and_scope_is_enforced_at_use_time() {
     let (application, _, _) = application(false, json!({"echo": "hello"}));
+    let reader = mounted_context(Confirmation::Missing, None);
+    let mut writer = mounted_context(Confirmation::Missing, None);
+    writer.principal = Some(Principal::new("writer", ScopeSet::from([WRITE_SCOPE])));
     let mut context = mounted_context(Confirmation::Missing, None);
     context.principal = Some(Principal::anonymous());
 
-    assert!(application.list_prompts(&context).is_empty());
+    assert_eq!(application.list_prompts().len(), 1);
     assert_eq!(
         application
             .get_prompt("quick_start", &context)
             .unwrap_err()
             .code,
-        "prompt_not_found"
+        "insufficient_scope"
     );
+    assert!(application.get_prompt("quick_start", &reader).is_ok());
+    assert!(application.get_prompt("quick_start", &writer).is_ok());
+}
+
+#[tokio::test]
+async fn resource_discovery_is_unfiltered_and_scope_is_enforced_at_use_time() {
+    let (application, _, _) = application(false, json!({}));
+    let reader = mounted_context(Confirmation::Missing, None);
+    let mut writer = mounted_context(Confirmation::Missing, None);
+    writer.principal = Some(Principal::new("writer", ScopeSet::from([WRITE_SCOPE])));
+
+    assert_eq!(application.list_resources().len(), 1);
+    assert_eq!(application.list_resource_templates().len(), 1);
+
+    let exact_uri = "soma://resources/recording/runbook.md";
+    let reader_error = application
+        .read_resource(
+            crate::ReadResourceRequest {
+                uri: exact_uri.to_owned(),
+            },
+            reader,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(reader_error.code, "insufficient_scope");
+
+    let writer_error = application
+        .read_resource(
+            crate::ReadResourceRequest {
+                uri: exact_uri.to_owned(),
+            },
+            writer,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(writer_error.code, "resource_read_not_supported");
+}
+
+#[test]
+fn scaffold_validation_preserves_structured_application_error_details() {
+    let (application, _, _) = application(false, json!({}));
+    let error = application
+        .scaffold_intent(ScaffoldIntentRequest {
+            display_name: "Demo".to_owned(),
+            crate_name: "Invalid Crate".to_owned(),
+            binary_name: "demo".to_owned(),
+            server_category: "upstream-client".to_owned(),
+            env_prefix: "DEMO".to_owned(),
+            auth_kind: "bearer".to_owned(),
+            host: "127.0.0.1".to_owned(),
+            port: 4000,
+            mcp_transport: "stdio".to_owned(),
+            mcp_primitives: "tools".to_owned(),
+            deployment: "none".to_owned(),
+            plugins: String::new(),
+            publish_mcp: false,
+            crawl_urls: String::new(),
+            crawl_repos: String::new(),
+            crawl_search_topics: String::new(),
+        })
+        .unwrap_err();
+
+    assert!(error.is_validation());
+    assert_eq!(error.code, "invalid_identifier");
+    match *error.details {
+        ApplicationErrorDetails::Service {
+            field,
+            expected_pattern,
+            ..
+        } => {
+            assert_eq!(field.as_deref(), Some("crate_name"));
+            assert_eq!(expected_pattern.as_deref(), Some("^[a-z][a-z0-9-]*$"));
+        }
+        details => panic!("expected service error details, got {details:?}"),
+    }
 }
 
 #[test]
@@ -388,7 +549,17 @@ fn application_errors_redact_sensitive_diagnostics() {
         "authorization: Bearer secret-value",
     ));
     let legacy_error = ApplicationError::legacy("status", "token=secret-value");
+    let provider_error = ApplicationError::from(ProviderError::opaque_execution(
+        "remote",
+        "echo",
+        "private-upstream-body",
+    ));
 
     assert_eq!(port_error.message, "[redacted provider diagnostic]");
     assert!(!legacy_error.message.contains("secret-value"));
+    assert!(!provider_error.message.contains("private-upstream-body"));
+    assert_eq!(
+        provider_error.private_diagnostics(),
+        Some("private-upstream-body")
+    );
 }

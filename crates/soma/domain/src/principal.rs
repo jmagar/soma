@@ -35,6 +35,7 @@ impl<const N: usize> From<[&str; N]> for ScopeSet {
 pub struct Principal {
     pub subject: String,
     pub scopes: ScopeSet,
+    pub issuer: Option<String>,
 }
 
 impl Principal {
@@ -42,7 +43,13 @@ impl Principal {
         Self {
             subject: subject.into(),
             scopes,
+            issuer: None,
         }
+    }
+
+    pub fn with_issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.issuer = Some(issuer.into());
+        self
     }
 
     pub fn anonymous() -> Self {

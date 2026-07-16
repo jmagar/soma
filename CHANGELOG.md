@@ -94,6 +94,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenAPI snapshots, and gateway operations through `SomaApplication`;
   `soma-api` now depends only on product application/domain contracts and HTTP
   types rather than runtime, service, provider-registry, or gateway engines.
+- Route MCP tools, prompts, resources, protected gateway proxying, auth
+  principals, and trace context through `SomaApplication`; `soma-mcp` no
+  longer depends directly on runtime, service, or gateway engines, while
+  preserving structured error, discovery, scope, and remote-error privacy
+  contracts.
 
 - `soma-auth` no longer forces a Google re-consent screen on every dynamic
   client registration attempt — `force_consent` is now only set the first

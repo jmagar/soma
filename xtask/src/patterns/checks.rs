@@ -151,7 +151,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
     let policies = [
         (
             "crates/soma/mcp/src/tools.rs",
-            &["state.service", "provider_registry"][..],
+            &["state.application()", ".execute_action("][..],
             FORBIDDEN_SHIM_TOKENS,
         ),
         (

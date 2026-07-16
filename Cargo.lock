@@ -3637,6 +3637,7 @@ dependencies = [
 name = "soma-application"
 version = "0.4.1"
 dependencies = [
+ "anyhow",
  "async-trait",
  "serde",
  "serde_json",
@@ -3781,6 +3782,7 @@ name = "soma-mcp"
 version = "0.4.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "http",
  "rmcp",
@@ -3788,12 +3790,11 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "serde_json",
+ "soma-application",
  "soma-auth",
  "soma-contracts",
- "soma-gateway",
+ "soma-domain",
  "soma-mcp-server",
- "soma-runtime",
- "soma-service",
  "soma-test-support",
  "tempfile",
  "tokio",

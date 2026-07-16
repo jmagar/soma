@@ -1,9 +1,9 @@
 //! Gateway dependency boundaries preserved from the self-contained gateway landing.
 //!
 //! CLAUDE.md says the MCP and CLI shims (`tools.rs`, `cli/lib.rs`) hold zero
-//! business logic and reach the service layer (`SomaService` /
-//! `dispatch_action`), never the transport client (`SomaClient`) or raw
-//! HTTP. These tests read the shim source and fail if that boundary is crossed,
+//! business logic and reach the application facade (`SomaApplication`), never
+//! the transport client (`SomaClient`), legacy service/registry, or raw HTTP.
+//! These tests read the shim source and fail if that boundary is crossed,
 //! so the rule is enforced by CI instead of by reviewer vigilance.
 //!
 //! The checks are deliberately textual and conservative: they target import and
@@ -60,7 +60,7 @@ fn mcp_tools_shim_does_not_touch_the_transport_client() {
     let src = read_shim("crates/soma/mcp/src/tools.rs");
     assert!(
         !imports_symbol(&src, "SomaClient"),
-        "tools.rs must dispatch through SomaService, never import SomaClient (thin-shim rule)"
+        "tools.rs must dispatch through SomaApplication, never import SomaClient (thin-shim rule)"
     );
     assert!(
         !src.contains("SomaClient::"),
@@ -93,12 +93,25 @@ fn cli_shim_does_not_perform_transport_work() {
 }
 
 #[test]
-fn mcp_tools_shim_reaches_the_shared_service_seam() {
+fn mcp_tools_shim_reaches_the_application_facade() {
     let src = read_shim("crates/soma/mcp/src/tools.rs");
     assert!(
-        src.contains("dispatch_action") || imports_symbol(&src, "SomaService"),
-        "tools.rs should reach the service layer via dispatch_action / SomaService"
+        src.contains("use soma_application::")
+            && src.contains("SomaApplication")
+            && src.contains(".execute_action("),
+        "tools.rs should reach business operations through SomaApplication::execute_action"
     );
+    for forbidden in [
+        "SomaService",
+        "ProviderRegistry",
+        "ProviderCall",
+        ".dispatch(",
+    ] {
+        assert!(
+            !src.contains(forbidden),
+            "tools.rs must not reach the legacy business engine directly ({forbidden})"
+        );
+    }
 }
 
 #[test]

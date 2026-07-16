@@ -211,9 +211,14 @@ impl HttpServerGuard {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()?;
-        if let Err(error) = wait_for_health(port).await {
+        if let Err(error) = wait_for_health(port, &mut child).await {
             let _ = child.start_kill();
-            return Err(error);
+            let stderr = child
+                .wait_with_output()
+                .await
+                .map(|output| String::from_utf8_lossy(&output.stderr).trim().to_owned())
+                .unwrap_or_else(|wait_error| format!("failed to capture stderr: {wait_error}"));
+            return Err(anyhow::anyhow!("{error}; server stderr: {stderr}"));
         }
         Ok(Self { child, _home: home })
     }
@@ -225,10 +230,13 @@ impl Drop for HttpServerGuard {
     }
 }
 
-async fn wait_for_health(port: u16) -> anyhow::Result<()> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+async fn wait_for_health(port: u16, child: &mut Child) -> anyhow::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(30);
     let address = format!("127.0.0.1:{port}");
     loop {
+        if let Some(status) = child.try_wait()? {
+            anyhow::bail!("HTTP MCP server on {address} exited before becoming healthy: {status}");
+        }
         if Instant::now() > deadline {
             anyhow::bail!("HTTP MCP server on {address} did not become healthy");
         }

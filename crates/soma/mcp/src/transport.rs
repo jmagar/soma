@@ -29,7 +29,7 @@ pub fn streamable_http_config(config: &McpConfig) -> StreamableHttpServerConfig 
 }
 
 pub fn streamable_http_service(
-    state: soma_runtime::server::AppState,
+    state: crate::McpState,
     config: StreamableHttpServerConfig,
 ) -> StreamableHttpService<SomaRmcpServer, LocalSessionManager> {
     StreamableHttpService::new(
