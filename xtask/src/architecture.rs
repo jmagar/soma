@@ -1,44 +1,24 @@
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
 
 pub(crate) use crate::architecture_graph::{Edge, Graph, Layer, Package};
 
-const SURFACE_PACKAGES: &[&str] = &["soma-api", "soma-cli", "soma-mcp"];
-const APPLICATION_PORT_PACKAGES: &[&str] = &["soma-application", "soma-service"];
-const CONCRETE_SHARED_ENGINES: &[&str] = &[
-    "soma-codemode",
-    "soma-gateway",
-    "soma-http-server",
-    "soma-openapi",
-    "soma-provider-adapters",
+const APPLICATION_PORT_PATHS: &[&str] = &["crates/soma/application", "crates/soma/service"];
+const CONCRETE_SHARED_ENGINE_PATHS: &[&str] = &[
+    "crates/shared/codemode",
+    "crates/shared/mcp/gateway",
+    "crates/shared/openapi",
 ];
 
-const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[
-    ArchitectureException {
-        from: "soma-application",
-        to: "soma-service",
-        owner: "architecture-refactor",
-        reason: "strangler migration keeps legacy service behind the new application facade",
-        removal_pr: "PR 12: Split soma-service",
-        expiration_milestone: "before declaring the application boundary stable",
-    },
-    ArchitectureException {
-        from: "soma-application",
-        to: "soma-contracts",
-        owner: "architecture-refactor",
-        reason: "strangler migration keeps legacy action/config contracts behind the new application facade",
-        removal_pr: "PR 13: Split soma-contracts",
-        expiration_milestone: "before declaring the application boundary stable",
-    },
-];
+const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[];
 
 #[derive(Debug)]
 struct ArchitectureException {
-    from: &'static str,
-    to: &'static str,
+    from_path: &'static str,
+    to_path: &'static str,
     owner: &'static str,
     reason: &'static str,
     removal_pr: &'static str,
@@ -46,9 +26,11 @@ struct ArchitectureException {
 }
 
 pub fn check(root: &Path) -> Result<()> {
-    validate_exceptions()?;
-    let metadata = cargo_metadata(root)?;
-    let graph = Graph::from_metadata(root, &metadata)?;
+    let root = root
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize {}", root.display()))?;
+    let metadata = cargo_metadata(&root)?;
+    let graph = Graph::from_metadata(&root, &metadata)?;
     let failures = check_graph(&graph);
 
     if failures.is_empty() {
@@ -67,16 +49,17 @@ pub fn check(root: &Path) -> Result<()> {
     bail!("architecture boundary check failed")
 }
 
-fn cargo_metadata(root: &Path) -> Result<Value> {
+fn cargo_metadata(root: impl AsRef<Path>) -> Result<Value> {
     let output = Command::new("cargo")
         .args([
             "metadata",
             "--locked",
             "--all-features",
+            "--no-deps",
             "--format-version",
             "1",
         ])
-        .current_dir(root)
+        .current_dir(root.as_ref())
         .output()
         .context("failed to run cargo metadata")?;
     if !output.status.success() {
@@ -92,8 +75,8 @@ fn cargo_metadata(root: &Path) -> Result<Value> {
 fn check_graph(graph: &Graph) -> Vec<String> {
     let mut failures = Vec::new();
     failures.extend(check_metadata_layers(graph));
+    failures.extend(check_exception_integrity(graph, TEMPORARY_EXCEPTIONS));
     failures.extend(check_direct_edges(graph));
-    failures.extend(check_shared_transitive_graphs(graph));
     failures.extend(check_internal_cycles(graph));
     failures
 }
@@ -147,40 +130,36 @@ fn check_direct_edges(graph: &Graph) -> Vec<String> {
 
 fn check_layer_edge(graph: &Graph, edge: &Edge, from: &Package, to: &Package) -> Vec<String> {
     let mut failures = Vec::new();
-    if from.name == "soma-domain"
-        && matches!(
-            to.layer,
-            Layer::App
-                | Layer::ProductApplication
-                | Layer::ProductIntegration
-                | Layer::ProductRuntime
-                | Layer::ProductSurface
-        )
+    if from.layer == Layer::ProductDomain
+        && !matches!(to.layer, Layer::Shared | Layer::ProductDomain)
     {
         failures.push(format!(
-            "soma-domain must not depend outward to {}\n  edge: {}",
+            "product-domain packages must not depend outward to {}\n  edge: {}",
             to.layer.as_str(),
             graph.edge_label(edge)
         ));
     }
 
-    if from.name == "soma-application"
+    if from.layer == Layer::ProductApplication
         && (matches!(
             to.layer,
-            Layer::App | Layer::ProductRuntime | Layer::ProductSurface
-        ) || CONCRETE_SHARED_ENGINES.contains(&to.name.as_str()))
+            Layer::App
+                | Layer::Legacy
+                | Layer::ProductIntegration
+                | Layer::ProductRuntime
+                | Layer::ProductSurface
+                | Layer::ProductSupport
+        ) || is_concrete_shared_engine(to))
     {
         failures.push(format!(
-            "soma-application must not depend on runtime/surface/app/concrete engines\n  edge: {}",
+            "product-application packages must not depend on app/legacy/integration/runtime/surface/support/concrete engines without a live exception\n  edge: {}",
             graph.edge_label(edge)
         ));
     }
 
-    if SURFACE_PACKAGES.contains(&from.name.as_str())
-        && SURFACE_PACKAGES.contains(&to.name.as_str())
-    {
+    if from.layer == Layer::ProductSurface && to.layer == Layer::ProductSurface {
         failures.push(format!(
-            "surface packages soma-api, soma-cli, and soma-mcp must not depend on one another\n  edge: {}",
+            "product-surface packages must not depend on one another\n  edge: {}",
             graph.edge_label(edge)
         ));
     }
@@ -192,13 +171,9 @@ fn check_mixed_application_and_engine_edges(graph: &Graph) -> Vec<String> {
         .packages
         .values()
         .filter_map(|package| {
-            let deps = graph.direct_dependency_names(&package.id);
-            let has_application_port = deps
-                .iter()
-                .any(|name| APPLICATION_PORT_PACKAGES.contains(&name.as_str()));
-            let has_concrete_engine = deps
-                .iter()
-                .any(|name| CONCRETE_SHARED_ENGINES.contains(&name.as_str()));
+            let deps = graph.direct_dependencies(&package.id);
+            let has_application_port = deps.iter().any(|package| is_application_port(package));
+            let has_concrete_engine = deps.iter().any(|package| is_concrete_shared_engine(package));
             (has_application_port
                 && has_concrete_engine
                 && !matches!(package.layer, Layer::App | Layer::ProductIntegration))
@@ -212,21 +187,41 @@ fn check_mixed_application_and_engine_edges(graph: &Graph) -> Vec<String> {
         .collect()
 }
 
-fn check_shared_transitive_graphs(graph: &Graph) -> Vec<String> {
-    graph
-        .packages
-        .values()
-        .filter(|package| package.layer == Layer::Shared)
-        .filter_map(|package| {
-            shortest_path(graph, &package.id, |p| p.layer != Layer::Shared).map(|path| {
-                format!(
-                    "shared all-features graph for {} reaches a non-shared package\n  path: {}",
-                    package.name,
-                    graph.path_label(&path)
-                )
-            })
-        })
+fn check_exception_integrity(graph: &Graph, exceptions: &[ArchitectureException]) -> Vec<String> {
+    exceptions
+        .iter()
+        .filter_map(|exception| exception_integrity_failure(graph, exception))
         .collect()
+}
+
+fn exception_integrity_failure(graph: &Graph, exception: &ArchitectureException) -> Option<String> {
+    if exception.owner.is_empty()
+        || exception.reason.is_empty()
+        || exception.removal_pr.is_empty()
+        || exception.expiration_milestone.is_empty()
+    {
+        return Some(format!(
+            "architecture exception {} -> {} is missing owner, reason, removal PR, or expiration milestone",
+            exception.from_path, exception.to_path
+        ));
+    }
+
+    let matches = graph
+        .edges
+        .iter()
+        .filter(|edge| exception.matches(graph, edge))
+        .count();
+    match matches {
+        1 => None,
+        0 => Some(format!(
+            "architecture exception {} -> {} does not match a current normal workspace edge; remove stale exceptions or add the edge with its owning PR",
+            exception.from_path, exception.to_path
+        )),
+        _ => Some(format!(
+            "architecture exception {} -> {} matches {matches} edges; exceptions must identify one current edge",
+            exception.from_path, exception.to_path
+        )),
+    }
 }
 
 fn check_internal_cycles(graph: &Graph) -> Vec<String> {
@@ -238,31 +233,6 @@ fn check_internal_cycles(graph: &Graph) -> Vec<String> {
             )]
         })
         .unwrap_or_default()
-}
-
-fn shortest_path(
-    graph: &Graph,
-    start: &str,
-    predicate: impl Fn(&Package) -> bool,
-) -> Option<Vec<usize>> {
-    let mut seen = BTreeSet::new();
-    let mut queue = VecDeque::from([(start.to_owned(), Vec::<usize>::new())]);
-    seen.insert(start.to_owned());
-    while let Some((id, path)) = queue.pop_front() {
-        for edge_index in graph.edges_by_from.get(&id).into_iter().flatten() {
-            let edge = &graph.edges[*edge_index];
-            if edge.from == edge.to || is_exception(graph, edge) || !seen.insert(edge.to.clone()) {
-                continue;
-            }
-            let mut next_path = path.clone();
-            next_path.push(*edge_index);
-            if predicate(graph.package(&edge.to)) {
-                return Some(next_path);
-            }
-            queue.push_back((edge.to.clone(), next_path));
-        }
-    }
-    None
 }
 
 fn find_cycle(graph: &Graph) -> Option<Vec<String>> {
@@ -316,29 +286,27 @@ fn cycle_names(graph: &Graph, stack: &[String], repeated: &str) -> Vec<String> {
     cycle
 }
 
-fn validate_exceptions() -> Result<()> {
-    for exception in TEMPORARY_EXCEPTIONS {
-        if exception.owner.is_empty()
-            || exception.reason.is_empty()
-            || exception.removal_pr.is_empty()
-            || exception.expiration_milestone.is_empty()
-        {
-            bail!(
-                "architecture exception {} -> {} is missing owner, reason, removal PR, or expiration milestone",
-                exception.from,
-                exception.to
-            );
-        }
-    }
-    Ok(())
-}
-
 fn is_exception(graph: &Graph, edge: &Edge) -> bool {
-    let from = &graph.package(&edge.from).name;
-    let to = &graph.package(&edge.to).name;
     TEMPORARY_EXCEPTIONS
         .iter()
-        .any(|exception| exception.from == from && exception.to == to)
+        .any(|exception| exception.matches(graph, edge))
+}
+
+impl ArchitectureException {
+    fn matches(&self, graph: &Graph, edge: &Edge) -> bool {
+        let from = &graph.package(&edge.from).rel_path;
+        let to = &graph.package(&edge.to).rel_path;
+        self.from_path == from && self.to_path == to && edge.kind == "normal"
+    }
+}
+
+fn is_application_port(package: &Package) -> bool {
+    package.layer == Layer::ProductApplication
+        || APPLICATION_PORT_PATHS.contains(&package.rel_path.as_str())
+}
+
+fn is_concrete_shared_engine(package: &Package) -> bool {
+    CONCRETE_SHARED_ENGINE_PATHS.contains(&package.rel_path.as_str())
 }
 
 #[cfg(test)]

@@ -144,8 +144,8 @@ jobs:
   # ── clippy: zero warnings ────────────────────────────────────────────────────
   clippy:
     name: Clippy
-    needs: [changes, architecture]
-    if: ${{ always() && needs.changes.outputs.rust == 'true' && needs.architecture.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [changes]
+    if: ${{ needs.changes.outputs.rust == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -172,8 +172,8 @@ jobs:
   # ── test: cargo nextest run --profile ci ─────────────────────────────────────
   test:
     name: Test
-    needs: [changes, architecture]
-    if: ${{ always() && needs.changes.outputs.rust == 'true' && needs.architecture.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [changes]
+    if: ${{ needs.changes.outputs.rust == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 30
     steps:

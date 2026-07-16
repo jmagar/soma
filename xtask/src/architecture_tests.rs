@@ -35,7 +35,11 @@ fn dep_with(name: &str, rel: &str, kind: &str, optional: bool) -> Value {
 }
 
 fn graph(packages: Vec<Value>) -> Graph {
-    let metadata = json!({ "packages": packages });
+    let workspace_members: Vec<Value> = packages
+        .iter()
+        .map(|package| package["id"].clone())
+        .collect();
+    let metadata = json!({ "packages": packages, "workspace_members": workspace_members });
     Graph::from_metadata(&root(), &metadata).expect("synthetic metadata graph")
 }
 
@@ -88,7 +92,26 @@ fn shared_optional_dependency_on_product_fails() {
 }
 
 #[test]
-fn shared_transitive_graph_must_stay_shared_only() {
+fn dev_and_build_dependencies_do_not_create_production_edges() {
+    let failures = failures(vec![
+        pkg(
+            "soma-gateway",
+            "crates/shared/mcp/gateway",
+            "shared",
+            vec![
+                dep_with("soma-contracts", "crates/soma/contracts", "dev", false),
+                dep_with("soma-service", "crates/soma/service", "build", false),
+            ],
+        ),
+        pkg("soma-contracts", "crates/soma/contracts", "legacy", vec![]),
+        pkg("soma-service", "crates/soma/service", "legacy", vec![]),
+    ]);
+
+    assert!(failures.is_empty(), "{failures:#?}");
+}
+
+#[test]
+fn shared_chain_fails_at_first_non_shared_boundary_edge() {
     let failures = failures(vec![
         pkg(
             "soma-gateway",
@@ -105,9 +128,9 @@ fn shared_transitive_graph_must_stay_shared_only() {
         pkg("soma-service", "crates/soma/service", "legacy", vec![]),
     ]);
 
-    assert!(failures
-        .join("\n")
-        .contains("shared all-features graph for soma-gateway"));
+    let report = failures.join("\n");
+    assert!(report.contains("shared package soma-codemode"));
+    assert!(report.contains("depends on non-shared package soma-service"));
 }
 
 #[test]
@@ -138,7 +161,128 @@ fn surfaces_must_not_depend_on_one_another() {
 
     assert!(failures
         .join("\n")
-        .contains("surface packages soma-api, soma-cli, and soma-mcp"));
+        .contains("product-surface packages must not depend on one another"));
+}
+
+#[test]
+fn all_product_surfaces_are_isolated_by_layer_not_name_list() {
+    let failures = failures(vec![
+        pkg(
+            "renamed-web",
+            "crates/soma/web",
+            "product-surface",
+            vec![dep("soma-api", "crates/soma/api")],
+        ),
+        pkg("soma-api", "crates/soma/api", "product-surface", vec![]),
+    ]);
+
+    assert!(failures
+        .join("\n")
+        .contains("product-surface packages must not depend on one another"));
+}
+
+#[test]
+fn product_domain_rules_follow_layer_even_when_package_name_changes() {
+    let failures = failures(vec![
+        pkg(
+            "renamed-domain",
+            "crates/soma/domain",
+            "product-domain",
+            vec![dep("soma-api", "crates/soma/api")],
+        ),
+        pkg("soma-api", "crates/soma/api", "product-surface", vec![]),
+    ]);
+
+    assert!(failures
+        .join("\n")
+        .contains("product-domain packages must not depend outward"));
+}
+
+#[test]
+fn product_application_cannot_depend_on_legacy_or_integration_without_exception() {
+    let failures = failures(vec![
+        pkg(
+            "renamed-application",
+            "crates/soma/application",
+            "product-application",
+            vec![
+                dep("soma-service", "crates/soma/service"),
+                dep("soma-integrations", "crates/soma/integrations"),
+            ],
+        ),
+        pkg("soma-service", "crates/soma/service", "legacy", vec![]),
+        pkg(
+            "soma-integrations",
+            "crates/soma/integrations",
+            "product-integration",
+            vec![],
+        ),
+    ]);
+
+    let report = failures.join("\n");
+    assert!(report.contains("product-application packages must not depend"));
+    assert!(report.contains("soma-service"));
+    assert!(report.contains("soma-integrations"));
+}
+
+#[test]
+fn path_anchored_exceptions_cannot_be_spoofed_by_package_name() {
+    let graph = graph(vec![
+        pkg(
+            "soma-application",
+            "crates/shared/pretender",
+            "shared",
+            vec![dep("soma-service", "crates/soma/service")],
+        ),
+        pkg("soma-service", "crates/soma/service", "legacy", vec![]),
+    ]);
+    let exception = ArchitectureException {
+        from_path: "crates/soma/application",
+        to_path: "crates/soma/service",
+        owner: "architecture-refactor",
+        reason: "temporary strangler edge",
+        removal_pr: "PR 12",
+        expiration_milestone: "before stable boundary",
+    };
+
+    assert!(!exception.matches(&graph, &graph.edges[0]));
+    assert!(check_direct_edges(&graph)
+        .join("\n")
+        .contains("shared package soma-application"));
+}
+
+#[test]
+fn temporary_exceptions_must_match_one_current_edge() {
+    let graph = graph(vec![
+        pkg(
+            "renamed-application",
+            "crates/soma/application",
+            "product-application",
+            vec![dep("soma-service", "crates/soma/service")],
+        ),
+        pkg("soma-service", "crates/soma/service", "legacy", vec![]),
+    ]);
+    let live_exception = ArchitectureException {
+        from_path: "crates/soma/application",
+        to_path: "crates/soma/service",
+        owner: "architecture-refactor",
+        reason: "temporary strangler edge",
+        removal_pr: "PR 12",
+        expiration_milestone: "before stable boundary",
+    };
+    let stale_exception = ArchitectureException {
+        from_path: "crates/soma/application",
+        to_path: "crates/soma/contracts",
+        owner: "architecture-refactor",
+        reason: "temporary strangler edge",
+        removal_pr: "PR 13",
+        expiration_milestone: "before stable boundary",
+    };
+
+    assert!(check_exception_integrity(&graph, &[live_exception]).is_empty());
+    assert!(check_exception_integrity(&graph, &[stale_exception])
+        .join("\n")
+        .contains("does not match a current normal workspace edge"));
 }
 
 #[test]

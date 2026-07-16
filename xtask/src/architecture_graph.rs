@@ -17,11 +17,13 @@ impl Graph {
             .get("packages")
             .and_then(Value::as_array)
             .context("metadata has packages")?;
+        let workspace_members = workspace_members(metadata)?;
 
-        for value in package_values
-            .iter()
-            .filter(|p| p.get("source") == Some(&Value::Null))
-        {
+        for value in package_values.iter().filter(|p| {
+            p.get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| workspace_members.contains(id))
+        }) {
             let id = text(value, "id")?.to_owned();
             let name = text(value, "name")?.to_owned();
             let rel_path = package_rel_path(root, Path::new(text(value, "manifest_path")?))?;
@@ -46,7 +48,7 @@ impl Graph {
             edges: Vec::new(),
             edges_by_from: BTreeMap::new(),
         };
-        graph.collect_edges(root, package_values, &path_to_id)?;
+        graph.collect_edges(root, package_values, &workspace_members, &path_to_id)?;
         Ok(graph)
     }
 
@@ -54,13 +56,12 @@ impl Graph {
         self.packages.get(id).expect("edge references package")
     }
 
-    pub(crate) fn direct_dependency_names(&self, id: &str) -> BTreeSet<String> {
+    pub(crate) fn direct_dependencies(&self, id: &str) -> Vec<&Package> {
         self.edges_by_from
             .get(id)
             .into_iter()
             .flat_map(|edges| edges.iter())
             .filter_map(|edge| self.packages.get(&self.edges[*edge].to))
-            .map(|package| package.name.clone())
             .collect()
     }
 
@@ -71,23 +72,18 @@ impl Graph {
         format!("{} --{} {}--> {}", from.name, optional, edge.kind, to.name)
     }
 
-    pub(crate) fn path_label(&self, path: &[usize]) -> String {
-        path.iter()
-            .map(|edge| self.edge_label(&self.edges[*edge]))
-            .collect::<Vec<_>>()
-            .join(" ; ")
-    }
-
     fn collect_edges(
         &mut self,
         root: &Path,
         package_values: &[Value],
+        workspace_members: &BTreeSet<String>,
         path_to_id: &BTreeMap<String, String>,
     ) -> Result<()> {
-        for value in package_values
-            .iter()
-            .filter(|p| p.get("source") == Some(&Value::Null))
-        {
+        for value in package_values.iter().filter(|p| {
+            p.get("id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| workspace_members.contains(id))
+        }) {
             let from = text(value, "id")?;
             for dependency in value
                 .get("dependencies")
@@ -95,20 +91,23 @@ impl Graph {
                 .into_iter()
                 .flatten()
             {
+                let kind = dependency_kind(dependency);
+                if kind != "normal" {
+                    continue;
+                }
                 let Some(path) = dependency.get("path").and_then(Value::as_str) else {
                     continue;
                 };
-                let Some(to) = path_to_id.get(&rel_slash(root, Path::new(path))?).cloned() else {
+                let Ok(rel_path) = rel_slash(root, Path::new(path)) else {
+                    continue;
+                };
+                let Some(to) = path_to_id.get(&rel_path).cloned() else {
                     continue;
                 };
                 self.push_edge(Edge {
                     from: from.to_owned(),
                     to,
-                    kind: dependency
-                        .get("kind")
-                        .and_then(Value::as_str)
-                        .unwrap_or("normal")
-                        .to_owned(),
+                    kind: kind.to_owned(),
                     optional: dependency
                         .get("optional")
                         .and_then(Value::as_bool)
@@ -225,6 +224,28 @@ fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
         .get(key)
         .and_then(Value::as_str)
         .with_context(|| format!("package is missing string field {key:?}"))
+}
+
+fn workspace_members(metadata: &Value) -> Result<BTreeSet<String>> {
+    metadata
+        .get("workspace_members")
+        .and_then(Value::as_array)
+        .context("metadata has workspace_members")?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_owned)
+                .context("workspace member id is a string")
+        })
+        .collect()
+}
+
+fn dependency_kind(dependency: &Value) -> &str {
+    dependency
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("normal")
 }
 
 fn package_rel_path(root: &Path, manifest_path: &Path) -> Result<String> {
