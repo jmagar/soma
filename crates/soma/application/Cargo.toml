@@ -13,6 +13,11 @@ publish = false
 [package.metadata.soma-architecture]
 layer = "product-application"
 
+[features]
+default = []
+client = ["soma-service/client"]
+observability = ["soma-service/observability"]
+
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
@@ -20,7 +25,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 soma-contracts = { path = "../contracts" }
 soma-domain = { path = "../domain" }
-soma-service = { path = "../service" }
+soma-service = { path = "../service", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+#[cfg(feature = "oauth")]
+use std::collections::BTreeMap;
+
 use axum::{
     body::{Body, Bytes},
     http::{header, HeaderMap, Request, StatusCode},
@@ -7,11 +10,32 @@ use axum::{
     routing::post,
 };
 use soma_gateway::config::{GatewayConfig, ProtectedMcpRouteConfig, UpstreamConfig};
-use soma_runtime::server::{gateway_product_state_from_config, AppState, AuthPolicy};
+use soma_runtime::server::{AppState, AuthPolicy};
 use tokio::sync::Mutex;
 use tower::ServiceExt;
 
+#[cfg(feature = "oauth")]
+use futures::future::BoxFuture;
+#[cfg(feature = "oauth")]
+use mcp_client::{
+    oauth::{
+        BeginAuthorization, UpstreamOAuthCredentialStatus, UpstreamOAuthError,
+        UpstreamOAuthHttpClient, UpstreamOAuthManager, UpstreamOAuthProvider, UpstreamOAuthRuntime,
+    },
+    upstream::http_body_cap::BodyCappedHttpClient,
+};
+
 use super::router;
+
+#[test]
+fn api_and_mcp_states_share_the_runtime_application() {
+    let state = crate::testing::loopback_state();
+    let api = super::api_state(&state);
+    let mcp = crate::application_ports::mcp_state_for_state(&state);
+
+    assert!(std::ptr::eq(state.application(), api.application()));
+    assert!(std::ptr::eq(state.application(), mcp.application()));
+}
 
 #[tokio::test]
 async fn openapi_json_is_served_without_auth() {
@@ -121,6 +145,184 @@ async fn protected_route_proxy_strips_public_bearer_and_adds_upstream_auth() {
 }
 
 #[tokio::test]
+async fn oauth_admin_gateway_add_is_visible_to_protected_route_proxy() {
+    let backend = backend_server(Arc::new(Mutex::new(Vec::new()))).await;
+    let temp = tempfile::tempdir().unwrap();
+    let state = oauth_state_with_gateway(&temp, protected_gateway_config(None, None)).await;
+    let admin_token = protected_route_token(
+        &state,
+        "https://example.example.com/mcp",
+        soma_contracts::scopes::ADMIN_SCOPE,
+    );
+    let route_token = protected_route_token(&state, "https://mcp.example.com/media", "soma:read");
+    let app = router(state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/gateway/gateway.add")
+                .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({"name": "backend", "url": backend}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/media")
+                .header(header::HOST, "mcp.example.com")
+                .header(header::AUTHORIZATION, format!("Bearer {route_token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"jsonrpc":"2.0","id":1}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body, "proxied");
+}
+
+#[cfg(feature = "oauth")]
+#[tokio::test]
+async fn upstream_oauth_state_is_shared_by_gateway_actions_and_protected_proxy() {
+    let seen_auth = Arc::new(Mutex::new(Vec::new()));
+    let backend = backend_server(seen_auth.clone()).await;
+    let mut gateway_config = protected_gateway_config(Some(backend), None);
+    gateway_config.upstream[0].oauth = Some(soma_gateway::config::GatewayUpstreamOauthConfig {
+        mode: soma_gateway::config::GatewayUpstreamOauthMode::AuthorizationCodePkce,
+        registration: soma_gateway::config::GatewayUpstreamOauthRegistration::Preregistered {
+            client_id: "test-client".to_owned(),
+            client_secret_env: None,
+        },
+        scopes: None,
+        prefer_client_metadata_document: None,
+    });
+    let gateway = soma_runtime::server::gateway_product_state_from_config(gateway_config).unwrap();
+    let mut managers: BTreeMap<String, Arc<dyn UpstreamOAuthManager>> = BTreeMap::new();
+    managers.insert("backend".to_owned(), Arc::new(FakeOAuthManager));
+    gateway.install_upstream_oauth_runtime(UpstreamOAuthRuntime::new(
+        Arc::new(FakeOAuthProvider),
+        managers,
+    ));
+
+    let temp = tempfile::tempdir().unwrap();
+    let state = crate::testing::oauth_state_with_gateway_product_state(temp.path(), gateway).await;
+    let admin_token = protected_route_token(
+        &state,
+        "https://example.example.com/mcp",
+        soma_contracts::scopes::ADMIN_SCOPE,
+    );
+    let route_token = protected_route_token(&state, "https://mcp.example.com/media", "soma:read");
+    let app = router(state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/gateway/gateway.oauth.status")
+                .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"upstream":"backend"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/media")
+                .header(header::HOST, "mcp.example.com")
+                .header(header::AUTHORIZATION, format!("Bearer {route_token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"jsonrpc":"2.0","id":1}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(seen_auth.lock().await.as_slice(), ["Bearer oauth-token"]);
+}
+
+#[cfg(feature = "oauth")]
+struct FakeOAuthProvider;
+
+#[cfg(feature = "oauth")]
+impl UpstreamOAuthProvider for FakeOAuthProvider {
+    fn authenticated_http_client<'a>(
+        &'a self,
+        _upstream: &'a mcp_client::config::UpstreamConfig,
+        _subject: &'a str,
+        _http_client: BodyCappedHttpClient,
+    ) -> BoxFuture<'a, Result<UpstreamOAuthHttpClient, UpstreamOAuthError>> {
+        Box::pin(async {
+            Err(UpstreamOAuthError::internal(
+                "unused by protected proxy test",
+            ))
+        })
+    }
+}
+
+#[cfg(feature = "oauth")]
+struct FakeOAuthManager;
+
+#[cfg(feature = "oauth")]
+impl UpstreamOAuthManager for FakeOAuthManager {
+    fn begin_authorization<'a>(
+        &'a self,
+        _subject: &'a str,
+    ) -> BoxFuture<'a, Result<BeginAuthorization, UpstreamOAuthError>> {
+        Box::pin(async {
+            Err(UpstreamOAuthError::internal(
+                "unused by protected proxy test",
+            ))
+        })
+    }
+
+    fn credential_status<'a>(
+        &'a self,
+        _subject: &'a str,
+    ) -> BoxFuture<'a, Result<Option<UpstreamOAuthCredentialStatus>, UpstreamOAuthError>> {
+        Box::pin(async {
+            Ok(Some(UpstreamOAuthCredentialStatus {
+                access_token_expires_at: 4_102_444_800,
+                refresh_token_present: true,
+            }))
+        })
+    }
+
+    fn clear_credentials<'a>(
+        &'a self,
+        _subject: &'a str,
+    ) -> BoxFuture<'a, Result<(), UpstreamOAuthError>> {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn access_token<'a>(
+        &'a self,
+        _subject: &'a str,
+    ) -> BoxFuture<'a, Result<String, UpstreamOAuthError>> {
+        Box::pin(async { Ok("oauth-token".to_owned()) })
+    }
+}
+
+#[tokio::test]
 async fn cors_preflight_allows_mcp_protocol_headers() {
     let response = router(crate::testing::loopback_state())
         .oneshot(
@@ -162,9 +364,7 @@ async fn cors_preflight_allows_mcp_protocol_headers() {
 }
 
 async fn oauth_state_with_gateway(temp: &tempfile::TempDir, gateway: GatewayConfig) -> AppState {
-    let mut state = crate::testing::oauth_state(temp.path()).await;
-    state.gateway = gateway_product_state_from_config(gateway).unwrap();
-    state
+    crate::testing::oauth_state_with_gateway(temp.path(), gateway).await
 }
 
 fn protected_gateway_config(

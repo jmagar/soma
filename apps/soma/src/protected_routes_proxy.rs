@@ -12,6 +12,7 @@ use soma_gateway::{
 use soma_runtime::server::AppState;
 
 const PROTECTED_PROXY_BODY_LIMIT: usize = 50 * 1024 * 1024;
+#[cfg(feature = "oauth")]
 const SHARED_GATEWAY_OAUTH_SUBJECT: &str = "gateway";
 
 pub(super) async fn proxy_protected_mcp_route(
@@ -116,7 +117,7 @@ async fn protected_route_upstream_target(
             "protected MCP route has no backend_url, upstream, or gateway subset target",
         ));
     };
-    let Some(upstream) = state.gateway.upstream_config(upstream_name) else {
+    let Some(upstream) = state.upstream_config(upstream_name) else {
         return Err(super::protected_routes::json_error(
             StatusCode::NOT_FOUND,
             "upstream_not_found",
@@ -152,11 +153,13 @@ async fn upstream_auth_token(
     state: &AppState,
     upstream: &UpstreamConfig,
 ) -> Result<Option<String>, Response> {
+    #[cfg(not(feature = "oauth"))]
+    let _ = state;
+
     if upstream.oauth.is_some() {
         #[cfg(feature = "oauth")]
         {
             return state
-                .gateway
                 .upstream_oauth_access_token(upstream, SHARED_GATEWAY_OAUTH_SUBJECT)
                 .await
                 .map_err(|error| {

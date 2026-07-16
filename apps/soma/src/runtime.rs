@@ -4,7 +4,7 @@
 //! CLI, stdio MCP, and HTTP server wiring in one place.
 
 use anyhow::Result;
-#[cfg(any(feature = "cli", feature = "mcp-http"))]
+#[cfg(any(feature = "cli", all(feature = "mcp-http", feature = "auth")))]
 use std::sync::Arc;
 
 #[cfg(feature = "mcp-stdio")]
@@ -96,15 +96,14 @@ pub async fn serve_stdio_mcp() -> Result<()> {
     let gateway = gateway_product_state_from_env()?;
     #[cfg(feature = "oauth")]
     configure_gateway_upstream_oauth_from_env(&gateway).await?;
-    let state = AppState {
-        config: config.mcp,
-        auth_policy: AuthPolicy::LoopbackDev,
-        service,
-        provider_registry,
-        gateway,
-        remote_adapter,
-        response_pages: Default::default(),
-    };
+    let runtime =
+        crate::application_ports::runtime_for_components(service, provider_registry, gateway);
+    let state = AppState::new(
+        config.mcp,
+        AuthPolicy::LoopbackDev,
+        runtime,
+        Default::default(),
+    );
     let svc = mcp::rmcp_server(crate::application_ports::mcp_state_for_state(&state))
         .serve(stdio())
         .await?;
@@ -189,15 +188,14 @@ async fn build_state(config: Config) -> Result<AppState> {
     let gateway = gateway_product_state_from_env()?;
     #[cfg(feature = "oauth")]
     configure_gateway_upstream_oauth_for_policy(&gateway, &auth_policy).await?;
-    Ok(AppState {
-        config: config.mcp,
+    let runtime =
+        crate::application_ports::runtime_for_components(service, provider_registry, gateway);
+    Ok(AppState::new(
+        config.mcp,
         auth_policy,
-        service,
-        provider_registry,
-        gateway,
-        remote_adapter: false,
-        response_pages: Default::default(),
-    })
+        runtime,
+        Default::default(),
+    ))
 }
 
 #[cfg(feature = "oauth")]
@@ -220,7 +218,7 @@ async fn configure_gateway_upstream_oauth_for_policy(
     configure_gateway_upstream_oauth(gateway, &auth_config).await
 }
 
-#[cfg(feature = "oauth")]
+#[cfg(all(feature = "oauth", feature = "mcp-stdio"))]
 async fn configure_gateway_upstream_oauth_from_env(
     gateway: &soma_runtime::server::GatewayProductState,
 ) -> Result<()> {

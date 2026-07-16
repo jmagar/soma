@@ -7,13 +7,15 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
+use soma_application::SomaApplication;
 use soma_contracts::config::{AuthMode, Config, McpConfig};
+#[cfg(feature = "protected-routes")]
+use soma_gateway::config::ProtectedMcpRouteConfig;
 use soma_gateway::{
-    config::{GatewayConfig, GatewayPaths},
+    config::{GatewayConfig, GatewayPaths, UpstreamConfig},
     gateway::{config_store::FsGatewayConfigStore, manager::GatewayManager},
 };
 pub use soma_mcp_server::ResponsePageStore;
-use soma_service::{ProviderRegistry, SomaService};
 
 pub type GatewayProductState = Arc<GatewayManager>;
 
@@ -177,14 +179,139 @@ fn validate_public_url(config: &Config) -> Result<()> {
 
 /// Shared application state injected into every request handler.
 #[derive(Clone)]
+pub struct SomaRuntime {
+    application: Arc<SomaApplication>,
+    gateway: GatewayProductState,
+}
+
+impl SomaRuntime {
+    pub fn new(application: Arc<SomaApplication>, gateway: GatewayProductState) -> Self {
+        Self {
+            application,
+            gateway,
+        }
+    }
+
+    pub fn application(&self) -> &SomaApplication {
+        self.application.as_ref()
+    }
+
+    pub fn application_handle(&self) -> Arc<SomaApplication> {
+        self.application.clone()
+    }
+
+    #[cfg(feature = "protected-routes")]
+    pub fn resolve_protected_route(
+        &self,
+        host: &str,
+        path: &str,
+    ) -> Option<ProtectedMcpRouteConfig> {
+        self.gateway.resolve_protected_route(host, path)
+    }
+
+    #[cfg(feature = "protected-routes")]
+    pub fn resolve_protected_route_metadata(
+        &self,
+        host: &str,
+        path: &str,
+    ) -> Option<ProtectedMcpRouteConfig> {
+        self.gateway.resolve_protected_route_metadata(host, path)
+    }
+
+    #[cfg(feature = "protected-routes")]
+    pub fn protected_route_list(&self) -> Vec<ProtectedMcpRouteConfig> {
+        self.gateway.protected_route_list()
+    }
+
+    pub fn upstream_config(&self, name: &str) -> Option<UpstreamConfig> {
+        self.gateway.upstream_config(name)
+    }
+
+    #[cfg(feature = "oauth")]
+    pub async fn upstream_oauth_access_token(
+        &self,
+        upstream: &UpstreamConfig,
+        subject: &str,
+    ) -> Result<Option<String>, soma_gateway::gateway::manager::GatewayManagerError> {
+        self.gateway
+            .upstream_oauth_access_token(upstream, subject)
+            .await
+    }
+}
+
+/// Shared transport state injected into every request handler.
+#[derive(Clone)]
 pub struct AppState {
     pub config: McpConfig,
     pub auth_policy: AuthPolicy,
-    pub service: SomaService,
-    pub provider_registry: ProviderRegistry,
-    pub gateway: GatewayProductState,
-    pub remote_adapter: bool,
+    runtime: Arc<SomaRuntime>,
     pub response_pages: ResponsePageStore,
+}
+
+impl AppState {
+    pub fn new(
+        config: McpConfig,
+        auth_policy: AuthPolicy,
+        runtime: Arc<SomaRuntime>,
+        response_pages: ResponsePageStore,
+    ) -> Self {
+        Self {
+            config,
+            auth_policy,
+            runtime,
+            response_pages,
+        }
+    }
+
+    pub fn runtime(&self) -> &SomaRuntime {
+        self.runtime.as_ref()
+    }
+
+    pub fn application(&self) -> &SomaApplication {
+        self.runtime.application()
+    }
+
+    pub fn application_handle(&self) -> Arc<SomaApplication> {
+        self.runtime.application_handle()
+    }
+
+    #[cfg(feature = "protected-routes")]
+    pub fn resolve_protected_route(
+        &self,
+        host: &str,
+        path: &str,
+    ) -> Option<ProtectedMcpRouteConfig> {
+        self.runtime.resolve_protected_route(host, path)
+    }
+
+    #[cfg(feature = "protected-routes")]
+    pub fn resolve_protected_route_metadata(
+        &self,
+        host: &str,
+        path: &str,
+    ) -> Option<ProtectedMcpRouteConfig> {
+        self.runtime.resolve_protected_route_metadata(host, path)
+    }
+
+    #[cfg(feature = "protected-routes")]
+    pub fn protected_route_list(&self) -> Vec<ProtectedMcpRouteConfig> {
+        self.runtime.protected_route_list()
+    }
+
+    pub fn upstream_config(&self, name: &str) -> Option<UpstreamConfig> {
+        self.runtime.upstream_config(name)
+    }
+
+    #[cfg(feature = "oauth")]
+    pub async fn upstream_oauth_access_token(
+        &self,
+        upstream: &UpstreamConfig,
+        subject: &str,
+    ) -> Result<Option<String>, soma_gateway::gateway::manager::GatewayManagerError> {
+        self.runtime
+            .upstream_oauth_access_token(upstream, subject)
+            .await
+    }
 }
 
 /// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` when the trust

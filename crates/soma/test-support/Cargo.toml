@@ -15,7 +15,7 @@ layer = "product-support"
 
 [dependencies]
 async-trait = "0.1"
-soma-application = { path = "../application" }
+soma-application = { path = "../application", default-features = false }
 soma-api = { path = "../api", features = ["auth"] }
 soma-auth = { path = "../../shared/auth", features = ["http-axum"] }
 soma-contracts = { path = "../contracts" }
