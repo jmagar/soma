@@ -202,7 +202,7 @@ impl CodexSession {
             match self.events.recv().await? {
                 Event::Notification(notification) => return Some(notification),
                 Event::Request(request) => {
-                    let reply = handler.handle(&request.request);
+                    let reply = handler.handle(&request.request).await;
                     let _ = reply.send(request);
                 }
                 Event::Closed => return None,

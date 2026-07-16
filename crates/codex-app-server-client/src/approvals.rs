@@ -1,4 +1,8 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    future::{ready, Future},
+    pin::Pin,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::protocol::{
     ApplyPatchApprovalResponse, CommandExecutionApprovalDecision,
@@ -8,6 +12,13 @@ use crate::protocol::{
     PermissionsRequestApprovalResponse, RequestPermissionProfile, ReviewDecision, ServerRequest,
 };
 use crate::{PendingServerRequest, Result};
+
+/// Boxed future returned by [`ApprovalHandler`].
+///
+/// The future is lifetime-bound to the handler and request so custom handlers
+/// can borrow their own UI/channel state and inspect the typed request while
+/// waiting asynchronously for a decision.
+pub type ApprovalFuture<'a> = Pin<Box<dyn Future<Output = ServerRequestReply> + Send + 'a>>;
 
 /// A typed reply for a server-to-client app-server request.
 ///
@@ -31,22 +42,18 @@ impl ServerRequestReply {
                 code,
                 message,
                 data,
-            } => {
-                request.respond_error(code, message, data);
-                Ok(())
-            }
+            } => request.respond_error(code, message, data),
         }
     }
 }
 
-/// Synchronous policy hook for server-to-client app-server requests.
+/// Policy hook for server-to-client app-server requests.
 ///
-/// The trait is intentionally synchronous because request handling happens
-/// while draining the event stream. For async/user-interface workflows, bridge
-/// to this trait with a channel or use [`FnApprovalHandler`] around your own
-/// state machine.
+/// Implementations return a future so human-in-the-loop UI, channels, or other
+/// async policy engines can decide without blocking a Tokio worker while the
+/// session drains app-server events.
 pub trait ApprovalHandler: Send + Sync {
-    fn handle(&self, request: &ServerRequest) -> ServerRequestReply;
+    fn handle<'a>(&'a self, request: &'a ServerRequest) -> ApprovalFuture<'a>;
 }
 
 /// Approval handler that rejects every server request with a JSON-RPC error.
@@ -91,8 +98,8 @@ impl DenyAllApprovalHandler {
 pub struct AllowAllApprovalHandler;
 
 impl ApprovalHandler for AllowAllApprovalHandler {
-    fn handle(&self, request: &ServerRequest) -> ServerRequestReply {
-        match request {
+    fn handle<'a>(&'a self, request: &'a ServerRequest) -> ApprovalFuture<'a> {
+        Box::pin(ready(match request {
             ServerRequest::ItemCommandExecutionRequestApproval { .. } => {
                 serialized_result(CommandExecutionRequestApprovalResponse {
                     decision: CommandExecutionApprovalDecision::Accept,
@@ -131,7 +138,7 @@ impl ApprovalHandler for AllowAllApprovalHandler {
             _ => {
                 unsupported_request_error(request, "allow-all approval policy has no canned reply")
             }
-        }
+        }))
     }
 }
 
@@ -145,8 +152,8 @@ impl ApprovalHandler for AllowAllApprovalHandler {
 pub struct ReadOnlyApprovalHandler;
 
 impl ApprovalHandler for ReadOnlyApprovalHandler {
-    fn handle(&self, request: &ServerRequest) -> ServerRequestReply {
-        match request {
+    fn handle<'a>(&'a self, request: &'a ServerRequest) -> ApprovalFuture<'a> {
+        Box::pin(ready(match request {
             ServerRequest::ItemCommandExecutionRequestApproval { .. } => {
                 serialized_result(CommandExecutionRequestApprovalResponse {
                     decision: CommandExecutionApprovalDecision::Decline,
@@ -179,17 +186,17 @@ impl ApprovalHandler for ReadOnlyApprovalHandler {
                 request,
                 "read-only approval policy declined this request",
             ),
-        }
+        }))
     }
 }
 
 impl ApprovalHandler for DenyAllApprovalHandler {
-    fn handle(&self, _request: &ServerRequest) -> ServerRequestReply {
-        ServerRequestReply::Error {
+    fn handle<'a>(&'a self, _request: &'a ServerRequest) -> ApprovalFuture<'a> {
+        Box::pin(ready(ServerRequestReply::Error {
             code: self.code,
             message: self.message.clone(),
             data: None,
-        }
+        }))
     }
 }
 
@@ -214,7 +221,32 @@ impl<F> ApprovalHandler for FnApprovalHandler<F>
 where
     F: Fn(&ServerRequest) -> ServerRequestReply + Send + Sync,
 {
-    fn handle(&self, request: &ServerRequest) -> ServerRequestReply {
+    fn handle<'a>(&'a self, request: &'a ServerRequest) -> ApprovalFuture<'a> {
+        Box::pin(ready((self.0)(request)))
+    }
+}
+
+/// Approval handler backed by an async closure.
+///
+/// Use this for UI, channel, or service-backed approval policies that need to
+/// await a decision while a turn is being drained.
+pub struct AsyncFnApprovalHandler<F>(F);
+
+impl<F> AsyncFnApprovalHandler<F>
+where
+    F: for<'a> Fn(&'a ServerRequest) -> ApprovalFuture<'a> + Send + Sync,
+{
+    /// Wraps an async closure as an [`ApprovalHandler`].
+    pub fn new(handler: F) -> Self {
+        Self(handler)
+    }
+}
+
+impl<F> ApprovalHandler for AsyncFnApprovalHandler<F>
+where
+    F: for<'a> Fn(&'a ServerRequest) -> ApprovalFuture<'a> + Send + Sync,
+{
+    fn handle<'a>(&'a self, request: &'a ServerRequest) -> ApprovalFuture<'a> {
         (self.0)(request)
     }
 }
