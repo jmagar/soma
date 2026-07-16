@@ -23,7 +23,7 @@ async fn tool_routes_use_native_names_when_unique() {
 }
 
 #[tokio::test]
-async fn tool_routes_namespace_reserved_and_duplicate_names() {
+async fn tool_routes_namespace_duplicate_names_without_gateway_reserved_words() {
     let manager = manager_with_pool(pool_with_snapshots(vec![
         snapshot("alpha", vec![tool("soma"), tool("search")], vec![], vec![]),
         snapshot("beta", vec![tool("search")], vec![], vec![]),
@@ -37,7 +37,7 @@ async fn tool_routes_namespace_reserved_and_duplicate_names() {
         .map(|route| route.name)
         .collect();
 
-    assert_eq!(names, vec!["alpha__soma", "alpha__search", "beta__search"]);
+    assert_eq!(names, vec!["soma", "alpha__search", "beta__search"]);
 }
 
 #[tokio::test]

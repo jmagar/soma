@@ -25,7 +25,6 @@ fn python_command() -> String {
         }
     })
 }
-
 #[tokio::test]
 async fn read_access_can_list_but_cannot_admin_test() {
     let manager = default_manager();

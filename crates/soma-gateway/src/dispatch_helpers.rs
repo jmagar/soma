@@ -1,5 +1,7 @@
 use serde_json::{json, Value};
 
+pub const GATEWAY_ERROR_SCHEMA_VERSION: &str = "mcp.gateway.error.v1";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GatewayStructuredError {
     pub code: &'static str,
@@ -14,7 +16,7 @@ impl GatewayStructuredError {
     pub fn to_json(&self) -> Value {
         json!({
             "isError": true,
-            "schema_version": "soma.gateway.error.v1",
+            "schema_version": GATEWAY_ERROR_SCHEMA_VERSION,
             "code": self.code,
             "kind": self.kind,
             "tool": self.tool,

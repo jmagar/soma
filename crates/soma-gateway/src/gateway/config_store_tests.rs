@@ -4,7 +4,7 @@ use crate::config::{ProtectedMcpRouteConfig, UpstreamConfig, VirtualServerConfig
 #[test]
 fn installs_default_config_when_missing() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsGatewayConfigStore::new(dir.path().join(".soma"));
+    let store = FsGatewayConfigStore::new(dir.path().join(".mcp-gateway"));
     let cfg = store.load_or_install_default().unwrap();
     assert_eq!(cfg, GatewayConfig::default());
     assert!(store.paths().config_path().exists());
@@ -13,7 +13,7 @@ fn installs_default_config_when_missing() {
 #[test]
 fn toml_round_trip_preserves_gateway_sections() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsGatewayConfigStore::new(dir.path().join(".soma"));
+    let store = FsGatewayConfigStore::new(dir.path().join(".mcp-gateway"));
     let cfg = GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "demo".to_owned(),
@@ -42,7 +42,7 @@ fn toml_round_trip_preserves_gateway_sections() {
 #[test]
 fn env_secret_write_merges_and_quotes_values() {
     let dir = tempfile::tempdir().unwrap();
-    let store = FsGatewayConfigStore::new(dir.path().join(".soma"));
+    let store = FsGatewayConfigStore::new(dir.path().join(".mcp-gateway"));
     store
         .write_env_secret("DEMO_TOKEN", "secret value")
         .unwrap();
@@ -58,7 +58,7 @@ fn env_secret_write_uses_0600_permissions() {
     use std::os::unix::fs::PermissionsExt;
 
     let dir = tempfile::tempdir().unwrap();
-    let store = FsGatewayConfigStore::new(dir.path().join(".soma"));
+    let store = FsGatewayConfigStore::new(dir.path().join(".mcp-gateway"));
     store.write_env_secret("DEMO_TOKEN", "secret").unwrap();
     let mode = fs::metadata(store.paths().env_path())
         .unwrap()

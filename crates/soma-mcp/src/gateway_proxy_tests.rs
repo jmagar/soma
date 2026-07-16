@@ -72,7 +72,7 @@ async fn mcp_server_exposes_live_gateway_tools_resources_and_prompts() -> anyhow
         .resources
         .iter()
         .map(|resource| resource.uri.as_str())
-        .find(|uri| uri.starts_with("soma://upstream/py/"))
+        .find(|uri| uri.starts_with("mcp-gateway://upstream/py/"))
         .expect("gateway resource route")
         .to_owned();
     let resource = client

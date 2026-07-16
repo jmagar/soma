@@ -274,7 +274,7 @@ fn manager_error_shape(
             action,
             "store_not_mounted",
             "configuration",
-            "start Soma with a mounted gateway config store",
+            "start the host application with a mounted gateway config store",
         ),
         GatewayManagerError::UpstreamExists(_) => structured_error(
             action,

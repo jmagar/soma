@@ -37,15 +37,15 @@ impl GatewayManager {
                     upstream.name
                 ))
             })?;
-        let auth_upstream = crate::gateway::oauth::to_soma_auth_upstream_config(upstream)
-            .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
-        let client = runtime
-            .cache
-            .get_or_build(&auth_upstream, subject)
-            .await
-            .map_err(|error| GatewayManagerError::OAuth(error.to_string()))?;
-        client
-            .get_access_token()
+        runtime
+            .manager(&upstream.name)
+            .ok_or_else(|| {
+                GatewayManagerError::OAuth(format!(
+                    "upstream `{}` has no OAuth manager",
+                    upstream.name
+                ))
+            })?
+            .access_token(subject)
             .await
             .map(Some)
             .map_err(|error| GatewayManagerError::OAuth(error.to_string()))
