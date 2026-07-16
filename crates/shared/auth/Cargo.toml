@@ -12,6 +12,9 @@ keywords = ["oauth", "auth", "axum", "jwt", "mcp"]
 categories = ["authentication", "web-programming::http-server"]
 publish = false
 
+[package.metadata.soma-architecture]
+layer = "shared"
+
 [features]
 # Explicit empty default to keep Cargo feature unification a no-op for downstream consumers.
 default = []

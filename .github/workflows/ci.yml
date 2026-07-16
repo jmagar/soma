@@ -125,11 +125,27 @@ jobs:
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
 
+  # ── architecture: dependency-layer boundary checks ───────────────────────────
+  architecture:
+    name: Architecture
+    needs: [changes]
+    if: ${{ needs.changes.outputs.rust == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, tootie, rmcp-template]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Rust and sccache
+        uses: ./.github/actions/setup-rust-sccache
+
+      - name: Check architecture boundaries
+        run: cargo xtask check-architecture
+
   # ── clippy: zero warnings ────────────────────────────────────────────────────
   clippy:
     name: Clippy
-    needs: [changes]
-    if: ${{ needs.changes.outputs.rust == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [changes, architecture]
+    if: ${{ always() && needs.changes.outputs.rust == 'true' && needs.architecture.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 20
     steps:
@@ -156,8 +172,8 @@ jobs:
   # ── test: cargo nextest run --profile ci ─────────────────────────────────────
   test:
     name: Test
-    needs: [changes]
-    if: ${{ needs.changes.outputs.rust == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [changes, architecture]
+    if: ${{ always() && needs.changes.outputs.rust == 'true' && needs.architecture.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, tootie, rmcp-template]
     timeout-minutes: 30
     steps:
@@ -718,6 +734,7 @@ jobs:
       - changes
       - actionlint
       - fmt
+      - architecture
       - clippy
       - test
       - frontend-assets

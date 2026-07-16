@@ -20,6 +20,9 @@ readme = "../../README.md"
 repository.workspace = true
 autobins = false
 
+[package.metadata.soma-architecture]
+layer = "app"
+
 [lib]
 name = "soma"
 

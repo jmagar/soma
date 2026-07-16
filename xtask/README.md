@@ -10,16 +10,20 @@ Run all CI checks locally in the same order as `.github/workflows/ci.yml`. Stops
 
 | Step | Tool | Skipped if absent |
 |---|---|---|
-| 1/10 | `cargo fmt --all -- --check` | — |
-| 2/10 | `cargo clippy --all-targets -- -D warnings` | — |
-| 3/10 | `cargo nextest run --profile ci` | falls back to `cargo test` |
-| 4/10 | `taplo check` | yes |
-| 5/10 | `cargo xtask patterns` | — |
-| 6/10 | `cargo xtask check-test-siblings` | — |
-| 7/10 | `cargo xtask check-docs` | — |
-| 8/10 | `cargo xtask check-stale-claims` | — |
-| 9/10 | `cargo xtask check-web-source-sync` | — |
-| 10/10 | `cargo audit` | yes |
+| 1/14 | `cargo fmt --all -- --check` | — |
+| 2/14 | `cargo xtask check-architecture` | — |
+| 3/14 | `cargo clippy --all-targets -- -D warnings` | — |
+| 4/14 | `cargo nextest run --profile ci` | falls back to `cargo test` |
+| 5/14 | `taplo check` | yes |
+| 6/14 | `cargo xtask patterns` | — |
+| 7/14 | `cargo xtask check-test-siblings` | — |
+| 8/14 | `cargo xtask check-docs` | — |
+| 9/14 | `cargo xtask check-stale-claims` | — |
+| 10/14 | `cargo xtask check-mcp-registry` | — |
+| 11/14 | `cargo xtask check-provider-manifest-contract` | — |
+| 12/14 | `cargo xtask check-palette-manifest --check` | — |
+| 13/14 | `cargo xtask check-web-source-sync` | — |
+| 14/14 | `cargo audit` | yes |
 
 ```bash
 cargo xtask ci
@@ -119,6 +123,19 @@ Verify every `src/*.rs` implementation file has a sibling `*_tests.rs` file wher
 
 ```bash
 cargo xtask check-test-siblings
+```
+
+---
+
+### `cargo xtask check-architecture`
+
+Validate the workspace dependency-layer policy from Cargo metadata with all
+features enabled. The check verifies package architecture metadata, shared-crate
+independence from product/app crates, surface isolation, future domain and
+application boundaries, mixed application/engine ownership, and internal cycles.
+
+```bash
+cargo xtask check-architecture
 ```
 
 ---

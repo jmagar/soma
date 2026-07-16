@@ -16,6 +16,7 @@
 //!   generate-docs Generate volatile docs and metadata from canonical specs
 //!   generate-provider-surfaces Generate provider docs and marketplace catalogs
 //!   check-docs    Validate generated docs and metadata are current
+//!   check-architecture Validate workspace dependency-layer boundaries
 //!   check-mcp-registry Validate server.json against the MCP registry schema
 //!   check-stale-claims Fail on stale hardcoded Soma claims
 //!   sync-web-source Copy apps/web into the bundled soma-web scaffold source
@@ -45,18 +46,22 @@
 
 use anyhow::{bail, Context, Result};
 use std::process::{Command, Stdio};
-use walkdir::WalkDir;
 
+mod architecture;
+mod architecture_graph;
 mod cargo_generate;
 mod cargo_generate_post;
 mod ci_paths;
 mod codex_schema;
 mod generated_surfaces;
+mod help;
 mod mcp_registry;
 mod no_mcp;
 mod patterns;
 mod provider_manifest;
+mod release_commands;
 mod release_versions;
+mod repo_checks;
 mod rmcp_release_monitor;
 mod scaffold;
 mod scripts;
@@ -82,8 +87,8 @@ fn main() -> Result<()> {
     match args.first().map(String::as_str) {
         Some("dist") => dist(),
         Some("ci") => ci(),
-        Some("symlink-docs") => symlink_docs(),
-        Some("check-env") => check_env(),
+        Some("symlink-docs") => repo_checks::symlink_docs(),
+        Some("check-env") => repo_checks::check_env(),
         Some("patterns") => patterns_cmd(&args[1..]),
         Some("contract-audit") => contract_audit(),
         Some("scaffold") => scaffold::run(&args[1..]),
@@ -93,6 +98,7 @@ fn main() -> Result<()> {
         Some("generate-docs") => generate_docs(),
         Some("generate-provider-surfaces") => generated_surfaces::provider_surfaces(&args[1..]),
         Some("check-docs") => check_docs(),
+        Some("check-architecture") => architecture::check(workspace_root),
         Some("check-mcp-registry") => mcp_registry::check_cmd(workspace_root, &args[1..]),
         Some("check-stale-claims") => check_stale_claims(),
         Some("check-cargo-generate") => scripts_lane_d::check_cargo_generate(&args[1..]),
@@ -132,120 +138,28 @@ fn main() -> Result<()> {
             let plugin_root = std::env::var_os("PLUGIN_ROOT").map(std::path::PathBuf::from);
             scripts_lane_b::validate_plugin_layout(workspace_root, plugin_root.as_deref())
         }
-        Some("check-test-siblings") => check_test_siblings(),
+        Some("check-test-siblings") => repo_checks::check_test_siblings(),
         Some("check-version-sync") => {
             scripts_lane_b::check_version_sync(workspace_root, &args[1..])
         }
-        Some("check-release-versions") => check_release_versions_cmd(workspace_root, &args[1..]),
-        Some("release-plan") => release_plan_cmd(workspace_root, &args[1..]),
+        Some("check-release-versions") => {
+            release_commands::check_release_versions(workspace_root, &args[1..])
+        }
+        Some("release-plan") => release_commands::release_plan(workspace_root, &args[1..]),
         Some("sync-release-please-version") => {
             release_versions::sync_release_please_version(workspace_root, "soma")
         }
         Some("rmcp-release-monitor") => rmcp_release_monitor::run(&args[1..]),
-        Some("bump-version") => bump_version_cmd(workspace_root, &args[1..]),
+        Some("bump-version") => release_commands::bump_version(workspace_root, &args[1..]),
         Some("bump-soma-version") => scripts_lane_b::bump_version(workspace_root, &args[1..]),
         Some("changed-paths") => ci_paths::run(&args[1..]),
         Some("--help") | Some("-h") | Some("help") | None => {
-            print_help();
+            help::print_help();
             Ok(())
         }
         Some(unknown) => {
             bail!("Unknown xtask command: {unknown:?}\nRun `cargo xtask --help` for usage.")
         }
-    }
-}
-
-fn check_release_versions_cmd(root: &std::path::Path, args: &[String]) -> Result<()> {
-    let options = ReleaseCommandOptions::parse(args)?;
-    release_versions::check(
-        root,
-        options.base.as_deref(),
-        &options.head,
-        options.mode,
-        options.json,
-    )
-}
-
-fn release_plan_cmd(root: &std::path::Path, args: &[String]) -> Result<()> {
-    let options = ReleaseCommandOptions::parse(args)?;
-    let plans = release_versions::plan(root, options.base.as_deref(), &options.head, options.mode)?;
-    release_versions::print_plans(&plans, options.json)
-}
-
-fn bump_version_cmd(root: &std::path::Path, args: &[String]) -> Result<()> {
-    if args.len() != 2 {
-        bail!("Usage: cargo xtask bump-version <component> <patch|minor|major>");
-    }
-    let level = parse_bump_level(&args[1])?;
-    release_versions::bump(root, &args[0], level)
-}
-
-struct ReleaseCommandOptions {
-    base: Option<String>,
-    head: String,
-    mode: release_versions::GateMode,
-    json: bool,
-}
-
-impl ReleaseCommandOptions {
-    fn parse(args: &[String]) -> Result<Self> {
-        let mut base = None;
-        let mut head = "HEAD".to_owned();
-        let mut mode = release_versions::GateMode::Pr;
-        let mut json = false;
-        let mut index = 0usize;
-        while index < args.len() {
-            match args[index].as_str() {
-                "--base" => {
-                    index += 1;
-                    base = Some(
-                        args.get(index)
-                            .context("--base requires a value")?
-                            .to_owned(),
-                    );
-                }
-                "--head" => {
-                    index += 1;
-                    head = args
-                        .get(index)
-                        .context("--head requires a value")?
-                        .to_owned();
-                }
-                "--mode" => {
-                    index += 1;
-                    mode = parse_gate_mode(args.get(index).context("--mode requires a value")?)?;
-                }
-                "--json" => json = true,
-                "--help" | "-h" => {
-                    bail!("Usage: cargo xtask <check-release-versions|release-plan> [--base REF] [--head REF] [--mode pr|main] [--json]");
-                }
-                unknown => bail!("unknown release option: {unknown}"),
-            }
-            index += 1;
-        }
-        Ok(Self {
-            base,
-            head,
-            mode,
-            json,
-        })
-    }
-}
-
-fn parse_gate_mode(value: &str) -> Result<release_versions::GateMode> {
-    match value {
-        "pr" => Ok(release_versions::GateMode::Pr),
-        "main" => Ok(release_versions::GateMode::Main),
-        other => bail!("unknown release gate mode {other:?}; expected pr or main"),
-    }
-}
-
-fn parse_bump_level(value: &str) -> Result<release_versions::BumpLevel> {
-    match value {
-        "patch" => Ok(release_versions::BumpLevel::Patch),
-        "minor" => Ok(release_versions::BumpLevel::Minor),
-        "major" => Ok(release_versions::BumpLevel::Major),
-        other => bail!("unknown bump level {other:?}; expected patch, minor, or major"),
     }
 }
 
@@ -268,45 +182,48 @@ fn cargo_generate(args: &[String]) -> Result<()> {
 /// the static contract surfaces that every derived server should keep current.
 fn contract_audit() -> Result<()> {
     println!("==> contract-audit: local static/spec checks only");
-    println!("==> [1/12] cargo xtask patterns");
+    println!("==> [1/13] cargo xtask check-architecture");
+    architecture::check(std::path::Path::new(".")).context("architecture check failed")?;
+
+    println!("==> [2/13] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default()).context("patterns contract check failed")?;
 
-    println!("==> [2/12] cargo xtask check-test-siblings");
-    check_test_siblings().context("test sibling check failed")?;
+    println!("==> [3/13] cargo xtask check-test-siblings");
+    repo_checks::check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [3/12] cargo xtask check-docs");
+    println!("==> [4/13] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [4/12] cargo xtask check-stale-claims");
+    println!("==> [5/13] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [5/12] cargo xtask check-schema-docs --check");
+    println!("==> [6/13] cargo xtask check-schema-docs --check");
     scripts_lane_d::check_schema_docs(&["--check".to_owned()])
         .context("schema docs check failed")?;
 
-    println!("==> [6/12] cargo xtask check-openapi --check");
+    println!("==> [7/13] cargo xtask check-openapi --check");
     scripts_lane_d::check_openapi(&["--check".to_owned()]).context("OpenAPI docs check failed")?;
 
-    println!("==> [7/12] cargo xtask check-mcp-registry");
+    println!("==> [8/13] cargo xtask check-mcp-registry");
     mcp_registry::check_default(std::path::Path::new("."))
         .context("MCP registry manifest check failed")?;
 
-    println!("==> [8/12] cargo xtask check-provider-manifest-contract");
+    println!("==> [9/13] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [9/12] cargo xtask check-palette-manifest --check");
+    println!("==> [10/13] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [10/12] cargo xtask generate-provider-surfaces --check");
+    println!("==> [11/13] cargo xtask generate-provider-surfaces --check");
     generated_surfaces::provider_surfaces(&["--check".to_owned()])
         .context("provider surfaces check failed")?;
 
-    println!("==> [11/12] cargo xtask check-scaffold-intent-contract");
+    println!("==> [12/13] cargo xtask check-scaffold-intent-contract");
     scripts_lane_d::check_scaffold_intent_contract()
         .context("scaffold intent contract check failed")?;
 
-    println!("==> [12/12] cargo xtask test-soma-features");
+    println!("==> [13/13] cargo xtask test-soma-features");
     scripts_lane_b::test_soma_features(std::path::Path::new("."))
         .context("Soma feature smoke failed")?;
 
@@ -372,13 +289,16 @@ fn dist() -> Result<()> {
 ///
 /// CUSTOMIZE: Add or remove steps to match your CI pipeline.
 fn ci() -> Result<()> {
-    println!("==> [1/13] cargo fmt --check");
+    println!("==> [1/14] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/13] cargo clippy");
+    println!("==> [2/14] cargo xtask check-architecture");
+    architecture::check(std::path::Path::new(".")).context("architecture check failed")?;
+
+    println!("==> [3/14] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [3/13] cargo nextest run --profile ci");
+    println!("==> [4/14] cargo nextest run --profile ci");
     // Falls back to cargo test if nextest isn't installed.
     // CUSTOMIZE: Remove the fallback once nextest is in your CI environment.
     if command_exists("cargo-nextest") {
@@ -388,7 +308,7 @@ fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [4/13] taplo check");
+    println!("==> [5/14] taplo check");
     // CUSTOMIZE: Remove this step if you don't use taplo.
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
@@ -396,34 +316,34 @@ fn ci() -> Result<()> {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [5/13] cargo xtask patterns");
+    println!("==> [6/14] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [6/13] cargo xtask check-test-siblings");
-    check_test_siblings().context("test sibling check failed")?;
+    println!("==> [7/14] cargo xtask check-test-siblings");
+    repo_checks::check_test_siblings().context("test sibling check failed")?;
 
-    println!("==> [7/13] cargo xtask check-docs");
+    println!("==> [8/14] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [8/13] cargo xtask check-stale-claims");
+    println!("==> [9/14] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [9/13] cargo xtask check-mcp-registry");
+    println!("==> [10/14] cargo xtask check-mcp-registry");
     mcp_registry::check_default(std::path::Path::new("."))
         .context("MCP registry manifest check failed")?;
 
-    println!("==> [10/13] cargo xtask check-provider-manifest-contract");
+    println!("==> [11/14] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [11/13] cargo xtask check-palette-manifest --check");
+    println!("==> [12/14] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [12/13] cargo xtask check-web-source-sync");
+    println!("==> [13/14] cargo xtask check-web-source-sync");
     web_source::check().context("web source bundle drifted from apps/web")?;
 
-    println!("==> [13/13] cargo audit");
+    println!("==> [14/14] cargo audit");
     // CUSTOMIZE: Remove if you don't want advisory audits in local CI.
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
@@ -435,131 +355,6 @@ fn ci() -> Result<()> {
 
     println!("==> All CI checks passed!");
     Ok(())
-}
-
-// =============================================================================
-// check-test-siblings — Verify every src/*.rs has a sibling *_tests.rs
-// =============================================================================
-
-/// Walk crate `src/` trees and report any `.rs` file missing a sibling
-/// `{stem}_tests.rs`.
-///
-/// Files excluded from the check:
-///   - Files whose name already ends in `_tests.rs` (they ARE the test sibling)
-///   - `main.rs` and `lib.rs` (entry points with no business logic to unit-test)
-///
-/// Exits non-zero if any sibling is missing, so it can gate CI.
-fn check_test_siblings() -> Result<()> {
-    const EXEMPT: &[&str] = &["main.rs", "lib.rs"];
-    const ORPHAN_EXEMPT: &[&str] = &["cli_tests.rs", "mcp_tests.rs"];
-
-    let mut missing: Vec<std::path::PathBuf> = Vec::new();
-
-    for root in crate_src_roots() {
-        for entry in WalkDir::new(root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let path = entry.path();
-            let name = match path.file_name().and_then(|n| n.to_str()) {
-                Some(n) => n,
-                None => continue,
-            };
-
-            if !name.ends_with(".rs") || name.ends_with("_tests.rs") || EXEMPT.contains(&name) {
-                continue;
-            }
-
-            let stem = name.strip_suffix(".rs").unwrap();
-            let sibling = path.parent().unwrap().join(format!("{stem}_tests.rs"));
-
-            if !sibling.exists() {
-                missing.push(path.to_owned());
-            }
-        }
-    }
-
-    // Reverse check: _tests.rs files with no corresponding source are orphans.
-    let mut orphans: Vec<std::path::PathBuf> = Vec::new();
-    for root in crate_src_roots() {
-        for entry in WalkDir::new(root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_type().is_file())
-        {
-            let path = entry.path();
-            let name = match path.file_name().and_then(|n| n.to_str()) {
-                Some(n) => n,
-                None => continue,
-            };
-            if !name.ends_with("_tests.rs") {
-                continue;
-            }
-            if ORPHAN_EXEMPT.contains(&name) {
-                continue;
-            }
-            let stem = name.strip_suffix("_tests.rs").unwrap();
-            let source = path.parent().unwrap().join(format!("{stem}.rs"));
-            if !source.exists() {
-                orphans.push(path.to_owned());
-            }
-        }
-    }
-
-    let ok = missing.is_empty() && orphans.is_empty();
-
-    if !missing.is_empty() {
-        println!(
-            "==> check-test-siblings: missing _tests.rs siblings ({}):",
-            missing.len()
-        );
-        for path in &missing {
-            let stem = path.file_stem().unwrap().to_string_lossy();
-            println!(
-                "  MISSING  {}  (expected {}_tests.rs)",
-                path.display(),
-                stem
-            );
-        }
-    }
-    if !orphans.is_empty() {
-        println!(
-            "==> check-test-siblings: orphaned _tests.rs files ({}):",
-            orphans.len()
-        );
-        for path in &orphans {
-            println!("  ORPHAN   {}  (no matching source file)", path.display());
-        }
-    }
-    if ok {
-        println!("==> check-test-siblings: all source files have a _tests.rs sibling");
-        return Ok(());
-    }
-    bail!("{} missing, {} orphaned", missing.len(), orphans.len());
-}
-
-fn crate_src_roots() -> Vec<std::path::PathBuf> {
-    [
-        "apps/soma/src",
-        "crates/soma/api/src",
-        "crates/soma/cli/src",
-        "crates/soma/contracts/src",
-        "crates/shared/codemode/src",
-        "crates/shared/mcp/client/src",
-        "crates/shared/mcp/gateway/src",
-        "crates/shared/mcp/proxy/src",
-        "crates/shared/mcp/server/src",
-        "crates/soma/mcp/src",
-        "crates/shared/observability/src",
-        "crates/shared/openapi/src",
-        "crates/soma/runtime/src",
-        "crates/soma/service/src",
-        "crates/soma/web/src",
-    ]
-    .into_iter()
-    .map(std::path::PathBuf::from)
-    .collect()
 }
 
 // =============================================================================
@@ -580,158 +375,6 @@ fn patterns_cmd(args: &[String]) -> Result<()> {
         }
     }
     patterns::run(options)
-}
-
-// =============================================================================
-// symlink-docs — Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
-// =============================================================================
-
-/// Walk the repo and create sibling symlinks next to every CLAUDE.md found.
-///
-/// Pattern §32: CLAUDE.md is the single source of truth. AGENTS.md (Codex/OpenAI)
-/// and GEMINI.md (Google) are symlinks so all AI systems read the same instructions.
-///
-/// This applies to ALL CLAUDE.md files in the repo, not just the root — nested
-/// CLAUDE.md files in plugins/, xtask/, etc. all get symlinks.
-///
-/// CUSTOMIZE: No changes needed here — this works for any repo using CLAUDE.md.
-///
-/// Run after adding any new CLAUDE.md file:
-///   cargo xtask symlink-docs
-fn symlink_docs() -> Result<()> {
-    let mut created = 0usize;
-    let mut skipped = 0usize;
-
-    // Walk the full repo, skipping .git/ and target/ (not real project dirs)
-    for entry in WalkDir::new(".")
-        .into_iter()
-        .filter_entry(|e| {
-            let name = e.file_name().to_string_lossy();
-            // Skip .git and target — they're not repo source dirs
-            !matches!(name.as_ref(), ".git" | "target")
-        })
-        .filter_map(|e| e.ok())
-    {
-        if entry.file_name() != "CLAUDE.md" {
-            continue;
-        }
-
-        let claude_path = entry.path();
-        let dir = claude_path
-            .parent()
-            .expect("CLAUDE.md must be inside a directory");
-
-        // Create sibling symlinks: AGENTS.md → CLAUDE.md, GEMINI.md → CLAUDE.md
-        // Both use a relative target so they remain valid after `git clone`.
-        for link_name in ["AGENTS.md", "GEMINI.md"] {
-            let link_path = dir.join(link_name);
-
-            if link_path.exists() || link_path.symlink_metadata().is_ok() {
-                // Already exists (or is a dangling symlink) — skip
-                println!("  skip  {}", link_path.display());
-                skipped += 1;
-                continue;
-            }
-
-            // Symlink target is always relative: "CLAUDE.md" → sibling file
-            #[cfg(unix)]
-            std::os::unix::fs::symlink("CLAUDE.md", &link_path)
-                .with_context(|| format!("Failed to create symlink at {}", link_path.display()))?;
-
-            // Windows: create a file symlink (requires developer mode or admin)
-            #[cfg(windows)]
-            std::os::windows::fs::symlink_file("CLAUDE.md", &link_path).with_context(|| {
-                format!(
-                    "Failed to create symlink at {} (may need developer mode on Windows)",
-                    link_path.display()
-                )
-            })?;
-
-            println!("  link  {} → CLAUDE.md", link_path.display());
-            created += 1;
-        }
-    }
-
-    println!("==> symlink-docs: {created} created, {skipped} already present");
-    Ok(())
-}
-
-// =============================================================================
-// check-env — Validate required environment variables
-// =============================================================================
-
-/// Validate that all required environment variables are set and non-empty.
-///
-/// Run this to get a clear error message before starting the server, rather
-/// than a cryptic runtime failure.
-///
-/// CUSTOMIZE: Replace the variable names in REQUIRED_VARS with your service's
-///           actual required environment variables.
-///
-/// Variables listed as "optional" are checked for presence but not required —
-/// the server will start without them but some features may be unavailable.
-fn check_env() -> Result<()> {
-    // CUSTOMIZE: Add or remove required variables for your service.
-    //   Format: (&str, &str)  →  (ENV_VAR_NAME, "description of what it's for")
-    //
-    // Soma's SomaClient doesn't require API credentials to boot
-    // (stub mode works without them). Your real service likely does — update
-    // REQUIRED_VARS accordingly.
-    const REQUIRED_VARS: &[(&str, &str)] = &[
-        // CUSTOMIZE: Uncomment and adapt once you have a real upstream service:
-        // ("SOMA_API_URL", "Full base URL of the upstream service (e.g. https://api.example.com/v1)"),
-        // ("SOMA_API_KEY", "API key or bearer token for the upstream service"),
-    ];
-
-    // CUSTOMIZE: Optional variables — server boots without them but warns.
-    const OPTIONAL_VARS: &[(&str, &str)] = &[
-        (
-            "SOMA_MCP_TOKEN",
-            "Static bearer token for /mcp (required in production; omit only in loopback dev mode)",
-        ),
-        (
-            "SOMA_MCP_HOST",
-            "Bind host (default 127.0.0.1 — set to 0.0.0.0 only with auth or trusted gateway)",
-        ),
-        ("SOMA_MCP_PORT", "Bind port (default 40060)"),
-        (
-            "RUST_LOG",
-            "Log filter (e.g. info,rmcp=warn — default: info in server mode, warn in stdio/cli)",
-        ),
-    ];
-
-    let mut missing = Vec::new();
-
-    println!("==> Checking required environment variables:");
-    for &(var, desc) in REQUIRED_VARS {
-        match std::env::var(var) {
-            Ok(v) if !v.is_empty() => println!("  OK  {var}"),
-            _ => {
-                println!("  MISSING  {var}");
-                println!("           {desc}");
-                missing.push(var);
-            }
-        }
-    }
-
-    println!("\n==> Optional variables (missing = feature degraded, not error):");
-    for &(var, desc) in OPTIONAL_VARS {
-        match std::env::var(var) {
-            Ok(v) if !v.is_empty() => println!("  set      {var} = {v}"),
-            _ => println!("  unset    {var}  ({desc})"),
-        }
-    }
-
-    if !missing.is_empty() {
-        bail!(
-            "\nMissing required environment variables: {}\n\
-             Copy .env.example to .env and fill in the values.",
-            missing.join(", ")
-        );
-    }
-
-    println!("\n==> All required environment variables are set.");
-    Ok(())
 }
 
 // =============================================================================
@@ -785,82 +428,4 @@ pub(crate) fn command_exists(name: &str) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
-}
-
-fn print_help() {
-    // CUSTOMIZE: Update binary name and command descriptions as you add commands.
-    eprintln!(
-        "cargo xtask — repo automation for soma
-
-USAGE:
-  cargo xtask <command>
-
-COMMANDS:
-  dist                  Build release binary into Cargo target dir
-  ci                    Run all CI checks: fmt, clippy, nextest, taplo, audit
-  symlink-docs          Create AGENTS.md + GEMINI.md symlinks next to every CLAUDE.md
-  check-env             Validate required environment variables are set
-  check-test-siblings   Verify every src/*.rs has a sibling *_tests.rs
-  patterns              Check static contracts from docs/PATTERNS.md (--strict, --json)
-  contract-audit        Run local static/spec checks without live upstream calls
-  scaffold             Plan/apply/verify a generated project from Soma
-  codex-schema         Rebuild/bisect the vendored codex-app-server-client schema
-                        (see `cargo xtask codex-schema --help`)
-  cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
-  cargo-generate-post   Internal generated-project rewrite command
-  generate-docs         Generate volatile docs and metadata from canonical specs
-  check-docs            Validate generated docs and metadata are current
-  check-mcp-registry    Validate server.json against docs/contracts/mcp-server.schema.json
-  check-stale-claims    Fail on stale hardcoded Soma claims
-  check-cargo-generate  Validate cargo-generate output
-  sync-web-source       Copy apps/web into crates/soma/web/assets/source
-  check-web-source-sync Validate bundled web source matches apps/web
-  update-aurora-web     Refresh Aurora registry components, validate, then sync
-  build-web             Build optional apps/web static export
-  web-watch             Watch apps/web and rebuild on changes
-  generate-cli          Generate dist/soma-cli through mcporter
-  repair                Rebuild and restart local soma-mcp runtime
-  test-mcp-auth         Smoke-test HTTP MCP bearer auth
-  asciicheck            Check/fix explicit files for non-ASCII characters
-  check-blob-size       Check changed git blobs against size budget
-  block-env-commits     Prevent staged .env secrets from being committed
-  check-coupled-files   Check common companion-file drift in a diff
-  check-dependency-updates
-                        Report Cargo dependency updates
-  check-file-size       Check staged source files against size budgets
-  check-openapi         Generate/check docs/generated/openapi.json
-  check-plugin-hook-contract
-                        Audit cross-repo plugin hook contracts
-  run-ascii-check       Check or fix tracked source/config/docs ASCII hygiene
-  check-plugin-stdio-smoke
-                        Smoke-test installed plugin stdio binary
-  check-runtime-current Check systemd/Docker runtime artifact freshness
-  check-schema-docs     Generate/check docs/MCP_SCHEMA.md
-  check-scaffold-intent-contract
-                        Validate scaffold intent schema/examples
-  apply-no-mcp-marketplace
-                        Remove bundled MCP registrations for the no-MCP branch
-  check-no-mcp-drift    Validate marketplace-no-MCP invariants and branch drift
-  sync-cargo            Copy Cargo.lock into plugin data directories
-  pre-release-check     Run release-readiness gate
-  refresh-docs          Refresh ignored reference docs
-  test-soma-features
-                        Run Soma invariant smoke tests
-  validate-plugin-layout
-                        Validate Claude/Codex/Gemini plugin package layout
-  check-version-sync    Validate release manifest version-file parity
-  check-release-versions [--base REF] [--head REF] [--mode pr|main] [--json]
-                        Validate changed release components have fresh versions/tags
-  release-plan          Print changed release components and candidate tags
-  sync-release-please-version
-                        Sync version files to .release-please-manifest.json
-  bump-version          Bump a component: cargo xtask bump-version soma patch
-  bump-soma-version Bump Soma component: cargo xtask bump-soma-version patch
-  changed-paths         Classify changed files into CI routing categories
-  help                  Show this help
-
-CUSTOMIZE:
-  Add commands by extending the match block in xtask/src/main.rs.
-  Keep dependencies minimal — xtask should compile in seconds."
-    );
 }
