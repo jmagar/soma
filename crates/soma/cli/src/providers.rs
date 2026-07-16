@@ -1,7 +1,7 @@
 //! Non-executing drop-in provider inspection commands (`list`, `lint`, `status`).
 //!
 //! Unlike `soma providers validate|inspect|test`, these never build or dispatch
-//! through the live `ProviderRegistry` — they only parse manifests on disk via
+//! through the live application provider catalog — they only parse manifests on disk via
 //! `soma_service::providers::filesystem::FileProviderSource::inspect()`. Safe to
 //! run before the runtime touches TS/WASM/MCP/OpenAPI handlers.
 

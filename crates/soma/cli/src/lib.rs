@@ -15,15 +15,11 @@
 
 use anyhow::{anyhow, Result};
 use serde_json::Value;
-use soma_contracts::{
-    actions::{ActionSpec, SomaAction},
-    config::SomaConfig,
-};
-use soma_service::{
-    dynamic_provider_registry, ProviderAuthMode, ProviderCall, ProviderPrincipal,
-    ProviderRequestLimits, ProviderSurface, SomaClient, SomaService,
-};
+use soma_application::{ExecuteActionRequest, ExecutionContext, SomaApplication};
+use soma_contracts::actions::{ActionSpec, SomaAction};
+use soma_domain::{Confirmation, RequestId, Surface};
 use std::io::{BufRead, IsTerminal, Write};
+use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
 
 // CUSTOMIZE: The doctor module is the §48 reference implementation.
 //           Import it from here and wire into run() below.
@@ -111,6 +107,51 @@ pub enum Command {
         write: bool,
     },
     Setup(SetupCommand),
+}
+
+pub struct CliInvocation {
+    pub command: Command,
+}
+
+impl From<Command> for CliInvocation {
+    fn from(command: Command) -> Self {
+        Self { command }
+    }
+}
+
+pub type CliError = anyhow::Error;
+
+pub trait CliIo {
+    fn stdout(&mut self, output: &str) -> Result<()>;
+    fn stderr(&mut self, output: &str) -> Result<()>;
+    fn confirm_destructive(&mut self, action: &str) -> Result<()>;
+}
+
+pub struct StandardCliIo;
+
+impl CliIo for StandardCliIo {
+    fn stdout(&mut self, output: &str) -> Result<()> {
+        writeln!(std::io::stdout(), "{output}")?;
+        Ok(())
+    }
+
+    fn stderr(&mut self, output: &str) -> Result<()> {
+        writeln!(std::io::stderr(), "{output}")?;
+        Ok(())
+    }
+
+    fn confirm_destructive(&mut self, action: &str) -> Result<()> {
+        if !std::io::stdin().is_terminal() {
+            return Err(anyhow!(
+                "pass -y / --yes to confirm destructive action `{action}`"
+            ));
+        }
+        confirm_destructive_action_from_io(
+            action,
+            &mut std::io::stdin().lock(),
+            &mut std::io::stderr(),
+        )
+    }
 }
 
 /// Parse CLI arguments from `std::env::args()`.
@@ -212,114 +253,87 @@ where
 
 /// Run a CLI command, print the result, and exit.
 ///
-/// # CUSTOMIZE
-/// - `Doctor` is handled specially in `main.rs::run_cli` (needs full `Config`).
-/// - All other commands get only `SomaConfig`; keep it that way.
-/// - Add `--json` support to each new command by forwarding a `json` flag.
-pub async fn run(cmd: Command, cfg: &SomaConfig) -> Result<()> {
+/// `Doctor`, `Watch`, `Setup`, and package generation are handled by the app
+/// composition layer because they are process infrastructure rather than
+/// product actions.
+pub async fn run(
+    application: Arc<SomaApplication>,
+    invocation: CliInvocation,
+    io: &mut dyn CliIo,
+) -> Result<std::process::ExitCode, CliError> {
+    let cmd = invocation.command;
     if let Command::Providers(command) = &cmd {
         if command.is_non_executing() {
             let Command::Providers(command) = cmd else {
                 unreachable!()
             };
-            return providers::run_providers_command(command);
+            providers::run_providers_command(command)?;
+            return Ok(std::process::ExitCode::SUCCESS);
         }
     }
 
-    if cfg.is_remote_adapter() && run_remote_adapter_command(&cmd, cfg).await? {
-        return Ok(());
-    }
-
-    let client = SomaClient::new(cfg)?;
-    let service = SomaService::new(client);
-    let registry = dynamic_provider_registry(service.clone())?;
-    registry
-        .refresh_file_providers()
-        .map_err(|error| anyhow!(error.to_string()))?;
-    let destructive_confirmed = confirm_command_if_destructive(&cmd, &registry)?;
+    let destructive_confirmed = confirm_command_if_destructive(&cmd, &application, io)?;
 
     if let Command::Providers(command) = &cmd {
         let result =
-            run_provider_management_command(command, &registry, destructive_confirmed).await?;
-        println!("{}", serde_json::to_string_pretty(&result)?);
-        return Ok(());
+            run_provider_management_command(command, application.as_ref(), destructive_confirmed)
+                .await?;
+        io.stdout(&serde_json::to_string_pretty(&result)?)?;
+        return Ok(std::process::ExitCode::SUCCESS);
     }
 
-    let result = match service_action_from_command(&cmd) {
-        Some(action) => match registry
-            .dispatch(ProviderCall {
-                provider: String::new(),
-                action: action.name().to_owned(),
-                params: cli_params(&action),
-                principal: ProviderPrincipal::loopback_dev(),
-                auth_mode: ProviderAuthMode::LoopbackDev,
-                surface: ProviderSurface::Cli,
-                destructive_confirmed,
-                limits: ProviderRequestLimits::default(),
-                snapshot_id: String::new(),
-            })
-            .await
-        {
-            Ok(output) => output.value,
-            Err(error) => {
-                eprintln!("{}", serde_json::to_string_pretty(&error)?);
-                return Err(anyhow!(error.message));
-            }
+    let request = match service_action_from_command(&cmd) {
+        Some(action) => ExecuteActionRequest {
+            action: action.name().to_owned(),
+            params: cli_params(&action),
         },
         None if matches!(cmd, Command::Provider { .. }) => {
             let Command::Provider { json, .. } = &cmd else {
                 unreachable!()
             };
-            let action = provider_action_from_command(&cmd, &registry)?;
-            match registry
-                .dispatch(ProviderCall {
-                    provider: String::new(),
-                    action,
-                    params: json.clone(),
-                    principal: ProviderPrincipal::loopback_dev(),
-                    auth_mode: ProviderAuthMode::LoopbackDev,
-                    surface: ProviderSurface::Cli,
-                    destructive_confirmed,
-                    limits: ProviderRequestLimits::default(),
-                    snapshot_id: String::new(),
-                })
-                .await
-            {
-                Ok(output) => output.value,
-                Err(error) => {
-                    eprintln!("{}", serde_json::to_string_pretty(&error)?);
-                    return Err(anyhow!(error.message));
-                }
+            ExecuteActionRequest {
+                action: provider_action_from_command(&cmd, &application)?,
+                params: json.clone(),
             }
         }
-        // Doctor, Watch, and Setup are never dispatched via this function — main.rs
-        // handles them directly because they need config.mcp fields.
-        None => {
-            unreachable!("dispatched directly in main.rs::run_cli")
+        None => unreachable!("dispatched directly in apps/soma::runtime::run_cli"),
+    };
+    let result = match application
+        .execute_action(request, cli_execution_context(destructive_confirmed))
+        .await
+    {
+        Ok(output) => output.output,
+        Err(error) => {
+            io.stderr(&serde_json::to_string_pretty(&error)?)?;
+            return Err(anyhow!(error.message));
         }
     };
 
-    println!("{}", serde_json::to_string_pretty(&result)?);
-    Ok(())
+    io.stdout(&serde_json::to_string_pretty(&result)?)?;
+    Ok(std::process::ExitCode::SUCCESS)
 }
 
-async fn run_remote_adapter_command(cmd: &Command, cfg: &SomaConfig) -> Result<bool> {
-    let client = SomaClient::new(cfg)?;
-    let remote_call = match cmd {
-        Command::Provider { command, json } => Some((command.as_str(), json.clone())),
-        Command::Providers(ProviderCommand::Test { action, json }) => {
-            Some((action.as_str(), json.clone()))
-        }
-        _ => service_action_from_command(cmd).map(|action| (action.name(), cli_params(&action))),
-    };
+pub fn run_non_executing_provider_command(command: ProviderCommand) -> Result<()> {
+    if !command.is_non_executing() {
+        return Err(anyhow!(
+            "provider command requires an initialized Soma application"
+        ));
+    }
+    providers::run_providers_command(command)
+}
 
-    let Some((action, params)) = remote_call else {
-        return Ok(false);
+pub(crate) fn cli_execution_context(destructive_confirmed: bool) -> ExecutionContext {
+    static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+    let sequence = REQUEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let request_id = RequestId::new(format!("cli-{}-{sequence}", std::process::id()))
+        .expect("generated CLI request ids are valid");
+    let mut context = ExecutionContext::loopback(Surface::Cli, request_id);
+    context.destructive_confirmation = if destructive_confirmed {
+        Confirmation::Confirmed
+    } else {
+        Confirmation::Missing
     };
-
-    let result = client.call_rest_action(action, params).await?;
-    println!("{}", serde_json::to_string_pretty(&result)?);
-    Ok(true)
+    context
 }
 
 #[cfg(test)]
@@ -342,51 +356,35 @@ fn format_cli_tool_error(error: &soma_contracts::errors::ToolError) -> String {
 
 fn confirm_command_if_destructive(
     cmd: &Command,
-    registry: &soma_service::ProviderRegistry,
+    application: &SomaApplication,
+    io: &mut dyn CliIo,
 ) -> Result<bool> {
-    let Some(action) = command_action_name(cmd, registry)? else {
+    let Some(action) = command_action_name(cmd, application)? else {
         return Ok(false);
     };
-    if !registry.snapshot().action_requires_confirmation(&action) {
+    if !application.action_requires_confirmation(&action) {
         return Ok(false);
     }
-    if !std::io::stdin().is_terminal() {
-        return Err(anyhow!(
-            "pass -y / --yes to confirm destructive action `{action}`"
-        ));
-    }
-    confirm_destructive_action_from_io(
-        &action,
-        &mut std::io::stdin().lock(),
-        &mut std::io::stderr(),
-    )?;
+    io.confirm_destructive(&action)?;
     Ok(true)
 }
 
-fn command_action_name(
-    cmd: &Command,
-    registry: &soma_service::ProviderRegistry,
-) -> Result<Option<String>> {
+fn command_action_name(cmd: &Command, application: &SomaApplication) -> Result<Option<String>> {
     match cmd {
-        Command::Provider { .. } => provider_action_from_command(cmd, registry).map(Some),
+        Command::Provider { .. } => provider_action_from_command(cmd, application).map(Some),
         Command::Providers(ProviderCommand::Test { action, .. }) => Ok(Some(action.clone())),
         Command::Providers(_) => Ok(None),
         _ => Ok(service_action_from_command(cmd).map(|action| action.name().to_owned())),
     }
 }
 
-fn provider_action_from_command(
-    cmd: &Command,
-    registry: &soma_service::ProviderRegistry,
-) -> Result<String> {
+fn provider_action_from_command(cmd: &Command, application: &SomaApplication) -> Result<String> {
     let Command::Provider { command, .. } = cmd else {
         return Err(anyhow!("command is not a dynamic provider command"));
     };
-    registry
-        .snapshot()
-        .cli_action(command)
-        .map(str::to_owned)
-        .ok_or_else(|| anyhow!("unknown dynamic provider CLI command `{command}`"))
+    application
+        .resolve_cli_action(command)
+        .map_err(|_| anyhow!("unknown dynamic provider CLI command `{command}`"))
 }
 
 fn service_action_from_command(cmd: &Command) -> Option<SomaAction> {

@@ -40,6 +40,7 @@ axum = { version = "0.8", optional = true }
 futures = { version = "0.3", optional = true }
 soma-runtime = { path = "../../crates/soma/runtime", default-features = false }
 soma-api = { path = "../../crates/soma/api", optional = true }
+soma-application = { path = "../../crates/soma/application" }
 soma-auth = { path = "../../crates/shared/auth", optional = true, features = ["http-axum"] }
 soma-cli = { path = "../../crates/soma/cli", optional = true }
 soma-contracts = { path = "../../crates/soma/contracts" }

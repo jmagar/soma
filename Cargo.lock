@@ -3595,6 +3595,7 @@ dependencies = [
  "serde_json",
  "soma",
  "soma-api",
+ "soma-application",
  "soma-auth",
  "soma-cli",
  "soma-contracts",
@@ -3682,14 +3683,16 @@ name = "soma-cli"
 version = "0.4.1"
 dependencies = [
  "anyhow",
- "async-trait",
  "dirs",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "soma-application",
  "soma-contracts",
+ "soma-domain",
  "soma-runtime",
  "soma-service",
+ "soma-test-support",
  "tempfile",
  "tokio",
 ]
@@ -3915,7 +3918,10 @@ dependencies = [
 name = "soma-test-support"
 version = "0.4.1"
 dependencies = [
+ "async-trait",
+ "serde_json",
  "soma-api",
+ "soma-application",
  "soma-auth",
  "soma-contracts",
  "soma-service",

@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use async_trait::async_trait;
 use soma_contracts::errors::ToolError;
 use soma_contracts::{
     actions::{ActionCost, ActionSpec, ActionTransport, SomaAction, ACTION_SPECS},
@@ -9,17 +6,13 @@ use soma_contracts::{
         ProviderManifest, ProviderTool,
     },
 };
-use soma_service::{
-    provider_registry::{Provider, ProviderCall, ProviderOutput, ProviderRegistry},
-    ProviderError,
-};
+use soma_test_support::application_with_provider;
 
 use super::{
     confirm_destructive_action_allowed, confirm_destructive_action_from_io, parse_args_from,
-    provider_action_from_command, run, service_action_from_command, usage, Command,
+    provider_action_from_command, run, service_action_from_command, usage, CliIo, Command,
     ProviderCommand, SetupCommand,
 };
-use soma_contracts::config::SomaConfig;
 
 const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
     name: "delete_everything",
@@ -36,19 +29,25 @@ const TEST_DESTRUCTIVE_ACTIONS: &[ActionSpec] = &[ActionSpec {
     cli: None,
 }];
 
-#[derive(Clone)]
-struct CliProvider {
-    catalog: ProviderCatalog,
+#[derive(Default)]
+struct TestIo {
+    stdout: Vec<String>,
+    stderr: Vec<String>,
 }
 
-#[async_trait]
-impl Provider for CliProvider {
-    fn catalog(&self) -> ProviderCatalog {
-        self.catalog.clone()
+impl CliIo for TestIo {
+    fn stdout(&mut self, output: &str) -> anyhow::Result<()> {
+        self.stdout.push(output.to_owned());
+        Ok(())
     }
 
-    async fn call(&self, _call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
-        Ok(ProviderOutput::json(serde_json::json!({})))
+    fn stderr(&mut self, output: &str) -> anyhow::Result<()> {
+        self.stderr.push(output.to_owned());
+        Ok(())
+    }
+
+    fn confirm_destructive(&mut self, _action: &str) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -250,10 +249,7 @@ fn providers_test_accepts_optional_json_payload() {
 
 #[test]
 fn dynamic_provider_command_resolves_cli_command_and_alias_to_action() {
-    let registry = ProviderRegistry::new(vec![Arc::new(CliProvider {
-        catalog: provider_catalog(),
-    })])
-    .expect("registry");
+    let application = application_with_provider(provider_catalog(), serde_json::json!({}));
 
     assert_eq!(
         provider_action_from_command(
@@ -261,7 +257,7 @@ fn dynamic_provider_command_resolves_cli_command_and_alias_to_action() {
                 command: "forecast".to_owned(),
                 json: serde_json::json!({})
             },
-            &registry
+            &application
         )
         .unwrap(),
         "weather-current"
@@ -272,7 +268,7 @@ fn dynamic_provider_command_resolves_cli_command_and_alias_to_action() {
                 command: "wx".to_owned(),
                 json: serde_json::json!({})
             },
-            &registry
+            &application
         )
         .unwrap(),
         "weather-current"
@@ -487,10 +483,22 @@ fn operational_commands_do_not_convert_to_service_actions() {
 }
 
 #[tokio::test]
-async fn run_service_command_uses_shared_dispatch_path() {
-    run(Command::Status, &SomaConfig::default())
-        .await
-        .expect("status should run through shared service dispatch");
+async fn run_dynamic_command_uses_application_dispatch() {
+    let application = application_with_provider(provider_catalog(), serde_json::json!({}));
+    let mut io = TestIo::default();
+    run(
+        application,
+        Command::Provider {
+            command: "forecast".to_owned(),
+            json: serde_json::json!({}),
+        }
+        .into(),
+        &mut io,
+    )
+    .await
+    .expect("dynamic command should run through the application facade");
+    assert_eq!(io.stdout, vec!["{}"]);
+    assert!(io.stderr.is_empty());
 }
 
 #[test]

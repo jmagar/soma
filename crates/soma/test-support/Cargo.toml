@@ -14,9 +14,12 @@ publish = false
 layer = "product-support"
 
 [dependencies]
+async-trait = "0.1"
+soma-application = { path = "../application" }
 soma-api = { path = "../api", features = ["auth"] }
 soma-auth = { path = "../../shared/auth", features = ["http-axum"] }
 soma-contracts = { path = "../contracts" }
 soma-service = { path = "../service", default-features = false, features = ["observability"] }
+serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }

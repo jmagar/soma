@@ -3,3 +3,43 @@
 pub mod tracing_capture;
 
 pub use tracing_capture::{tracing_test_lock, SharedBuf, SharedWriter};
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde_json::Value;
+use soma_application::{ApplicationPorts, SomaApplication};
+use soma_contracts::{config::SomaConfig, providers::ProviderCatalog};
+use soma_service::{
+    provider_registry::Provider, ProviderCall, ProviderError, ProviderOutput, ProviderRegistry,
+    SomaClient, SomaService,
+};
+
+struct FixtureProvider {
+    catalog: ProviderCatalog,
+    output: Value,
+}
+
+#[async_trait]
+impl Provider for FixtureProvider {
+    fn catalog(&self) -> ProviderCatalog {
+        self.catalog.clone()
+    }
+
+    async fn call(&self, _call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
+        Ok(ProviderOutput::json(self.output.clone()))
+    }
+}
+
+pub fn application_with_provider(catalog: ProviderCatalog, output: Value) -> Arc<SomaApplication> {
+    let service = SomaService::new(
+        SomaClient::new(&SomaConfig::default()).expect("test Soma client should build"),
+    );
+    let registry = ProviderRegistry::new(vec![Arc::new(FixtureProvider { catalog, output })])
+        .expect("test provider registry should build");
+    Arc::new(SomaApplication::new(
+        Arc::new(service),
+        Arc::new(registry),
+        ApplicationPorts::unavailable(),
+    ))
+}
