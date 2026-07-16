@@ -370,6 +370,7 @@ dependencies = [
 name = "codex-app-server-client"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "prettyplease",
  "schemars 0.8.22",
  "serde",
@@ -379,6 +380,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "typify",
