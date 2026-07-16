@@ -33,7 +33,7 @@ rmcp = { version = "=2.2.0", default-features = false, features = [
 ] }
 rmcp-traces = { path = "../../shared/traces" }
 soma-auth = { path = "../../shared/auth", optional = true, features = ["http-axum"] }
-soma-application = { path = "../application" }
+soma-application = { path = "../application", default-features = false }
 soma-contracts = { path = "../contracts" }
 soma-domain = { path = "../domain" }
 soma-mcp-server = { path = "../../shared/mcp/server" }

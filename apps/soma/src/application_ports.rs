@@ -16,19 +16,27 @@ use soma_gateway::gateway::dispatch::{
     dispatch_gateway_action, GatewayAccess, GatewayDispatchError,
 };
 use soma_gateway::gateway::{manager::GatewayManagerError, protected_routes::ProtectedRouteScope};
+#[cfg(feature = "mcp")]
 use soma_runtime::server::AppState;
-use soma_runtime::server::GatewayProductState;
+use soma_runtime::server::{GatewayProductState, SomaRuntime};
+use soma_service::{ProviderRegistry, SomaService};
 
-pub(crate) fn application_for_state(state: &AppState) -> Arc<SomaApplication> {
+pub(crate) fn runtime_for_components(
+    service: SomaService,
+    provider_registry: ProviderRegistry,
+    gateway: GatewayProductState,
+) -> Arc<SomaRuntime> {
     let ports = ApplicationPorts::unavailable()
-        .with_gateway(Arc::new(GatewayApplicationPort::new(state.gateway.clone())));
-    Arc::new(SomaApplication::new(
-        Arc::new(state.service.clone()),
-        Arc::new(state.provider_registry.clone()),
+        .with_gateway(Arc::new(GatewayApplicationPort::new(gateway.clone())));
+    let application = Arc::new(SomaApplication::new(
+        Arc::new(service),
+        Arc::new(provider_registry),
         ports,
-    ))
+    ));
+    Arc::new(SomaRuntime::new(application, gateway))
 }
 
+#[cfg(feature = "mcp")]
 pub(crate) fn authorization_mode(state: &AppState) -> AuthorizationMode {
     match &state.auth_policy {
         soma_runtime::server::AuthPolicy::LoopbackDev => AuthorizationMode::LoopbackDev,
@@ -39,9 +47,10 @@ pub(crate) fn authorization_mode(state: &AppState) -> AuthorizationMode {
     }
 }
 
+#[cfg(feature = "mcp")]
 pub(crate) fn mcp_state_for_state(state: &AppState) -> soma_mcp::McpState {
     soma_mcp::McpState::new(
-        application_for_state(state),
+        state.application_handle(),
         state.config.clone(),
         authorization_mode(state),
         state.response_pages.clone(),

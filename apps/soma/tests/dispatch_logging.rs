@@ -1,12 +1,14 @@
 //! Regression test for the unified dispatch logging contract.
 //!
-//! `soma_service::dispatch_action` is the single seam every surface (MCP,
+//! `SomaApplication::execute_action` is the entrypoint every surface (MCP,
 //! REST, CLI) routes through, and it must emit one structured log line per
 //! action with `surface`, `action`, and `outcome` fields. This test captures
 //! the tracing output and asserts those fields are present so the observability
 //! contract cannot silently regress.
 
-use soma_contracts::actions::SomaAction;
+use serde_json::json;
+use soma_application::{ExecuteActionRequest, ExecutionContext};
+use soma_domain::{RequestId, Surface};
 use soma_test_support::{tracing_test_lock, SharedBuf};
 
 // The capture lock is intentionally held across the await: this is a
@@ -28,7 +30,19 @@ async fn dispatch_action_emits_structured_log() {
     let guard = tracing::subscriber::set_default(subscriber);
 
     let state = soma::testing::loopback_state();
-    let result = soma_service::dispatch_action(&state.service, &SomaAction::Status, "rest").await;
+    let result = state
+        .application()
+        .execute_action(
+            ExecuteActionRequest {
+                action: "status".to_owned(),
+                params: json!({}),
+            },
+            ExecutionContext::loopback(
+                Surface::Rest,
+                RequestId::new("dispatch-logging-test").unwrap(),
+            ),
+        )
+        .await;
     assert!(
         result.is_ok(),
         "status dispatch should succeed in stub mode"

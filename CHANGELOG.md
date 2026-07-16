@@ -87,6 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Store one `SomaApplication` facade in the process-wide `SomaRuntime` and keep
+  legacy service, provider-registry, and gateway engines private behind narrow
+  application/runtime interfaces shared by CLI, stdio, and HTTP surfaces.
 - Route CLI product actions through `SomaApplication`; `soma-cli` now owns only
   parsing, confirmation I/O, rendering, and error presentation while app
   composition selects local or remote provider infrastructure.

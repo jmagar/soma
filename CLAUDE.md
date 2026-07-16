@@ -28,7 +28,7 @@ subcommands select HTTP server, stdio MCP, or CLI adapter mode.
 |------|------|
 | `crates/soma/service/src/soma.rs` | `SomaClient` — HTTP/API transport stub; one method per remote operation |
 | `crates/soma/service/src/app.rs` | `SomaService` — business layer; all logic lives here, never in shims |
-| `crates/soma/runtime/src/server.rs` | `AppState`, `AuthPolicy`, `build_auth_layer` — HTTP server state and auth policy |
+| `crates/soma/runtime/src/server.rs` | `SomaRuntime`, `AppState`, `AuthPolicy`, `build_auth_layer` — process facade, HTTP state, and auth policy |
 | `apps/soma/src/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
 | `crates/soma/api/src/api.rs` | REST API handlers: direct `/v1/*` routes, `GET /health`, `GET /status` |
 | `crates/soma/mcp/src/lib.rs` | MCP protocol layer — re-exports from `mcp/` submodules |
@@ -52,10 +52,11 @@ subcommands select HTTP server, stdio MCP, or CLI adapter mode.
 
 `crates/soma/mcp/src/tools.rs` and `crates/soma/cli/src/lib.rs` contain **zero business logic**. They only:
 1. Parse their input format (JSON args or CLI flags)
-2. Call the corresponding `SomaService` method
+2. Call the corresponding `SomaApplication` action
 3. Return the result
 
-If you find yourself computing, filtering, transforming, or validating data in `tools.rs` or `cli.rs`, stop and move it to `app.rs`.
+If you find yourself computing, filtering, transforming, or validating data in
+`tools.rs` or `cli.rs`, stop and move it behind the application facade.
 
 Dynamic providers load from `./providers` by default or `SOMA_PROVIDER_DIR`. Two distinct CLI surfaces inspect them:
 - `soma providers validate|inspect|test` — dispatches through the *live, loaded* `ProviderRegistry`; executes handlers.
@@ -71,7 +72,8 @@ Dynamic providers load from `./providers` by default or `SOMA_PROVIDER_DIR`. Two
 
 4. **`crates/soma/mcp/src/schemas.rs`** — add any new parameters to `tool_definitions()`; the action enum comes from `ACTION_SPECS`.
 
-5. **`crates/soma/mcp/src/tools.rs`** — add a match arm in `dispatch_soma()`: `"your_action" => { ... state.service.your_action(...).await }`. Also add to `HELP_TEXT`.
+5. **`crates/soma/mcp/src/tools.rs`** — translate the MCP request into the
+   corresponding `SomaApplication` action and add any MCP-specific help text.
 
 6. **`crates/soma/cli/src/lib.rs`** — add a `Command` variant, a parse arm in `parse_args()`, and a dispatch arm in `run()`.
 

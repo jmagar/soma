@@ -3880,11 +3880,11 @@ name = "soma-runtime"
 version = "0.4.1"
 dependencies = [
  "anyhow",
+ "soma-application",
  "soma-auth",
  "soma-contracts",
  "soma-gateway",
  "soma-mcp-server",
- "soma-service",
  "tempfile",
  "tokio",
  "tracing",

@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use soma::{
     api::REST_ROUTES,
     server::{self, AuthPolicy},
-    testing::{bearer_state, loopback_state},
+    testing::{bearer_state, loopback_state, loopback_state_with_registry},
 };
 use soma_contracts::actions::ACTION_SPECS;
 use soma_contracts::providers::{
@@ -156,9 +156,9 @@ async fn direct_rest_echo_accepts_typed_body() {
 
 #[tokio::test]
 async fn dynamic_provider_rest_route_dispatches_from_registry_snapshot() {
-    let mut state = loopback_state();
-    state.provider_registry =
-        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let state = loopback_state_with_registry(
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry"),
+    );
     let app = server::router(state);
     let (status, body) = request_json(
         app,
@@ -177,9 +177,9 @@ async fn dynamic_provider_rest_route_dispatches_from_registry_snapshot() {
 
 #[tokio::test]
 async fn generic_provider_tool_route_dispatches_tools_without_custom_rest_overlay() {
-    let mut state = loopback_state();
-    state.provider_registry =
-        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let state = loopback_state_with_registry(
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry"),
+    );
     let app = server::router(state);
     let (status, body) =
         request_json(app, Method::POST, "/v1/tools/runtime_check", None, None).await;
@@ -191,9 +191,9 @@ async fn generic_provider_tool_route_dispatches_tools_without_custom_rest_overla
 
 #[tokio::test]
 async fn generic_provider_tool_route_respects_explicit_rest_disable() {
-    let mut state = loopback_state();
-    state.provider_registry =
-        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let state = loopback_state_with_registry(
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry"),
+    );
     let app = server::router(state);
     let (status, body) =
         request_json(app, Method::POST, "/v1/tools/hidden", None, Some(json!({}))).await;
@@ -204,9 +204,9 @@ async fn generic_provider_tool_route_respects_explicit_rest_disable() {
 
 #[tokio::test]
 async fn providers_endpoint_lists_live_provider_rest_tools() {
-    let mut state = loopback_state();
-    state.provider_registry =
-        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry");
+    let state = loopback_state_with_registry(
+        ProviderRegistry::new(vec![Arc::new(RestDynamicProvider)]).expect("dynamic registry"),
+    );
     let app = server::router(state);
     let (status, body) = request_json(app, Method::GET, "/v1/providers", None, None).await;
 
