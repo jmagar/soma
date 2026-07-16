@@ -65,7 +65,9 @@ mcp = ["dep:soma-mcp"]
 mcp-stdio = [
   "mcp",
   "dep:rmcp",
+  "dep:serde_json",
   "rmcp/transport-io",
+  "soma-gateway/protected-routes",
   "soma-mcp/stdio",
   "soma-service/client",
 ]
