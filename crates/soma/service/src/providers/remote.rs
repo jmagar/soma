@@ -156,7 +156,6 @@ fn tool_from_value(tool: &Value) -> Result<ProviderTool> {
 fn prompt_from_value(prompt: &Value) -> Result<ProviderPrompt> {
     Ok(ProviderPrompt {
         name: string_field(prompt, "name")?.to_owned(),
-        title: optional_string(prompt, "title"),
         description: optional_string(prompt, "description").unwrap_or_default(),
         template: optional_string(prompt, "template"),
         arguments_schema: prompt
@@ -192,7 +191,6 @@ fn mcp_overlay(value: &Value) -> Option<McpOverlay> {
     Some(McpOverlay {
         enabled,
         title: None,
-        icons: Vec::new(),
         annotations: json!({}),
     })
 }

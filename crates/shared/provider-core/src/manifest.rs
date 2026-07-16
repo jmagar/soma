@@ -220,8 +220,6 @@ pub type ProviderTool = ToolSpec;
 #[serde(deny_unknown_fields)]
 pub struct ProviderPrompt {
     pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
     pub description: String,
     #[serde(default)]
     pub template: Option<String>,
@@ -421,20 +419,8 @@ pub struct McpOverlay {
     pub enabled: bool,
     #[serde(default)]
     pub title: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub icons: Vec<McpIcon>,
     #[serde(default = "default_object")]
     pub annotations: Value,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct McpIcon {
-    pub src: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mime_type: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sizes: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

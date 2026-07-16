@@ -24,7 +24,12 @@ pub(super) fn enforce_call(
 }
 
 pub(crate) fn provider_tool_surface_enabled(tool: &ProviderTool, surface: ProviderSurface) -> bool {
-    tool.exposed_on(surface)
+    tool.exposed_on(match surface {
+        ProviderSurface::Mcp => soma_provider_core::ProviderSurface::Mcp,
+        ProviderSurface::Rest => soma_provider_core::ProviderSurface::Rest,
+        ProviderSurface::Cli => soma_provider_core::ProviderSurface::Cli,
+        ProviderSurface::Palette => soma_provider_core::ProviderSurface::Palette,
+    })
 }
 
 fn enforce_scope(tool: &ProviderTool, call: &ProviderCall) -> Result<(), ProviderError> {

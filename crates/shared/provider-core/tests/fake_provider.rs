@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use soma_provider_core::{
     Provider, ProviderCall, ProviderCatalog, ProviderError, ProviderId, ProviderManifest,
-    ProviderOutput, ProviderRegistry, ToolSpec, validate_manifest_schema,
+    ProviderOutput, ProviderRegistry, ToolSpec, validate_provider_manifest,
 };
 
 struct FakeProvider {
@@ -46,10 +46,10 @@ fn optional_manifest_metadata_round_trips_with_object_defaults() {
     }))
     .expect("minimal manifest deserializes");
 
-    let serialized = serde_json::to_value(manifest).expect("manifest serializes");
+    let serialized = serde_json::to_value(&manifest).expect("manifest serializes");
     assert_eq!(serialized["meta"], json!({}));
     assert!(serialized["capabilities"].is_object());
-    validate_manifest_schema(&serialized).expect("serialized defaults remain schema-valid");
+    validate_provider_manifest(&manifest).expect("typed defaults remain compatibility-valid");
 }
 
 #[async_trait]

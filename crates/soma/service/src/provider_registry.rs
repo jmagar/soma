@@ -4,7 +4,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use soma_contracts::{
     provider_validation::{validate_provider_manifest, ProviderValidationError},
@@ -29,7 +29,7 @@ use enforcement::{enforce_call, enforce_response_limit};
 use refresh::ProviderRefreshEvent;
 use resources::ResourceIndex;
 pub use resources::{DynamicResourceTemplate, ResourceReadOutput};
-pub use soma_provider_core::{Provider as CoreProvider, ProviderOutput, ProviderSurface};
+pub use soma_provider_core::{Provider as CoreProvider, ProviderOutput};
 pub type ProviderInvocation = CoreProviderCall;
 
 #[async_trait]
@@ -74,6 +74,35 @@ pub trait Provider: Send + Sync {
             "resource_read_not_supported",
             "this provider does not support resource reads",
         ))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProviderSurface {
+    Mcp,
+    Rest,
+    Cli,
+    Palette,
+}
+
+impl ProviderSurface {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Mcp => "mcp",
+            Self::Rest => "rest",
+            Self::Cli => "cli",
+            Self::Palette => "palette",
+        }
+    }
+
+    fn core(self) -> soma_provider_core::ProviderSurface {
+        match self {
+            Self::Mcp => soma_provider_core::ProviderSurface::Mcp,
+            Self::Rest => soma_provider_core::ProviderSurface::Rest,
+            Self::Cli => soma_provider_core::ProviderSurface::Cli,
+            Self::Palette => soma_provider_core::ProviderSurface::Palette,
+        }
     }
 }
 
@@ -140,7 +169,7 @@ impl ProviderCall {
             provider: self.provider.clone(),
             action: self.action.clone(),
             params: self.params.clone(),
-            surface: self.surface,
+            surface: self.surface.core(),
             snapshot_id: self.snapshot_id.clone(),
         }
     }
@@ -450,23 +479,25 @@ impl ProviderRegistry {
 
         call.provider = provider.catalog().provider.name;
         call.snapshot_id = snapshot.id.clone();
-        enforce_call(&tool, &capabilities, &call, &self.capabilities)?;
-
         let product_call = call.clone();
-        let output = core_registry
+        let capability_broker = self.capabilities.clone();
+        core_registry
             .dispatch_with(call.provider_invocation(), move |_, invocation| {
                 let mut call = product_call;
                 call.provider = invocation.provider;
                 call.snapshot_id = invocation.snapshot_id;
-                async move { provider.call(call).await }
+                async move {
+                    enforce_call(&tool, &capabilities, &call, &capability_broker)?;
+                    let output = provider.call(call.clone()).await?;
+                    enforce_response_limit(&tool, &call, &output)?;
+                    Ok(output)
+                }
             })
             .await
             .inspect_err(|error| {
                 let (provider, action, code) = error.log_code();
                 tracing::warn!(provider, action, code, "provider call failed");
-            })?;
-        enforce_response_limit(&tool, &call, &output)?;
-        Ok(output)
+            })
     }
 }
 
@@ -502,6 +533,21 @@ impl CoreProvider for CoreProviderAdapter {
     }
 
     async fn call(&self, call: CoreProviderCall) -> Result<ProviderOutput, ProviderError> {
+        let surface = match call.surface {
+            soma_provider_core::ProviderSurface::Mcp => ProviderSurface::Mcp,
+            soma_provider_core::ProviderSurface::Rest => ProviderSurface::Rest,
+            soma_provider_core::ProviderSurface::Cli => ProviderSurface::Cli,
+            soma_provider_core::ProviderSurface::Palette => ProviderSurface::Palette,
+            soma_provider_core::ProviderSurface::Internal
+            | soma_provider_core::ProviderSurface::Ui => {
+                return Err(ProviderError::validation(
+                    call.provider,
+                    call.action,
+                    "unsupported_product_surface",
+                    "Soma providers expose only MCP, REST, CLI, and Palette surfaces",
+                ));
+            }
+        };
         self.0
             .call(ProviderCall {
                 provider: call.provider,
@@ -509,7 +555,7 @@ impl CoreProvider for CoreProviderAdapter {
                 params: call.params,
                 principal: ProviderPrincipal::anonymous(),
                 auth_mode: ProviderAuthMode::TrustedGateway,
-                surface: call.surface,
+                surface,
                 destructive_confirmed: false,
                 limits: ProviderRequestLimits::default(),
                 snapshot_id: call.snapshot_id,

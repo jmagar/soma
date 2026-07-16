@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use soma_provider_core::{
     Provider, ProviderCall, ProviderCatalog, ProviderError, ProviderId, ProviderManifest,
-    ProviderOutput, ProviderRegistry, validate_manifest_schema, validate_provider_manifest_value,
+    ProviderOutput, ProviderRegistry, validate_manifest_schema, validate_provider_manifest,
+    validate_provider_manifest_value,
 };
 
 #[derive(Clone)]
@@ -20,7 +21,7 @@ impl Provider for CatalogProvider {
 }
 
 #[test]
-fn schema_advertised_prompt_titles_and_mcp_icons_round_trip() {
+fn schema_and_rust_model_round_trip_without_unmodeled_properties() {
     let value = json!({
         "schema_version": 1,
         "provider": {
@@ -48,7 +49,6 @@ fn schema_advertised_prompt_titles_and_mcp_icons_round_trip() {
             "mcp": {
                 "enabled": true,
                 "title": "Echo",
-                "icons": [{"src": "https://example.com/icon.png", "mime_type": "image/png", "sizes": "32x32"}],
                 "annotations": {"audience": "user"}
             },
             "rest": {"enabled": true, "method": "POST", "path": "/v1/echo", "tags": ["demo"], "summary": "Echo", "description": "Echo", "deprecated": false, "path_params": {}, "query_params": {}, "request_body_schema": {"type": "object"}},
@@ -60,18 +60,17 @@ fn schema_advertised_prompt_titles_and_mcp_icons_round_trip() {
         }],
         "prompts": [{
             "name": "welcome",
-            "title": "Welcome prompt",
             "description": "Welcome a user",
             "template": "Hello {{name}}",
             "arguments_schema": {"type": "object"},
             "scope": "provider:read",
-            "mcp": {"enabled": true, "title": "Welcome", "icons": [], "annotations": {}},
+            "mcp": {"enabled": true, "title": "Welcome", "annotations": {}},
             "examples": []
         }],
-        "resources": [{"uri_template": "provider://readme", "name": "readme", "description": "Readme", "mime_type": "text/plain", "scope": "provider:read", "mcp": {"enabled": true, "title": "Readme", "icons": [], "annotations": {}}, "annotations": {} }],
-        "tasks": [{"name": "summarize", "description": "Summarize", "input_schema": {"type": "object"}, "output_schema": {"type": "object"}, "scope": "provider:read", "mcp": {"enabled": true, "title": "Summarize", "icons": [], "annotations": {}}, "limits": {}}],
-        "elicitation": [{"name": "confirm", "description": "Confirm", "schema": {"type": "object"}, "scope": "provider:write", "mcp": {"enabled": true, "title": "Confirm", "icons": [], "annotations": {}}}],
-        "env": [{"name": "API_KEY", "description": "API key", "required": true, "sensitive": true, "server_prefixed": true, "allow_unprefixed": false, "default": null}],
+        "resources": [{"uri_template": "provider://readme", "name": "readme", "description": "Readme", "mime_type": "text/plain", "scope": "provider:read", "mcp": {"enabled": true, "title": "Readme", "annotations": {}}, "annotations": {} }],
+        "tasks": [{"name": "summarize", "description": "Summarize", "input_schema": {"type": "object"}, "output_schema": {"type": "object"}, "scope": "provider:read", "mcp": {"enabled": true, "title": "Summarize", "annotations": {}}, "limits": {}}],
+        "elicitation": [{"name": "confirm", "description": "Confirm", "schema": {"type": "object"}, "scope": "provider:write", "mcp": {"enabled": true, "title": "Confirm", "annotations": {}}}],
+        "env": [{"name": "API_KEY", "description": "API key", "required": true, "sensitive": true, "server_prefixed": true, "allow_unprefixed": false, "default": "demo"}],
         "capabilities": {
             "filesystem": {"enabled": true, "read_roots": ["/tmp"], "write_roots": []},
             "network": {"enabled": true, "allowed_hosts": ["example.com"]},
@@ -88,7 +87,7 @@ fn schema_advertised_prompt_titles_and_mcp_icons_round_trip() {
 
     let manifest = validate_provider_manifest_value(&value).expect("schema-valid manifest parses");
     let serialized = serde_json::to_value(&manifest).expect("manifest serializes");
-    validate_manifest_schema(&serialized).expect("serialized manifest remains schema-valid");
+    validate_provider_manifest(&manifest).expect("typed manifest remains compatibility-valid");
     let reparsed: ProviderManifest = serde_json::from_value(serialized).expect("manifest reparses");
     assert_eq!(reparsed, manifest);
 }
@@ -126,4 +125,58 @@ fn typed_registry_registration_enforces_packaged_schema_constraints() {
         Err(error) => error,
     };
     assert_eq!(error.code(), "json_schema_failed");
+}
+
+fn strict_raw_manifest() -> Value {
+    json!({
+        "schema_version": 1,
+        "provider": {"name": "raw-provider", "kind": "static-rust"},
+        "tools": [{
+            "name": "echo",
+            "description": "Echo",
+            "input_schema": {"type": "object"}
+        }],
+        "prompts": [{
+            "name": "welcome",
+            "description": "Welcome",
+            "mcp": {"enabled": true, "title": "Welcome", "annotations": {}}
+        }]
+    })
+}
+
+#[test]
+fn raw_schema_validation_rejects_null_optional_properties() {
+    let base = strict_raw_manifest();
+    validate_manifest_schema(&base).expect("null-free raw manifest is valid");
+    validate_provider_manifest_value(&base).expect("null-free raw manifest parses");
+
+    for pointer in ["/provider/enabled", "/tools/0/mcp"] {
+        let mut value = base.clone();
+        let (parent, field) = pointer.rsplit_once('/').unwrap();
+        value.pointer_mut(parent).unwrap()[field] = Value::Null;
+        let error = validate_manifest_schema(&value).expect_err("raw null must be rejected");
+        assert_eq!(error.code(), "json_schema_failed", "pointer {pointer}");
+        let error =
+            validate_provider_manifest_value(&value).expect_err("raw manifest null must fail");
+        assert_eq!(error.code(), "json_schema_failed", "pointer {pointer}");
+    }
+}
+
+#[test]
+fn schema_rejects_prompt_title_and_mcp_icons_absent_from_the_rust_model() {
+    let base = strict_raw_manifest();
+
+    let mut prompt_title = base.clone();
+    prompt_title["prompts"][0]["title"] = json!("Unmodeled title");
+    assert_eq!(
+        validate_manifest_schema(&prompt_title).unwrap_err().code(),
+        "json_schema_failed"
+    );
+
+    let mut icons = base;
+    icons["prompts"][0]["mcp"]["icons"] = json!([{"src": "https://example.com/icon.png"}]);
+    assert_eq!(
+        validate_manifest_schema(&icons).unwrap_err().code(),
+        "json_schema_failed"
+    );
 }

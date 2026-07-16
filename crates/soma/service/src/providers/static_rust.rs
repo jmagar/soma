@@ -94,7 +94,6 @@ fn static_catalog() -> ProviderCatalog {
         // for name reservation only, not to serve as the source of truth.
         prompts: vec![ProviderPrompt {
             name: "quick_start".to_owned(),
-            title: None,
             description: "Check the server status and get a personalised greeting to verify \
                 the MCP connection is working end-to-end."
                 .to_owned(),
@@ -139,7 +138,6 @@ fn static_tool(spec: &soma_contracts::actions::ActionSpec) -> ProviderTool {
         mcp: Some(McpOverlay {
             enabled: spec.transport.mcp(),
             title: None,
-            icons: Vec::new(),
             annotations: json!({}),
         }),
         rest: static_rest_overlay(spec),
@@ -364,11 +362,9 @@ fn action_params(action: &str, params: &Value) -> Value {
 
 fn surface_label(surface: crate::provider_registry::ProviderSurface) -> &'static str {
     match surface {
-        crate::provider_registry::ProviderSurface::Internal => "internal",
         crate::provider_registry::ProviderSurface::Mcp => "mcp",
         crate::provider_registry::ProviderSurface::Rest => "rest",
         crate::provider_registry::ProviderSurface::Cli => "cli",
         crate::provider_registry::ProviderSurface::Palette => "palette",
-        crate::provider_registry::ProviderSurface::Ui => "ui",
     }
 }

@@ -112,7 +112,6 @@ fn catalog_with_primitives(provider: &str) -> ProviderCatalog {
     ProviderManifest {
         prompts: vec![ProviderPrompt {
             name: "brief_prompt".to_owned(),
-            title: None,
             description: "Prompt for a compact brief".to_owned(),
             template: Some("Summarize {{topic}} in three bullet points.".to_owned()),
             arguments_schema: Some(json!({
@@ -398,6 +397,72 @@ async fn output_schema_is_enforced_after_provider_code() {
     assert_eq!(&*error.code, "output_schema_failed");
     let error_json = serde_json::to_value(&error).expect("provider error serializes");
     assert_eq!(error_json["phase"], "output_validation");
+}
+
+#[tokio::test]
+async fn disabled_surface_is_rejected_before_all_soma_policy_checks() {
+    let mut disabled = tool("hidden_policy_tool");
+    disabled.scope = Some("soma:write".to_owned());
+    disabled.requires_admin = true;
+    disabled.destructive = true;
+    disabled.mcp = Some(McpOverlay {
+        enabled: false,
+        title: None,
+        annotations: json!({}),
+    });
+    let provider = Arc::new(EchoProvider {
+        catalog: catalog_with_capabilities(
+            "demo",
+            vec![disabled],
+            HostCapabilities {
+                network: Some(NetworkCapability {
+                    enabled: true,
+                    allowed_hosts: vec!["denied.internal.example".to_owned()],
+                }),
+                ..Default::default()
+            },
+        ),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+    let error = registry
+        .dispatch(call("hidden_policy_tool", json!({})))
+        .await
+        .expect_err("disabled surface must fail before product policy");
+    assert_eq!(&*error.code, "surface_not_exposed");
+}
+
+#[tokio::test]
+async fn effective_host_response_cap_precedes_core_output_schema_validation() {
+    let provider = Arc::new(EchoProvider {
+        catalog: catalog(
+            "demo",
+            vec![tool_with_output_schema(
+                "oversized_invalid",
+                json!({
+                    "type": "object",
+                    "required": ["ok"],
+                    "properties": {"ok": {"type": "boolean"}}
+                }),
+            )],
+        ),
+        delay: Duration::ZERO,
+        started: None,
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+    let mut oversized = call(
+        "oversized_invalid",
+        json!({"message": "this response is both oversized and schema-invalid"}),
+    );
+    oversized.limits.max_response_bytes = 8;
+
+    let error = registry
+        .dispatch(oversized)
+        .await
+        .expect_err("effective host cap must run before output schema validation");
+    assert_eq!(&*error.code, "response_too_large");
 }
 
 #[tokio::test]
@@ -977,7 +1042,6 @@ async fn mcp_disabled_resource_is_excluded_from_live_resources_surface() {
     resource.mcp = Some(McpOverlay {
         enabled: false,
         title: None,
-        icons: Vec::new(),
         annotations: json!({}),
     });
     let provider = Arc::new(ResourceProvider {

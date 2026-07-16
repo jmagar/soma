@@ -72,7 +72,7 @@ async fn soma_preserves_legacy_provider_shape_and_uses_core_registry_snapshot() 
                 scopes: Vec::new(),
             },
             auth_mode: ProviderAuthMode::LoopbackDev,
-            surface: ProviderSurface::Internal,
+            surface: ProviderSurface::Mcp,
             destructive_confirmed: false,
             limits: ProviderRequestLimits::default(),
             snapshot_id: String::new(),

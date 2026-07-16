@@ -40,7 +40,6 @@ fn disabled_tool() -> ToolSpec {
     tool.mcp = Some(McpOverlay {
         enabled: false,
         title: None,
-        icons: Vec::new(),
         annotations: json!({}),
     });
     tool.rest = Some(RestOverlay {

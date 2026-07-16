@@ -43,15 +43,13 @@ pub fn validate_provider_manifest_value(
 }
 
 pub fn validate_manifest_schema(value: &Value) -> Result<(), ProviderValidationError> {
-    let mut normalized = value.clone();
-    remove_null_object_fields(&mut normalized);
     let schema: Value = serde_json::from_str(SCHEMA)
         .map_err(|error| ProviderValidationError::new("schema_parse_failed", error.to_string()))?;
     let compiled: Validator = jsonschema::options().build(&schema).map_err(|error| {
         ProviderValidationError::new("schema_compile_failed", error.to_string())
     })?;
     let details = compiled
-        .iter_errors(&normalized)
+        .iter_errors(value)
         .map(|error| format!("{}: {}", error.instance_path(), error))
         .collect::<Vec<_>>();
     if !details.is_empty() {
@@ -69,7 +67,9 @@ pub fn validate_provider_manifest(
     let value = serde_json::to_value(manifest).map_err(|error| {
         ProviderValidationError::new("manifest_serialize_failed", error.to_string())
     })?;
-    validate_manifest_schema(&value)?;
+    let mut compatibility_value = value;
+    normalize_typed_legacy_nulls(&mut compatibility_value);
+    validate_manifest_schema(&compatibility_value)?;
 
     let mut tool_names = BTreeSet::new();
     let mut rest_routes = BTreeSet::new();
@@ -180,20 +180,187 @@ pub fn validate_provider_manifest(
     Ok(())
 }
 
-fn remove_null_object_fields(value: &mut Value) {
-    match value {
-        Value::Object(object) => {
-            object.retain(|_, value| !value.is_null());
-            for value in object.values_mut() {
-                remove_null_object_fields(value);
+fn normalize_typed_legacy_nulls(value: &mut Value) {
+    let Some(root) = value.as_object_mut() else {
+        return;
+    };
+    remove_null_fields(root, &["docs", "plugin", "ui"]);
+    normalize_object_field(root, "provider", |provider| {
+        remove_null_fields(
+            provider,
+            &[
+                "title",
+                "description",
+                "homepage",
+                "source",
+                "version",
+                "enabled",
+            ],
+        );
+    });
+    normalize_array_field(root, "tools", normalize_tool);
+    normalize_array_field(root, "prompts", normalize_prompt);
+    normalize_array_field(root, "resources", normalize_resource);
+    normalize_array_field(root, "tasks", normalize_task);
+    normalize_array_field(root, "elicitation", normalize_elicitation);
+    normalize_array_field(root, "env", normalize_env_requirement);
+    normalize_object_field(root, "capabilities", normalize_capabilities);
+    normalize_object_field(root, "docs", |docs| {
+        remove_null_fields(docs, &["when_to_use"]);
+        normalize_array_field(docs, "examples", normalize_example);
+    });
+    normalize_object_field(root, "plugin", |plugin| {
+        remove_null_fields(plugin, &["mcp_registration"]);
+    });
+}
+
+fn normalize_tool(tool: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(
+        tool,
+        &[
+            "title",
+            "output_schema",
+            "scope",
+            "cost",
+            "limits",
+            "mcp",
+            "rest",
+            "cli",
+            "palette",
+            "ui",
+        ],
+    );
+    normalize_array_field(tool, "env", normalize_env_requirement);
+    normalize_object_field(tool, "limits", normalize_limits);
+    normalize_object_field(tool, "mcp", normalize_mcp);
+    normalize_object_field(tool, "rest", normalize_rest);
+    normalize_object_field(tool, "cli", normalize_cli);
+    normalize_object_field(tool, "palette", normalize_palette);
+    normalize_array_field(tool, "examples", normalize_example);
+}
+
+fn normalize_prompt(prompt: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(prompt, &["template", "arguments_schema", "scope", "mcp"]);
+    normalize_object_field(prompt, "mcp", normalize_mcp);
+    normalize_array_field(prompt, "examples", normalize_example);
+}
+
+fn normalize_resource(resource: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(resource, &["mime_type", "scope", "mcp"]);
+    normalize_object_field(resource, "mcp", normalize_mcp);
+}
+
+fn normalize_task(task: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(task, &["output_schema", "scope", "mcp", "limits"]);
+    normalize_object_field(task, "mcp", normalize_mcp);
+    normalize_object_field(task, "limits", normalize_limits);
+}
+
+fn normalize_elicitation(elicitation: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(elicitation, &["scope", "mcp"]);
+    normalize_object_field(elicitation, "mcp", normalize_mcp);
+}
+
+fn normalize_env_requirement(env: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(env, &["description", "default"]);
+}
+
+fn normalize_capabilities(capabilities: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(
+        capabilities,
+        &[
+            "filesystem",
+            "network",
+            "env",
+            "terminal",
+            "browser",
+            "github",
+        ],
+    );
+    normalize_object_field(capabilities, "terminal", |terminal| {
+        remove_null_fields(terminal, &["working_dir"]);
+    });
+}
+
+fn normalize_mcp(mcp: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(mcp, &["title"]);
+}
+
+fn normalize_rest(rest: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(
+        rest,
+        &[
+            "method",
+            "path",
+            "summary",
+            "description",
+            "request_body_schema",
+        ],
+    );
+}
+
+fn normalize_cli(cli: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(cli, &["command", "about", "long_about", "default_output"]);
+}
+
+fn normalize_palette(palette: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(
+        palette,
+        &["category", "icon", "tone", "arg_mode", "result_view"],
+    );
+}
+
+fn normalize_limits(limits: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(
+        limits,
+        &["timeout_ms", "max_response_bytes", "max_input_bytes"],
+    );
+}
+
+fn normalize_example(example: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(
+        example,
+        &[
+            "title",
+            "description",
+            "input",
+            "output",
+            "cli",
+            "rest",
+            "mcp",
+        ],
+    );
+}
+
+fn remove_null_fields(object: &mut serde_json::Map<String, Value>, fields: &[&str]) {
+    for field in fields {
+        if object.get(*field).is_some_and(Value::is_null) {
+            object.remove(*field);
+        }
+    }
+}
+
+fn normalize_object_field(
+    object: &mut serde_json::Map<String, Value>,
+    field: &str,
+    normalize: impl FnOnce(&mut serde_json::Map<String, Value>),
+) {
+    if let Some(Value::Object(value)) = object.get_mut(field) {
+        normalize(value);
+    }
+}
+
+fn normalize_array_field(
+    object: &mut serde_json::Map<String, Value>,
+    field: &str,
+    normalize: fn(&mut serde_json::Map<String, Value>),
+) {
+    if let Some(Value::Array(values)) = object.get_mut(field) {
+        for value in values {
+            if let Value::Object(value) = value {
+                normalize(value);
             }
         }
-        Value::Array(values) => {
-            for value in values {
-                remove_null_object_fields(value);
-            }
-        }
-        _ => {}
     }
 }
 

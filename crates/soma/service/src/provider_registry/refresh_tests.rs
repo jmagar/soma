@@ -115,7 +115,6 @@ fn cli_only_tool(name: &str) -> ProviderTool {
         mcp: Some(McpOverlay {
             enabled: false,
             title: None,
-            icons: Vec::new(),
             annotations: json!({}),
         }),
         cli: Some(CliOverlay {
