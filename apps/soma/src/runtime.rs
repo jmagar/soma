@@ -4,7 +4,7 @@
 //! CLI, stdio MCP, and HTTP server wiring in one place.
 
 use anyhow::Result;
-#[cfg(feature = "mcp-http")]
+#[cfg(any(feature = "cli", feature = "mcp-http"))]
 use std::sync::Arc;
 
 #[cfg(feature = "mcp-stdio")]
@@ -14,9 +14,11 @@ use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
 
 use soma_contracts::config::Config;
-#[cfg(any(feature = "mcp-stdio", feature = "mcp-http"))]
+#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_service::{SomaClient, SomaService};
 
+#[cfg(feature = "cli")]
+use soma_application::{ApplicationPorts, SomaApplication};
 #[cfg(feature = "cli")]
 use soma_cli as cli;
 #[cfg(feature = "mcp-stdio")]
@@ -129,12 +131,52 @@ pub async fn run_cli() -> Result<()> {
         }
         Some(cli::Command::Setup(command)) => cli::run_setup(&config, command).await,
         Some(cli::Command::PackageGenerate { write }) => cli::run_package_generate(write),
-        Some(cmd) => cli::run(cmd, &config.soma).await,
+        Some(cli::Command::Providers(command)) if command.is_non_executing() => {
+            cli::run_non_executing_provider_command(command)
+        }
+        Some(cmd) => {
+            let application = build_cli_application(&config).await?;
+            let mut io = cli::StandardCliIo;
+            cli::run(application, cmd.into(), &mut io).await?;
+            Ok(())
+        }
         None => {
             eprintln!("Unknown command. Run `example --help` for usage.");
             std::process::exit(1);
         }
     }
+}
+
+#[cfg(feature = "cli")]
+async fn build_cli_application(config: &Config) -> Result<Arc<SomaApplication>> {
+    build_cli_application_with_provider_dir(config, None).await
+}
+
+#[cfg(feature = "cli")]
+async fn build_cli_application_with_provider_dir(
+    config: &Config,
+    provider_dir: Option<&std::path::Path>,
+) -> Result<Arc<SomaApplication>> {
+    let service = SomaService::new(SomaClient::new(&config.soma)?);
+    let registry = if config.soma.is_remote_adapter() {
+        soma_service::remote_provider_registry(service.clone()).await?
+    } else {
+        let registry = match provider_dir {
+            Some(provider_dir) => {
+                soma_service::dynamic_provider_registry_from_dir(service.clone(), provider_dir)?
+            }
+            None => soma_service::dynamic_provider_registry(service.clone())?,
+        };
+        registry
+            .refresh_file_providers()
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        registry
+    };
+    Ok(Arc::new(SomaApplication::new(
+        Arc::new(service),
+        Arc::new(registry),
+        ApplicationPorts::unavailable(),
+    )))
 }
 
 #[cfg(feature = "mcp-http")]

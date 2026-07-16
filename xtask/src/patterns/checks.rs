@@ -156,7 +156,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
         ),
         (
             "crates/soma/cli/src/lib.rs",
-            &["SomaService::new", "service."][..],
+            &["SomaApplication", ".execute_action("][..],
             &["reqwest::", "hyper::Client", "sqlx::", "rusqlite::"][..],
         ),
     ];
@@ -178,7 +178,7 @@ pub(super) fn thin_shims(reporter: &mut PatternReporter) {
             reporter.warn(
                 "thin-shim",
                 format!(
-                    "{path} does not contain expected delegation token(s): {}. Hint: shims should parse inputs and delegate to SomaService.",
+                    "{path} does not contain expected delegation token(s): {}. Hint: shims should parse inputs and delegate to SomaApplication.",
                     missing.join(", ")
                 ),
             );

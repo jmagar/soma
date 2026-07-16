@@ -1,97 +1,23 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use soma_contracts::providers::{ProviderCatalog, ProviderPrompt, ProviderResource};
+use soma_contracts::providers::{ProviderPrompt, ProviderResource};
 use soma_domain::{AuthorizationMode, Principal, Surface};
 use soma_service::{
     ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry, ProviderRequestLimits,
     ProviderSurface, ResourceReadOutput, SomaService,
 };
 
-use crate::{ApplicationError, ApplicationPorts, ExecutionContext};
+use crate::{
+    ApplicationError, ApplicationPorts, CatalogSnapshot, CodeModeExecuteRequest, DoctorReport,
+    ExecuteActionRequest, ExecuteActionResponse, ExecutionContext, GatewayExecuteRequest,
+    GatewayReloadRequest, OpenApiExecuteRequest, OperationResponse, ReadResourceRequest,
+    ResourceContent,
+};
 
 #[cfg(test)]
 #[path = "app_tests.rs"]
 mod tests;
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ExecuteActionRequest {
-    pub action: String,
-    #[serde(default)]
-    pub params: Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ExecuteActionResponse {
-    pub output: Value,
-    pub request_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct GatewayReloadRequest {
-    #[serde(default)]
-    pub config: Value,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct GatewayExecuteRequest {
-    pub action: String,
-    #[serde(default)]
-    pub params: Value,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CodeModeExecuteRequest {
-    pub source: String,
-    #[serde(default)]
-    pub input: Value,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct OpenApiExecuteRequest {
-    pub operation: String,
-    #[serde(default)]
-    pub params: Value,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct OperationResponse {
-    pub output: Value,
-    pub request_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ReadResourceRequest {
-    pub uri: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-pub enum ResourceContent {
-    Text {
-        text: String,
-        mime_type: Option<String>,
-    },
-    Blob {
-        blob_base64: String,
-        mime_type: Option<String>,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct CatalogSnapshot {
-    pub id: String,
-    pub fingerprint: String,
-    pub catalogs: Vec<ProviderCatalog>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct DoctorReport {
-    pub ready: bool,
-    pub status: Option<Value>,
-    pub problems: Vec<String>,
-}
 
 pub struct SomaApplication {
     legacy_service: Arc<SomaService>,
@@ -143,6 +69,35 @@ impl SomaApplication {
 
     pub fn catalog_snapshot(&self) -> CatalogSnapshot {
         catalog_snapshot(self.legacy_registry.snapshot().as_ref())
+    }
+
+    pub fn resolve_cli_action(&self, command: &str) -> Result<String, ApplicationError> {
+        self.legacy_registry
+            .snapshot()
+            .cli_action(command)
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| ApplicationError::not_found("CLI command", command))
+    }
+
+    pub fn action_requires_confirmation(&self, action: &str) -> bool {
+        self.legacy_registry
+            .snapshot()
+            .action_requires_confirmation(action)
+    }
+
+    pub fn provider_for_action(&self, action: &str) -> Option<String> {
+        self.legacy_registry
+            .snapshot()
+            .provider_for_action(action)
+            .map(ToOwned::to_owned)
+    }
+
+    pub fn provider_validation_summary(&self) -> Value {
+        self.legacy_registry.snapshot().validation_summary()
+    }
+
+    pub fn provider_inspection_report(&self) -> Value {
+        self.legacy_registry.snapshot().inspection_report()
     }
 
     pub fn refresh_providers(&self) -> Result<CatalogSnapshot, ApplicationError> {

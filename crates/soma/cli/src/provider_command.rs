@@ -1,5 +1,5 @@
 //! `soma providers validate|inspect|test` — dispatches through the *live,
-//! loaded* `ProviderRegistry`; executes handlers.
+//! loaded application provider catalog; executes handlers.
 //!
 //! Distinct from the `providers` module (`soma providers list|lint|status`),
 //! which is non-executing filesystem inspection that never touches the
@@ -7,13 +7,10 @@
 
 use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
-use soma_service::{
-    ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry, ProviderRequestLimits,
-    ProviderSurface,
-};
+use soma_application::{ExecuteActionRequest, SomaApplication};
 use std::path::PathBuf;
 
-use crate::Command;
+use crate::{cli_execution_context, Command};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProviderCommand {
@@ -44,7 +41,7 @@ impl ProviderCommand {
     /// The three non-executing variants never touch the live registry — they
     /// only parse manifests on disk, so `run()` short-circuits before any
     /// client/service/registry construction for these.
-    pub(crate) fn is_non_executing(&self) -> bool {
+    pub fn is_non_executing(&self) -> bool {
         matches!(
             self,
             ProviderCommand::List { .. }
@@ -56,29 +53,22 @@ impl ProviderCommand {
 
 pub(crate) async fn run_provider_management_command(
     command: &ProviderCommand,
-    registry: &ProviderRegistry,
+    application: &SomaApplication,
     destructive_confirmed: bool,
 ) -> Result<Value> {
     match command {
-        ProviderCommand::Validate => Ok(registry.snapshot().validation_summary()),
-        ProviderCommand::Inspect => Ok(registry.snapshot().inspection_report()),
+        ProviderCommand::Validate => Ok(application.provider_validation_summary()),
+        ProviderCommand::Inspect => Ok(application.provider_inspection_report()),
         ProviderCommand::Test { action, json } => {
-            let provider = registry
-                .snapshot()
-                .provider_for_action(action)
-                .map(str::to_owned);
-            match registry
-                .dispatch(ProviderCall {
-                    provider: String::new(),
-                    action: action.clone(),
-                    params: json.clone(),
-                    principal: ProviderPrincipal::loopback_dev(),
-                    auth_mode: ProviderAuthMode::LoopbackDev,
-                    surface: ProviderSurface::Cli,
-                    destructive_confirmed,
-                    limits: ProviderRequestLimits::default(),
-                    snapshot_id: String::new(),
-                })
+            let provider = application.provider_for_action(action);
+            match application
+                .execute_action(
+                    ExecuteActionRequest {
+                        action: action.clone(),
+                        params: json.clone(),
+                    },
+                    cli_execution_context(destructive_confirmed),
+                )
                 .await
             {
                 Ok(output) => Ok(json!({
@@ -86,12 +76,9 @@ pub(crate) async fn run_provider_management_command(
                     "ok": true,
                     "action": action,
                     "provider": provider,
-                    "result": output.value
+                    "result": output.output
                 })),
-                Err(error) => {
-                    eprintln!("{}", serde_json::to_string_pretty(&error)?);
-                    Err(anyhow!(error.message))
-                }
+                Err(error) => Err(anyhow!(error)),
             }
         }
         ProviderCommand::List { .. }

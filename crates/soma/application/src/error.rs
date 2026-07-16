@@ -1,8 +1,9 @@
+use serde::Serialize;
 use soma_service::ProviderError;
 
 use crate::PortError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ApplicationError {
     pub code: String,
     pub message: String,
