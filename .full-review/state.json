@@ -1,0 +1,36 @@
+{
+  "review_id": "pr-138-codex-app-server-rest-bridge",
+  "workflow": "comprehensive-review:full-review",
+  "status": "complete",
+  "target": {
+    "kind": "github_pr",
+    "pr": 138,
+    "url": "https://github.com/jmagar/soma/pull/138",
+    "title": "Add REST bridge for codex app-server client",
+    "state": "MERGED",
+    "base_ref": "main",
+    "head_ref": "codex/codex-app-server-review",
+    "base_oid": "009a03d373690c1bb58caace09a6092d078538c7",
+    "head_oid": "c87ac8905cc0b3e84b7acca6f915a54b8985126a",
+    "merge_oid": "f2bdbc0b0e25e15625b55ef887118234c5b8bd88",
+    "merged_at": "2026-07-16T06:19:50Z"
+  },
+  "tracking_issue": "rmcp-template-exl0",
+  "fix_issue": "rmcp-template-hc8a",
+  "current_phase": 5,
+  "completed_phases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "artifacts": [
+    ".full-review/00-scope.md",
+    ".full-review/01-quality-architecture.md",
+    ".full-review/02-security-performance.md",
+    ".full-review/03-testing-documentation.md",
+    ".full-review/04-best-practices-ci.md",
+    ".full-review/05-final-report.md"
+  ]
+}

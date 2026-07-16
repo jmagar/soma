@@ -10,25 +10,45 @@ pub type RestFuture<T> = Pin<Box<dyn Future<Output = RestResult<T>> + Send + 'st
 
 /// REST router behavior knobs.
 ///
-/// [`Default`] is intentionally conservative: health, compatibility, and the
-/// text-turn helper are mounted, but the raw bridge/session routes and
-/// client-controlled unsafe options are not. Use [`Self::trusted_bridge`] only
-/// when the caller mounts the router behind its own authz boundary.
+/// [`Default`] is intentionally non-executing: only health and compatibility are
+/// mounted. Enable the text-turn helper or raw bridge routes explicitly when the
+/// caller mounts the router behind its own authz boundary.
 #[derive(Clone, Debug, Default)]
 pub struct RestRouterOptions {
+    pub enable_text_turn_route: bool,
     pub enable_bridge_routes: bool,
     pub allow_unsafe_client_options: bool,
     pub limits: RestLimits,
 }
 
 impl RestRouterOptions {
+    /// Enables the one-shot text-turn helper without raw callable/session routes.
+    pub fn text_turn() -> Self {
+        Self {
+            enable_text_turn_route: true,
+            enable_bridge_routes: false,
+            allow_unsafe_client_options: false,
+            limits: RestLimits::default(),
+        }
+    }
+
     /// Enables the full raw callable bridge for trusted deployments.
     pub fn trusted_bridge() -> Self {
         Self {
+            enable_text_turn_route: true,
             enable_bridge_routes: true,
-            allow_unsafe_client_options: true,
+            allow_unsafe_client_options: false,
             limits: RestLimits::default(),
         }
+    }
+
+    /// Allows request bodies to override the Codex command, extra arguments, and
+    /// app-server config. This is intentionally separate from
+    /// [`Self::trusted_bridge`]: admitting a caller to the bridge is not the same
+    /// as allowing that caller to choose host executables or weaken sandboxing.
+    pub fn with_unsafe_client_options(mut self, allow: bool) -> Self {
+        self.allow_unsafe_client_options = allow;
+        self
     }
 
     pub fn with_max_sessions(mut self, max_sessions: usize) -> Self {
@@ -40,6 +60,16 @@ impl RestRouterOptions {
         self.limits.max_poll_timeout = Duration::from_millis(timeout_ms);
         self
     }
+
+    pub fn with_max_text_turn_duration_ms(mut self, timeout_ms: u64) -> Self {
+        self.limits.max_text_turn_duration = Duration::from_millis(timeout_ms);
+        self
+    }
+
+    pub fn with_max_text_turn_output_bytes(mut self, max_bytes: usize) -> Self {
+        self.limits.max_text_turn_output_bytes = max_bytes;
+        self
+    }
 }
 
 /// Resource limits used by the default REST backend and route layer.
@@ -47,7 +77,11 @@ impl RestRouterOptions {
 pub struct RestLimits {
     pub max_sessions: usize,
     pub max_one_shot_concurrency: usize,
+    pub max_session_call_concurrency: usize,
+    pub max_session_call_concurrency_per_session: usize,
     pub max_poll_timeout: Duration,
+    pub max_text_turn_duration: Duration,
+    pub max_text_turn_output_bytes: usize,
     pub pending_request_ttl: Duration,
     pub max_pending_requests_per_session: usize,
     pub idle_session_ttl: Duration,
@@ -59,7 +93,11 @@ impl Default for RestLimits {
         Self {
             max_sessions: 16,
             max_one_shot_concurrency: 4,
+            max_session_call_concurrency: 64,
+            max_session_call_concurrency_per_session: 8,
             max_poll_timeout: Duration::from_secs(30),
+            max_text_turn_duration: Duration::from_secs(10 * 60),
+            max_text_turn_output_bytes: 1024 * 1024,
             pending_request_ttl: Duration::from_secs(600),
             max_pending_requests_per_session: 64,
             idle_session_ttl: Duration::from_secs(30 * 60),
@@ -81,10 +119,22 @@ pub enum RestError {
     Forbidden(String),
 
     #[error("{0}")]
+    InvalidRequest(String),
+
+    #[error("{0}")]
     RateLimited(String),
 
     #[error("{0}")]
     Conflict(String),
+
+    #[error("{0}")]
+    TimedOut(String),
+
+    #[error("{0}")]
+    PayloadTooLarge(String),
+
+    #[error("{0}")]
+    Internal(String),
 
     #[error(transparent)]
     Client(#[from] Error),
@@ -102,32 +152,74 @@ impl From<serde_json::Error> for RestError {
 /// processes. Tests and host applications can inject their own backend with
 /// [`crate::rest::router_with_backend`] to control process lifecycle, pooling, or policy.
 pub trait RestBackend: Send + Sync + 'static {
-    fn compatibility_report(&self) -> CompatibilityReport;
+    fn compatibility_report(&self) -> RestFuture<CompatibilityReport>;
     fn run_text_turn(&self, request: RestTextTurnRequest) -> RestFuture<RestTextTurnResponse>;
     fn create_session(
         &self,
-        request: RestSessionCreateRequest,
-    ) -> RestFuture<RestSessionCreateResponse>;
-    fn list_sessions(&self) -> RestFuture<Vec<RestSessionSummary>>;
-    fn delete_session(&self, session_id: String) -> RestFuture<RestStatusResponse>;
-    fn call_method(&self, request: RestCallRequest) -> RestFuture<RestCallResponse>;
+        _request: RestSessionCreateRequest,
+    ) -> RestFuture<RestSessionCreateResponse> {
+        Box::pin(async move {
+            Err(RestError::NotFound(
+                "REST session bridge is not implemented by this backend".to_owned(),
+            ))
+        })
+    }
+    fn list_sessions(&self) -> RestFuture<Vec<RestSessionSummary>> {
+        Box::pin(async move { Ok(Vec::new()) })
+    }
+    fn delete_session(&self, session_id: String) -> RestFuture<RestStatusResponse> {
+        Box::pin(async move {
+            Err(RestError::NotFound(format!(
+                "session `{session_id}` was not found"
+            )))
+        })
+    }
+    fn call_method(&self, request: RestCallRequest) -> RestFuture<RestCallResponse> {
+        Box::pin(async move {
+            Err(RestError::NotFound(format!(
+                "REST raw call `{}` is not implemented by this backend",
+                request.method
+            )))
+        })
+    }
     fn poll_event(
         &self,
         session_id: String,
         timeout_ms: Option<u64>,
-    ) -> RestFuture<RestEventResponse>;
+    ) -> RestFuture<RestEventResponse> {
+        let _ = timeout_ms;
+        Box::pin(async move {
+            Err(RestError::NotFound(format!(
+                "session `{session_id}` was not found"
+            )))
+        })
+    }
     fn reply_request_result(
         &self,
         session_id: String,
         request_key: String,
         body: RestRequestReplyResultRequest,
-    ) -> RestFuture<RestRequestReplyResponse>;
+    ) -> RestFuture<RestRequestReplyResponse> {
+        let _ = (request_key, body);
+        Box::pin(async move {
+            Err(RestError::NotFound(format!(
+                "session `{session_id}` was not found"
+            )))
+        })
+    }
     fn reply_request_error(
         &self,
         session_id: String,
         request_key: String,
         body: RestErrorReplyRequest,
-    ) -> RestFuture<RestRequestReplyResponse>;
+    ) -> RestFuture<RestRequestReplyResponse> {
+        let _ = (request_key, body);
+        Box::pin(async move {
+            Err(RestError::NotFound(format!(
+                "session `{session_id}` was not found"
+            )))
+        })
+    }
 }
 
 /// Health response returned by `GET /health` and `GET /v1/health`.
@@ -302,31 +394,28 @@ pub struct RestStatusResponse {
 
 /// Event returned by `GET /v1/sessions/{sessionId}/events`.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RestEventResponse {
-    pub event: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub notification: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub method: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request: Option<Value>,
+#[serde(
+    tag = "event",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum RestEventResponse {
+    Notification {
+        notification: Value,
+    },
+    Request {
+        request_key: String,
+        request_id: Value,
+        method: String,
+        request: Value,
+    },
+    Closed,
+    Timeout,
 }
 
 impl RestEventResponse {
     pub fn notification(notification: Value) -> Self {
-        Self {
-            event: "notification".to_owned(),
-            notification: Some(notification),
-            request_key: None,
-            request_id: None,
-            method: None,
-            request: None,
-        }
+        Self::Notification { notification }
     }
 
     pub fn request(
@@ -335,36 +424,20 @@ impl RestEventResponse {
         method: impl Into<String>,
         request: Value,
     ) -> Self {
-        Self {
-            event: "request".to_owned(),
-            notification: None,
-            request_key: Some(request_key.into()),
-            request_id: Some(request_id),
-            method: Some(method.into()),
-            request: Some(request),
+        Self::Request {
+            request_key: request_key.into(),
+            request_id,
+            method: method.into(),
+            request,
         }
     }
 
     pub fn closed() -> Self {
-        Self {
-            event: "closed".to_owned(),
-            notification: None,
-            request_key: None,
-            request_id: None,
-            method: None,
-            request: None,
-        }
+        Self::Closed
     }
 
     pub fn timeout() -> Self {
-        Self {
-            event: "timeout".to_owned(),
-            notification: None,
-            request_key: None,
-            request_id: None,
-            method: None,
-            request: None,
-        }
+        Self::Timeout
     }
 }
 

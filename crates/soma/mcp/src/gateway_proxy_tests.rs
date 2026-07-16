@@ -9,11 +9,28 @@ use soma_runtime::server::gateway_product_state_from_config;
 use crate::rmcp_server;
 use crate::testing::loopback_state;
 
-fn python_command() -> &'static str {
+fn python_command() -> String {
+    std::env::var("SOMA_PYTHON_COMMAND")
+        .ok()
+        .and_then(|value| bare_command_name(&value))
+        .unwrap_or_else(default_python_command)
+}
+
+fn bare_command_name(value: &str) -> Option<String> {
+    value
+        .trim()
+        .trim_matches('"')
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn default_python_command() -> String {
     if cfg!(windows) {
-        "python"
+        "python".to_owned()
     } else {
-        "python3"
+        "python3".to_owned()
     }
 }
 
@@ -27,7 +44,7 @@ async fn mcp_server_exposes_live_gateway_tools_resources_and_prompts() -> anyhow
     state.gateway = gateway_product_state_from_config(GatewayConfig {
         upstream: vec![UpstreamConfig {
             name: "py".to_owned(),
-            command: Some(python_command().to_owned()),
+            command: Some(python_command()),
             args: vec![script.to_string_lossy().to_string()],
             ..UpstreamConfig::default()
         }],

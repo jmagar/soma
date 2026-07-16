@@ -50,12 +50,17 @@ impl Drop for ActivePollGuard {
 
 /// Builds a conservative REST router backed by real `codex app-server` processes.
 ///
-/// The default router exposes health, compatibility, and the text-turn helper.
-/// It does not mount the raw callable bridge/session routes. Use
-/// [`trusted_bridge_router`] or [`router_with_options`] when the router is
-/// mounted behind a trusted authz boundary and should expose the full bridge.
+/// The default router exposes only non-executing health and compatibility
+/// routes. Use [`text_turn_router`], [`trusted_bridge_router`], or
+/// [`router_with_options`] when the router is mounted behind a trusted authz
+/// boundary and should execute Codex work.
 pub fn router() -> Router {
     router_with_options(RestRouterOptions::default())
+}
+
+/// Builds a router with the one-shot text-turn helper enabled.
+pub fn text_turn_router() -> Router {
+    router_with_options(RestRouterOptions::text_turn())
 }
 
 /// Builds a trusted full bridge router backed by real `codex app-server` processes.
@@ -120,8 +125,13 @@ pub fn router_with_backend_arc_and_options(
     let router = Router::new()
         .route("/health", get(health))
         .route("/v1/health", get(health))
-        .route("/v1/compatibility", get(compatibility))
-        .route("/v1/text-turn", post(text_turn));
+        .route("/v1/compatibility", get(compatibility));
+
+    let router = if options.enable_text_turn_route {
+        router.route("/v1/text-turn", post(text_turn))
+    } else {
+        router
+    };
 
     let router = if options.enable_bridge_routes {
         router
@@ -161,7 +171,10 @@ async fn health() -> impl IntoResponse {
 }
 
 async fn compatibility(State(state): State<RestState>) -> impl IntoResponse {
-    Json(state.backend.compatibility_report())
+    match state.backend.compatibility_report().await {
+        Ok(response) => Json(response).into_response(),
+        Err(error) => rest_error(error),
+    }
 }
 
 async fn text_turn(
@@ -278,8 +291,11 @@ async fn call_session_method(
         Ok(body) => body,
         Err(error) => return invalid_json(error),
     };
-    if let Err(error) = validate_client_options(&state.options, body.client.as_ref()) {
-        return rest_error(error);
+    if body.client.is_some() {
+        return rest_error(RestError::InvalidRequest(
+            "`client` options are only accepted when creating a session or making one-shot calls"
+                .to_owned(),
+        ));
     }
     let request = RestCallRequest {
         session_id: Some(session_id),
@@ -410,6 +426,16 @@ fn rest_error(error: RestError) -> Response {
             }),
         )
             .into_response(),
+        RestError::InvalidRequest(message) => (
+            StatusCode::BAD_REQUEST,
+            Json(RestErrorResponse {
+                error: "invalid_request".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
         RestError::RateLimited(message) => (
             StatusCode::TOO_MANY_REQUESTS,
             Json(RestErrorResponse {
@@ -424,6 +450,36 @@ fn rest_error(error: RestError) -> Response {
             StatusCode::CONFLICT,
             Json(RestErrorResponse {
                 error: "conflict".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::TimedOut(message) => (
+            StatusCode::GATEWAY_TIMEOUT,
+            Json(RestErrorResponse {
+                error: "timeout".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::PayloadTooLarge(message) => (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(RestErrorResponse {
+                error: "payload_too_large".to_owned(),
+                message,
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response(),
+        RestError::Internal(message) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(RestErrorResponse {
+                error: "internal".to_owned(),
                 message,
                 code: None,
                 data: None,

@@ -84,6 +84,16 @@ impl EventCollector {
         &self.errors
     }
 
+    pub fn output_bytes(&self) -> usize {
+        self.agent_message.len()
+            + self.latest_diff.as_ref().map_or(0, String::len)
+            + self
+                .errors
+                .iter()
+                .map(|error| error.message.len())
+                .sum::<usize>()
+    }
+
     fn matches_turn(&self, thread_id: &str, turn_id: &str) -> bool {
         self.thread_id.as_deref().is_none_or(|id| id == thread_id)
             && self.turn_id.as_deref().is_none_or(|id| id == turn_id)

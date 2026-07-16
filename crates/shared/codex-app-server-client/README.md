@@ -47,6 +47,19 @@ copied into another project wholesale and will keep working.
 
 ## Quick start
 
+Prerequisites: install the `codex` CLI, make sure `codex` is on `PATH`, and
+complete any first-run login/setup before using turn-starting examples. The
+`examples/basic.rs` connection smoke does not start a model turn, but this
+quick start and other text-turn examples can consume model credits.
+
+Downstream `Cargo.toml`:
+
+```toml
+[dependencies]
+codex-app-server-client = { path = "crates/codex-app-server-client" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
 ```rust,no_run
 use codex_app_server_client::{CodexSession, DenyAllApprovalHandler, SessionOptions};
 
@@ -55,7 +68,7 @@ async fn main() -> codex_app_server_client::Result<()> {
     let mut session = CodexSession::spawn(SessionOptions::new("my_integration", "0.1.0")).await?;
     let result = session
         .run_text_turn_with_model_and_handler(
-            "gpt-5.4",
+            "gpt-5",
             "Say hello in one sentence.",
             &DenyAllApprovalHandler::default(),
         )
@@ -112,9 +125,11 @@ The generated low-level methods are still available directly through
   command/file-change prompts; `AllowAllApprovalHandler` approves command,
   file-change, legacy command/patch, and permission-profile approval requests;
   `FnApprovalHandler` lets you route each typed `ServerRequest` through custom
-  logic. Preset handlers intentionally return clear errors for dynamic tool
-  calls, auth refreshes, and other app-specific requests they cannot answer
-  safely.
+  sync logic; `AsyncFnApprovalHandler` and the `ApprovalFuture` alias let UI,
+  channel, or service-backed policies await a decision without blocking a
+  Tokio worker. Preset handlers intentionally return clear errors for dynamic
+  tool calls, auth refreshes, and other app-specific requests they cannot
+  answer safely.
 - `EventCollector`: collect streamed agent text, latest diff, completion, and
   turn errors from `ServerNotification`s.
 - `CodexDaemon`: build real `codex app-server --listen unix://...` args and
@@ -130,19 +145,27 @@ Enable the `rest` feature when you want a portable HTTP bridge for the Codex
 app-server protocol:
 
 ```toml
+[dependencies]
 codex-app-server-client = { path = "crates/codex-app-server-client", features = ["rest"] }
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 ```
 
 The adapter is deliberately self-contained: it uses crates.io dependencies
 only, has no Soma path-dependencies, and does not assume any auth, gateway,
 Labby, Beads, or repo-specific runtime.
 
+The REST adapter is only an adapter around local `codex app-server` processes.
+It does not authenticate callers, authorize requests, sandbox clients, or make
+the upstream app-server safe to expose on a network. Bind it to loopback or
+place it behind your own authentication and authorization layer.
+
 ```rust,no_run
 use codex_app_server_client::rest;
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 let listener = tokio::net::TcpListener::bind("127.0.0.1:43210").await?;
-axum::serve(listener, rest::router()).await?;
+axum::serve(listener, rest::text_turn_router()).await?;
 # Ok(())
 # }
 ```
@@ -152,17 +175,19 @@ Routes:
 - `GET /health` and `GET /v1/health`: liveness probe.
 - `GET /v1/compatibility`: schema stamp, installed `codex --version`, and
   generated method-count summary.
-- `POST /v1/text-turn`: starts a fresh Codex session, sends one text prompt,
-  waits for turn completion, and returns assistant text, latest diff, and
-  turn errors.
+- `POST /v1/text-turn`: mounted by `rest::text_turn_router()` or
+  `RestRouterOptions::text_turn()`. It starts a fresh Codex session, sends one
+  text prompt, waits for turn completion, and returns assistant text, latest
+  diff, and turn errors.
 
-`rest::router()` mounts only those conservative helper routes. It rejects
-`approvalPolicy: "allow_all"` plus client `command`, `extraArgs`, and `config`
-overrides because those controls can change what the local Codex process is
-allowed to run.
+`rest::router()` mounts only the non-executing health and compatibility routes.
+`rest::text_turn_router()` opts into the one-shot text helper. Unsafe client
+options are off by default: the REST layer rejects `approvalPolicy:
+"allow_all"` plus client `command`, `extraArgs`, and `config` overrides because
+those controls can change what the local Codex process is allowed to run.
 
-For a full REST bridge to every callable, mount the trusted router behind your
-own authentication and authorization boundary:
+For a full stateful REST bridge to every callable, mount the trusted router
+only behind your own authentication and authorization boundary:
 
 ```rust,no_run
 use codex_app_server_client::rest;
@@ -174,12 +199,21 @@ axum::serve(listener, rest::trusted_bridge_router()).await?;
 # }
 ```
 
+**Trusted bridge warning:** `trusted_bridge_router()` has no built-in auth and
+must never be exposed publicly. It enables the raw callable/session routes, but
+unsafe client options (`command`, `extraArgs`, `config`, and
+`approvalPolicy: "allow_all"`) still remain disabled. Enable those only for an
+operator-owned/admin-only boundary with
+`RestRouterOptions::trusted_bridge().with_unsafe_client_options(true)`.
+
 Trusted bridge routes:
 
 - `POST /v1/call/{method}`: one-shot raw JSON-RPC bridge. The backend starts
   a fresh session, calls the app-server method named by the path (for example
   `/v1/call/config/read` or `/v1/call/thread/start`), and returns the raw
-  result.
+  result. This is useful for single request/response calls, but it does not
+  preserve turn state, stream events, or let you answer server-originated
+  requests after the call returns.
 - `POST /v1/sessions`: starts a persistent app-server session and returns a
   `sessionId` plus the raw initialize response.
 - `GET /v1/sessions`: lists active REST bridge sessions.
@@ -194,6 +228,12 @@ Trusted bridge routes:
   pending server-originated request with a JSON-RPC `result`.
 - `POST /v1/sessions/{sessionId}/requests/{requestKey}/error`: replies to a
   pending server-originated request with a JSON-RPC `error`.
+
+Use the session routes, event polling, and request reply routes for the "every
+callable" bridge contract. Codex turns are stateful: start a bridge session,
+call `thread/start`, call `turn/start` with the returned thread id, poll
+`/events`, and answer any returned `request` events before waiting for
+`turn/completed`.
 
 One-shot text helper request:
 
@@ -283,6 +323,31 @@ content-type: application/json
 ```
 
 ```http
+POST /v1/sessions/session-1/call/thread/start
+content-type: application/json
+```
+
+```json
+{
+  "params": {
+    "model": "gpt-5",
+    "cwd": "/workspace"
+  }
+}
+```
+
+```json
+{
+  "method": "thread/start",
+  "result": {
+    "thread": {
+      "id": "019..."
+    }
+  }
+}
+```
+
+```http
 POST /v1/sessions/session-1/call/turn/start
 content-type: application/json
 ```
@@ -294,6 +359,10 @@ content-type: application/json
     "input": [{ "type": "text", "text": "Hello" }]
   }
 }
+```
+
+```http
+GET /v1/sessions/session-1/events?timeoutMs=30000
 ```
 
 Event polling response shapes:
@@ -348,8 +417,10 @@ cargo run -p codex-app-server-client --features rest --example rest_server
 
 Set `CODEX_APP_SERVER_REST_ADDR=127.0.0.1:43211` to pick a different bind
 address. Host applications that want pooling, auth, tenancy, or their own
-process lifecycle can mount `rest::router_with_backend(...)` for conservative
-helper routes, or `rest::router_with_backend_and_options(backend,
+process lifecycle can mount `rest::router_with_backend(...)` for non-executing
+health/compat routes, `rest::router_with_backend_and_options(backend,
+rest::RestRouterOptions::text_turn())` for the text helper, or
+`rest::router_with_backend_and_options(backend,
 rest::RestRouterOptions::trusted_bridge())` for the full trusted bridge.
 
 ## How the typed protocol layer is built

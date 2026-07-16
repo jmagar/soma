@@ -12,9 +12,9 @@ use axum::{
 };
 use codex_app_server_client::{
     rest::{
-        router_with_backend, router_with_backend_and_options, RestBackend, RestCallRequest,
-        RestCallResponse, RestClientOptions, RestErrorReplyRequest, RestErrorResponse,
-        RestEventResponse, RestHealthResponse, RestRequestReplyResponse,
+        router_with_backend, router_with_backend_and_options, RestApprovalPolicy, RestBackend,
+        RestCallRequest, RestCallResponse, RestClientOptions, RestError, RestErrorReplyRequest,
+        RestErrorResponse, RestEventResponse, RestHealthResponse, RestRequestReplyResponse,
         RestRequestReplyResultRequest, RestResult, RestRouterOptions, RestSessionCreateRequest,
         RestSessionCreateResponse, RestSessionSummary, RestStatusResponse, RestTextTurnRequest,
         RestTextTurnResponse,
@@ -22,6 +22,7 @@ use codex_app_server_client::{
     CompatibilityReport, Error, SurfaceSummary, CODEX_SCHEMA_VERSION,
 };
 use serde_json::{json, Value};
+use tokio::sync::{watch, Notify};
 use tower::ServiceExt;
 
 #[derive(Clone, Default)]
@@ -36,6 +37,7 @@ struct FakeBackend {
     observed_polls: Arc<Mutex<Vec<Option<u64>>>>,
     observed_replies: Arc<Mutex<Vec<ObservedReply>>>,
     deleted_sessions: Arc<Mutex<Vec<String>>>,
+    next_poll_block: Arc<Mutex<Option<PollBlock>>>,
 }
 
 impl FakeBackend {
@@ -44,6 +46,16 @@ impl FakeBackend {
             text_response: Arc::new(Mutex::new(Some(Ok(response)))),
             ..Self::default()
         }
+    }
+
+    fn block_next_poll(&self) -> PollBlockHandle {
+        let started = Arc::new(Notify::new());
+        let (release, release_rx) = watch::channel(false);
+        *self.next_poll_block.lock().unwrap() = Some(PollBlock {
+            started: started.clone(),
+            release: release_rx,
+        });
+        PollBlockHandle { started, release }
     }
 }
 
@@ -61,9 +73,25 @@ enum ObservedReply {
     },
 }
 
+struct PollBlock {
+    started: Arc<Notify>,
+    release: watch::Receiver<bool>,
+}
+
+struct PollBlockHandle {
+    started: Arc<Notify>,
+    release: watch::Sender<bool>,
+}
+
 impl RestBackend for FakeBackend {
-    fn compatibility_report(&self) -> CompatibilityReport {
-        CompatibilityReport::from_installed_version(Some(CODEX_SCHEMA_VERSION.to_owned()))
+    fn compatibility_report(
+        &self,
+    ) -> Pin<Box<dyn Future<Output = RestResult<CompatibilityReport>> + Send + 'static>> {
+        Box::pin(async move {
+            Ok(CompatibilityReport::from_installed_version(Some(
+                CODEX_SCHEMA_VERSION.to_owned(),
+            )))
+        })
     }
 
     fn run_text_turn(
@@ -146,13 +174,24 @@ impl RestBackend for FakeBackend {
         timeout_ms: Option<u64>,
     ) -> Pin<Box<dyn Future<Output = RestResult<RestEventResponse>> + Send + 'static>> {
         self.observed_polls.lock().unwrap().push(timeout_ms);
+        let block = self.next_poll_block.lock().unwrap().take();
         let response = self
             .event_response
             .lock()
             .unwrap()
             .take()
             .unwrap_or_else(|| Ok(RestEventResponse::timeout()));
-        Box::pin(async move { response })
+        Box::pin(async move {
+            if let Some(mut block) = block {
+                block.started.notify_waiters();
+                while !*block.release.borrow() {
+                    if block.release.changed().await.is_err() {
+                        break;
+                    }
+                }
+            }
+            response
+        })
     }
 
     fn reply_request_result(
@@ -233,7 +272,10 @@ async fn rest_text_turn_maps_json_request_to_backend_response() {
         errors: Vec::new(),
     });
     let observed = backend.observed_text.clone();
-    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+    let app = router_with_backend_and_options(
+        backend,
+        RestRouterOptions::text_turn().with_unsafe_client_options(true),
+    );
 
     let body = json!({
         "prompt": "say hi",
@@ -283,6 +325,19 @@ async fn rest_text_turn_maps_json_request_to_backend_response() {
 async fn default_router_rejects_unsafe_text_turn_controls() {
     let app = router_with_backend(FakeBackend::default());
 
+    let (status, _body) = request_json(
+        app,
+        Method::POST,
+        "/v1/text-turn",
+        Some(json!({
+            "prompt": "run something"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let app =
+        router_with_backend_and_options(FakeBackend::default(), RestRouterOptions::text_turn());
     let (status, body) = request_json(
         app.clone(),
         Method::POST,
@@ -315,8 +370,40 @@ async fn default_router_rejects_unsafe_text_turn_controls() {
 }
 
 #[tokio::test]
+async fn trusted_bridge_allows_allow_all_text_turn_and_forwards_policy() {
+    let backend = FakeBackend::default();
+    let observed = backend.observed_text.clone();
+    let app = router_with_backend_and_options(
+        backend,
+        RestRouterOptions::trusted_bridge().with_unsafe_client_options(true),
+    );
+
+    let (status, body) = request_json(
+        app,
+        Method::POST,
+        "/v1/text-turn",
+        Some(json!({
+            "prompt": "run trusted turn",
+            "approvalPolicy": "allow_all"
+        })),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["threadId"], "");
+
+    let observed = observed.lock().unwrap();
+    assert_eq!(observed.len(), 1);
+    assert_eq!(
+        observed[0].approval_policy,
+        Some(RestApprovalPolicy::AllowAll)
+    );
+}
+
+#[tokio::test]
 async fn rest_text_turn_rejects_malformed_json() {
-    let app = router_with_backend(FakeBackend::default());
+    let app =
+        router_with_backend_and_options(FakeBackend::default(), RestRouterOptions::text_turn());
     let request = Request::builder()
         .method(Method::POST)
         .uri("/v1/text-turn")
@@ -343,6 +430,65 @@ async fn default_router_does_not_mount_raw_bridge_routes() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn bridge_routes_reject_unsafe_client_options_when_not_trusted() {
+    let backend = FakeBackend::default();
+    let observed_calls = backend.observed_calls.clone();
+    let observed_sessions = backend.observed_sessions.clone();
+    let app = router_with_backend_and_options(
+        backend,
+        RestRouterOptions {
+            enable_bridge_routes: true,
+            allow_unsafe_client_options: false,
+            ..RestRouterOptions::default()
+        },
+    );
+
+    let (status, body) = request_json(
+        app.clone(),
+        Method::POST,
+        "/v1/call/thread/start",
+        Some(json!({
+            "params": { "model": "gpt-5" },
+            "client": { "command": "codex-dev" }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "forbidden");
+
+    let (status, body) = request_json(
+        app.clone(),
+        Method::POST,
+        "/v1/sessions",
+        Some(json!({
+            "client": {
+                "extraArgs": ["--experimental"],
+                "config": { "sandbox_mode": "danger-full-access" }
+            }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"], "forbidden");
+
+    let (status, body) = request_json(
+        app,
+        Method::POST,
+        "/v1/sessions/session-1/call/turn/start",
+        Some(json!({
+            "params": { "threadId": "thread-1" },
+            "client": { "config": { "model_provider": "custom" } }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "invalid_request");
+
+    assert!(observed_calls.lock().unwrap().is_empty());
+    assert!(observed_sessions.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -428,6 +574,54 @@ async fn rest_raw_call_bridge_preserves_json_rpc_error_details() {
     assert_eq!(body["error"], "json_rpc_error");
     assert_eq!(body["code"], -32602);
     assert_eq!(body["data"]["field"], "params.cwd");
+}
+
+#[tokio::test]
+async fn rest_error_mapping_uses_expected_http_status_codes() {
+    let cases = [
+        (
+            RestError::NotFound("missing session".to_owned()),
+            StatusCode::NOT_FOUND,
+            "not_found",
+        ),
+        (
+            RestError::Gone("closed session".to_owned()),
+            StatusCode::GONE,
+            "gone",
+        ),
+        (
+            RestError::Conflict("poll already active".to_owned()),
+            StatusCode::CONFLICT,
+            "conflict",
+        ),
+        (
+            RestError::RateLimited("too many calls".to_owned()),
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+        ),
+        (
+            RestError::Client(Error::TransportClosed),
+            StatusCode::BAD_GATEWAY,
+            "codex_app_server_error",
+        ),
+    ];
+
+    for (error, expected_status, expected_error) in cases {
+        let backend = FakeBackend::default();
+        *backend.call_response.lock().unwrap() = Some(Err(error));
+        let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+        let (status, body) = request_json(
+            app,
+            Method::POST,
+            "/v1/call/thread/start",
+            Some(json!({ "params": { "model": "gpt-5" } })),
+        )
+        .await;
+
+        assert_eq!(status, expected_status);
+        assert_eq!(body["error"], expected_error);
+    }
 }
 
 #[tokio::test]
@@ -609,6 +803,49 @@ async fn rest_router_clamps_event_poll_timeout() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["event"], "timeout");
     assert_eq!(observed_polls.lock().unwrap()[0], Some(50));
+}
+
+#[tokio::test]
+async fn rest_router_rejects_second_simultaneous_poll_and_releases_guard() {
+    let backend = FakeBackend::default();
+    let poll_block = backend.block_next_poll();
+    let poll_started = poll_block.started.notified();
+    let observed_polls = backend.observed_polls.clone();
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let first_poll = tokio::spawn(request_json(
+        app.clone(),
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=5000",
+        None,
+    ));
+    poll_started.await;
+
+    let (status, body) = request_json(
+        app.clone(),
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=5000",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "conflict");
+
+    poll_block.release.send(true).unwrap();
+    let (status, body) = first_poll.await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+
+    let (status, body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=1",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+    assert_eq!(*observed_polls.lock().unwrap(), vec![Some(5000), Some(1)]);
 }
 
 async fn request_json(
