@@ -541,17 +541,17 @@ fn check_test_siblings() -> Result<()> {
 
 fn crate_src_roots() -> Vec<std::path::PathBuf> {
     [
-        "crates/soma/src",
-        "crates/soma-api/src",
-        "crates/soma-cli/src",
-        "crates/soma-contracts/src",
-        "crates/soma-codemode/src",
-        "crates/soma-mcp/src",
-        "crates/soma-observability/src",
-        "crates/soma-openapi/src",
-        "crates/soma-runtime/src",
-        "crates/soma-service/src",
-        "crates/soma-web/src",
+        "apps/soma/src",
+        "crates/soma/api/src",
+        "crates/soma/cli/src",
+        "crates/soma/contracts/src",
+        "crates/shared/codemode/src",
+        "crates/soma/mcp/src",
+        "crates/shared/observability/src",
+        "crates/shared/openapi/src",
+        "crates/soma/runtime/src",
+        "crates/soma/service/src",
+        "crates/soma/web/src",
     ]
     .into_iter()
     .map(std::path::PathBuf::from)
@@ -809,7 +809,7 @@ COMMANDS:
   check-mcp-registry    Validate server.json against docs/contracts/mcp-server.schema.json
   check-stale-claims    Fail on stale hardcoded Soma claims
   check-cargo-generate  Validate cargo-generate output
-  sync-web-source       Copy apps/web into crates/soma-web/assets/source
+  sync-web-source       Copy apps/web into crates/soma/web/assets/source
   check-web-source-sync Validate bundled web source matches apps/web
   update-aurora-web     Refresh Aurora registry components, validate, then sync
   build-web             Build optional apps/web static export

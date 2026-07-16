@@ -20,11 +20,11 @@ last_reviewed: "2026-05-15"
 ## Layer diagram
 
 ```
-SomaClient  (crates/soma-service/src/soma.rs) → HTTP/API transport ONLY — network calls, no logic
-SomaService (crates/soma-service/src/app.rs)     → ALL business logic, validation, enrichment
-MCP shim       (crates/soma-mcp/src/tools.rs)       → parse JSON args → call service → return Value
-CLI shim       (crates/soma-cli/src/lib.rs)         → parse argv → call service → print
-REST shim      (crates/soma-api/src/api.rs)       → parse HTTP JSON → call service → return JSON
+SomaClient  (crates/soma/service/src/soma.rs) → HTTP/API transport ONLY — network calls, no logic
+SomaService (crates/soma/service/src/app.rs)     → ALL business logic, validation, enrichment
+MCP shim       (crates/soma/mcp/src/tools.rs)       → parse JSON args → call service → return Value
+CLI shim       (crates/soma/cli/src/lib.rs)         → parse argv → call service → print
+REST shim      (crates/soma/api/src/api.rs)       → parse HTTP JSON → call service → return JSON
 ```
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`,
@@ -62,7 +62,7 @@ Two crates in this workspace sit outside the layered architecture above by
 design - each contains a standalone, self-contained tool that doesn't follow
 (or need to follow) the client → service → shim pattern:
 
-- `crates/codex-app-server-client/` - a fully-typed async Rust client for the
+- `crates/shared/codex-app-server-client/` - a fully-typed async Rust client for the
   Codex CLI's `app-server` v2 JSON-RPC protocol, with zero path-dependencies
   on any other crate in this workspace. See its own README for architecture
   and usage.
@@ -77,16 +77,16 @@ design - each contains a standalone, self-contained tool that doesn't follow
 
 | File | Responsibility |
 |---|---|
-| `crates/soma-service/src/soma.rs` | Upstream/client transport stub. Replace with your service API client. |
-| `crates/soma-service/src/app.rs` | Service layer. All business rules live here. |
-| `crates/soma-contracts/src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
-| `crates/soma-mcp/src/tools.rs` | MCP tool dispatch and elicitation-only actions. |
-| `crates/soma-mcp/src/schemas.rs` | Tool input schema generated from action metadata. |
-| `crates/soma-mcp/src/rmcp_server.rs` | `ServerHandler`, scope enforcement, tools/resources/prompts. |
-| `crates/soma-runtime/src/server.rs` | Shared auth policy resolution and app state. |
-| `crates/soma/src/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
-| `crates/soma-contracts/src/config.rs` | Environment/config loading and safe defaults. |
-| `crates/soma/src/bin/soma.rs` | Canonical binary mode dispatch for `serve`, `mcp`, and CLI commands. |
+| `crates/soma/service/src/soma.rs` | Upstream/client transport stub. Replace with your service API client. |
+| `crates/soma/service/src/app.rs` | Service layer. All business rules live here. |
+| `crates/soma/contracts/src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
+| `crates/soma/mcp/src/tools.rs` | MCP tool dispatch and elicitation-only actions. |
+| `crates/soma/mcp/src/schemas.rs` | Tool input schema generated from action metadata. |
+| `crates/soma/mcp/src/rmcp_server.rs` | `ServerHandler`, scope enforcement, tools/resources/prompts. |
+| `crates/soma/runtime/src/server.rs` | Shared auth policy resolution and app state. |
+| `apps/soma/src/routes.rs` | HTTP routes for MCP, health, status, REST API, and web assets. |
+| `crates/soma/contracts/src/config.rs` | Environment/config loading and safe defaults. |
+| `apps/soma/src/bin/soma.rs` | Canonical binary mode dispatch for `serve`, `mcp`, and CLI commands. |
 
 ## AppState
 
@@ -142,7 +142,7 @@ Port 40060
 ```
 
 ```rust
-// crates/soma/src/routes.rs
+// apps/soma/src/routes.rs
 pub fn router(state: AppState) -> Router {
     let public = Router::new()
         .route("/health", get(health))
@@ -170,7 +170,7 @@ pub fn router(state: AppState) -> Router {
 
 ## CLI thin shim pattern
 
-`crates/soma-cli/src/lib.rs` follows the same shim discipline as `crates/soma-mcp/src/tools.rs`. The canonical shape:
+`crates/soma/cli/src/lib.rs` follows the same shim discipline as `crates/soma/mcp/src/tools.rs`. The canonical shape:
 
 ```rust
 // cli.rs — binary module (uses `soma::` not `crate::`)
@@ -257,7 +257,7 @@ Zero validation, zero defaults, zero error message crafting in shims. All of tha
 ## Invariants
 
 - Shims do not contain business logic.
-- All action metadata starts in `crates/soma-contracts/src/actions.rs`.
+- All action metadata starts in `crates/soma/contracts/src/actions.rs`.
 - Read actions require `soma:read`; write actions require `soma:write`; `help` is public.
 - Stdio is local trusted transport; HTTP is protected unless in loopback or explicit trusted-gateway mode.
 - Plugin setup is binary-owned: hook scripts delegate to `soma setup plugin-hook`.

@@ -116,17 +116,17 @@ fn classify(event: &str, paths: &[String]) -> BTreeMap<String, bool> {
             )
     });
     let web = any(paths, |p| {
-        starts(p, &["apps/web/", "crates/soma-web/"])
+        starts(p, &["apps/web/", "crates/soma/web/"])
             || matches!(p, "package.json" | "pnpm-lock.yaml" | "pnpm-workspace.yaml")
     });
     let mcp = any(paths, |p| {
         starts(
             p,
             &[
-                "crates/soma-mcp/",
-                "crates/soma-api/",
-                "crates/soma-contracts/",
-                "crates/soma/tests/mcporter/",
+                "crates/soma/mcp/",
+                "crates/soma/api/",
+                "crates/soma/contracts/",
+                "apps/soma/tests/mcporter/",
                 "docs/reference/mcp/",
             ],
         )
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn rust_changes_enable_runtime_dependents() {
-        let out = classify_paths(&["crates/soma-mcp/src/tool.rs"]);
+        let out = classify_paths(&["crates/soma/mcp/src/tool.rs"]);
         assert!(out["rust"]);
         assert!(out["mcp"]);
         assert!(out["native"]);
