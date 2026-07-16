@@ -1,0 +1,17 @@
+[package]
+name = "soma-domain"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.96"
+authors.workspace = true
+description = "Product domain values and invariant rules for Soma"
+homepage.workspace = true
+license = "MIT"
+repository.workspace = true
+publish = false
+
+[package.metadata.soma-architecture]
+layer = "product-domain"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

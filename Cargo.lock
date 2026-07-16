@@ -3632,6 +3632,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "soma-application"
+version = "0.4.1"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "soma-contracts",
+ "soma-domain",
+ "soma-service",
+ "tokio",
+]
+
+[[package]]
 name = "soma-auth"
 version = "0.4.1"
 dependencies = [
@@ -3721,6 +3734,13 @@ dependencies = [
  "serial_test",
  "thiserror 2.0.18",
  "toml",
+]
+
+[[package]]
+name = "soma-domain"
+version = "0.4.1"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
