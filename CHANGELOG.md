@@ -13,6 +13,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `codex-app-server-client`'s optional `rest` feature became liftable and
+  operable end-to-end, without breaking the crate's zero-workspace-path-dependency
+  rule (no new crates entered the dependency graph — `futures-core`,
+  `tower-layer`, and `tower-service` were already transitive `axum` deps):
+  - **OpenAPI**: `rest::openapi_spec()` returns an OpenAPI 3.1.0 document for
+    the whole REST surface, checked in at
+    `crates/shared/codex-app-server-client/openapi.json` (13 routes, 19
+    schemas, `bearerAuth` scheme) so downstream clients can be generated
+    without building the crate. A test enforces spec/file parity, and a
+    route-coverage test probes the live router so a documented-but-unmounted
+    route fails the build.
+  - **Runnable binary**: `codex-app-server-rest --host --port --mode
+    text-turn|trusted-bridge|health-only [--token]`, with
+    `CODEX_APP_SERVER_REST_*` env fallbacks. It refuses to start on a
+    non-loopback bind in `trusted-bridge` mode without a token, and prints its
+    effective configuration (never the token) on startup.
+  - **Bearer auth**: `rest::bearer_auth(token)` is a batteries-included
+    `tower` layer — `rest::trusted_bridge_router().layer(rest::bearer_auth(token))`
+    — with constant-time token comparison and a configurable health-route
+    exemption (`/v1/compatibility` is never exempt).
+  - **SSE**: `GET /v1/sessions/{sessionId}/events/stream` streams the same
+    payloads as the long-poll `.../events` route as Server-Sent Events. A
+    session still allows only one event consumer; a second reader of either
+    kind gets `409 Conflict`.
+  - **Operational knobs**: every `RestLimits` field (session TTL, max
+    sessions, concurrency caps, response byte cap, text-turn timeout, SSE
+    keep-alive, ...) gained a documented default and a
+    `CODEX_APP_SERVER_REST_*` override via `RestLimits::from_env()` /
+    `try_from_env()`. A malformed value is a hard error, never a silent
+    fallback.
+  - **Safety examples**: `rest_loopback_dev`, `rest_bearer_auth`,
+    `rest_trusted_gateway`, and `rest_admin_unsafe` document the four
+    deployment postures and what each does and does not protect.
+  - **TypeScript client**: generated from `openapi.json` under
+    `crates/shared/codex-app-server-client/clients/typescript/`, kept in sync
+    by `cargo xtask check-ts-client [--write|--check]` (which skips cleanly
+    when `node`/`pnpm` aren't installed). Building it proved the spec is
+    consumable by a real third-party generator, and immediately caught a bug
+    in it: `RestEventResponse`'s `discriminator.mapping` pointed at four
+    component schemas that were only ever built inline in the `oneOf` array
+    and never registered, which every spec-compliant generator rejects. The
+    four variants are now real named schemas — so generated clients get named
+    per-variant types rather than an anonymous union — and a new
+    `every_schema_ref_resolves_to_a_real_component` test fails the build if
+    any `$ref` or `discriminator.mapping` target ever dangles again.
+- Add `cargo xtask codex-schema drift [--dir <dump>] [--json] [--strict]`,
+  which diffs the vendored `codex-app-server-client` protocol schema against
+  the installed `codex` CLI's actual app-server surface and reports added,
+  removed, and changed methods per section. A scheduled
+  `codex-schema-drift-monitor` workflow opens/updates a tracking issue on
+  drift. A missing `codex` binary is always a graceful skip, never a failure.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.

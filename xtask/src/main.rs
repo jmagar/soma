@@ -11,7 +11,7 @@
 //!   patterns     Check static contracts from docs/PATTERNS.md
 //!   contract-audit Run local static/spec checks for REST-client MCP servers
 //!   scaffold     Plan, generate, or verify a new project from Soma
-//!   codex-schema Rebuild/bisect the vendored codex-app-server-client schema
+//!   codex-schema Rebuild/bisect/diff the vendored codex-app-server-client schema
 //!   cargo-generate Smoke-test cargo-generate output
 //!   cargo-generate-post Apply cargo-generate post-processing rewrites
 //!   generate-docs Generate volatile docs and metadata from canonical specs
@@ -29,6 +29,7 @@
 //!   check-plugin-stdio-smoke Smoke-test installed plugin stdio binary
 //!   apply-no-mcp-marketplace Apply deterministic no-MCP marketplace branch transform
 //!   check-no-mcp-drift Validate marketplace-no-mcp branch invariants and drift
+//!   check-ts-client Regenerate/verify the checked-in codex-app-server-client TypeScript REST client
 //!   sync-cargo   Copy Cargo.lock into plugin data directories
 //!   check-release-versions Validate release component version policy
 //!   release-plan Print changed release components and candidate tags
@@ -68,6 +69,7 @@ mod scripts_lane_b;
 mod scripts_lane_c;
 mod scripts_lane_d;
 mod test_siblings;
+mod ts_client;
 mod web_source;
 mod workspace_commands;
 
@@ -118,6 +120,7 @@ fn main() -> Result<()> {
         Some("check-file-size") => scripts::check_file_size(),
         Some("check-openapi") => scripts_lane_d::check_openapi(&args[1..]),
         Some("check-openapi-drift") => scripts_lane_d::check_openapi(&args[1..]),
+        Some("check-ts-client") => ts_client::run(&args[1..]),
         Some("check-palette-manifest") => generated_surfaces::check_palette_manifest(&args[1..]),
         Some("check-provider-manifest-contract") => provider_manifest::check(),
         Some("check-plugin-hook-contract") => {

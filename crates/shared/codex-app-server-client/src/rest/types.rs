@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, pin::Pin, time::Duration};
+use std::{collections::HashMap, env, future::Future, pin::Pin, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -70,22 +70,132 @@ impl RestRouterOptions {
         self.limits.max_text_turn_output_bytes = max_bytes;
         self
     }
+
+    /// Sets the interval between SSE keep-alive frames on
+    /// `GET /v1/sessions/{sessionId}/events/stream`. See
+    /// [`RestLimits::sse_keep_alive_interval`].
+    pub fn with_sse_keep_alive_interval_ms(mut self, interval_ms: u64) -> Self {
+        self.limits.sse_keep_alive_interval = Duration::from_millis(interval_ms);
+        self
+    }
+
+    /// Replaces the whole [`RestLimits`] set in one call, e.g. with
+    /// [`RestLimits::from_env`] or [`RestLimits::try_from_env`]:
+    ///
+    /// ```rust,no_run
+    /// # use codex_app_server_client::rest::{RestLimits, RestRouterOptions};
+    /// let options = RestRouterOptions::trusted_bridge().with_limits(RestLimits::from_env());
+    /// # let _ = options;
+    /// ```
+    pub fn with_limits(mut self, limits: RestLimits) -> Self {
+        self.limits = limits;
+        self
+    }
 }
 
 /// Resource limits used by the default REST backend and route layer.
+///
+/// Every field has a hardcoded default (below) and can be overridden
+/// independently via a `CODEX_APP_SERVER_REST_*` environment variable
+/// through [`RestLimits::from_env`] / [`RestLimits::try_from_env`]. A
+/// variable that is absent falls back to the field's default; a variable
+/// that is *present but fails to parse* is a hard error
+/// ([`RestLimitsEnvError`]), never a silent fallback - a malformed override
+/// that quietly reverts to the default is exactly how an operator ships a
+/// 10x-wrong limit and never notices.
+///
+/// | Field | Env var | Default |
+/// |---|---|---|
+/// | [`max_sessions`](Self::max_sessions) | `CODEX_APP_SERVER_REST_MAX_SESSIONS` | `16` |
+/// | [`max_one_shot_concurrency`](Self::max_one_shot_concurrency) | `CODEX_APP_SERVER_REST_MAX_ONE_SHOT_CONCURRENCY` | `4` |
+/// | [`max_session_call_concurrency`](Self::max_session_call_concurrency) | `CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY` | `64` |
+/// | [`max_session_call_concurrency_per_session`](Self::max_session_call_concurrency_per_session) | `CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY_PER_SESSION` | `8` |
+/// | [`max_poll_timeout`](Self::max_poll_timeout) | `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS` | `30000` (30s) |
+/// | [`max_text_turn_duration`](Self::max_text_turn_duration) | `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS` | `600000` (10m) |
+/// | [`max_text_turn_output_bytes`](Self::max_text_turn_output_bytes) | `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES` | `1048576` (1 MiB) |
+/// | [`pending_request_ttl`](Self::pending_request_ttl) | `CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS` | `600000` (10m) |
+/// | [`max_pending_requests_per_session`](Self::max_pending_requests_per_session) | `CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION` | `64` |
+/// | [`idle_session_ttl`](Self::idle_session_ttl) | `CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS` | `1800000` (30m) |
+/// | [`compatibility_ttl`](Self::compatibility_ttl) | `CODEX_APP_SERVER_REST_COMPATIBILITY_TTL_MS` | `30000` (30s) |
+/// | [`sse_keep_alive_interval`](Self::sse_keep_alive_interval) | `CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS` | `15000` (15s) |
 #[derive(Clone, Debug)]
 pub struct RestLimits {
+    /// Maximum number of concurrently open stateful bridge sessions
+    /// (`POST /v1/sessions`). Enforced both by a semaphore in
+    /// [`crate::rest::CodexRestBackend`] and by an explicit pre-check in the
+    /// route handler (so a full backend rejects before spawning a process).
+    /// Env: `CODEX_APP_SERVER_REST_MAX_SESSIONS`. Default: `16`.
     pub max_sessions: usize,
+    /// Maximum number of one-shot requests (`POST /v1/text-turn`,
+    /// `POST /v1/call/{method}`) running at once; each spawns its own
+    /// short-lived Codex process. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_ONE_SHOT_CONCURRENCY`. Default: `4`.
     pub max_one_shot_concurrency: usize,
+    /// Maximum number of in-flight `POST /v1/sessions/{sessionId}/call/*`
+    /// calls across *all* sessions combined. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY`. Default: `64`.
     pub max_session_call_concurrency: usize,
+    /// Maximum number of in-flight `POST /v1/sessions/{sessionId}/call/*`
+    /// calls for a *single* session. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY_PER_SESSION`.
+    /// Default: `8`.
     pub max_session_call_concurrency_per_session: usize,
+    /// Upper bound on `?timeoutMs=` for both
+    /// `GET /v1/sessions/{sessionId}/events` and
+    /// `GET /v1/sessions/{sessionId}/events/stream`; a larger requested
+    /// value is clamped down to this. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS`. Default: `30000` (30s).
     pub max_poll_timeout: Duration,
+    /// Wall-clock budget for `POST /v1/text-turn` to reach a terminal turn
+    /// state; the turn is interrupted and the request fails with
+    /// [`RestError::TimedOut`] past this point. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS`. Default:
+    /// `600000` (10m).
     pub max_text_turn_duration: Duration,
+    /// Byte cap on accumulated turn output for `POST /v1/text-turn`; the
+    /// turn is interrupted and the request fails with
+    /// [`RestError::PayloadTooLarge`] past this point. This is the
+    /// response-byte-cap knob for the REST layer - the crate has no other
+    /// hardcoded response size limit to promote (see the `rest`
+    /// implementation notes for what was audited). Env:
+    /// `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES`. Default:
+    /// `1048576` (1 MiB).
     pub max_text_turn_output_bytes: usize,
+    /// How long a server-originated request surfaced by
+    /// `GET /v1/sessions/{sessionId}/events(/stream)` stays answerable via
+    /// `POST .../requests/{requestKey}/result` or `.../error` before it
+    /// expires with [`RestError::Gone`] (also capped by the app-server's
+    /// own reply deadline for that request, whichever is sooner). Env:
+    /// `CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS`. Default: `600000`
+    /// (10m).
     pub pending_request_ttl: Duration,
+    /// Maximum number of not-yet-replied-to server requests a single
+    /// session will hold at once; beyond this, new ones are rejected
+    /// (with a JSON-RPC error sent back to the app-server on the caller's
+    /// behalf) rather than buffered without bound. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION`. Default:
+    /// `64`.
     pub max_pending_requests_per_session: usize,
+    /// How long a stateful bridge session may sit with no in-flight
+    /// operation before it is pruned (and its `codex app-server` process
+    /// torn down) on the next backend access. Env:
+    /// `CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS`. Default: `1800000`
+    /// (30m).
     pub idle_session_ttl: Duration,
+    /// How long a `GET /v1/compatibility` result is cached before the next
+    /// call re-runs the (blocking, `codex --version`-invoking) check. Env:
+    /// `CODEX_APP_SERVER_REST_COMPATIBILITY_TTL_MS`. Default: `30000`
+    /// (30s).
     pub compatibility_ttl: Duration,
+    /// Interval between SSE keep-alive frames sent by
+    /// `GET /v1/sessions/{sessionId}/events/stream` while no real event is
+    /// ready. Passed straight through to axum's
+    /// [`KeepAlive::interval`](axum::response::sse::KeepAlive::interval).
+    /// Env: `CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS`. Default: `15000`
+    /// (15s, matching axum's own `KeepAlive` default - set explicitly here
+    /// rather than relied upon, so this crate's behavior doesn't silently
+    /// change if axum's default ever does).
+    pub sse_keep_alive_interval: Duration,
 }
 
 impl Default for RestLimits {
@@ -102,7 +212,146 @@ impl Default for RestLimits {
             max_pending_requests_per_session: 64,
             idle_session_ttl: Duration::from_secs(30 * 60),
             compatibility_ttl: Duration::from_secs(30),
+            sse_keep_alive_interval: Duration::from_secs(15),
         }
+    }
+}
+
+/// Error returned by [`RestLimits::try_from_env`] when a
+/// `CODEX_APP_SERVER_REST_*` environment variable is set but cannot be
+/// parsed as its expected type.
+///
+/// Deliberately distinct from [`RestError`]: this happens at process
+/// startup, before any router or backend exists, so it can't be reported
+/// through an HTTP response.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("environment variable `{var}` has an invalid value `{value}`: expected {expected}")]
+pub struct RestLimitsEnvError {
+    pub var: &'static str,
+    pub value: String,
+    pub expected: &'static str,
+}
+
+impl RestLimits {
+    /// Builds [`RestLimits`] from `CODEX_APP_SERVER_REST_*` environment
+    /// variables, using [`RestLimits::default`] for any variable that is
+    /// absent.
+    ///
+    /// # Panics
+    ///
+    /// Panics (via [`RestLimitsEnvError`]'s `Display`) if any
+    /// `CODEX_APP_SERVER_REST_*` variable is set but fails to parse. See
+    /// [`RestLimits::try_from_env`] to handle that case without a panic -
+    /// this constructor exists for the common case of one-shot process
+    /// startup, where a malformed limit should abort startup loudly rather
+    /// than be silently downgraded to the default or handled by caller
+    /// code that has to remember to check.
+    pub fn from_env() -> Self {
+        match Self::try_from_env() {
+            Ok(limits) => limits,
+            Err(error) => panic!("{error}"),
+        }
+    }
+
+    /// Builds [`RestLimits`] from `CODEX_APP_SERVER_REST_*` environment
+    /// variables, using [`RestLimits::default`] for any variable that is
+    /// absent, and returning [`RestLimitsEnvError`] for the first variable
+    /// that is present but fails to parse.
+    pub fn try_from_env() -> Result<Self, RestLimitsEnvError> {
+        let default = Self::default();
+        Ok(Self {
+            max_sessions: env_usize("CODEX_APP_SERVER_REST_MAX_SESSIONS", default.max_sessions)?,
+            max_one_shot_concurrency: env_usize(
+                "CODEX_APP_SERVER_REST_MAX_ONE_SHOT_CONCURRENCY",
+                default.max_one_shot_concurrency,
+            )?,
+            max_session_call_concurrency: env_usize(
+                "CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY",
+                default.max_session_call_concurrency,
+            )?,
+            max_session_call_concurrency_per_session: env_usize(
+                "CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY_PER_SESSION",
+                default.max_session_call_concurrency_per_session,
+            )?,
+            max_poll_timeout: env_duration_ms(
+                "CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS",
+                default.max_poll_timeout,
+            )?,
+            max_text_turn_duration: env_duration_ms(
+                "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS",
+                default.max_text_turn_duration,
+            )?,
+            max_text_turn_output_bytes: env_usize(
+                "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES",
+                default.max_text_turn_output_bytes,
+            )?,
+            pending_request_ttl: env_duration_ms(
+                "CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS",
+                default.pending_request_ttl,
+            )?,
+            max_pending_requests_per_session: env_usize(
+                "CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION",
+                default.max_pending_requests_per_session,
+            )?,
+            idle_session_ttl: env_duration_ms(
+                "CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS",
+                default.idle_session_ttl,
+            )?,
+            compatibility_ttl: env_duration_ms(
+                "CODEX_APP_SERVER_REST_COMPATIBILITY_TTL_MS",
+                default.compatibility_ttl,
+            )?,
+            sse_keep_alive_interval: env_duration_ms(
+                "CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS",
+                default.sse_keep_alive_interval,
+            )?,
+        })
+    }
+}
+
+/// Reads `var` as a `usize`, falling back to `default` only when the
+/// variable is entirely absent. A variable that is set to anything that
+/// doesn't parse as a `usize` (empty, negative, non-numeric, non-UTF-8) is
+/// reported via `Err`, never silently mapped to `default`.
+fn env_usize(var: &'static str, default: usize) -> Result<usize, RestLimitsEnvError> {
+    match env::var(var) {
+        Ok(value) => value
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| RestLimitsEnvError {
+                var,
+                value,
+                expected: "a non-negative integer",
+            }),
+        Err(env::VarError::NotPresent) => Ok(default),
+        Err(env::VarError::NotUnicode(raw)) => Err(RestLimitsEnvError {
+            var,
+            value: raw.to_string_lossy().into_owned(),
+            expected: "valid UTF-8 text",
+        }),
+    }
+}
+
+/// Reads `var` as a millisecond count and converts it to a [`Duration`],
+/// falling back to `default` only when the variable is entirely absent. See
+/// [`env_usize`] for the malformed-value policy (identical here).
+fn env_duration_ms(var: &'static str, default: Duration) -> Result<Duration, RestLimitsEnvError> {
+    match env::var(var) {
+        Ok(value) => value
+            .trim()
+            .parse::<u64>()
+            .map(Duration::from_millis)
+            .map_err(|_| RestLimitsEnvError {
+                var,
+                value,
+                expected: "a non-negative integer count of milliseconds",
+            }),
+        Err(env::VarError::NotPresent) => Ok(default),
+        Err(env::VarError::NotUnicode(raw)) => Err(RestLimitsEnvError {
+            var,
+            value: raw.to_string_lossy().into_owned(),
+            expected: "valid UTF-8 text",
+        }),
     }
 }
 
@@ -481,4 +730,176 @@ pub(super) fn session_options_from(
     client
         .unwrap_or_default()
         .into_session_options(default_name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        ffi::OsStr,
+        sync::{Mutex, OnceLock},
+    };
+
+    /// `std::env` is process-global, so tests that mutate
+    /// `CODEX_APP_SERVER_REST_*` variables must not run concurrently with
+    /// each other (`cargo test` runs unit tests on multiple threads by
+    /// default). This serializes just the tests in this module - it does
+    /// not need to coordinate with anything outside this crate, since these
+    /// variable names are only ever touched here and in the `rest`
+    /// integration tests, which run in a separate test binary/process.
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+            let previous = env::var_os(key);
+            env::set_var(key, value);
+            Self { key, previous }
+        }
+
+        fn unset(key: &'static str) -> Self {
+            let previous = env::var_os(key);
+            env::remove_var(key);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(previous) => env::set_var(self.key, previous),
+                None => env::remove_var(self.key),
+            }
+        }
+    }
+
+    const ALL_REST_LIMIT_VARS: &[&str] = &[
+        "CODEX_APP_SERVER_REST_MAX_SESSIONS",
+        "CODEX_APP_SERVER_REST_MAX_ONE_SHOT_CONCURRENCY",
+        "CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY",
+        "CODEX_APP_SERVER_REST_MAX_SESSION_CALL_CONCURRENCY_PER_SESSION",
+        "CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS",
+        "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS",
+        "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES",
+        "CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS",
+        "CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION",
+        "CODEX_APP_SERVER_REST_IDLE_SESSION_TTL_MS",
+        "CODEX_APP_SERVER_REST_COMPATIBILITY_TTL_MS",
+        "CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS",
+    ];
+
+    /// Ensures every `CODEX_APP_SERVER_REST_*` variable starts (and ends)
+    /// unset for a test, regardless of what the ambient environment
+    /// happened to have, by unsetting (and restoring on drop) all of them.
+    fn clear_all_rest_limit_vars() -> Vec<EnvVarGuard> {
+        ALL_REST_LIMIT_VARS
+            .iter()
+            .map(|var| EnvVarGuard::unset(var))
+            .collect()
+    }
+
+    #[test]
+    fn try_from_env_uses_defaults_when_every_variable_is_absent() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+
+        let limits = RestLimits::try_from_env().expect("all-absent env should use defaults");
+        let default = RestLimits::default();
+        assert_eq!(limits.max_sessions, default.max_sessions);
+        assert_eq!(
+            limits.max_session_call_concurrency_per_session,
+            default.max_session_call_concurrency_per_session
+        );
+        assert_eq!(limits.max_poll_timeout, default.max_poll_timeout);
+        assert_eq!(
+            limits.sse_keep_alive_interval,
+            default.sse_keep_alive_interval
+        );
+    }
+
+    #[test]
+    fn try_from_env_parses_valid_overrides() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _max_sessions = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_SESSIONS", "42");
+        let _poll_timeout = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS", "5000");
+        let _keep_alive = EnvVarGuard::set("CODEX_APP_SERVER_REST_SSE_KEEP_ALIVE_MS", "2500");
+
+        let limits = RestLimits::try_from_env().expect("well-formed overrides should parse");
+
+        assert_eq!(limits.max_sessions, 42);
+        assert_eq!(limits.max_poll_timeout, Duration::from_millis(5000));
+        assert_eq!(limits.sse_keep_alive_interval, Duration::from_millis(2500));
+        // Every other field falls back to its default when unset.
+        assert_eq!(
+            limits.max_one_shot_concurrency,
+            RestLimits::default().max_one_shot_concurrency
+        );
+    }
+
+    #[test]
+    fn try_from_env_reports_malformed_values_instead_of_defaulting() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _bad = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_SESSIONS", "not-a-number");
+
+        let error = RestLimits::try_from_env()
+            .expect_err("a malformed override must not silently fall back to the default");
+
+        assert_eq!(error.var, "CODEX_APP_SERVER_REST_MAX_SESSIONS");
+        assert_eq!(error.value, "not-a-number");
+    }
+
+    #[test]
+    fn try_from_env_reports_empty_string_as_malformed() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _bad = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS", "");
+
+        let error = RestLimits::try_from_env()
+            .expect_err("an empty override must not silently fall back to the default");
+
+        assert_eq!(error.var, "CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS");
+    }
+
+    #[test]
+    fn try_from_env_reports_negative_values_as_malformed() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _bad = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_SESSIONS", "-1");
+
+        let error = RestLimits::try_from_env()
+            .expect_err("a negative override must not silently fall back to the default");
+
+        assert_eq!(error.var, "CODEX_APP_SERVER_REST_MAX_SESSIONS");
+    }
+
+    #[test]
+    #[should_panic(expected = "CODEX_APP_SERVER_REST_MAX_SESSIONS")]
+    fn from_env_panics_on_malformed_override() {
+        let _lock = env_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _cleared = clear_all_rest_limit_vars();
+        let _bad = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_SESSIONS", "nope");
+
+        let _ = RestLimits::from_env();
+    }
 }

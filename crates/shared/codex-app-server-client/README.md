@@ -39,9 +39,12 @@ copied into another project wholesale and will keep working.
 - No native Codex app-server REST transport exists upstream. This crate's
   optional `rest` feature is an HTTP adapter that calls the real JSON-RPC
   app-server client underneath.
-- No opinion on auth, sandboxing, or approval policy - that's all `codex`
-  CLI/config territory, passed straight through via `extra_args` or the
-  typed params structs.
+- No opinion on sandboxing or approval policy - that's all `codex` CLI/config
+  territory, passed straight through via `extra_args` or the typed params
+  structs. The `rest` feature ships an *optional* bearer-token layer
+  (`rest::bearer_auth`) so every embedder isn't rewriting the same
+  middleware, but it is transport auth only and off unless you mount it; the
+  crate has no authorization or tenancy model.
 - No retry/reconnect logic. One connection, one client. Build that on top if
   you need it.
 
@@ -87,7 +90,10 @@ See:
   policy; use the documented preset handlers when they fit.
 - `examples/daemon.rs` for Unix socket connection helpers.
 - `examples/compatibility.rs` for schema/version diagnostics.
-- `examples/rest_server.rs` for the optional HTTP bridge.
+- `examples/rest_server.rs` for the optional HTTP bridge, and
+  `examples/rest_loopback_dev.rs`, `examples/rest_bearer_auth.rs`,
+  `examples/rest_trusted_gateway.rs`, `examples/rest_admin_unsafe.rs` for the
+  four deployment postures (see "Optional REST adapter" below).
 - `tests/smoke.rs` for a live integration test against the real binary
   (skips gracefully if `codex` isn't on `PATH`).
 
@@ -156,9 +162,35 @@ only, has no Soma path-dependencies, and does not assume any auth, gateway,
 Labby, Beads, or repo-specific runtime.
 
 The REST adapter is only an adapter around local `codex app-server` processes.
-It does not authenticate callers, authorize requests, sandbox clients, or make
-the upstream app-server safe to expose on a network. Bind it to loopback or
-place it behind your own authentication and authorization layer.
+It does not authorize requests, sandbox clients, or make the upstream
+app-server safe to expose on a network. It ships an *optional* bearer-token
+layer (see "Bearer auth" below), but that is transport auth only: it answers
+"did the caller present the secret?", not "may this caller do this?". Bind it
+to loopback or place it behind your own authentication and authorization
+layer.
+
+### Run it as a binary
+
+The fastest path — no Rust code at all. From this crate's directory:
+
+```bash
+cargo install --path . --features rest
+codex-app-server-rest --host 127.0.0.1 --port 43210 --mode text-turn
+```
+
+`--mode` selects the router: `health-only` (health + compatibility only),
+`text-turn` (adds the one-shot text helper), or `trusted-bridge` (adds the
+raw session/call/event routes). `--token <secret>` turns on bearer auth;
+`--allow-unsafe-client-options` opts into the admin-only posture below. Every
+flag has a `CODEX_APP_SERVER_REST_*` env fallback, and the binary prints its
+effective configuration (never the token) on startup.
+
+The binary refuses to start rather than let you deploy something dangerous by
+accident: a non-loopback bind in `--mode trusted-bridge` without `--token` is
+rejected, as is `--allow-unsafe-client-options` on a non-loopback bind without
+a token.
+
+### Mount it in your own app
 
 ```rust,no_run
 use codex_app_server_client::rest;
@@ -224,6 +256,14 @@ Trusted bridge routes:
 - `GET /v1/sessions/{sessionId}/events?timeoutMs=30000`: long-polls the next
   server notification/request. Server requests are returned with a
   `requestKey` so REST clients can answer them later.
+- `GET /v1/sessions/{sessionId}/events/stream?timeoutMs=30000`: the same
+  events as Server-Sent Events (`text/event-stream`) instead of one
+  long-poll per event — usually what you want from a browser or any client
+  with an `EventSource`. Each event arrives as one `data:` frame carrying the
+  identical JSON payload the long-poll route returns, tagged with an SSE
+  `event:` name (`notification`, `request`, `closed`, `timeout`, `error`).
+  The stream ends on `closed` or `error`; a `timeout` is forwarded and the
+  stream continues.
 - `POST /v1/sessions/{sessionId}/requests/{requestKey}/result`: replies to a
   pending server-originated request with a JSON-RPC `result`.
 - `POST /v1/sessions/{sessionId}/requests/{requestKey}/error`: replies to a
@@ -231,9 +271,14 @@ Trusted bridge routes:
 
 Use the session routes, event polling, and request reply routes for the "every
 callable" bridge contract. Codex turns are stateful: start a bridge session,
-call `thread/start`, call `turn/start` with the returned thread id, poll
-`/events`, and answer any returned `request` events before waiting for
-`turn/completed`.
+call `thread/start`, call `turn/start` with the returned thread id, read
+`/events` (long-poll) or `/events/stream` (SSE), and answer any returned
+`request` events before waiting for `turn/completed`.
+
+A session has **at most one active event consumer**. `/events` and
+`/events/stream` drain the same underlying stream, so a second concurrent
+reader for the same session — of either kind — gets `409 Conflict` rather
+than silently splitting events between two readers. Pick one per session.
 
 One-shot text helper request:
 
@@ -409,15 +454,94 @@ Request reply examples:
 }
 ```
 
-Run the example server:
+### Bearer auth
+
+Auth stays optional, but you shouldn't have to rewrite the same middleware to
+get it:
+
+```rust,no_run
+use codex_app_server_client::rest;
+
+# fn build(token: String) -> axum::Router {
+rest::trusted_bridge_router().layer(rest::bearer_auth(token))
+# }
+```
+
+Every request then needs `Authorization: Bearer <token>`. The comparison is
+constant-time, a blank configured token panics at construction rather than
+silently accepting blank credentials, and rejections return the adapter's
+normal `RestErrorResponse` JSON with `WWW-Authenticate: Bearer`.
+
+`GET /health` and `GET /v1/health` are exempt by default — liveness probes
+rarely carry credentials and "the process is up" leaks nothing. Flip that with
+`rest::bearer_auth(token).allow_unauthenticated_health(false)`.
+`GET /v1/compatibility` is **never** exempt, because it reveals the installed
+`codex` version.
+
+This is transport auth only. A caller holding the one shared token gets
+everything the mounted router exposes; it is not multi-tenant isolation and it
+is not authorization.
+
+### Operational knobs
+
+Every limit has a default and a `CODEX_APP_SERVER_REST_*` environment
+override. Build them with `RestLimits::from_env()` (panics on a malformed
+value) or `RestLimits::try_from_env()` (returns `RestLimitsEnvError`), then
+`RestRouterOptions::trusted_bridge().with_limits(limits)`.
+
+| Env var (`CODEX_APP_SERVER_REST_` +) | Default | Bounds |
+|---|---|---|
+| `MAX_SESSIONS` | `16` | concurrent stateful bridge sessions |
+| `MAX_ONE_SHOT_CONCURRENCY` | `4` | in-flight `/v1/text-turn` + `/v1/call/*` |
+| `MAX_SESSION_CALL_CONCURRENCY` | `64` | in-flight session calls, all sessions |
+| `MAX_SESSION_CALL_CONCURRENCY_PER_SESSION` | `8` | in-flight session calls, one session |
+| `MAX_POLL_TIMEOUT_MS` | `30000` | cap on `?timeoutMs=` for both event routes |
+| `MAX_TEXT_TURN_DURATION_MS` | `600000` | wall-clock budget for one text turn |
+| `MAX_TEXT_TURN_OUTPUT_BYTES` | `1048576` | response byte cap for one text turn |
+| `PENDING_REQUEST_TTL_MS` | `600000` | how long an unanswered server request lives |
+| `MAX_PENDING_REQUESTS_PER_SESSION` | `64` | unanswered server requests per session |
+| `IDLE_SESSION_TTL_MS` | `1800000` | idle session reaping |
+| `COMPATIBILITY_TTL_MS` | `30000` | `/v1/compatibility` cache |
+| `SSE_KEEP_ALIVE_MS` | `15000` | SSE keep-alive frame interval |
+
+A variable that is present but unparseable is a hard error, never a silent
+fallback to the default — that is how a 10x-wrong limit ships unnoticed.
+
+### OpenAPI
+
+`rest::openapi_spec()` returns an OpenAPI 3.1.0 document for the whole `rest`
+surface, and the same document is checked in at
+[`openapi.json`](openapi.json) so downstream clients can be generated without
+building the Rust crate at all. A test keeps the two in sync; regenerate with:
+
+```bash
+CODEX_REST_OPENAPI_WRITE=1 cargo test -p codex-app-server-client \
+  --features rest openapi_spec_matches_checked_in_file
+```
+
+A generated TypeScript client lives in
+[`clients/typescript/`](clients/typescript) — proof the surface is consumable
+outside Rust, and a starting point for any other language.
+
+### Examples
 
 ```bash
 cargo run -p codex-app-server-client --features rest --example rest_server
 ```
 
 Set `CODEX_APP_SERVER_REST_ADDR=127.0.0.1:43211` to pick a different bind
-address. Host applications that want pooling, auth, tenancy, or their own
-process lifecycle can mount `rest::router_with_backend(...)` for non-executing
+address. Four further examples walk the deployment postures in increasing
+order of danger — read the one matching your deployment before copying it:
+
+| Example | Posture |
+|---|---|
+| `rest_loopback_dev` | no auth, loopback only; the "just let me try it" path |
+| `rest_bearer_auth` | token-protected local service |
+| `rest_trusted_gateway` | full bridge behind someone else's authz boundary |
+| `rest_admin_unsafe` | admin-only `allow_unsafe_client_options` |
+
+Host applications that want pooling, auth, tenancy, or their own process
+lifecycle can mount `rest::router_with_backend(...)` for non-executing
 health/compat routes, `rest::router_with_backend_and_options(backend,
 rest::RestRouterOptions::text_turn())` for the text helper, or
 `rest::router_with_backend_and_options(backend,

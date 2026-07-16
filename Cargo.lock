@@ -371,6 +371,7 @@ name = "codex-app-server-client"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-core",
  "prettyplease",
  "schemars 0.8.22",
  "serde",
@@ -381,6 +382,8 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower",
+ "tower-layer",
+ "tower-service",
  "tracing",
  "tracing-subscriber",
  "typify",
