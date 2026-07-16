@@ -4,15 +4,16 @@ use serde_json::Value;
 use soma_contracts::providers::{ProviderPrompt, ProviderResource};
 use soma_domain::{AuthorizationMode, Principal, Surface};
 use soma_service::{
-    ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry, ProviderRequestLimits,
-    ProviderSurface, ResourceReadOutput, SomaService,
+    ElicitedNameOutcome, ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry,
+    ProviderRequestLimits, ProviderSurface, ResourceReadOutput, ScaffoldIntent, SomaService,
 };
 
 use crate::{
     ApplicationError, ApplicationPorts, CatalogSnapshot, CodeModeExecuteRequest, DoctorReport,
-    ExecuteActionRequest, ExecuteActionResponse, ExecutionContext, GatewayExecuteRequest,
-    GatewayReloadRequest, OpenApiExecuteRequest, OperationResponse, ReadResourceRequest,
-    ResourceContent,
+    ElicitedName, ExecuteActionRequest, ExecuteActionResponse, ExecutionContext,
+    GatewayExecuteRequest, GatewayPromptRoute, GatewayReloadRequest, GatewayResourceRoute,
+    GatewayRouteScope, GatewayToolRoute, OpenApiExecuteRequest, OperationResponse,
+    ReadResourceRequest, ResourceContent, ResourceTemplateSpec, ScaffoldIntentRequest,
 };
 
 #[cfg(test)]
@@ -65,6 +66,52 @@ impl SomaApplication {
             output: output.value,
             request_id: context.request_id.as_str().to_owned(),
         })
+    }
+
+    pub fn elicited_name_greeting(&self, outcome: ElicitedName) -> Value {
+        match outcome {
+            ElicitedName::Accepted(name) => self
+                .legacy_service
+                .elicited_name_greeting(ElicitedNameOutcome::Accepted(&name)),
+            ElicitedName::NoInput => self
+                .legacy_service
+                .elicited_name_greeting(ElicitedNameOutcome::NoInput),
+            ElicitedName::Declined => self
+                .legacy_service
+                .elicited_name_greeting(ElicitedNameOutcome::Declined),
+            ElicitedName::Cancelled => self
+                .legacy_service
+                .elicited_name_greeting(ElicitedNameOutcome::Cancelled),
+            ElicitedName::Unsupported => self
+                .legacy_service
+                .elicited_name_greeting(ElicitedNameOutcome::Unsupported),
+        }
+    }
+
+    pub fn scaffold_intent(
+        &self,
+        request: ScaffoldIntentRequest,
+    ) -> Result<Value, ApplicationError> {
+        self.legacy_service
+            .scaffold_intent(ScaffoldIntent {
+                display_name: request.display_name,
+                crate_name: request.crate_name,
+                binary_name: request.binary_name,
+                server_category: request.server_category,
+                env_prefix: request.env_prefix,
+                auth_kind: request.auth_kind,
+                host: request.host,
+                port: request.port,
+                mcp_transport: request.mcp_transport,
+                mcp_primitives: request.mcp_primitives,
+                deployment: request.deployment,
+                plugins: request.plugins,
+                publish_mcp: request.publish_mcp,
+                crawl_urls: request.crawl_urls,
+                crawl_repos: request.crawl_repos,
+                crawl_search_topics: request.crawl_search_topics,
+            })
+            .map_err(|error| ApplicationError::service(&error))
     }
 
     pub fn catalog_snapshot(&self) -> CatalogSnapshot {
@@ -121,9 +168,14 @@ impl SomaApplication {
     }
 
     pub fn refresh_providers(&self) -> Result<CatalogSnapshot, ApplicationError> {
+        self.refresh_providers_in_place()?;
+        Ok(self.catalog_snapshot())
+    }
+
+    pub fn refresh_providers_in_place(&self) -> Result<(), ApplicationError> {
         self.legacy_registry
             .refresh_file_providers()
-            .map(|snapshot| catalog_snapshot(snapshot.as_ref()))
+            .map(|_| ())
             .map_err(|error| {
                 let diagnostic = soma_service::provider_errors::redact_public(&error.to_string());
                 ApplicationError::new(
@@ -162,23 +214,37 @@ impl SomaApplication {
         })
     }
 
-    pub fn list_resources(&self, context: &ExecutionContext) -> Vec<ProviderResource> {
+    pub fn list_resources(&self) -> Vec<ProviderResource> {
         self.legacy_registry
             .snapshot()
-            .catalogs
-            .iter()
-            .flat_map(|catalog| catalog.resources.iter().cloned())
-            .filter(|resource| scope_visible(resource.scope.as_deref(), context))
+            .exact_resources()
+            .cloned()
             .collect()
     }
 
-    pub fn list_prompts(&self, context: &ExecutionContext) -> Vec<ProviderPrompt> {
+    pub fn list_resource_templates(&self) -> Vec<ResourceTemplateSpec> {
+        self.legacy_registry
+            .snapshot()
+            .dynamic_resource_templates()
+            .iter()
+            .map(|(_, template)| template)
+            .map(|template| ResourceTemplateSpec {
+                uri_template: template.uri_template(),
+                name: template.name.clone(),
+                description: template.description.clone(),
+                mime_type: template.mime_type.clone(),
+            })
+            .collect()
+    }
+
+    pub fn list_prompts(&self) -> Vec<ProviderPrompt> {
         self.legacy_registry
             .snapshot()
             .catalogs
             .iter()
-            .flat_map(|catalog| catalog.prompts.iter().cloned())
-            .filter(|prompt| scope_visible(prompt.scope.as_deref(), context))
+            .flat_map(|catalog| catalog.prompts.iter())
+            .filter(|prompt| prompt_is_servable(prompt))
+            .cloned()
             .collect()
     }
 
@@ -187,10 +253,26 @@ impl SomaApplication {
         name: &str,
         context: &ExecutionContext,
     ) -> Result<ProviderPrompt, ApplicationError> {
-        self.list_prompts(context)
-            .into_iter()
+        let prompt = self
+            .legacy_registry
+            .snapshot()
+            .catalogs
+            .iter()
+            .flat_map(|catalog| catalog.prompts.iter())
+            .filter(|prompt| prompt_is_servable(prompt))
             .find(|prompt| prompt.name == name)
-            .ok_or_else(|| ApplicationError::not_found("prompt", name))
+            .cloned()
+            .ok_or_else(|| ApplicationError::not_found("prompt", name))?;
+        if !scope_visible(prompt.scope.as_deref(), context) {
+            let required = prompt.scope.as_deref().unwrap_or_default();
+            return Err(ApplicationError::new(
+                "insufficient_scope",
+                format!("prompt `{name}` requires scope `{required}`"),
+                false,
+                "Authenticate with a token that includes the required scope.",
+            ));
+        }
+        Ok(prompt)
     }
 
     pub async fn gateway_status(
@@ -217,6 +299,75 @@ impl SomaApplication {
     ) -> Result<OperationResponse, ApplicationError> {
         let output = self.ports.gateway.execute(request, &context).await?;
         operation_response(output, &context)
+    }
+
+    pub async fn gateway_mcp_tools(
+        &self,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Vec<GatewayToolRoute>, ApplicationError> {
+        Ok(self.ports.gateway.list_mcp_tools(scope, context).await?)
+    }
+
+    pub async fn gateway_call_mcp_tool(
+        &self,
+        name: &str,
+        params: Value,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Option<Value>, ApplicationError> {
+        Ok(self
+            .ports
+            .gateway
+            .call_mcp_tool(name, params, scope, context)
+            .await?)
+    }
+
+    pub async fn gateway_mcp_resources(
+        &self,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Vec<GatewayResourceRoute>, ApplicationError> {
+        Ok(self
+            .ports
+            .gateway
+            .list_mcp_resources(scope, context)
+            .await?)
+    }
+
+    pub async fn gateway_read_mcp_resource(
+        &self,
+        uri: &str,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Option<Value>, ApplicationError> {
+        Ok(self
+            .ports
+            .gateway
+            .read_mcp_resource(uri, scope, context)
+            .await?)
+    }
+
+    pub async fn gateway_mcp_prompts(
+        &self,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Vec<GatewayPromptRoute>, ApplicationError> {
+        Ok(self.ports.gateway.list_mcp_prompts(scope, context).await?)
+    }
+
+    pub async fn gateway_get_mcp_prompt(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Map<String, Value>>,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Option<Value>, ApplicationError> {
+        Ok(self
+            .ports
+            .gateway
+            .get_mcp_prompt(name, arguments, scope, context)
+            .await?)
     }
 
     pub async fn codemode_execute(
@@ -340,10 +491,20 @@ fn scope_visible(required: Option<&str>, context: &ExecutionContext) -> bool {
     let Some(required) = required else {
         return true;
     };
-    let scopes = context
-        .principal
-        .as_ref()
-        .map(|principal| principal.scopes.to_vec())
-        .unwrap_or_default();
-    soma_contracts::actions::scopes_satisfy(&scopes, required)
+    context.principal.as_ref().is_some_and(|principal| {
+        principal.scopes.contains(required)
+            || (required == soma_contracts::actions::READ_SCOPE
+                && principal
+                    .scopes
+                    .contains(soma_contracts::actions::WRITE_SCOPE))
+    })
+}
+
+fn prompt_is_servable(prompt: &ProviderPrompt) -> bool {
+    prompt.template.is_some()
+        && prompt
+            .mcp
+            .as_ref()
+            .map(|metadata| metadata.enabled)
+            .unwrap_or(true)
 }

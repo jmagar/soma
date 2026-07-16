@@ -1,10 +1,8 @@
-use std::borrow::Cow;
-
 use rmcp::{service::RequestContext, ErrorData, RoleServer};
 use serde_json::{json, Value};
-use soma_gateway::gateway::protected_routes::ProtectedRouteScope;
-use soma_runtime::server::{AppState, AuthPolicy};
-use soma_service::{ProviderAuthMode, ProviderPrincipal};
+use soma_domain::{AuthorizationMode, Principal, ScopeSet};
+
+use super::state::{McpRouteScope, McpState};
 
 #[cfg(feature = "auth")]
 pub(super) use soma_auth::AuthContext;
@@ -16,12 +14,12 @@ pub(super) struct AuthContext {
 }
 
 pub(super) fn require_auth_context<'a>(
-    state: &AppState,
+    state: &McpState,
     ctx: &'a RequestContext<RoleServer>,
 ) -> Result<Option<&'a AuthContext>, ErrorData> {
-    match &state.auth_policy {
-        AuthPolicy::LoopbackDev | AuthPolicy::TrustedGatewayUnscoped => Ok(None),
-        AuthPolicy::Mounted { .. } => {
+    match state.authorization_mode() {
+        AuthorizationMode::LoopbackDev | AuthorizationMode::TrustedGateway => Ok(None),
+        AuthorizationMode::Mounted => {
             let parts = ctx
                 .extensions
                 .get::<http::request::Parts>()
@@ -54,61 +52,35 @@ pub(super) fn require_auth_context<'a>(
     }
 }
 
-pub(super) fn provider_principal(auth: Option<&AuthContext>) -> ProviderPrincipal {
+pub(super) fn principal(auth: Option<&AuthContext>) -> Principal {
     match auth {
-        Some(auth) => ProviderPrincipal {
-            subject: auth.sub.clone(),
-            scopes: auth.scopes.clone(),
-        },
-        None => ProviderPrincipal::loopback_dev(),
+        Some(auth) => authenticated_principal(auth),
+        None => Principal::new(
+            "loopback-dev",
+            ScopeSet::from([soma_contracts::actions::READ_SCOPE]),
+        ),
     }
-}
-
-pub(super) fn provider_auth_mode(policy: &AuthPolicy) -> ProviderAuthMode {
-    match policy {
-        AuthPolicy::LoopbackDev => ProviderAuthMode::LoopbackDev,
-        AuthPolicy::TrustedGatewayUnscoped => ProviderAuthMode::TrustedGateway,
-        AuthPolicy::Mounted { .. } => ProviderAuthMode::Mounted,
-    }
-}
-
-pub(super) fn gateway_oauth_subject(auth: Option<&AuthContext>) -> Cow<'_, str> {
-    const SHARED_GATEWAY_OAUTH_SUBJECT: &str = "gateway";
-    match auth {
-        None => Cow::Borrowed(SHARED_GATEWAY_OAUTH_SUBJECT),
-        Some(auth)
-            if auth_context_is_local(auth)
-                || soma_contracts::scopes::has_admin_scope(&auth.scopes) =>
-        {
-            Cow::Borrowed(SHARED_GATEWAY_OAUTH_SUBJECT)
-        }
-        Some(auth) => Cow::Borrowed(auth.sub.as_str()),
-    }
-}
-
-pub(super) fn protected_route_scope(
-    ctx: &RequestContext<RoleServer>,
-) -> Option<&ProtectedRouteScope> {
-    ctx.extensions
-        .get::<http::request::Parts>()
-        .and_then(|parts| parts.extensions.get::<ProtectedRouteScope>())
-}
-
-pub(super) fn protected_scope_allows_service(
-    scope: Option<&ProtectedRouteScope>,
-    service: &str,
-) -> bool {
-    scope.is_none_or(|scope| scope.services.iter().any(|allowed| allowed == service))
 }
 
 #[cfg(feature = "auth")]
-fn auth_context_is_local(auth: &AuthContext) -> bool {
-    auth.issuer == "local"
+fn authenticated_principal(auth: &AuthContext) -> Principal {
+    Principal::new(auth.sub.clone(), ScopeSet::new(auth.scopes.clone()))
+        .with_issuer(auth.issuer.clone())
 }
 
 #[cfg(not(feature = "auth"))]
-fn auth_context_is_local(_auth: &AuthContext) -> bool {
-    false
+fn authenticated_principal(auth: &AuthContext) -> Principal {
+    Principal::new(auth.sub.clone(), ScopeSet::new(auth.scopes.clone()))
+}
+
+pub(super) fn protected_route_scope(ctx: &RequestContext<RoleServer>) -> Option<&McpRouteScope> {
+    ctx.extensions
+        .get::<http::request::Parts>()
+        .and_then(|parts| parts.extensions.get::<McpRouteScope>())
+}
+
+pub(super) fn protected_scope_allows_service(scope: Option<&McpRouteScope>, service: &str) -> bool {
+    scope.is_none_or(|scope| scope.services.iter().any(|allowed| allowed == service))
 }
 
 fn auth_protocol_error_payload(

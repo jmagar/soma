@@ -11,7 +11,25 @@ fn provider_errors_redact_secret_bearing_diagnostics() {
 
     assert_eq!(&*error.code, "provider_execution_failed");
     assert_eq!(&*error.message, "[redacted provider diagnostic]");
+    assert!(error
+        .private_diagnostics()
+        .is_some_and(|diagnostic| diagnostic.contains("sk-secret")));
     assert!(!format!("{error}").contains("sk-secret"));
+}
+
+#[test]
+fn opaque_provider_errors_keep_remote_diagnostics_private() {
+    let error =
+        ProviderError::opaque_execution("remote", "leaky", "private-upstream-stack-and-secret");
+
+    assert_eq!(
+        &*error.message,
+        "Provider execution failed. Check server logs for details."
+    );
+    assert_eq!(
+        error.private_diagnostics(),
+        Some("private-upstream-stack-and-secret")
+    );
 }
 
 #[test]

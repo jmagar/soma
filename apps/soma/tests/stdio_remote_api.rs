@@ -5,7 +5,8 @@ use std::{
 
 use axum::{
     extract::State,
-    http::{HeaderMap, Uri},
+    http::{HeaderMap, StatusCode, Uri},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
@@ -81,6 +82,54 @@ async fn remote_stdio_mcp_provider_action_posts_to_server_api() -> anyhow::Resul
     Ok(())
 }
 
+#[tokio::test]
+async fn remote_stdio_mcp_errors_do_not_expose_upstream_bodies() -> anyhow::Result<()> {
+    const SENTINEL: &str = "private-upstream-stack-and-secret";
+    let (base_url, handle) = mock_failing_api(SENTINEL).await?;
+    let home = tempdir()?;
+
+    let (transport, _stderr) =
+        TokioChildProcess::builder(Command::new(env!("CARGO_BIN_EXE_soma")).configure(|cmd| {
+            cmd.arg("mcp")
+                .env("HOME", home.path())
+                .env("SOMA_HOME", home.path())
+                .env("SOMA_RUNTIME_MODE", "remote")
+                .env("SOMA_API_URL", &base_url)
+                .env("SOMA_API_KEY", "remote-secret")
+                .env("RUST_LOG", "warn");
+        }))
+        .stderr(Stdio::null())
+        .spawn()?;
+    let service = ().serve(transport).await?;
+
+    let result = service
+        .call_tool(
+            CallToolRequestParams::new("soma").with_arguments(
+                json!({"action": "weather_current", "city": "Paris"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await?;
+    service.cancel().await?;
+    handle.abort();
+
+    let structured = result
+        .structured_content
+        .expect("remote failure should be structured");
+    let text = result.content[0]
+        .as_text()
+        .expect("remote failure should include text")
+        .text
+        .as_str();
+    assert_eq!(result.is_error, Some(true));
+    assert_eq!(structured["code"], "provider_execution_failed");
+    assert!(!structured.to_string().contains(SENTINEL));
+    assert!(!text.contains(SENTINEL));
+    Ok(())
+}
+
 #[derive(Debug, Clone)]
 struct ObservedRequest {
     path: String,
@@ -97,6 +146,24 @@ async fn mock_api(
         .route("/v1/providers", get(mock_provider_catalog))
         .route("/v1/tools/weather_current", post(mock_weather))
         .with_state(observed);
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let handle = tokio::spawn(async move { axum::serve(listener, app.into_make_service()).await });
+    Ok((format!("http://{addr}/"), handle))
+}
+
+async fn mock_failing_api(
+    sentinel: &'static str,
+) -> anyhow::Result<(String, tokio::task::JoinHandle<std::io::Result<()>>)> {
+    let app =
+        Router::new()
+            .route("/v1/providers", get(mock_provider_catalog))
+            .route(
+                "/v1/tools/weather_current",
+                post(move || async move {
+                    (StatusCode::INTERNAL_SERVER_ERROR, sentinel).into_response()
+                }),
+            );
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
     let handle = tokio::spawn(async move { axum::serve(listener, app.into_make_service()).await });

@@ -92,6 +92,32 @@ fn shared_optional_dependency_on_product_fails() {
 }
 
 #[test]
+fn soma_mcp_cannot_depend_directly_on_legacy_or_gateway_engines() {
+    for (name, path, layer) in [
+        ("soma-service", "crates/soma/service", "legacy"),
+        ("soma-runtime", "crates/soma/runtime", "product-runtime"),
+        ("soma-gateway", "crates/shared/mcp/gateway", "shared"),
+    ] {
+        let failures = failures(vec![
+            pkg(
+                "soma-mcp",
+                "crates/soma/mcp",
+                "product-surface",
+                vec![dep(name, path)],
+            ),
+            pkg(name, path, layer, vec![]),
+        ]);
+
+        assert!(
+            failures
+                .join("\n")
+                .contains("soma-mcp must depend on SomaApplication ports"),
+            "expected direct edge to {name} to fail: {failures:#?}"
+        );
+    }
+}
+
+#[test]
 fn dev_and_build_dependencies_do_not_create_production_edges() {
     let failures = failures(vec![
         pkg(

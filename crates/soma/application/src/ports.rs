@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::{
-    CodeModeExecuteRequest, ExecutionContext, GatewayExecuteRequest, GatewayReloadRequest,
+    CodeModeExecuteRequest, ExecutionContext, GatewayExecuteRequest, GatewayPromptRoute,
+    GatewayReloadRequest, GatewayResourceRoute, GatewayRouteScope, GatewayToolRoute,
     OpenApiExecuteRequest,
 };
 
@@ -40,6 +41,47 @@ pub trait GatewayPort: Send + Sync {
         request: GatewayExecuteRequest,
         context: &ExecutionContext,
     ) -> Result<Value, PortError>;
+
+    async fn list_mcp_tools(
+        &self,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Vec<GatewayToolRoute>, PortError>;
+
+    async fn call_mcp_tool(
+        &self,
+        name: &str,
+        params: Value,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError>;
+
+    async fn list_mcp_resources(
+        &self,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Vec<GatewayResourceRoute>, PortError>;
+
+    async fn read_mcp_resource(
+        &self,
+        uri: &str,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError>;
+
+    async fn list_mcp_prompts(
+        &self,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Vec<GatewayPromptRoute>, PortError>;
+
+    async fn get_mcp_prompt(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Map<String, Value>>,
+        scope: Option<&GatewayRouteScope>,
+        context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError>;
 }
 
 #[async_trait]
@@ -112,6 +154,59 @@ impl GatewayPort for UnavailableEnginePort {
         _request: GatewayExecuteRequest,
         _context: &ExecutionContext,
     ) -> Result<Value, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn list_mcp_tools(
+        &self,
+        _scope: Option<&GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Vec<GatewayToolRoute>, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn call_mcp_tool(
+        &self,
+        _name: &str,
+        _params: Value,
+        _scope: Option<&GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn list_mcp_resources(
+        &self,
+        _scope: Option<&GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Vec<GatewayResourceRoute>, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn read_mcp_resource(
+        &self,
+        _uri: &str,
+        _scope: Option<&GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn list_mcp_prompts(
+        &self,
+        _scope: Option<&GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Vec<GatewayPromptRoute>, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn get_mcp_prompt(
+        &self,
+        _name: &str,
+        _arguments: Option<serde_json::Map<String, Value>>,
+        _scope: Option<&GatewayRouteScope>,
+        _context: &ExecutionContext,
+    ) -> Result<Option<Value>, PortError> {
         Err(Self::error("gateway"))
     }
 }

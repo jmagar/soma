@@ -1,19 +1,22 @@
 //! MCP protocol layer — tool dispatch, schemas, prompts, and server handler.
 //!
 //! This module is strictly MCP concerns: the `ServerHandler` impl, tool schemas,
-//! prompt templates, and dispatch shims. Application state lives in `soma_runtime::server`.
+//! prompt templates, and dispatch shims. Business operations flow through `SomaApplication`.
 
 mod conformance;
 mod gateway_proxy;
 mod prompts;
+mod protocol_errors;
 mod rmcp_auth;
 pub mod rmcp_server;
 mod schemas;
+mod state;
 mod tools;
 #[cfg(feature = "http")]
 mod transport;
 
 pub use rmcp_server::{rmcp_server, SomaRmcpServer};
+pub use state::{McpRouteScope, McpState};
 #[cfg(feature = "http")]
 pub use transport::{allowed_origins, streamable_http_config, streamable_http_service};
 
@@ -35,65 +38,45 @@ pub use tools::execute_tool_without_peer_for_test;
 
 #[cfg(test)]
 mod testing {
-    use soma_contracts::config::{McpConfig, SomaConfig};
-    use soma_runtime::server::empty_gateway_product_state;
-    use soma_runtime::server::{AppState, AuthPolicy};
-    use soma_service::{SomaClient, SomaService};
+    use std::sync::Arc;
 
-    pub fn loopback_state() -> AppState {
-        let client = SomaClient::new(&SomaConfig {
-            api_url: String::new(),
-            api_key: "test".into(),
-            ..SomaConfig::default()
-        })
-        .expect("stub client should always build");
-        let service = SomaService::new(client);
-        let provider_registry =
-            soma_service::static_provider_registry(service.clone()).expect("static registry");
-        AppState {
-            config: McpConfig::default(),
-            auth_policy: AuthPolicy::LoopbackDev,
-            service,
-            provider_registry,
-            gateway: empty_gateway_product_state(),
-            remote_adapter: false,
-            response_pages: Default::default(),
-        }
+    use soma_application::{ApplicationPorts, GatewayPort};
+    use soma_contracts::config::McpConfig;
+    use soma_domain::AuthorizationMode;
+
+    pub fn loopback_state() -> super::McpState {
+        state(McpConfig::default(), AuthorizationMode::LoopbackDev)
     }
 
-    pub fn bearer_state(token: &str) -> AppState {
-        let client = SomaClient::new(&SomaConfig {
-            api_url: String::new(),
-            api_key: "test".into(),
-            ..SomaConfig::default()
-        })
-        .expect("stub client should always build");
-        let service = SomaService::new(client);
-        let provider_registry =
-            soma_service::static_provider_registry(service.clone()).expect("static registry");
-        AppState {
-            config: McpConfig {
+    pub fn loopback_state_with_gateway(gateway: Arc<dyn GatewayPort>) -> super::McpState {
+        state_with_ports(
+            McpConfig::default(),
+            AuthorizationMode::LoopbackDev,
+            ApplicationPorts::unavailable().with_gateway(gateway),
+        )
+    }
+
+    pub fn bearer_state(token: &str) -> super::McpState {
+        state(
+            McpConfig {
                 api_token: Some(token.to_owned()),
                 ..McpConfig::default()
             },
-            auth_policy: mounted_test_policy(),
-            service,
-            provider_registry,
-            gateway: empty_gateway_product_state(),
-            remote_adapter: false,
-            response_pages: Default::default(),
-        }
+            AuthorizationMode::Mounted,
+        )
     }
 
-    fn mounted_test_policy() -> AuthPolicy {
-        #[cfg(feature = "auth")]
-        {
-            AuthPolicy::Mounted { auth_state: None }
-        }
-        #[cfg(not(feature = "auth"))]
-        {
-            AuthPolicy::Mounted {}
-        }
+    fn state(config: McpConfig, authorization_mode: AuthorizationMode) -> super::McpState {
+        state_with_ports(config, authorization_mode, ApplicationPorts::unavailable())
+    }
+
+    fn state_with_ports(
+        config: McpConfig,
+        authorization_mode: AuthorizationMode,
+        ports: ApplicationPorts,
+    ) -> super::McpState {
+        let application = soma_test_support::default_application_with_ports(ports);
+        super::McpState::new(application, config, authorization_mode, Default::default())
     }
 }
 

@@ -43,3 +43,25 @@ pub fn application_with_provider(catalog: ProviderCatalog, output: Value) -> Arc
         ApplicationPorts::unavailable(),
     ))
 }
+
+pub fn default_application() -> Arc<SomaApplication> {
+    default_application_with_ports(ApplicationPorts::unavailable())
+}
+
+pub fn default_application_with_ports(ports: ApplicationPorts) -> Arc<SomaApplication> {
+    let service = SomaService::new(
+        SomaClient::new(&SomaConfig {
+            api_url: String::new(),
+            api_key: "test".into(),
+            ..SomaConfig::default()
+        })
+        .expect("test Soma client should build"),
+    );
+    let registry = soma_service::static_provider_registry(service.clone())
+        .expect("static test provider registry should build");
+    Arc::new(SomaApplication::new(
+        Arc::new(service),
+        Arc::new(registry),
+        ports,
+    ))
+}

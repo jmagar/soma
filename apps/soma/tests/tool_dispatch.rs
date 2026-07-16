@@ -11,7 +11,7 @@ use serde_json::json;
 use soma::{
     actions::SomaAction,
     mcp::{execute_tool_without_peer_for_test, rmcp_server},
-    testing::{bearer_state, loopback_state},
+    testing::{bearer_state, loopback_state, mcp_state},
 };
 use soma_contracts::providers::{
     ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool,
@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 async fn call_mcp_action(args: serde_json::Value) -> serde_json::Value {
     let state = loopback_state();
-    execute_tool_without_peer_for_test(&state, "soma", args)
+    execute_tool_without_peer_for_test(&mcp_state(&state), "soma", args)
         .await
         .expect("MCP tool dispatch should succeed")
 }
@@ -148,7 +148,7 @@ async fn test_dynamic_provider_action_dispatches_without_static_action_enum() {
         ProviderRegistry::new(vec![Arc::new(DynamicProvider)]).expect("dynamic registry");
 
     let result = execute_tool_without_peer_for_test(
-        &state,
+        &mcp_state(&state),
         "soma",
         json!({ "action": "weather", "city": "Paris" }),
     )
@@ -165,7 +165,7 @@ async fn test_real_call_tool_path_returns_status_json() -> anyhow::Result<()> {
     let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
 
     let server_handle = tokio::spawn(async move {
-        rmcp_server(loopback_state())
+        rmcp_server(mcp_state(&loopback_state()))
             .serve(server_transport)
             .await?
             .waiting()
@@ -202,7 +202,7 @@ async fn test_real_call_tool_missing_http_context_returns_structured_auth_error(
     let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
 
     let server_handle = tokio::spawn(async move {
-        rmcp_server(bearer_state("secret"))
+        rmcp_server(mcp_state(&bearer_state("secret")))
             .serve(server_transport)
             .await?
             .waiting()
@@ -279,7 +279,7 @@ fn test_scaffold_intent_action_parses_for_mcp_dispatch() {
 #[tokio::test]
 async fn test_mcp_dispatch_rejects_missing_action() {
     let state = loopback_state();
-    let error = execute_tool_without_peer_for_test(&state, "soma", json!({}))
+    let error = execute_tool_without_peer_for_test(&mcp_state(&state), "soma", json!({}))
         .await
         .expect_err("missing action should be rejected");
     assert!(error.to_string().contains("action is required"));
@@ -288,18 +288,25 @@ async fn test_mcp_dispatch_rejects_missing_action() {
 #[tokio::test]
 async fn test_mcp_dispatch_rejects_unknown_action() {
     let state = loopback_state();
-    let error = execute_tool_without_peer_for_test(&state, "soma", json!({ "action": "missing" }))
-        .await
-        .expect_err("unknown action should be rejected");
+    let error = execute_tool_without_peer_for_test(
+        &mcp_state(&state),
+        "soma",
+        json!({ "action": "missing" }),
+    )
+    .await
+    .expect_err("unknown action should be rejected");
     assert!(error.to_string().contains("unknown provider action"));
 }
 
 #[tokio::test]
 async fn test_mcp_dispatch_rejects_peer_required_actions_without_peer() {
     let state = loopback_state();
-    let error =
-        execute_tool_without_peer_for_test(&state, "soma", json!({ "action": "elicit_name" }))
-            .await
-            .expect_err("elicitation action should require a peer");
+    let error = execute_tool_without_peer_for_test(
+        &mcp_state(&state),
+        "soma",
+        json!({ "action": "elicit_name" }),
+    )
+    .await
+    .expect_err("elicitation action should require a peer");
     assert!(error.to_string().contains("requires an MCP peer"));
 }

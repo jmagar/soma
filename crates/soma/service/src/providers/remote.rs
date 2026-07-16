@@ -35,7 +35,7 @@ impl Provider for RemoteCatalogProvider {
             .call_rest_action(&call.action, call.params)
             .await
             .map(ProviderOutput::json)
-            .map_err(|error| ProviderError::execution(&call.provider, call.action, error))
+            .map_err(|error| ProviderError::opaque_execution(&call.provider, call.action, error))
     }
 }
 
