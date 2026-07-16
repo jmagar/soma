@@ -353,15 +353,12 @@ mod tests {
     ///   type there is the same tell.
     ///
     /// What this test does *not* catch: a route added to `routes.rs` and
-    /// never added to `ROUTES` here. axum's opacity makes that direction
-    /// fundamentally unverifiable without either vendoring axum's internal
-    /// route-matching table or maintaining a second independent list (which
-    /// just moves the drift problem rather than solving it) - see this
-    /// file's module docs and `RouteDef`'s doc comment. `cargo xtask
-    /// check-*`-style CI has no hook into this crate (zero
-    /// workspace-crate path-dependencies - see README.md), so the practical
-    /// mitigation is procedural: touch `ROUTES` in the same diff that
-    /// touches `routes.rs`'s `.route(...)` calls.
+    /// never added to `ROUTES` here. axum exposes no route-enumeration API,
+    /// so that direction is unverifiable *from the live router*.
+    /// [`every_path_mounted_by_routes_rs_is_in_the_routes_table`] covers it
+    /// from the other side instead, by reading `routes.rs`'s own source for
+    /// its `.route(...)` path literals - the two tests together pin both
+    /// directions.
     #[tokio::test]
     async fn every_documented_route_is_actually_mounted() {
         let app =
@@ -419,6 +416,106 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Every path mounted by `routes.rs` must appear in [`ROUTES`], and vice
+    /// versa.
+    ///
+    /// This closes the one direction
+    /// [`every_documented_route_is_actually_mounted`] structurally cannot:
+    /// that test probes a live router for each `ROUTES` entry, proving
+    /// `ROUTES` is a subset of what is mounted. A route added to `routes.rs`
+    /// and never mirrored here would compile, pass every other test, and be
+    /// silently absent from `openapi.json` and every generated client
+    /// forever - the failure mode with no symptom.
+    ///
+    /// Works by reading `routes.rs`'s own source and extracting its
+    /// `.route("...")` path literals. Source-grep rather than introspection
+    /// because axum 0.8's `Router` exposes no route-enumeration API (the same
+    /// reason `ROUTES` exists at all), and this repo already uses
+    /// source-pattern contract checks elsewhere (`xtask/src/patterns/`).
+    ///
+    /// Compares paths only, not methods: the two files spell parameters
+    /// differently (`routes.rs` uses axum's `{session_id}`/`{*method}`, this
+    /// table uses OpenAPI's `{sessionId}`), so both sides are normalized to a
+    /// bare `{}` placeholder per parameter segment. A residual gap that
+    /// remains: adding a *method* to an already-listed path (e.g. a `.patch()`
+    /// on `/v1/sessions`) is not caught here - only a new or removed path is.
+    #[test]
+    fn every_path_mounted_by_routes_rs_is_in_the_routes_table() {
+        /// Collapses each `{...}` path segment to `{}` so axum's and
+        /// OpenAPI's differing parameter spellings compare equal.
+        fn normalize(path: &str) -> String {
+            path.split('/')
+                .map(|segment| {
+                    if segment.starts_with('{') && segment.ends_with('}') {
+                        "{}"
+                    } else {
+                        segment
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/")
+        }
+
+        let source = include_str!("routes.rs");
+        let call_count = source.matches(".route(").count();
+        let mounted: BTreeSet<String> = source
+            .match_indices(".route(")
+            .map(|(index, matched)| {
+                // `rustfmt` wraps longer calls, so the path literal is not
+                // necessarily on the same line as `.route(`. Skip whitespace
+                // rather than assuming `.route("`, and fail loudly on any
+                // shape this parser cannot read - a silently-skipped call
+                // would make this whole test vacuously pass.
+                let rest = source[index + matched.len()..].trim_start();
+                let rest = rest.strip_prefix('"').unwrap_or_else(|| {
+                    panic!(
+                        "expected a string literal as the first argument to .route(, found: {:?}. \
+                         This test parses routes.rs's source; teach it the new shape rather than \
+                         letting it skip the call.",
+                        &rest[..rest.len().min(40)]
+                    )
+                });
+                let end = rest
+                    .find('"')
+                    .expect("a .route( path literal must have a closing quote");
+                normalize(&rest[..end])
+            })
+            .collect();
+        assert!(
+            !mounted.is_empty(),
+            "found no .route(...) calls in routes.rs - the source-grep in this test has broken \
+             and is silently proving nothing"
+        );
+        // `mounted` is a set, so duplicate paths would collapse silently.
+        // There are none today; if that changes, this catches the collapse
+        // rather than letting the set comparison quietly under-count.
+        assert_eq!(
+            mounted.len(),
+            call_count,
+            "routes.rs has {call_count} .route(...) calls but only {} distinct paths - a \
+             duplicate path would make the comparison below under-count",
+            mounted.len()
+        );
+
+        let documented: BTreeSet<String> = ROUTES
+            .iter()
+            .map(|route| normalize(route.path_template))
+            .collect();
+
+        let undocumented: Vec<&String> = mounted.difference(&documented).collect();
+        assert!(
+            undocumented.is_empty(),
+            "routes.rs mounts these paths, but they are missing from ROUTES - they would be \
+             absent from openapi.json and every generated client: {undocumented:?}"
+        );
+
+        let unmounted: Vec<&String> = documented.difference(&mounted).collect();
+        assert!(
+            unmounted.is_empty(),
+            "ROUTES documents these paths, but routes.rs does not mount them: {unmounted:?}"
+        );
     }
 
     /// Cheap structural sanity check that every [`ROUTES`] entry has a

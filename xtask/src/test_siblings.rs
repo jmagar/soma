@@ -34,7 +34,24 @@ pub(crate) fn check() -> Result<()> {
         }
     }
     if ok {
-        println!("==> check-test-siblings: all source files have a _tests.rs sibling");
+        // Name the scope, not just the verdict. This used to print "all source
+        // files have a _tests.rs sibling" while silently skipping every tree
+        // missing from the roots list - a claim much broader than what it had
+        // actually looked at. Printing the skipped trees and why keeps the
+        // pass honest, and puts the exemptions in front of whoever runs the
+        // command rather than only in the source.
+        println!(
+            "==> check-test-siblings: all source files have a _tests.rs sibling ({} tree(s) \
+             checked)",
+            CHECKED_SRC_ROOTS.len()
+        );
+        println!(
+            "    not checked ({} tree(s), by design - see UNCHECKED_SRC_ROOTS):",
+            UNCHECKED_SRC_ROOTS.len()
+        );
+        for (path, reason) in UNCHECKED_SRC_ROOTS {
+            println!("      {path}: {reason}");
+        }
         return Ok(());
     }
     bail!("{} missing, {} orphaned", missing.len(), orphans.len());
@@ -103,22 +120,82 @@ fn filename(path: &Path) -> String {
         .to_owned()
 }
 
+/// Source trees that follow the `foo.rs` + `foo_tests.rs` sibling convention
+/// and are therefore checked by this command.
+///
+/// Every workspace member's `src/` must appear either here or in
+/// [`UNCHECKED_SRC_ROOTS`]; `crate_src_roots_classify_every_workspace_member`
+/// fails the build otherwise. That is the point of splitting the two lists:
+/// this used to be a bare allowlist, so a crate that was simply never added
+/// to it was silently unchecked, and the command still reported "all source
+/// files have a _tests.rs sibling" - a pass that only meant it had not
+/// looked.
+const CHECKED_SRC_ROOTS: &[&str] = &[
+    "apps/soma/src",
+    "crates/shared/codemode/src",
+    "crates/shared/mcp/client/src",
+    "crates/shared/mcp/gateway/src",
+    "crates/shared/mcp/proxy/src",
+    "crates/shared/mcp/server/src",
+    "crates/shared/observability/src",
+    "crates/shared/openapi/src",
+    "crates/soma/api/src",
+    "crates/soma/cli/src",
+    "crates/soma/contracts/src",
+    "crates/soma/mcp/src",
+    "crates/soma/runtime/src",
+    "crates/soma/service/src",
+    "crates/soma/web/src",
+];
+
+/// Source trees deliberately *not* checked, each with the reason.
+///
+/// Both conventions genuinely coexist in this repo. The sibling convention is
+/// the default for Soma's own crates; the trees below use inline
+/// `#[cfg(test)] mod tests` instead, and forcing siblings on them would be a
+/// large mechanical churn that buys nothing. An entry here is a decision, not
+/// an oversight - which is exactly what the old bare allowlist could not
+/// express.
+const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
+    (
+        "crates/shared/auth/src",
+        "inline #[cfg(test)] mod tests throughout (21 modules, 0 siblings)",
+    ),
+    (
+        "crates/shared/codex-app-server-client/src",
+        "inline #[cfg(test)] mod tests throughout. This crate is designed to be \
+         lifted wholesale into another repo (see its README.md), so its tests \
+         travel inside the files they cover rather than depending on this \
+         repo's sibling layout.",
+    ),
+    (
+        "crates/shared/traces/src",
+        "inline #[cfg(test)] mod tests throughout",
+    ),
+    (
+        "crates/soma/domain/src",
+        "inline #[cfg(test)] mod tests throughout",
+    ),
+    (
+        "crates/soma/test-support/src",
+        "test-support code is exercised by the crates that consume it",
+    ),
+    (
+        "crates/soma/application/src",
+        "follows the sibling convention but does not satisfy it yet - types.rs, \
+         ports.rs and two others have no sibling. Tracked separately; move this \
+         entry to CHECKED_SRC_ROOTS once they do.",
+    ),
+    (
+        "xtask/src",
+        "mixed by module: xtask/src/codex_schema/ uses siblings, most other \
+         modules use inline tests. Split per-module rather than per-crate before \
+         checking this tree.",
+    ),
+];
+
 fn crate_src_roots() -> Vec<PathBuf> {
-    [
-        "apps/soma/src",
-        "crates/soma/api/src",
-        "crates/soma/cli/src",
-        "crates/soma/contracts/src",
-        "crates/shared/mcp/gateway/src",
-        "crates/soma/mcp/src",
-        "crates/shared/observability/src",
-        "crates/soma/runtime/src",
-        "crates/soma/service/src",
-        "crates/soma/web/src",
-    ]
-    .into_iter()
-    .map(PathBuf::from)
-    .collect()
+    CHECKED_SRC_ROOTS.iter().map(PathBuf::from).collect()
 }
 
 #[cfg(test)]

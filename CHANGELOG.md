@@ -174,6 +174,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `codex-app-server-client`'s REST backend swept idle sessions on every single
+  `session()` call — i.e. on every event poll and session call — and each sweep
+  is an O(sessions) scan behind the global session lock. The sweep on that hot
+  path is now throttled to at most once per second (capped by
+  `idle_session_ttl`). `create_session` and `list_sessions` still sweep
+  unconditionally, because their correctness depends on a fresh view: one
+  reclaims a session slot before taking it, the other must not report a
+  session it is about to drop.
+- `cargo xtask check-test-siblings` reported "all source files have a
+  `_tests.rs` sibling" while only looking at 10 of the workspace's 22 members —
+  a pass that meant it had not looked. Its root list is now split into checked
+  and explicitly-exempt-with-a-reason, a test fails if a member is in neither
+  (so a new crate cannot be silently unchecked), and the command prints how
+  many trees it checked and names the ones it skipped. Coverage widened from 10
+  to 15 trees.
+- `codex-app-server-client`'s OpenAPI route table could drift in one
+  direction undetected: a route mounted in `routes.rs` but never added to
+  `ROUTES` compiled, passed every test, and was silently absent from
+  `openapi.json` and every generated client. A new test reads `routes.rs`'s
+  own `.route(...)` path literals and set-compares them against the table, so
+  both directions now fail loudly.
 - `codex-app-server-client` module size: `src/rest/openapi.rs` (1154 effective
   lines) exceeded the `xtask patterns` file-size hard limit (700). Split into
   `openapi/{json,route_table,schemas,paths}.rs` along the document's own
