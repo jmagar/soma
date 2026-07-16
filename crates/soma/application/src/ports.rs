@@ -65,3 +65,70 @@ pub struct ApplicationPorts {
     pub codemode: Arc<dyn CodeModePort>,
     pub openapi: Arc<dyn OpenApiPort>,
 }
+
+impl ApplicationPorts {
+    pub fn unavailable() -> Self {
+        let port = Arc::new(UnavailableEnginePort);
+        Self {
+            gateway: port.clone(),
+            codemode: port.clone(),
+            openapi: port,
+        }
+    }
+}
+
+struct UnavailableEnginePort;
+
+impl UnavailableEnginePort {
+    fn error(engine: &str) -> PortError {
+        PortError::new(
+            "engine_unavailable",
+            format!("{engine} is not configured for this application instance"),
+        )
+    }
+}
+
+#[async_trait]
+impl GatewayPort for UnavailableEnginePort {
+    async fn status(&self, _context: &ExecutionContext) -> Result<Value, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn reload(
+        &self,
+        _request: GatewayReloadRequest,
+        _context: &ExecutionContext,
+    ) -> Result<Value, PortError> {
+        Err(Self::error("gateway"))
+    }
+
+    async fn execute(
+        &self,
+        _request: GatewayExecuteRequest,
+        _context: &ExecutionContext,
+    ) -> Result<Value, PortError> {
+        Err(Self::error("gateway"))
+    }
+}
+
+#[async_trait]
+impl CodeModePort for UnavailableEnginePort {
+    async fn execute(
+        &self,
+        _request: CodeModeExecuteRequest,
+        _context: &ExecutionContext,
+    ) -> Result<Value, PortError> {
+        Err(Self::error("Code Mode"))
+    }
+}
+
+#[async_trait]
+impl OpenApiPort for UnavailableEnginePort {
+    async fn execute(
+        &self,
+        _request: OpenApiExecuteRequest,
+        _context: &ExecutionContext,
+    ) -> Result<Value, PortError> {
+        Err(Self::error("OpenAPI"))
+    }
+}

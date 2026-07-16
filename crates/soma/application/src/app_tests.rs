@@ -350,6 +350,23 @@ fn prompt_discovery_filters_mounted_scopes() {
 }
 
 #[test]
+fn cli_catalog_queries_stay_behind_the_application_facade() {
+    let (application, _, _) = application(true, json!({"echo": "hello"}));
+
+    assert_eq!(application.resolve_cli_action("echo").unwrap(), "echo");
+    assert!(application.action_requires_confirmation("echo"));
+    assert_eq!(
+        application.provider_for_action("echo").as_deref(),
+        Some("recording")
+    );
+    assert_eq!(application.provider_validation_summary()["ok"], true);
+    assert_eq!(
+        application.provider_inspection_report()["providers"][0]["name"],
+        "recording"
+    );
+}
+
+#[test]
 fn application_errors_redact_sensitive_diagnostics() {
     let port_error = ApplicationError::from(PortError::new(
         "engine_failed",
