@@ -3,11 +3,12 @@ use std::{path::PathBuf, sync::Arc};
 use async_trait::async_trait;
 use serde_json::Value;
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 use tokio::time::Instant;
 
 use crate::{
     provider_errors::{redact_public, ProviderError},
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{Provider, ProviderOutput},
     providers::sidecar::{
         collect_provider_env, output_exceeded_message, run_bounded_sidecar, SidecarError,
     },
@@ -30,7 +31,7 @@ impl AiSdkProvider {
 }
 
 #[async_trait]
-impl Provider for AiSdkProvider {
+impl CoreProvider for AiSdkProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -152,6 +153,8 @@ impl Provider for AiSdkProvider {
         Ok(ProviderOutput::json(value))
     }
 }
+
+impl Provider for AiSdkProvider {}
 
 impl AiSdkProvider {
     fn tool(&self, call: &ProviderCall) -> Result<&ProviderTool, ProviderError> {

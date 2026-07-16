@@ -5,10 +5,11 @@ use soma_contracts::providers::{
     CliOverlay, EnvRequirement, McpOverlay, ProviderCatalog, ProviderIdentity, ProviderKind,
     ProviderManifest, ProviderPrompt, ProviderResource, ProviderTool, RestOverlay,
 };
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{Provider, ProviderOutput},
     SomaService,
 };
 
@@ -25,7 +26,7 @@ impl RemoteCatalogProvider {
 }
 
 #[async_trait]
-impl Provider for RemoteCatalogProvider {
+impl CoreProvider for RemoteCatalogProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -38,6 +39,8 @@ impl Provider for RemoteCatalogProvider {
             .map_err(|error| ProviderError::opaque_execution(&call.provider, call.action, error))
     }
 }
+
+impl Provider for RemoteCatalogProvider {}
 
 pub fn catalogs_from_inspection(report: &Value) -> Result<Vec<ProviderCatalog>> {
     let providers = report

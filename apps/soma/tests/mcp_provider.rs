@@ -13,8 +13,9 @@ use rmcp::{
 use serde_json::{json, Map, Value};
 use soma_contracts::providers::{ProviderCatalog, ProviderManifest};
 use soma_service::{
-    provider_registry::Provider, providers::mcp::McpProvider, ProviderAuthMode, ProviderCall,
-    ProviderPrincipal, ProviderRequestLimits, ProviderSurface,
+    provider_registry::{CoreProvider, ProviderInvocation},
+    providers::mcp::McpProvider,
+    ProviderSurface,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -134,18 +135,11 @@ async fn mcp_provider_infers_http_transport_from_url() -> anyhow::Result<()> {
     }))?;
 
     let output = McpProvider::new(catalog)
-        .call(ProviderCall {
+        .call(ProviderInvocation {
             provider: "upstream-http-mcp".to_owned(),
             action: "http_echo".to_owned(),
             params: json!({"message": "hello over http"}),
-            principal: ProviderPrincipal {
-                subject: "test".to_owned(),
-                scopes: vec!["soma:read".to_owned()],
-            },
-            auth_mode: ProviderAuthMode::Mounted,
             surface: ProviderSurface::Mcp,
-            destructive_confirmed: false,
-            limits: ProviderRequestLimits::default(),
             snapshot_id: "test-snapshot".to_owned(),
         })
         .await?;

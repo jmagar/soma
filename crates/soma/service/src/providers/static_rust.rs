@@ -7,11 +7,12 @@ use soma_contracts::{
         ProviderKind, ProviderManifest, ProviderPrompt, ProviderTool, RestOverlay,
     },
 };
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 
 use crate::{
     dispatch_action,
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{Provider, ProviderOutput},
     SomaService,
 };
 
@@ -35,7 +36,7 @@ impl StaticRustProvider {
 }
 
 #[async_trait]
-impl Provider for StaticRustProvider {
+impl CoreProvider for StaticRustProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -70,6 +71,8 @@ impl Provider for StaticRustProvider {
         Ok(ProviderOutput::json(value))
     }
 }
+
+impl Provider for StaticRustProvider {}
 
 fn static_catalog() -> ProviderCatalog {
     ProviderManifest {
@@ -362,6 +365,7 @@ fn action_params(action: &str, params: &Value) -> Value {
 
 fn surface_label(surface: crate::provider_registry::ProviderSurface) -> &'static str {
     match surface {
+        crate::provider_registry::ProviderSurface::Internal => "internal",
         crate::provider_registry::ProviderSurface::Mcp => "mcp",
         crate::provider_registry::ProviderSurface::Rest => "rest",
         crate::provider_registry::ProviderSurface::Cli => "cli",

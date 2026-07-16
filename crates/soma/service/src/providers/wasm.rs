@@ -3,12 +3,13 @@ use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 use async_trait::async_trait;
 use serde_json::Value;
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 use tokio::time::timeout;
 use wasmtime::{Config, Engine, Instance, Memory, Module, Store, TypedFunc};
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{Provider, ProviderOutput},
 };
 
 #[derive(Clone)]
@@ -28,7 +29,7 @@ impl WasmProvider {
 }
 
 #[async_trait]
-impl Provider for WasmProvider {
+impl CoreProvider for WasmProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -101,6 +102,8 @@ impl Provider for WasmProvider {
         Ok(ProviderOutput::json(value))
     }
 }
+
+impl Provider for WasmProvider {}
 
 impl WasmProvider {
     fn tool(&self, call: &ProviderCall) -> Result<&ProviderTool, ProviderError> {

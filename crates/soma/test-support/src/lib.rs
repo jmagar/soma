@@ -11,8 +11,8 @@ use serde_json::Value;
 use soma_application::{ApplicationPorts, SomaApplication};
 use soma_contracts::{config::SomaConfig, providers::ProviderCatalog};
 use soma_service::{
-    provider_registry::Provider, ProviderCall, ProviderError, ProviderOutput, ProviderRegistry,
-    SomaClient, SomaService,
+    provider_registry::{CoreProvider, Provider, ProviderInvocation},
+    ProviderError, ProviderOutput, ProviderRegistry, SomaClient, SomaService,
 };
 
 struct FixtureProvider {
@@ -21,15 +21,17 @@ struct FixtureProvider {
 }
 
 #[async_trait]
-impl Provider for FixtureProvider {
+impl CoreProvider for FixtureProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
 
-    async fn call(&self, _call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
+    async fn call(&self, _call: ProviderInvocation) -> Result<ProviderOutput, ProviderError> {
         Ok(ProviderOutput::json(self.output.clone()))
     }
 }
+
+impl Provider for FixtureProvider {}
 
 pub fn application_with_provider(catalog: ProviderCatalog, output: Value) -> Arc<SomaApplication> {
     let service = SomaService::new(

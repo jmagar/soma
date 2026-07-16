@@ -8,6 +8,7 @@ use std::{
 };
 
 use soma_contracts::providers::EnvRequirement;
+use soma_provider_core::ProviderCall;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     process::Command,
@@ -15,7 +16,7 @@ use tokio::{
     time::timeout,
 };
 
-use crate::{provider_errors::ProviderError, provider_registry::ProviderCall};
+use crate::provider_errors::ProviderError;
 
 pub(crate) struct BoundedOutput {
     pub output: Output,

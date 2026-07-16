@@ -11,10 +11,11 @@ use soma_contracts::{
     provider_validation::{validate_manifest_schema, validate_provider_manifest},
     providers::{ProviderCatalog, ProviderKind},
 };
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{DynamicResourceTemplate, Provider, ProviderCall, ProviderOutput},
+    provider_registry::{DynamicResourceTemplate, Provider, ProviderOutput},
     providers::{
         ai_sdk::AiSdkProvider,
         mcp::McpProvider,
@@ -497,7 +498,7 @@ fn provider_for_catalog(path: PathBuf, catalog: ProviderCatalog) -> std::sync::A
 }
 
 #[async_trait]
-impl Provider for FileProvider {
+impl CoreProvider for FileProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -535,6 +536,8 @@ impl Provider for FileProvider {
         })))
     }
 }
+
+impl Provider for FileProvider {}
 
 fn is_provider_file(path: &Path) -> bool {
     match path.extension().and_then(|extension| extension.to_str()) {

@@ -12,11 +12,12 @@ use rmcp::{
 };
 use serde_json::{json, Map, Value};
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 use tokio::process::Command;
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{Provider, ProviderOutput},
 };
 
 #[derive(Clone)]
@@ -35,7 +36,7 @@ impl McpProvider {
 }
 
 #[async_trait]
-impl Provider for McpProvider {
+impl CoreProvider for McpProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -75,6 +76,8 @@ impl Provider for McpProvider {
         ))
     }
 }
+
+impl Provider for McpProvider {}
 
 impl McpProvider {
     fn tool(&self, call: &ProviderCall) -> Result<&ProviderTool, ProviderError> {

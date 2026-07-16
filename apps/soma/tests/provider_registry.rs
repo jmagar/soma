@@ -9,9 +9,9 @@ use soma_contracts::providers::{
 };
 use soma_service::capabilities::CapabilityBroker;
 use soma_service::provider_registry::{
-    DynamicResourceTemplate, Provider, ProviderAuthMode, ProviderCall, ProviderOutput,
-    ProviderPrincipal, ProviderRegistry, ProviderRequestLimits, ProviderSurface,
-    ResourceReadOutput,
+    CoreProvider, DynamicResourceTemplate, Provider, ProviderAuthMode, ProviderCall,
+    ProviderInvocation, ProviderOutput, ProviderPrincipal, ProviderRegistry, ProviderRequestLimits,
+    ProviderSurface, ResourceReadOutput,
 };
 use soma_service::ProviderError;
 use tokio::sync::Notify;
@@ -145,12 +145,12 @@ struct EchoProvider {
 }
 
 #[async_trait]
-impl Provider for EchoProvider {
+impl CoreProvider for EchoProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
 
-    async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
+    async fn call(&self, call: ProviderInvocation) -> Result<ProviderOutput, ProviderError> {
         if let Some(started) = &self.started {
             started.notify_one();
         }
@@ -165,6 +165,8 @@ impl Provider for EchoProvider {
         })))
     }
 }
+
+impl Provider for EchoProvider {}
 
 fn call(action: &str, params: serde_json::Value) -> ProviderCall {
     ProviderCall {
@@ -552,12 +554,12 @@ struct ResourceProvider {
 }
 
 #[async_trait]
-impl Provider for ResourceProvider {
+impl CoreProvider for ResourceProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
 
-    async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
+    async fn call(&self, call: ProviderInvocation) -> Result<ProviderOutput, ProviderError> {
         Err(ProviderError::validation(
             &self.catalog.provider.name,
             &call.action,
@@ -565,7 +567,10 @@ impl Provider for ResourceProvider {
             "this test provider has no callable actions",
         ))
     }
+}
 
+#[async_trait]
+impl Provider for ResourceProvider {
     fn dynamic_resource_templates(&self) -> Vec<DynamicResourceTemplate> {
         self.dynamic_template.clone().into_iter().collect()
     }

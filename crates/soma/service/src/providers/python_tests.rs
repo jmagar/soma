@@ -30,7 +30,8 @@ fn python_sidecar_payload_preserves_execution_envelope_fields() {
     };
 
     let env = vec![("SOMA_DEMO_SECRET".to_owned(), "redacted".to_owned())];
-    let bytes = python_execution_payload(std::path::Path::new("/tmp/demo.py"), &call, &env)
+    let invocation = call.provider_invocation();
+    let bytes = python_execution_payload(std::path::Path::new("/tmp/demo.py"), &invocation, &env)
         .expect("payload should serialize");
     let payload: serde_json::Value = serde_json::from_slice(&bytes).expect("payload JSON");
 

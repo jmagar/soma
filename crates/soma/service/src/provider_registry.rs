@@ -5,13 +5,13 @@ use std::{
 
 use async_trait::async_trait;
 use jsonschema::Validator;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use soma_contracts::{
     provider_validation::{validate_provider_manifest, ProviderValidationError},
     providers::{HostCapabilities, ProviderCatalog, ProviderResource, ProviderTool},
 };
+use soma_provider_core::ProviderCall as CoreProviderCall;
 
 use crate::{
     capabilities::CapabilityBroker, provider_errors::ProviderError,
@@ -27,12 +27,11 @@ use enforcement::{enforce_call, enforce_output_schema, enforce_response_limit};
 use refresh::ProviderRefreshEvent;
 use resources::ResourceIndex;
 pub use resources::{DynamicResourceTemplate, ResourceReadOutput};
+pub use soma_provider_core::{Provider as CoreProvider, ProviderOutput, ProviderSurface};
+pub type ProviderInvocation = CoreProviderCall;
 
 #[async_trait]
-pub trait Provider: Send + Sync {
-    fn catalog(&self) -> ProviderCatalog;
-    async fn call(&self, call: ProviderCall) -> Result<ProviderOutput, ProviderError>;
-
+pub trait Provider: CoreProvider {
     /// Dynamic resource templates this provider serves. Every provider
     /// inherits the empty default — only file-based dynamic resource
     /// readers (`providers/resources/*.ts`) override it.
@@ -69,26 +68,6 @@ pub trait Provider: Send + Sync {
             "resource_read_not_supported",
             "this provider does not support resource reads",
         ))
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ProviderSurface {
-    Mcp,
-    Rest,
-    Cli,
-    Palette,
-}
-
-impl ProviderSurface {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Mcp => "mcp",
-            Self::Rest => "rest",
-            Self::Cli => "cli",
-            Self::Palette => "palette",
-        }
     }
 }
 
@@ -149,41 +128,15 @@ pub struct ProviderCall {
     pub snapshot_id: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ProviderExecutionEnvelope {
-    pub schema_version: u32,
-    pub provider: String,
-    pub action: String,
-    pub params: Value,
-    pub surface: ProviderSurface,
-    pub snapshot_id: String,
-}
-
 impl ProviderCall {
-    pub fn execution_envelope(&self) -> ProviderExecutionEnvelope {
-        ProviderExecutionEnvelope {
-            schema_version: 1,
+    pub fn provider_invocation(&self) -> ProviderInvocation {
+        ProviderInvocation {
             provider: self.provider.clone(),
             action: self.action.clone(),
             params: self.params.clone(),
             surface: self.surface,
             snapshot_id: self.snapshot_id.clone(),
         }
-    }
-
-    pub fn execution_payload(&self) -> Result<Vec<u8>, serde_json::Error> {
-        serde_json::to_vec(&self.execution_envelope())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ProviderOutput {
-    pub value: Value,
-}
-
-impl ProviderOutput {
-    pub fn json(value: Value) -> Self {
-        Self { value }
     }
 }
 
@@ -474,10 +427,13 @@ impl ProviderRegistry {
         call.snapshot_id = snapshot.id.clone();
         enforce_call(&entry, &call, &self.capabilities)?;
 
-        let output = provider.call(call.clone()).await.inspect_err(|error| {
-            let (provider, action, code) = error.log_code();
-            tracing::warn!(provider, action, code, "provider call failed");
-        })?;
+        let output = provider
+            .call(call.provider_invocation())
+            .await
+            .inspect_err(|error| {
+                let (provider, action, code) = error.log_code();
+                tracing::warn!(provider, action, code, "provider call failed");
+            })?;
         enforce_response_limit(&entry, &call, &output)?;
         enforce_output_schema(&entry, &output)?;
         Ok(output)

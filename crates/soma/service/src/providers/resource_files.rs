@@ -14,12 +14,11 @@ use serde_json::Value;
 use soma_contracts::providers::{
     ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderResource,
 };
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{
-        DynamicResourceTemplate, Provider, ProviderCall, ProviderOutput, ResourceReadOutput,
-    },
+    provider_registry::{DynamicResourceTemplate, Provider, ProviderOutput, ResourceReadOutput},
     providers::{
         resource_uri,
         sidecar::{run_bounded_sidecar, SidecarError},
@@ -279,7 +278,7 @@ fn is_text_mime(mime_type: &str) -> bool {
 }
 
 #[async_trait]
-impl Provider for ResourceFileProvider {
+impl CoreProvider for ResourceFileProvider {
     fn catalog(&self) -> ProviderCatalog {
         let (title, description, resources) = match &self.kind {
             ResourceFileKind::Static { resource, path, .. } => (
@@ -327,7 +326,10 @@ impl Provider for ResourceFileProvider {
             "resource file providers do not expose any callable actions",
         ))
     }
+}
 
+#[async_trait]
+impl Provider for ResourceFileProvider {
     fn dynamic_resource_templates(&self) -> Vec<DynamicResourceTemplate> {
         match &self.kind {
             ResourceFileKind::Dynamic { template, .. } => vec![template.clone()],

@@ -47,6 +47,7 @@ fn enforce_surface(entry: &ToolEntry, call: &ProviderCall) -> Result<(), Provide
 
 pub(crate) fn provider_tool_surface_enabled(tool: &ProviderTool, surface: ProviderSurface) -> bool {
     match surface {
+        ProviderSurface::Internal => true,
         ProviderSurface::Mcp => tool.mcp.as_ref().map(|mcp| mcp.enabled).unwrap_or(true),
         ProviderSurface::Rest => tool.rest.as_ref().map(|rest| rest.enabled).unwrap_or(true),
         ProviderSurface::Cli => tool.cli.as_ref().map(|cli| cli.enabled).unwrap_or(false),

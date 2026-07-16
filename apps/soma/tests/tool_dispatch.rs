@@ -16,7 +16,9 @@ use soma::{
 use soma_contracts::providers::{
     ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool,
 };
-use soma_service::provider_registry::{Provider, ProviderOutput, ProviderRegistry};
+use soma_service::provider_registry::{
+    CoreProvider, Provider, ProviderInvocation, ProviderOutput, ProviderRegistry,
+};
 use soma_service::ProviderError;
 use std::sync::Arc;
 
@@ -31,7 +33,7 @@ async fn call_mcp_action(args: serde_json::Value) -> serde_json::Value {
 struct DynamicProvider;
 
 #[async_trait]
-impl Provider for DynamicProvider {
+impl CoreProvider for DynamicProvider {
     fn catalog(&self) -> ProviderCatalog {
         ProviderManifest {
             schema_version: 1,
@@ -83,10 +85,7 @@ impl Provider for DynamicProvider {
         }
     }
 
-    async fn call(
-        &self,
-        call: soma_service::provider_registry::ProviderCall,
-    ) -> Result<ProviderOutput, ProviderError> {
+    async fn call(&self, call: ProviderInvocation) -> Result<ProviderOutput, ProviderError> {
         Ok(ProviderOutput::json(json!({
             "provider": call.provider,
             "action": call.action,
@@ -94,6 +93,8 @@ impl Provider for DynamicProvider {
         })))
     }
 }
+
+impl Provider for DynamicProvider {}
 
 #[tokio::test]
 async fn test_greet_no_name_returns_greeting() {

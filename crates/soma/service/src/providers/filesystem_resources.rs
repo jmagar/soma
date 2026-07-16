@@ -10,6 +10,7 @@ use std::{
 };
 
 use soma_contracts::providers::{ProviderCatalog, ProviderKind};
+use soma_provider_core::Provider as CoreProvider;
 
 use crate::{
     provider_registry::{DynamicResourceTemplate, Provider},

@@ -11,8 +11,9 @@ use soma_domain::{
     AuthorizationMode, Confirmation, Principal, RequestId, ScopeSet, Surface, TraceContext,
 };
 use soma_service::{
-    provider_registry::Provider, DynamicResourceTemplate, ProviderCall, ProviderError,
-    ProviderOutput, ProviderRegistry, SomaClient, SomaService, StaticRustProvider,
+    provider_registry::{CoreProvider, Provider, ProviderInvocation},
+    DynamicResourceTemplate, ProviderError, ProviderOutput, ProviderRegistry, SomaClient,
+    SomaService, StaticRustProvider,
 };
 
 use super::{
@@ -27,23 +28,26 @@ use crate::{
 struct RecordingProvider {
     catalog: ProviderCatalog,
     output: Value,
-    calls: Mutex<Vec<ProviderCall>>,
+    calls: Mutex<Vec<ProviderInvocation>>,
 }
 
 #[async_trait]
-impl Provider for RecordingProvider {
+impl CoreProvider for RecordingProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
 
     async fn call(
         &self,
-        call: ProviderCall,
+        call: ProviderInvocation,
     ) -> Result<ProviderOutput, soma_service::ProviderError> {
         self.calls.lock().unwrap().push(call);
         Ok(ProviderOutput::json(self.output.clone()))
     }
+}
 
+#[async_trait]
+impl Provider for RecordingProvider {
     fn dynamic_resource_templates(&self) -> Vec<DynamicResourceTemplate> {
         let mut template = DynamicResourceTemplate::from_path_segments(
             &["recording", "[id]"],
@@ -285,10 +289,7 @@ async fn execute_action_applies_defaults_and_returns_request_context() {
     let calls = provider.calls.lock().unwrap();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].surface, soma_service::ProviderSurface::Rest);
-    assert_eq!(
-        calls[0].limits,
-        soma_service::ProviderRequestLimits::default()
-    );
+    assert!(!calls[0].snapshot_id.is_empty());
 }
 
 #[tokio::test]

@@ -3,11 +3,12 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
+use soma_provider_core::{Provider as CoreProvider, ProviderCall};
 use url::Url;
 
 use crate::{
     provider_errors::ProviderError,
-    provider_registry::{Provider, ProviderCall, ProviderOutput},
+    provider_registry::{Provider, ProviderOutput},
 };
 
 #[derive(Clone)]
@@ -26,7 +27,7 @@ impl OpenApiProvider {
 }
 
 #[async_trait]
-impl Provider for OpenApiProvider {
+impl CoreProvider for OpenApiProvider {
     fn catalog(&self) -> ProviderCatalog {
         self.catalog.clone()
     }
@@ -79,6 +80,8 @@ impl Provider for OpenApiProvider {
         Ok(ProviderOutput::json(parsed))
     }
 }
+
+impl Provider for OpenApiProvider {}
 
 impl OpenApiProvider {
     fn tool(&self, call: &ProviderCall) -> Result<&ProviderTool, ProviderError> {
