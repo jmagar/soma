@@ -1,16 +1,4 @@
 use super::*;
-use soma_contracts::config::SomaConfig;
-use soma_service::SomaClient;
-
-fn service() -> SomaService {
-    let client = SomaClient::new(&SomaConfig {
-        api_url: String::new(),
-        api_key: "test-key".to_owned(),
-        ..SomaConfig::default()
-    })
-    .expect("stub client should build");
-    SomaService::new(client)
-}
 
 fn upstream_input() -> ScaffoldIntentInput {
     ScaffoldIntentInput {
@@ -35,7 +23,9 @@ fn upstream_input() -> ScaffoldIntentInput {
 
 #[test]
 fn scaffold_intent_json_matches_simplified_contract_shape() {
-    let value = service()
+    let state = crate::testing::loopback_state();
+    let value = state
+        .application()
         .scaffold_intent(upstream_input().into())
         .expect("valid scaffold intent should build");
 
@@ -85,7 +75,9 @@ fn application_platform_intent_requires_all_surfaces() {
     input.plugins = "claude, codex, gemini".to_owned();
     input.crawl_repos = "https://github.com/example/lab-sdk".to_owned();
 
-    let value = service()
+    let state = crate::testing::loopback_state();
+    let value = state
+        .application()
         .scaffold_intent(input.into())
         .expect("valid scaffold intent should build");
 
@@ -107,7 +99,9 @@ fn application_platform_intent_requires_all_surfaces() {
 
 #[test]
 fn scaffold_intent_json_contains_contract_required_fields() {
-    let value = service()
+    let state = crate::testing::loopback_state();
+    let value = state
+        .application()
         .scaffold_intent(upstream_input().into())
         .expect("valid scaffold intent should build");
     let contract: serde_json::Value = serde_json::from_str(include_str!(
@@ -131,7 +125,9 @@ fn scaffold_intent_json_contains_contract_required_fields() {
 fn primitive_defaults_to_tools_when_input_is_empty() {
     let mut input = upstream_input();
     input.mcp_primitives.clear();
-    let value = service()
+    let state = crate::testing::loopback_state();
+    let value = state
+        .application()
         .scaffold_intent(input.into())
         .expect("valid scaffold intent should build");
     assert_eq!(value["mcp_primitives"], json!(["tools"]));

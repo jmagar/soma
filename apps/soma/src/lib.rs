@@ -117,6 +117,10 @@ pub mod testing {
         }
     }
 
+    pub fn mcp_state(state: &AppState) -> soma_mcp::McpState {
+        crate::application_ports::mcp_state_for_state(state)
+    }
+
     /// `AppState` with full OAuth (requires data directory for SQLite + key file).
     #[cfg(feature = "auth")]
     pub async fn oauth_state(data_dir: &std::path::Path) -> AppState {

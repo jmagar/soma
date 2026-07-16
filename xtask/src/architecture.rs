@@ -12,6 +12,12 @@ const CONCRETE_SHARED_ENGINE_PATHS: &[&str] = &[
     "crates/shared/mcp/gateway",
     "crates/shared/openapi",
 ];
+const MCP_SURFACE_PATH: &str = "crates/soma/mcp";
+const MCP_FORBIDDEN_DIRECT_DEPENDENCIES: &[&str] = &[
+    "crates/soma/service",
+    "crates/soma/runtime",
+    "crates/shared/mcp/gateway",
+];
 
 const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[
     ArchitectureException {
@@ -29,14 +35,6 @@ const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[
         reason: "the application facade exposes legacy provider catalog values during migration",
         removal_pr: "PR 13",
         expiration_milestone: "legacy contracts decomposition",
-    },
-    ArchitectureException {
-        from_path: "crates/soma/mcp",
-        to_path: "crates/shared/mcp/gateway",
-        owner: "architecture-refactor",
-        reason: "MCP still composes the legacy service and shared gateway during migration",
-        removal_pr: "PR 7",
-        expiration_milestone: "MCP migration to SomaApplication",
     },
     ArchitectureException {
         from_path: "crates/soma/runtime",
@@ -145,6 +143,14 @@ fn check_direct_edges(graph: &Graph, exceptions: &[ArchitectureException]) -> Ve
         }
         let from = graph.package(&edge.from);
         let to = graph.package(&edge.to);
+        if from.rel_path == MCP_SURFACE_PATH
+            && MCP_FORBIDDEN_DIRECT_DEPENDENCIES.contains(&to.rel_path.as_str())
+        {
+            failures.push(format!(
+                "soma-mcp must depend on SomaApplication ports, not service/runtime/gateway engines\n  edge: {}",
+                graph.edge_label(edge)
+            ));
+        }
         if from.layer == Layer::Shared && to.layer != Layer::Shared {
             failures.push(format!(
                 "shared package {} ({}) depends on non-shared package {} ({})\n  edge: {}",

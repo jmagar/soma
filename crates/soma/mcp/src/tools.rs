@@ -17,13 +17,13 @@ use serde_json::{json, Value};
 #[cfg(test)]
 use std::sync::OnceLock;
 
+use soma_application::{
+    ElicitedName, ExecuteActionRequest, ExecutionContext, ScaffoldIntentRequest, SomaApplication,
+};
 #[cfg(test)]
 use soma_contracts::actions::{ActionTransport, ACTION_SPECS};
-use soma_runtime::server::AppState;
-use soma_service::app::{ElicitedNameOutcome, ScaffoldIntent, SomaService};
-use soma_service::{
-    ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRequestLimits, ProviderSurface,
-};
+
+use crate::McpState;
 
 /// Dispatch an incoming MCP tool call to the appropriate handler.
 ///
@@ -31,15 +31,14 @@ use soma_service::{
 /// `args`   — parsed JSON arguments from the MCP client
 /// `peer`   — connection to the MCP client; used for elicitation
 pub(super) async fn execute_tool(
-    state: &AppState,
+    state: &McpState,
     name: &str,
     args: Value,
     peer: &Peer<RoleServer>,
-    principal: ProviderPrincipal,
-    auth_mode: ProviderAuthMode,
+    context: ExecutionContext,
 ) -> anyhow::Result<Value> {
     match name {
-        "soma" => dispatch_soma(state, args, peer, principal, auth_mode).await,
+        "soma" => dispatch_soma(state, args, peer, context).await,
         _ => Err(anyhow::anyhow!("unknown tool: {name}")),
     }
 }
@@ -47,84 +46,67 @@ pub(super) async fn execute_tool(
 #[cfg(any(test, feature = "test-support"))]
 #[doc(hidden)]
 pub async fn execute_tool_without_peer_for_test(
-    state: &AppState,
+    state: &McpState,
     name: &str,
     args: Value,
 ) -> anyhow::Result<Value> {
     match name {
         "soma" => {
-            dispatch_soma_without_peer(
-                state,
-                args,
-                ProviderPrincipal::loopback_dev(),
-                ProviderAuthMode::LoopbackDev,
-            )
-            .await
+            dispatch_soma_without_peer(state, args, state.execution_context(None, None)).await
         }
         _ => Err(anyhow::anyhow!("unknown tool: {name}")),
     }
 }
 
 async fn dispatch_soma(
-    state: &AppState,
+    state: &McpState,
     args: Value,
     peer: &Peer<RoleServer>,
-    principal: ProviderPrincipal,
-    auth_mode: ProviderAuthMode,
+    context: ExecutionContext,
 ) -> anyhow::Result<Value> {
     let action = action_name(&args)?.to_owned();
 
     match action.as_str() {
-        "elicit_name" => elicit_name(&state.service, peer).await,
-        "scaffold_intent" => scaffold_intent(&state.service, peer).await,
-        other => dispatch_non_elicitation_action(state, other, args, principal, auth_mode).await,
+        "elicit_name" => elicit_name(state.application(), peer).await,
+        "scaffold_intent" => scaffold_intent(state.application(), peer).await,
+        other => dispatch_non_elicitation_action(state, other, args, context).await,
     }
 }
 
 #[cfg(any(test, feature = "test-support"))]
 async fn dispatch_soma_without_peer(
-    state: &AppState,
+    state: &McpState,
     args: Value,
-    principal: ProviderPrincipal,
-    auth_mode: ProviderAuthMode,
+    context: ExecutionContext,
 ) -> anyhow::Result<Value> {
     let action = action_name(&args)?.to_owned();
     match action.as_str() {
         "elicit_name" | "scaffold_intent" => {
             Err(anyhow::anyhow!("action={} requires an MCP peer", action))
         }
-        other => dispatch_non_elicitation_action(state, other, args, principal, auth_mode).await,
+        other => dispatch_non_elicitation_action(state, other, args, context).await,
     }
 }
 
 async fn dispatch_non_elicitation_action(
-    state: &AppState,
+    state: &McpState,
     action: &str,
     args: Value,
-    principal: ProviderPrincipal,
-    auth_mode: ProviderAuthMode,
+    context: ExecutionContext,
 ) -> anyhow::Result<Value> {
     let params = strip_action_arg(args);
-    if state.remote_adapter {
-        return state.service.call_rest_action(action, params).await;
-    }
-
-    state
-        .provider_registry
-        .refresh_file_providers()
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    let call = ProviderCall {
-        provider: String::new(),
-        action: action.to_owned(),
-        params,
-        principal,
-        auth_mode,
-        surface: ProviderSurface::Mcp,
-        destructive_confirmed: false,
-        limits: ProviderRequestLimits::default(),
-        snapshot_id: String::new(),
-    };
-    Ok(state.provider_registry.dispatch(call).await?.value)
+    state.application().refresh_providers_in_place()?;
+    Ok(state
+        .application()
+        .execute_action(
+            ExecuteActionRequest {
+                action: action.to_owned(),
+                params,
+            },
+            context,
+        )
+        .await?
+        .output)
 }
 
 fn action_name(args: &Value) -> anyhow::Result<&str> {
@@ -223,14 +205,17 @@ rmcp::elicit_safe!(ScaffoldIntentInput);
 /// Only clients that declared the `elicitation` capability during the MCP initialisation
 /// handshake will respond. If the client doesn't support it, this returns a graceful
 /// fallback message rather than an error.
-async fn scaffold_intent(service: &SomaService, peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
+async fn scaffold_intent(
+    application: &SomaApplication,
+    peer: &Peer<RoleServer>,
+) -> anyhow::Result<Value> {
     match peer
         .elicit::<ScaffoldIntentInput>(
             "Tell me what kind of project you are scaffolding. I will return JSON only; the scaffold-project skill will turn it into an approval-first plan.",
         )
         .await
     {
-        Ok(Some(input)) => service.scaffold_intent(input.into()),
+        Ok(Some(input)) => Ok(application.scaffold_intent(input.into())?),
         Ok(None) => Ok(json!({
             "kind": "soma_scaffold_intent",
             "schema_version": 1,
@@ -266,7 +251,7 @@ async fn scaffold_intent(service: &SomaService, peer: &Peer<RoleServer>) -> anyh
     }
 }
 
-impl From<ScaffoldIntentInput> for ScaffoldIntent {
+impl From<ScaffoldIntentInput> for ScaffoldIntentRequest {
     fn from(input: ScaffoldIntentInput) -> Self {
         Self {
             display_name: input.display_name,
@@ -289,24 +274,27 @@ impl From<ScaffoldIntentInput> for ScaffoldIntent {
     }
 }
 
-async fn elicit_name(service: &SomaService, peer: &Peer<RoleServer>) -> anyhow::Result<Value> {
+async fn elicit_name(
+    application: &SomaApplication,
+    peer: &Peer<RoleServer>,
+) -> anyhow::Result<Value> {
     match peer
         .elicit::<NameInput>("What is your name? I'll use it to give you a personalised greeting.")
         .await
     {
         Ok(Some(input)) => {
-            Ok(service.elicited_name_greeting(ElicitedNameOutcome::Accepted(&input.name)))
+            Ok(application.elicited_name_greeting(ElicitedName::Accepted(input.name)))
         }
-        Ok(None) => Ok(service.elicited_name_greeting(ElicitedNameOutcome::NoInput)),
+        Ok(None) => Ok(application.elicited_name_greeting(ElicitedName::NoInput)),
         Err(ElicitationError::UserDeclined) => {
-            Ok(service.elicited_name_greeting(ElicitedNameOutcome::Declined))
+            Ok(application.elicited_name_greeting(ElicitedName::Declined))
         }
         Err(ElicitationError::UserCancelled) => {
-            Ok(service.elicited_name_greeting(ElicitedNameOutcome::Cancelled))
+            Ok(application.elicited_name_greeting(ElicitedName::Cancelled))
         }
         Err(ElicitationError::CapabilityNotSupported) => {
             tracing::warn!("elicitation requested but client does not support it");
-            Ok(service.elicited_name_greeting(ElicitedNameOutcome::Unsupported))
+            Ok(application.elicited_name_greeting(ElicitedName::Unsupported))
         }
         Err(e) => {
             tracing::error!(error = %e, "elicitation failed unexpectedly");
@@ -390,7 +378,7 @@ fn build_help_text() -> String {
 1. Add the action metadata to `ACTION_SPECS` in `actions.rs`.
 2. Add any new parameters to the action's `params` metadata.
 3. Add a method to `SomaClient` in `soma.rs` (transport).
-4. Add a method to `SomaService` in `app.rs` (business logic).
+4. Add an application use case in `soma-application` (business logic).
 5. Add a match arm in `dispatch_soma()` in `mcp/tools.rs`.
 6. Add a test covering parser, schema, and dispatch behavior.
 ",

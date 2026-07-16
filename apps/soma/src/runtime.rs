@@ -105,7 +105,9 @@ pub async fn serve_stdio_mcp() -> Result<()> {
         remote_adapter,
         response_pages: Default::default(),
     };
-    let svc = mcp::rmcp_server(state).serve(stdio()).await?;
+    let svc = mcp::rmcp_server(crate::application_ports::mcp_state_for_state(&state))
+        .serve(stdio())
+        .await?;
     svc.waiting().await?;
     Ok(())
 }

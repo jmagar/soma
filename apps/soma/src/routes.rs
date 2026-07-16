@@ -25,11 +25,9 @@ use crate::api::{
     health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
     v1_greet, v1_help, v1_provider_tool_action, v1_providers, v1_service_status,
 };
-use crate::application_ports::GatewayApplicationPort;
+use crate::application_ports::{application_for_state, authorization_mode, mcp_state_for_state};
 use crate::gateway_api::v1_gateway_action;
 use soma_api::ApiState;
-use soma_application::{ApplicationPorts, SomaApplication};
-use soma_domain::AuthorizationMode;
 use soma_mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use soma_runtime::server::{build_auth_layer, AppState, AuthPolicy};
 
@@ -56,8 +54,11 @@ pub fn router(state: AppState) -> Router {
         resource_url,
     );
 
-    let mcp: Router<AppState> =
-        Router::new().nest_service("/mcp", streamable_http_service(state.clone(), rmcp_config));
+    let mcp_state = mcp_state_for_state(&state);
+    let mcp: Router<soma_mcp::McpState> = Router::new().nest_service(
+        "/mcp",
+        streamable_http_service(mcp_state.clone(), rmcp_config),
+    );
     let api: Router<ApiState> = Router::new()
         .route("/v1/capabilities", get(v1_capabilities))
         .route("/v1/providers", get(v1_providers))
@@ -77,7 +78,7 @@ pub fn router(state: AppState) -> Router {
         );
 
     let api_and_mcp_resolved: Router<()> = mcp
-        .with_state(state.clone())
+        .with_state(mcp_state.clone())
         .merge(api.with_state(api_state.clone()));
 
     let authenticated = if let Some(layer) = auth_layer {
@@ -144,7 +145,7 @@ pub fn router(state: AppState) -> Router {
         base.fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))) });
 
     let base = base.layer(middleware::from_fn_with_state(
-        state.clone(),
+        crate::protected_routes::ProtectedMcpState::new(state.clone(), mcp_state),
         crate::protected_routes::protected_mcp_intercept,
     ));
 
@@ -153,21 +154,9 @@ pub fn router(state: AppState) -> Router {
 }
 
 fn api_state(state: &AppState) -> ApiState {
-    let authorization_mode = match &state.auth_policy {
-        AuthPolicy::LoopbackDev => AuthorizationMode::LoopbackDev,
-        AuthPolicy::TrustedGatewayUnscoped => AuthorizationMode::TrustedGateway,
-        AuthPolicy::Mounted { .. } => AuthorizationMode::Mounted,
-    };
-    let ports = ApplicationPorts::unavailable()
-        .with_gateway(Arc::new(GatewayApplicationPort::new(state.gateway.clone())));
-    let application = Arc::new(SomaApplication::new(
-        Arc::new(state.service.clone()),
-        Arc::new(state.provider_registry.clone()),
-        ports,
-    ));
     ApiState::new(
-        application,
-        authorization_mode,
+        application_for_state(state),
+        authorization_mode(state),
         state.config.server_name.clone(),
     )
 }

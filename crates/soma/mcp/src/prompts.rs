@@ -14,11 +14,7 @@
 use rmcp::model::{
     GetPromptRequestParams, GetPromptResult, ListPromptsResult, Prompt, PromptMessage, Role,
 };
-use soma_contracts::{
-    actions::scopes_satisfy,
-    providers::{ProviderCatalog, ProviderPrompt},
-};
-use soma_service::{ProviderAuthMode, ProviderPrincipal};
+use soma_contracts::providers::ProviderPrompt;
 
 pub(super) fn list_prompts() -> ListPromptsResult {
     ListPromptsResult {
@@ -47,18 +43,6 @@ pub(super) fn get_prompt(request: GetPromptRequestParams) -> anyhow::Result<GetP
     }
 }
 
-/// Result of resolving a provider-declared prompt by name via `prompts/get`.
-pub(super) enum ProviderPromptLookup {
-    /// No enabled, servable (has a `template`) prompt with this name exists.
-    NotFound,
-    /// A matching prompt exists but the caller's scopes don't satisfy
-    /// `prompt.scope` under `ProviderAuthMode::Mounted`.
-    ScopeDenied {
-        required_scope: String,
-    },
-    Found(GetPromptResult),
-}
-
 /// Prompts advertised by drop-in providers (currently just Markdown prompt
 /// files — see `providers::filesystem::load_markdown_catalog_value`).
 ///
@@ -73,47 +57,20 @@ pub(super) enum ProviderPromptLookup {
 /// lists every tool regardless of scope. Scope is enforced at the point of
 /// use (`get_provider_prompt`), mirroring how tool scope is enforced at
 /// `call_tool` rather than `list_tools`.
-pub(super) fn provider_prompts(catalogs: &[ProviderCatalog]) -> Vec<Prompt> {
-    servable_prompts(catalogs)
+pub(super) fn provider_prompts(prompts: &[ProviderPrompt]) -> Vec<Prompt> {
+    prompts
+        .iter()
+        .filter(|prompt| is_prompt_enabled(prompt) && prompt.template.is_some())
         .map(|prompt| Prompt::new(prompt.name.clone(), Some(prompt.description.clone()), None))
         .collect()
 }
 
-pub(super) fn get_provider_prompt(
-    catalogs: &[ProviderCatalog],
-    request: &GetPromptRequestParams,
-    auth_mode: ProviderAuthMode,
-    principal: &ProviderPrincipal,
-) -> ProviderPromptLookup {
-    let Some(prompt) = servable_prompts(catalogs).find(|prompt| prompt.name == request.name) else {
-        return ProviderPromptLookup::NotFound;
-    };
-
-    if matches!(auth_mode, ProviderAuthMode::Mounted) {
-        if let Some(scope) = prompt.scope.as_deref() {
-            if !scopes_satisfy(&principal.scopes, scope) {
-                return ProviderPromptLookup::ScopeDenied {
-                    required_scope: scope.to_owned(),
-                };
-            }
-        }
-    }
-
-    ProviderPromptLookup::Found(
-        GetPromptResult::new(vec![PromptMessage::new_text(
-            Role::User,
-            // `servable_prompts` guarantees `template.is_some()`.
-            prompt.template.clone().unwrap_or_default(),
-        )])
-        .with_description(prompt.description.clone()),
-    )
-}
-
-fn servable_prompts(catalogs: &[ProviderCatalog]) -> impl Iterator<Item = &ProviderPrompt> {
-    catalogs
-        .iter()
-        .flat_map(|catalog| &catalog.prompts)
-        .filter(|prompt| is_prompt_enabled(prompt) && prompt.template.is_some())
+pub(super) fn provider_prompt_result(prompt: ProviderPrompt) -> GetPromptResult {
+    GetPromptResult::new(vec![PromptMessage::new_text(
+        Role::User,
+        prompt.template.clone().unwrap_or_default(),
+    )])
+    .with_description(prompt.description)
 }
 
 fn is_prompt_enabled(prompt: &ProviderPrompt) -> bool {

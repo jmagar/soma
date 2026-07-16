@@ -12,8 +12,6 @@ use std::sync::OnceLock;
 use serde_json::{json, Map, Value};
 
 use soma_contracts::providers::{ProviderCatalog, ProviderTool};
-#[cfg(test)]
-use soma_service::StaticRustProvider;
 
 use crate::ACTION_DISCRIMINATOR_FIELD;
 
@@ -346,7 +344,15 @@ fn is_mcp_only(tool: &ProviderTool) -> bool {
 
 #[cfg(test)]
 fn static_catalog() -> &'static ProviderCatalog {
-    STATIC_CATALOG.get_or_init(StaticRustProvider::catalog_static)
+    STATIC_CATALOG.get_or_init(|| {
+        crate::testing::loopback_state()
+            .application()
+            .catalog_snapshot()
+            .catalogs
+            .into_iter()
+            .next()
+            .expect("static test catalog")
+    })
 }
 
 #[cfg(test)]

@@ -78,6 +78,22 @@ impl ProviderError {
         .with_private_diagnostics(diagnostic)
     }
 
+    pub fn opaque_execution(
+        provider: impl Into<String>,
+        action: impl Into<String>,
+        error: impl std::fmt::Display,
+    ) -> Self {
+        let diagnostic = error.to_string();
+        Self::new(
+            "provider_execution_failed",
+            provider,
+            Some(action.into()),
+            "Provider execution failed. Check server logs for details.",
+            "Check provider status and retry after the upstream issue is resolved.",
+        )
+        .with_private_diagnostics(diagnostic)
+    }
+
     pub fn with_retryable(mut self, retryable: bool) -> Self {
         self.retryable = retryable;
         self
@@ -105,6 +121,12 @@ impl ProviderError {
 
     pub fn log_code(&self) -> (&str, Option<&str>, &str) {
         (&self.provider, self.action.as_deref(), &self.code)
+    }
+
+    pub fn private_diagnostics(&self) -> Option<&str> {
+        self.context
+            .as_deref()
+            .and_then(|context| context.private_diagnostics.as_deref())
     }
 
     fn context_mut(&mut self) -> &mut ProviderErrorContext {

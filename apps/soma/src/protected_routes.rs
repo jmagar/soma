@@ -18,6 +18,18 @@ use tower::ServiceExt;
 
 use crate::protected_routes_proxy::proxy_protected_mcp_route;
 
+#[derive(Clone)]
+pub(crate) struct ProtectedMcpState {
+    runtime: AppState,
+    mcp: soma_mcp::McpState,
+}
+
+impl ProtectedMcpState {
+    pub(crate) fn new(runtime: AppState, mcp: soma_mcp::McpState) -> Self {
+        Self { runtime, mcp }
+    }
+}
+
 pub async fn protected_route_resource_metadata(
     State(state): State<AppState>,
     request: Request<Body>,
@@ -35,7 +47,7 @@ pub async fn protected_route_resource_metadata(
 }
 
 pub async fn protected_mcp_intercept(
-    State(state): State<AppState>,
+    State(state): State<ProtectedMcpState>,
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, Infallible> {
@@ -44,6 +56,7 @@ pub async fn protected_mcp_intercept(
     }
     let route = request_host(&request).and_then(|host| {
         state
+            .runtime
             .gateway
             .resolve_protected_route(&host, request.uri().path())
     });
@@ -59,12 +72,12 @@ pub async fn protected_mcp_intercept(
 }
 
 async fn protected_mcp_route_entry(
-    state: AppState,
+    state: ProtectedMcpState,
     mut request: Request<Body>,
     route: ProtectedMcpRouteConfig,
 ) -> Response {
     if *request.method() == Method::GET && is_route_metadata_path(&route, request.uri().path()) {
-        return protected_route_metadata_response(&state, route);
+        return protected_route_metadata_response(&state.runtime, route);
     }
     if !matches!(
         *request.method(),
@@ -72,13 +85,15 @@ async fn protected_mcp_route_entry(
     ) {
         return StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
-    if let Err(response) = authenticate_protected_route_request(&state, &mut request, &route) {
+    if let Err(response) =
+        authenticate_protected_route_request(&state.runtime, &mut request, &route)
+    {
         return *response;
     }
     if route.target.is_some() {
         return dispatch_gateway_subset(state, request, route).await;
     }
-    proxy_protected_mcp_route(&state, request, route).await
+    proxy_protected_mcp_route(&state.runtime, request, route).await
 }
 
 fn protected_route_metadata_response(state: &AppState, route: ProtectedMcpRouteConfig) -> Response {
@@ -172,23 +187,26 @@ fn authenticate_protected_route_request(
 }
 
 async fn dispatch_gateway_subset(
-    state: AppState,
+    state: ProtectedMcpState,
     mut request: Request<Body>,
     route: ProtectedMcpRouteConfig,
 ) -> Response {
-    request
-        .extensions_mut()
-        .insert(resolve_scope(&route, &serde_json::Value::Null));
+    let scope = resolve_scope(&route, &serde_json::Value::Null);
+    request.extensions_mut().insert(soma_mcp::McpRouteScope {
+        upstreams: scope.upstreams,
+        services: scope.services,
+        expose_code_mode: scope.expose_code_mode,
+    });
     if let Err(response) = rewrite_to_internal_mcp_path(&mut request, &route.public_path) {
         return *response;
     }
-    let config = soma_mcp::streamable_http_config(&state.config);
+    let config = soma_mcp::streamable_http_config(&state.runtime.config);
     let router = Router::new()
         .nest_service(
             "/mcp",
-            soma_mcp::streamable_http_service(state.clone(), config),
+            soma_mcp::streamable_http_service(state.mcp.clone(), config),
         )
-        .with_state(state);
+        .with_state(state.mcp);
     router.oneshot(request).await.unwrap_or_else(|error| {
         json_error(
             StatusCode::BAD_GATEWAY,
