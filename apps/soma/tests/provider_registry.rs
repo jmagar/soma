@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -163,6 +169,24 @@ impl Provider for EchoProvider {
             "snapshot_id": call.snapshot_id,
             "message": call.params.get("message").cloned().unwrap_or(json!(null))
         })))
+    }
+}
+
+#[derive(Clone)]
+struct CountingProvider {
+    catalog: ProviderCatalog,
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Provider for CountingProvider {
+    fn catalog(&self) -> ProviderCatalog {
+        self.catalog.clone()
+    }
+
+    async fn call(&self, _call: ProviderCall) -> Result<ProviderOutput, ProviderError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(ProviderOutput::json(json!({"ok": true})))
     }
 }
 
@@ -463,6 +487,61 @@ async fn effective_host_response_cap_precedes_core_output_schema_validation() {
         .await
         .expect_err("effective host cap must run before output schema validation");
     assert_eq!(&*error.code, "response_too_large");
+}
+
+#[tokio::test]
+async fn malformed_input_observes_scope_admin_and_destructive_policy_precedence() {
+    for (case, expected) in [
+        ("scope", "insufficient_scope"),
+        ("admin", "admin_required"),
+        ("destructive", "confirmation_required"),
+    ] {
+        let mut denied = tool(&format!("denied_{case}"));
+        match case {
+            "scope" => denied.scope = Some("soma:write".to_owned()),
+            "admin" => denied.requires_admin = true,
+            "destructive" => denied.destructive = true,
+            _ => unreachable!(),
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let provider = Arc::new(CountingProvider {
+            catalog: catalog("demo", vec![denied]),
+            calls: calls.clone(),
+        });
+        let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+
+        let error = registry
+            .dispatch(call(
+                &format!("denied_{case}"),
+                json!({"unexpected": "schema-invalid"}),
+            ))
+            .await
+            .expect_err("product policy must precede core input schema validation");
+        assert_eq!(&*error.code, expected, "case {case}");
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "case {case}");
+    }
+}
+
+#[tokio::test]
+async fn effective_host_input_cap_precedes_schema_validation_without_invoking_provider() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let provider = Arc::new(CountingProvider {
+        catalog: catalog("demo", vec![tool("oversized_invalid_input")]),
+        calls: calls.clone(),
+    });
+    let registry = ProviderRegistry::new(vec![provider]).expect("registry");
+    let mut oversized = call(
+        "oversized_invalid_input",
+        json!({"unexpected": "this input is oversized and schema-invalid"}),
+    );
+    oversized.limits.max_input_bytes = 8;
+
+    let error = registry
+        .dispatch(oversized)
+        .await
+        .expect_err("effective host input cap must precede schema validation");
+    assert_eq!(&*error.code, "input_too_large");
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

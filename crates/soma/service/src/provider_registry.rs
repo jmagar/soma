@@ -25,7 +25,7 @@ mod refresh;
 mod reports;
 mod resources;
 pub(super) use enforcement::provider_tool_surface_enabled;
-use enforcement::{enforce_call, enforce_response_limit};
+use enforcement::{enforce_capabilities, enforce_pre_input, enforce_response_limit};
 use refresh::ProviderRefreshEvent;
 use resources::ResourceIndex;
 pub use resources::{DynamicResourceTemplate, ResourceReadOutput};
@@ -479,20 +479,31 @@ impl ProviderRegistry {
 
         call.provider = provider.catalog().provider.name;
         call.snapshot_id = snapshot.id.clone();
-        let product_call = call.clone();
+        let pre_input_call = call.clone();
+        let invocation_call = call.clone();
+        let pre_input_tool = tool.clone();
         let capability_broker = self.capabilities.clone();
         core_registry
-            .dispatch_with(call.provider_invocation(), move |_, invocation| {
-                let mut call = product_call;
-                call.provider = invocation.provider;
-                call.snapshot_id = invocation.snapshot_id;
-                async move {
-                    enforce_call(&tool, &capabilities, &call, &capability_broker)?;
-                    let output = provider.call(call.clone()).await?;
-                    enforce_response_limit(&tool, &call, &output)?;
-                    Ok(output)
-                }
-            })
+            .dispatch_with_pre_input(
+                call.provider_invocation(),
+                move |invocation| {
+                    let mut call = pre_input_call;
+                    call.provider.clone_from(&invocation.provider);
+                    call.snapshot_id.clone_from(&invocation.snapshot_id);
+                    enforce_pre_input(&pre_input_tool, &call)
+                },
+                move |_, invocation| {
+                    let mut call = invocation_call;
+                    call.provider = invocation.provider;
+                    call.snapshot_id = invocation.snapshot_id;
+                    async move {
+                        enforce_capabilities(&capabilities, &call, &capability_broker)?;
+                        let output = provider.call(call.clone()).await?;
+                        enforce_response_limit(&tool, &call, &output)?;
+                        Ok(output)
+                    }
+                },
+            )
             .await
             .inspect_err(|error| {
                 let (provider, action, code) = error.log_code();

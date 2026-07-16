@@ -34,7 +34,7 @@ impl FakeProvider {
 }
 
 #[test]
-fn optional_manifest_metadata_round_trips_with_object_defaults() {
+fn optional_manifest_metadata_round_trips_with_legacy_null_defaults() {
     let manifest: ProviderManifest = serde_json::from_value(json!({
         "schema_version": 1,
         "provider": {
@@ -47,7 +47,7 @@ fn optional_manifest_metadata_round_trips_with_object_defaults() {
     .expect("minimal manifest deserializes");
 
     let serialized = serde_json::to_value(&manifest).expect("manifest serializes");
-    assert_eq!(serialized["meta"], json!({}));
+    assert!(serialized["meta"].is_null());
     assert!(serialized["capabilities"].is_object());
     validate_provider_manifest(&manifest).expect("typed defaults remain compatibility-valid");
 }

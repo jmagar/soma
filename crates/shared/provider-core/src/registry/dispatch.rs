@@ -15,10 +15,26 @@ impl ProviderRegistry {
 
     pub async fn dispatch_with<F, Fut>(
         &self,
-        mut call: ProviderCall,
+        call: ProviderCall,
         invoke: F,
     ) -> Result<ProviderOutput, ProviderError>
     where
+        F: FnOnce(std::sync::Arc<dyn crate::Provider>, ProviderCall) -> Fut,
+        Fut: std::future::Future<Output = Result<ProviderOutput, ProviderError>>,
+    {
+        self.dispatch_with_pre_input(call, |_| Ok(()), invoke).await
+    }
+
+    /// Dispatches with a host check after action/surface resolution and before
+    /// provider-core validates the declared input limit and schema.
+    pub async fn dispatch_with_pre_input<P, F, Fut>(
+        &self,
+        mut call: ProviderCall,
+        pre_input: P,
+        invoke: F,
+    ) -> Result<ProviderOutput, ProviderError>
+    where
+        P: FnOnce(&ProviderCall) -> Result<(), ProviderError>,
         F: FnOnce(std::sync::Arc<dyn crate::Provider>, ProviderCall) -> Fut,
         Fut: std::future::Future<Output = Result<ProviderOutput, ProviderError>>,
     {
@@ -44,6 +60,7 @@ impl ProviderRegistry {
         call.provider = entry.provider_id().to_string();
         call.snapshot_id = self.snapshot.fingerprint().to_string();
         validate_surface(&entry, &call)?;
+        pre_input(&call)?;
         validate_input(&entry, &call)?;
         let output = invoke(provider, call).await?;
         validate_output(&entry, &output)?;

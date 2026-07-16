@@ -30,7 +30,7 @@ pub struct ProviderManifest {
     pub plugin: Option<PluginOverlay>,
     #[serde(default)]
     pub ui: Option<UiOverlay>,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub meta: Value,
 }
 
@@ -58,7 +58,7 @@ impl ProviderManifest {
             docs: None,
             plugin: None,
             ui: None,
-            meta: default_object(),
+            meta: Value::Null,
         }
     }
 
@@ -150,7 +150,7 @@ pub struct ToolSpec {
     pub ui: Option<UiOverlay>,
     #[serde(default)]
     pub examples: Vec<ProviderExample>,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub meta: Value,
 }
 
@@ -178,7 +178,7 @@ impl ToolSpec {
             palette: None,
             ui: None,
             examples: Vec::new(),
-            meta: default_object(),
+            meta: Value::Null,
         }
     }
 
@@ -245,7 +245,7 @@ pub struct ProviderResource {
     pub scope: Option<String>,
     #[serde(default)]
     pub mcp: Option<McpOverlay>,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub annotations: Value,
 }
 
@@ -419,7 +419,7 @@ pub struct McpOverlay {
     pub enabled: bool,
     #[serde(default)]
     pub title: Option<String>,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub annotations: Value,
 }
 
@@ -440,9 +440,9 @@ pub struct RestOverlay {
     pub description: Option<String>,
     #[serde(default)]
     pub deprecated: bool,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub path_params: Value,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub query_params: Value,
     #[serde(default)]
     pub request_body_schema: Option<Value>,
@@ -501,7 +501,7 @@ pub struct UiOverlay {
     pub shadcn_items: Vec<String>,
     #[serde(default)]
     pub categories: Vec<String>,
-    #[serde(default = "default_object")]
+    #[serde(default)]
     pub meta: Value,
 }
 
@@ -565,8 +565,4 @@ pub struct ProviderExample {
 
 fn default_true() -> bool {
     true
-}
-
-fn default_object() -> Value {
-    Value::Object(serde_json::Map::new())
 }

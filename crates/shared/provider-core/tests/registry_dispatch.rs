@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use soma_provider_core::{
     Provider, ProviderCall, ProviderCatalog, ProviderError, ProviderId, ProviderLimits,
-    ProviderManifest, ProviderOutput, ProviderRegistry, ToolSpec,
+    ProviderManifest, ProviderOutput, ProviderRegistry, ProviderSurface, ToolSpec,
 };
 
 #[derive(Clone)]
@@ -95,6 +95,61 @@ async fn dispatch_enforces_input_and_output_schemas() {
         .await
         .expect_err("invalid output must fail");
     assert_eq!(output_error.code.as_ref(), "output_schema_failed");
+}
+
+#[tokio::test]
+async fn pre_input_hook_runs_after_surface_resolution_and_before_input_validation() {
+    let mut tool = ToolSpec::new(
+        "run",
+        "run",
+        json!({"type": "object", "required": ["message"]}),
+    );
+    tool.cli = Some(soma_provider_core::CliOverlay {
+        enabled: false,
+        command: None,
+        aliases: Vec::new(),
+        about: None,
+        long_about: None,
+        hidden: false,
+        flags: Vec::new(),
+        default_output: None,
+        interactive: false,
+    });
+    let registry = registry(tool, Ok(json!({"result": true})));
+
+    let surface_error = registry
+        .dispatch_with_pre_input(
+            ProviderCall::new("run", json!({})).with_surface(ProviderSurface::Cli),
+            |_| {
+                Err(ProviderError::validation(
+                    "dispatch-provider",
+                    "run",
+                    "host_denied",
+                    "host denied",
+                ))
+            },
+            |provider, call| async move { provider.call(call).await },
+        )
+        .await
+        .expect_err("surface resolution must precede the hook");
+    assert_eq!(surface_error.code.as_ref(), "surface_not_exposed");
+
+    let hook_error = registry
+        .dispatch_with_pre_input(
+            ProviderCall::new("run", json!({})),
+            |_| {
+                Err(ProviderError::validation(
+                    "dispatch-provider",
+                    "run",
+                    "host_denied",
+                    "host denied",
+                ))
+            },
+            |provider, call| async move { provider.call(call).await },
+        )
+        .await
+        .expect_err("hook must precede input validation");
+    assert_eq!(hook_error.code.as_ref(), "host_denied");
 }
 
 #[tokio::test]

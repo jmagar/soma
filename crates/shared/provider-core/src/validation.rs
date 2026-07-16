@@ -184,7 +184,7 @@ fn normalize_typed_legacy_nulls(value: &mut Value) {
     let Some(root) = value.as_object_mut() else {
         return;
     };
-    remove_null_fields(root, &["docs", "plugin", "ui"]);
+    remove_null_fields(root, &["docs", "plugin", "ui", "meta"]);
     normalize_object_field(root, "provider", |provider| {
         remove_null_fields(
             provider,
@@ -212,6 +212,7 @@ fn normalize_typed_legacy_nulls(value: &mut Value) {
     normalize_object_field(root, "plugin", |plugin| {
         remove_null_fields(plugin, &["mcp_registration"]);
     });
+    normalize_object_field(root, "ui", normalize_ui);
 }
 
 fn normalize_tool(tool: &mut serde_json::Map<String, Value>) {
@@ -228,6 +229,7 @@ fn normalize_tool(tool: &mut serde_json::Map<String, Value>) {
             "cli",
             "palette",
             "ui",
+            "meta",
         ],
     );
     normalize_array_field(tool, "env", normalize_env_requirement);
@@ -236,6 +238,7 @@ fn normalize_tool(tool: &mut serde_json::Map<String, Value>) {
     normalize_object_field(tool, "rest", normalize_rest);
     normalize_object_field(tool, "cli", normalize_cli);
     normalize_object_field(tool, "palette", normalize_palette);
+    normalize_object_field(tool, "ui", normalize_ui);
     normalize_array_field(tool, "examples", normalize_example);
 }
 
@@ -246,7 +249,7 @@ fn normalize_prompt(prompt: &mut serde_json::Map<String, Value>) {
 }
 
 fn normalize_resource(resource: &mut serde_json::Map<String, Value>) {
-    remove_null_fields(resource, &["mime_type", "scope", "mcp"]);
+    remove_null_fields(resource, &["mime_type", "scope", "mcp", "annotations"]);
     normalize_object_field(resource, "mcp", normalize_mcp);
 }
 
@@ -283,7 +286,7 @@ fn normalize_capabilities(capabilities: &mut serde_json::Map<String, Value>) {
 }
 
 fn normalize_mcp(mcp: &mut serde_json::Map<String, Value>) {
-    remove_null_fields(mcp, &["title"]);
+    remove_null_fields(mcp, &["title", "annotations"]);
 }
 
 fn normalize_rest(rest: &mut serde_json::Map<String, Value>) {
@@ -294,6 +297,8 @@ fn normalize_rest(rest: &mut serde_json::Map<String, Value>) {
             "path",
             "summary",
             "description",
+            "path_params",
+            "query_params",
             "request_body_schema",
         ],
     );
@@ -308,6 +313,10 @@ fn normalize_palette(palette: &mut serde_json::Map<String, Value>) {
         palette,
         &["category", "icon", "tone", "arg_mode", "result_view"],
     );
+}
+
+fn normalize_ui(ui: &mut serde_json::Map<String, Value>) {
+    remove_null_fields(ui, &["meta"]);
 }
 
 fn normalize_limits(limits: &mut serde_json::Map<String, Value>) {

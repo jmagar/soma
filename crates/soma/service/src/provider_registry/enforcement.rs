@@ -9,16 +9,22 @@ use crate::{capabilities::CapabilityBroker, provider_errors::ProviderError};
 
 use super::{ProviderAuthMode, ProviderCall, ProviderOutput, ProviderPrincipal, ProviderSurface};
 
-pub(super) fn enforce_call(
+pub(super) fn enforce_pre_input(
     tool: &ProviderTool,
-    declared_capabilities: &HostCapabilities,
     call: &ProviderCall,
-    capabilities: &CapabilityBroker,
 ) -> Result<(), ProviderError> {
     enforce_scope(tool, call)?;
     enforce_admin(tool, call)?;
     enforce_destructive(tool, call)?;
     enforce_input_limit(tool, call)?;
+    Ok(())
+}
+
+pub(super) fn enforce_capabilities(
+    declared_capabilities: &HostCapabilities,
+    call: &ProviderCall,
+    capabilities: &CapabilityBroker,
+) -> Result<(), ProviderError> {
     capabilities.authorize(&call.provider, &call.action, declared_capabilities)?;
     Ok(())
 }

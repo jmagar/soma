@@ -111,6 +111,25 @@ fn pre_extraction_catalog_json_and_fingerprint_remain_stable() {
 }
 
 #[test]
+fn omitted_value_fields_preserve_hello_static_catalog_bytes_and_fingerprint() {
+    const SOURCE: &str = include_str!("fixtures/hello_static_omitted_fields.json");
+    const CATALOGS: &str = include_str!("fixtures/pre_extraction_hello_static_catalogs.json");
+    const FINGERPRINT: &str =
+        "sha256:9c8df0088541c37abc32eee474988b7d3655eb61c3982ed54115a8d19f658719";
+
+    let catalog: ProviderCatalog = serde_json::from_str(SOURCE).expect("source fixture parses");
+    let serialized = serde_json::to_vec(&vec![catalog.clone()]).expect("catalog serializes");
+    assert_eq!(serialized, CATALOGS.trim().as_bytes());
+
+    let registry = ProviderRegistry::builder()
+        .register(CatalogProvider(catalog))
+        .expect("fixture provider registers")
+        .build()
+        .expect("fixture registry builds");
+    assert_eq!(registry.snapshot().fingerprint().as_str(), FINGERPRINT);
+}
+
+#[test]
 fn typed_registry_registration_enforces_packaged_schema_constraints() {
     let mut manifest = ProviderManifest::new(
         ProviderId::new("typed-provider").expect("valid id"),
@@ -160,6 +179,64 @@ fn raw_schema_validation_rejects_null_optional_properties() {
             validate_provider_manifest_value(&value).expect_err("raw manifest null must fail");
         assert_eq!(error.code(), "json_schema_failed", "pointer {pointer}");
     }
+}
+
+#[test]
+fn typed_legacy_value_nulls_normalize_but_raw_nulls_remain_strict() {
+    let base = json!({
+        "schema_version": 1,
+        "provider": {"name": "legacy-values", "kind": "static-rust"},
+        "tools": [{
+            "name": "echo",
+            "description": "Echo",
+            "input_schema": {"type": "object"},
+            "mcp": {"enabled": true, "annotations": {}},
+            "rest": {"enabled": true, "path_params": {}, "query_params": {}},
+            "ui": {"enabled": true, "meta": {}},
+            "meta": {}
+        }],
+        "resources": [{
+            "uri_template": "provider://readme",
+            "name": "readme",
+            "description": "Readme",
+            "mcp": {"enabled": true, "annotations": {}},
+            "annotations": {}
+        }],
+        "ui": {"enabled": true, "meta": {}},
+        "meta": {}
+    });
+    validate_manifest_schema(&base).expect("object-valued baseline is schema-valid");
+
+    let schema_object_pointers = [
+        "/meta",
+        "/tools/0/meta",
+        "/tools/0/mcp/annotations",
+        "/tools/0/ui/meta",
+        "/resources/0/annotations",
+        "/resources/0/mcp/annotations",
+        "/ui/meta",
+    ];
+    for pointer in schema_object_pointers {
+        let mut raw = base.clone();
+        *raw.pointer_mut(pointer).expect("fixture pointer exists") = Value::Null;
+        let error = match validate_manifest_schema(&raw) {
+            Ok(()) => panic!("raw pointer {pointer} unexpectedly accepted null"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "json_schema_failed", "raw pointer {pointer}");
+    }
+
+    let mut typed: ProviderManifest = serde_json::from_value(base).expect("typed fixture parses");
+    typed.meta = Value::Null;
+    typed.tools[0].meta = Value::Null;
+    typed.tools[0].mcp.as_mut().unwrap().annotations = Value::Null;
+    typed.tools[0].rest.as_mut().unwrap().path_params = Value::Null;
+    typed.tools[0].rest.as_mut().unwrap().query_params = Value::Null;
+    typed.tools[0].ui.as_mut().unwrap().meta = Value::Null;
+    typed.resources[0].annotations = Value::Null;
+    typed.resources[0].mcp.as_mut().unwrap().annotations = Value::Null;
+    typed.ui.as_mut().unwrap().meta = Value::Null;
+    validate_provider_manifest(&typed).expect("typed legacy nulls normalize privately");
 }
 
 #[test]
