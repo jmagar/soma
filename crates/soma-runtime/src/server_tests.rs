@@ -113,7 +113,7 @@ fn wildcard_public_url_is_rejected() {
 #[tokio::test]
 async fn gateway_product_state_loads_filesystem_config() {
     let temp = tempfile::tempdir().expect("tempdir");
-    let home = temp.path().join(".soma");
+    let home = temp.path().join(".mcp-gateway");
     let paths = GatewayPaths::new(home).expect("paths");
     let store = FsGatewayConfigStore::from_paths(paths);
     store

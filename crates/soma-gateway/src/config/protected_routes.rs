@@ -14,7 +14,7 @@ pub struct ProtectedGatewaySubsetTarget {
 }
 
 fn default_protected_route_scopes() -> Vec<String> {
-    vec!["soma:read".to_owned(), "soma:write".to_owned()]
+    Vec::new()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

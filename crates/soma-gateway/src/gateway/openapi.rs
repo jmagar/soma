@@ -1,8 +1,6 @@
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::security::ssrf::{validate_url, OutboundPolicy};
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenApiOperationRef {
     pub namespace: String,
@@ -18,7 +16,8 @@ pub enum OpenApiAdapterError {
 }
 
 pub fn validate_spec_url(url: &str) -> Result<(), OpenApiAdapterError> {
-    validate_url(url, OutboundPolicy::StrictExternal)
+    let parsed = url::Url::parse(url).map_err(|_| OpenApiAdapterError::SpecUrlDenied)?;
+    soma_openapi::ssrf::validate_spec_url("gateway", &parsed)
         .map(|_| ())
         .map_err(|_| OpenApiAdapterError::SpecUrlDenied)
 }

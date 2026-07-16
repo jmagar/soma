@@ -1,4 +1,4 @@
-//! Self-contained gateway runtime for Soma.
+//! Reusable MCP aggregation gateway runtime.
 //!
 //! This crate intentionally starts with a narrow public surface. Runtime modules
 //! are added phase by phase behind tests that enforce the dependency direction.
@@ -8,12 +8,10 @@ pub mod codemode_journal;
 pub mod config;
 pub mod dispatch_helpers;
 pub mod gateway;
-pub mod net;
-pub mod process;
 pub mod registry;
-pub mod security;
-pub mod upstream;
 pub mod usage;
+
+pub use soma_mcp_client::{net, process, security, upstream};
 
 /// Crate version from Cargo metadata.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

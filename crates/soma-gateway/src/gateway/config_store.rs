@@ -11,7 +11,7 @@ pub struct FsGatewayConfigStore {
 
 impl FsGatewayConfigStore {
     pub fn new(home: std::path::PathBuf) -> Self {
-        let paths = GatewayPaths::new(home).expect("valid .soma home");
+        let paths = GatewayPaths::new(home).expect("valid gateway home");
         Self { paths }
     }
 

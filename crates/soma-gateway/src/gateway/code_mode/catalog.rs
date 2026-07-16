@@ -5,8 +5,6 @@ use thiserror::Error;
 
 use crate::upstream::UpstreamSnapshot;
 
-use super::namespace_tool_id;
-
 pub const CODEMODE_SCHEMA_CAP_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,7 +36,14 @@ impl CodeModeCatalog {
         let mut entries = BTreeMap::new();
         for snapshot in snapshots {
             for tool in &snapshot.tools {
-                let id = namespace_tool_id(&snapshot.name, &tool.name);
+                let descriptor = soma_codemode::ToolDescriptor::tool(
+                    &snapshot.name,
+                    &tool.name,
+                    tool.description.as_deref().unwrap_or_default(),
+                    tool.input_schema.clone(),
+                    tool.output_schema.clone(),
+                );
+                let id = descriptor.id;
                 entries.insert(
                     id.clone(),
                     CodeModeCatalogEntry {
@@ -46,7 +51,7 @@ impl CodeModeCatalog {
                         namespace: snapshot.name.clone(),
                         tool: tool.name.clone(),
                         description: tool.description.clone(),
-                        input_schema: tool.input_schema.clone(),
+                        input_schema: descriptor.schema,
                         ui_link: None,
                     },
                 );
