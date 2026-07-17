@@ -51,7 +51,20 @@ uuid = { version = "1", features = ["v4"] }
 
 [features]
 default = []
-rest = ["dep:axum", "dep:futures-core", "dep:tower-layer", "dep:tower-service"]
+# `tokio/rt-multi-thread` and `tokio/signal` are pulled in only by `rest`
+# because only the `codex-app-server-rest` binary needs them: it runs a
+# multi-threaded runtime (a real server, not the single-session examples) and
+# installs SIGTERM/ctrl-c handlers for graceful shutdown. Gating them here
+# keeps a library-only consumer (`features = []`) from paying for a runtime
+# flavor and signal machinery it never runs.
+rest = [
+  "dep:axum",
+  "dep:futures-core",
+  "dep:tower-layer",
+  "dep:tower-service",
+  "tokio/rt-multi-thread",
+  "tokio/signal",
+]
 
 [[bin]]
 name = "codex-app-server-rest"

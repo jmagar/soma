@@ -89,7 +89,14 @@ documented in this crate's generated OpenAPI spec
 crates/shared/codex-app-server-client/openapi.json) and in README.md.
 ";
 
-#[tokio::main(flavor = "current_thread")]
+// Multi-threaded runtime (tokio's default `#[tokio::main]`): this is a real
+// server that can hold up to `RestLimits::max_sessions` concurrent sessions,
+// each driving its own `codex app-server` child. On a single-threaded runtime
+// one busy connection starves every other session sharing the process (flagged
+// in review); a worker pool lets them make progress in parallel. The
+// single-session `examples/rest_*.rs` deliberately stay `current_thread` -
+// they demo one session and have no such contention.
+#[tokio::main]
 async fn main() -> ExitCode {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
     run(raw_args, &|key| std::env::var(key).ok()).await
@@ -158,10 +165,50 @@ async fn bind_and_serve(addr: SocketAddr, router: axum::Router) -> ExitCode {
         Err(error) => return fail(&format!("failed to bind {addr}: {error}")),
     };
     println!("codex-app-server-rest listening on http://{addr}");
-    match axum::serve(listener, router).await {
+    match axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+    {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => fail(&format!("server error: {error}")),
     }
+}
+
+/// Resolves when the process is asked to stop, so [`bind_and_serve`] can drain
+/// in-flight requests instead of dropping them mid-flight.
+///
+/// Without this, a `SIGTERM` (systemd stop, `docker stop`, an orchestrator
+/// rolling the pod) kills the process instantly, tearing down every active
+/// session and orphaning the `codex app-server` children they own. Graceful
+/// shutdown stops accepting new connections and lets the ones in progress
+/// finish first.
+///
+/// Waits on `ctrl-c` on every platform, plus `SIGTERM` on unix (the signal a
+/// service manager actually sends); whichever arrives first wins. A failure to
+/// install a handler is treated as "never fires" rather than a crash - losing
+/// graceful shutdown is not worth taking the server down over.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut stream) => {
+                stream.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
+    println!("codex-app-server-rest: shutdown signal received, draining");
 }
 
 fn build_router(config: &ResolvedConfig, limits: RestLimits) -> axum::Router {

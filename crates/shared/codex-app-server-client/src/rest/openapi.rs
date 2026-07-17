@@ -225,6 +225,38 @@ mod tests {
     /// can't resolve a mapping ref, which defeats the point of publishing the
     /// spec at all. A dangling ref is invisible to `serde_json`, so it needs
     /// its own assertion.
+    /// Every operation that declares a `requestBody` must document a `413`.
+    ///
+    /// The router caps request bodies with `DefaultBodyLimit`
+    /// (`RestLimits::max_request_body_bytes`), so any body-reading route can
+    /// return `413` before its handler runs. `paths::ensure_request_body_limit_413`
+    /// adds it centrally; this asserts nothing slipped past that - a route with
+    /// a body but no documented `413` would under-report the real API to every
+    /// generated client.
+    #[test]
+    fn every_route_with_a_request_body_documents_413() {
+        let spec = openapi_spec();
+        let paths = spec["paths"].as_object().expect("paths is an object");
+
+        let mut missing = Vec::new();
+        for (path, item) in paths {
+            let operations = item.as_object().expect("path item is an object");
+            for (method, operation) in operations {
+                if operation.get("requestBody").is_none() {
+                    continue;
+                }
+                if operation["responses"].get("413").is_none() {
+                    missing.push(format!("{} {path}", method.to_uppercase()));
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "these operations declare a requestBody but do not document a 413 (the router's \
+             DefaultBodyLimit can reject any of them): {missing:?}"
+        );
+    }
+
     #[test]
     fn every_schema_ref_resolves_to_a_real_component() {
         let spec = openapi_spec();

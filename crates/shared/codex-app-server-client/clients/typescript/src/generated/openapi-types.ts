@@ -497,6 +497,15 @@ export interface operations {
                     "application/json": components["schemas"]["RestErrorResponse"];
                 };
             };
+            /** @description Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestErrorResponse"];
+                };
+            };
             /** @description `RestLimits::max_one_shot_concurrency` concurrent one-shot calls are already in flight. */
             429: {
                 headers: {
@@ -654,6 +663,15 @@ export interface operations {
                     "application/json": components["schemas"]["RestErrorResponse"];
                 };
             };
+            /** @description Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestErrorResponse"];
+                };
+            };
             /** @description `RestLimits::max_sessions` concurrently open bridge sessions are already open. */
             429: {
                 headers: {
@@ -763,6 +781,15 @@ export interface operations {
             };
             /** @description No session with this `sessionId` is open. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestErrorResponse"];
+                };
+            };
+            /** @description Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran. */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -970,6 +997,15 @@ export interface operations {
                     "application/json": components["schemas"]["RestErrorResponse"];
                 };
             };
+            /** @description Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestErrorResponse"];
+                };
+            };
         };
     };
     postV1SessionsBySessionIdRequestsByRequestKeyResult: {
@@ -1036,6 +1072,15 @@ export interface operations {
                     "application/json": components["schemas"]["RestErrorResponse"];
                 };
             };
+            /** @description Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestErrorResponse"];
+                };
+            };
         };
     };
     postV1TextTurn: {
@@ -1088,7 +1133,7 @@ export interface operations {
                     "application/json": components["schemas"]["RestErrorResponse"];
                 };
             };
-            /** @description Accumulated turn output exceeded `RestLimits::max_text_turn_output_bytes`; the turn was interrupted. */
+            /** @description The request body exceeded `RestLimits::max_request_body_bytes` (rejected before the turn started), or accumulated turn output exceeded `RestLimits::max_text_turn_output_bytes` (the turn was interrupted). */
             413: {
                 headers: {
                     [name: string]: unknown;

@@ -239,6 +239,55 @@ fn stream_timeout_ms_param() -> Value {
 /// `openapi_spec()`, including in tests) instead of silently emitting a
 /// route with no operation.
 fn operation_for(route: &RouteDef) -> Value {
+    let mut operation = operation_definition(route);
+    ensure_request_body_limit_413(&mut operation);
+    operation
+}
+
+/// Adds a `413` response to any operation that has a `requestBody`.
+///
+/// Every route that reads a body can be rejected by the router's
+/// `DefaultBodyLimit` ([`RestLimits::max_request_body_bytes`](crate::rest::RestLimits::max_request_body_bytes))
+/// before its handler runs, independently of any route-specific failure. Doing
+/// it here, once, rather than hand-listing `413` on each POST route means a
+/// route added later cannot forget it - `every_route_with_a_request_body_documents_413`
+/// in `super::super` fails the build if this ever stops holding.
+///
+/// Skips an operation that already documents `413` (only `POST /v1/text-turn`,
+/// whose `413` also covers its output-byte cap) so its more specific
+/// description is kept.
+fn ensure_request_body_limit_413(operation: &mut Value) {
+    let Some(map) = operation.as_object_mut() else {
+        return;
+    };
+    if !map.contains_key("requestBody") {
+        return;
+    }
+    let Some(responses) = map.get_mut("responses").and_then(Value::as_object_mut) else {
+        return;
+    };
+    if responses.contains_key("413") {
+        return;
+    }
+    let (_, body) = error_response(
+        "413",
+        "Request body exceeded `RestLimits::max_request_body_bytes` (the router's \
+         `DefaultBodyLimit`); rejected before the handler ran.",
+    );
+    responses.insert("413".to_owned(), body);
+    // Re-sort so output stays byte-identical whether `serde_json::Map` is a
+    // `BTreeMap` or an insertion-ordered `IndexMap` in this build - the same
+    // determinism concern `json::obj` exists for (see the module docs). A bare
+    // `insert` would append at the end under `IndexMap`.
+    let mut sorted: Vec<(String, Value)> = responses
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
+    sorted.sort_by(|left, right| left.0.cmp(&right.0));
+    *responses = sorted.into_iter().collect();
+}
+
+fn operation_definition(route: &RouteDef) -> Value {
     let auth_note = unauthorized_response();
     match (route.method, route.path_template) {
         ("get", "/health") | ("get", "/v1/health") => obj(vec![
@@ -318,7 +367,9 @@ fn operation_for(route: &RouteDef) -> Value {
                     ),
                     error_response(
                         "413",
-                        "Accumulated turn output exceeded `RestLimits::max_text_turn_output_bytes`; the turn was interrupted.",
+                        "The request body exceeded `RestLimits::max_request_body_bytes` (rejected before \
+                         the turn started), or accumulated turn output exceeded \
+                         `RestLimits::max_text_turn_output_bytes` (the turn was interrupted).",
                     ),
                     error_response(
                         "502",
@@ -649,7 +700,7 @@ fn operation_for(route: &RouteDef) -> Value {
             ),
         ]),
         (method, path) => unreachable!(
-            "openapi.rs::operation_for has no operation body mapped for `{method} {path}` - \
+            "openapi.rs::operation_definition has no operation body mapped for `{method} {path}` - \
              add one alongside the new ROUTES entry"
         ),
     }

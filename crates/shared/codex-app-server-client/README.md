@@ -190,6 +190,11 @@ accident: a non-loopback bind in `--mode trusted-bridge` without `--token` is
 rejected, as is `--allow-unsafe-client-options` on a non-loopback bind without
 a token.
 
+On `SIGTERM` (`systemd` stop, `docker stop`, an orchestrator rolling the pod)
+or `ctrl-c`, it shuts down gracefully: it stops accepting new connections and
+drains in-flight requests before exiting, rather than dropping active sessions
+and orphaning their `codex app-server` children.
+
 ### Mount it in your own app
 
 ```rust,no_run
@@ -482,6 +487,29 @@ This is transport auth only. A caller holding the one shared token gets
 everything the mounted router exposes; it is not multi-tenant isolation and it
 is not authorization.
 
+### Browser clients need CORS — the adapter adds none
+
+The SSE route exists for browser clients, but **this crate sets no CORS
+headers**, deliberately: a `CorsLayer` would mean a `tower-http` dependency,
+and the crate is kept to a minimal, audited dependency graph so it stays
+liftable (see the top of this file). A page served from a different origin
+than the adapter therefore can't call any of these routes — including
+`EventSource` against `/events/stream` — until *you* add CORS in front of it.
+
+Add it in the host application (it's one layer):
+
+```rust,ignore
+use tower_http::cors::CorsLayer;
+
+let app = codex_app_server_client::rest::trusted_bridge_router()
+    .layer(CorsLayer::permissive()); // scope this to your real origins in production
+```
+
+`CorsLayer::permissive()` is fine for local development; in production restrict
+it to the specific origins that should reach the adapter. Same-origin
+deployments (the page and the adapter behind one gateway/host) need nothing
+here.
+
 ### Operational knobs
 
 Every limit has a default and a `CODEX_APP_SERVER_REST_*` environment
@@ -499,6 +527,7 @@ value) or `RestLimits::try_from_env()` (returns `RestLimitsEnvError`), then
 | `MIN_STREAM_POLL_TIMEOUT_MS` | `250` | floor on `?timeoutMs=`, SSE route only |
 | `MAX_TEXT_TURN_DURATION_MS` | `600000` | wall-clock budget for one text turn |
 | `MAX_TEXT_TURN_OUTPUT_BYTES` | `1048576` | response byte cap for one text turn |
+| `MAX_REQUEST_BODY_BYTES` | `2097152` | request body cap, all routes (`413` past it) |
 | `PENDING_REQUEST_TTL_MS` | `600000` | how long an unanswered server request lives |
 | `MAX_PENDING_REQUESTS_PER_SESSION` | `64` | unanswered server requests per session |
 | `EVENTS_CHANNEL_CAPACITY` | `1024` | event buffer per session; events drop once full |

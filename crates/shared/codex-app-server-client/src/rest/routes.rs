@@ -7,7 +7,7 @@ use std::{
 };
 
 use axum::{
-    extract::{rejection::JsonRejection, Path, Query, State},
+    extract::{rejection::JsonRejection, DefaultBodyLimit, Path, Query, State},
     http::StatusCode,
     response::{
         sse::{Event as SseEvent, KeepAlive, Sse},
@@ -169,7 +169,15 @@ pub fn router_with_backend_arc_and_options(
         router
     };
 
-    router.with_state(state)
+    // Cap request bodies before any handler runs. axum applies a silent 2 MiB
+    // default otherwise; this makes the bound explicit, tunable
+    // (`RestLimits::max_request_body_bytes`), and consistent with every other
+    // documented limit. Applied to the whole router, but only the body-reading
+    // POST routes can actually trip it - the health/compat/event GETs have no
+    // body to measure.
+    router
+        .layer(DefaultBodyLimit::max(options.limits.max_request_body_bytes))
+        .with_state(state)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -598,11 +606,30 @@ fn invalid_request(message: impl Into<String>) -> Response {
 }
 
 fn invalid_json(error: JsonRejection) -> Response {
+    // A body that blew the `DefaultBodyLimit` (see
+    // `router_with_backend_arc_and_options`) surfaces here as a `JsonRejection`
+    // too, but it is a `413`, not a malformed-request `400` - reporting it as
+    // "invalid_json" would tell a caller their JSON was wrong when it was
+    // simply too big. The rejection knows its own status; trust it for the
+    // too-large case and keep the crate's `payload_too_large` error shape so it
+    // matches `RestError::PayloadTooLarge` responses from elsewhere.
+    if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(RestErrorResponse {
+                error: "payload_too_large".to_owned(),
+                message: error.body_text(),
+                code: None,
+                data: None,
+            }),
+        )
+            .into_response();
+    }
     (
         StatusCode::BAD_REQUEST,
         Json(RestErrorResponse {
             error: "invalid_json".to_owned(),
-            message: error.to_string(),
+            message: error.body_text(),
             code: None,
             data: None,
         }),

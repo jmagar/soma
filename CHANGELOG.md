@@ -146,6 +146,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ServerNotification::method_name()` for logging a notification's kind
   without its full (potentially sensitive) payload. See
   `crates/shared/codex-app-server-client/README.md`.
+- `codex-app-server-client` REST operational hardening:
+  - The `codex-app-server-rest` binary now shuts down gracefully on `SIGTERM`
+    (unix) and `ctrl-c`, draining in-flight requests instead of dropping active
+    sessions and orphaning their `codex app-server` children.
+  - `RestLimits::max_request_body_bytes` (env
+    `CODEX_APP_SERVER_REST_MAX_REQUEST_BODY_BYTES`, default 2 MiB) caps request
+    bodies on every route via axum's `DefaultBodyLimit`, replacing axum's silent
+    2 MiB default and closing the input-side gap in the "every limit documented
+    and overridable" contract. An oversized body is rejected with `413`
+    (distinct from a malformed-JSON `400`); every request-body route documents
+    it, guarded by `every_route_with_a_request_body_documents_413`.
 
 ### Changed
 
@@ -171,6 +182,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interactive round trip that could time out impatient MCP clients on retry.
 - `soma-auth`'s default auth-database directory is now `~/.soma` instead of
   the inherited `~/.lab`.
+- The `codex-app-server-rest` binary runs on tokio's multi-threaded runtime
+  (was `current_thread`, copied unexamined from the example): it can hold up to
+  `max_sessions` concurrent sessions, each driving a `codex` child, and a
+  single-threaded runtime let one busy connection starve the rest. The
+  single-session `examples/rest_*.rs` stay `current_thread`. The
+  `rt-multi-thread` and `signal` tokio features are pulled in only by the
+  `rest` feature, so a library-only consumer does not pay for them.
 
 ### Fixed
 

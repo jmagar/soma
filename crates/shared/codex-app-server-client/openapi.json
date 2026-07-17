@@ -551,6 +551,16 @@
             },
             "description": "A `client.command`/`extraArgs`/`config` override was requested without `RestRouterOptions::with_unsafe_client_options(true)`."
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestErrorResponse"
+                }
+              }
+            },
+            "description": "Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran."
+          },
           "429": {
             "content": {
               "application/json": {
@@ -716,6 +726,16 @@
             },
             "description": "A `client.command`/`extraArgs`/`config` override was requested without `RestRouterOptions::with_unsafe_client_options(true)`."
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestErrorResponse"
+                }
+              }
+            },
+            "description": "Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran."
+          },
           "429": {
             "content": {
               "application/json": {
@@ -865,6 +885,16 @@
               }
             },
             "description": "No session with this `sessionId` is open."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestErrorResponse"
+                }
+              }
+            },
+            "description": "Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran."
           },
           "429": {
             "content": {
@@ -1126,6 +1156,16 @@
               }
             },
             "description": "`requestKey` matched a request that has since expired (past `RestLimits::pending_request_ttl` or the app-server's own reply deadline) or was already answered."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestErrorResponse"
+                }
+              }
+            },
+            "description": "Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran."
           }
         },
         "summary": "Reply to a pending server-originated request with an error"
@@ -1216,6 +1256,16 @@
               }
             },
             "description": "`requestKey` matched a request that has since expired (past `RestLimits::pending_request_ttl` or the app-server's own reply deadline) or was already answered."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestErrorResponse"
+                }
+              }
+            },
+            "description": "Request body exceeded `RestLimits::max_request_body_bytes` (the router's `DefaultBodyLimit`); rejected before the handler ran."
           }
         },
         "summary": "Reply to a pending server-originated request with a result"
@@ -1285,7 +1335,7 @@
                 }
               }
             },
-            "description": "Accumulated turn output exceeded `RestLimits::max_text_turn_output_bytes`; the turn was interrupted."
+            "description": "The request body exceeded `RestLimits::max_request_body_bytes` (rejected before the turn started), or accumulated turn output exceeded `RestLimits::max_text_turn_output_bytes` (the turn was interrupted)."
           },
           "429": {
             "content": {

@@ -116,6 +116,7 @@ impl RestRouterOptions {
 /// | [`min_stream_poll_timeout`](Self::min_stream_poll_timeout) | `CODEX_APP_SERVER_REST_MIN_STREAM_POLL_TIMEOUT_MS` | `250` |
 /// | [`max_text_turn_duration`](Self::max_text_turn_duration) | `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_DURATION_MS` | `600000` (10m) |
 /// | [`max_text_turn_output_bytes`](Self::max_text_turn_output_bytes) | `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES` | `1048576` (1 MiB) |
+/// | [`max_request_body_bytes`](Self::max_request_body_bytes) | `CODEX_APP_SERVER_REST_MAX_REQUEST_BODY_BYTES` | `2097152` (2 MiB) |
 /// | [`pending_request_ttl`](Self::pending_request_ttl) | `CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS` | `600000` (10m) |
 /// | [`max_pending_requests_per_session`](Self::max_pending_requests_per_session) | `CODEX_APP_SERVER_REST_MAX_PENDING_REQUESTS_PER_SESSION` | `64` |
 /// | [`events_channel_capacity`](Self::events_channel_capacity) | `CODEX_APP_SERVER_REST_EVENTS_CHANNEL_CAPACITY` | `1024` |
@@ -178,6 +179,19 @@ pub struct RestLimits {
     /// `CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES`. Default:
     /// `1048576` (1 MiB).
     pub max_text_turn_output_bytes: usize,
+    /// Cap on the size of a request *body*, applied to every route via axum's
+    /// `DefaultBodyLimit`. A request whose body exceeds this is rejected with
+    /// `413 Payload Too Large` before any handler runs.
+    ///
+    /// This is the input-side counterpart to
+    /// [`Self::max_text_turn_output_bytes`]: without it, the only bound on an
+    /// incoming prompt or raw-call params object is axum's own silent 2 MiB
+    /// default, which is neither documented nor tunable. Making it an explicit
+    /// `RestLimits` field keeps the "every limit has a default and an env
+    /// override" contract true on the request side too. Env:
+    /// `CODEX_APP_SERVER_REST_MAX_REQUEST_BODY_BYTES`. Default: `2097152`
+    /// (2 MiB, matching axum's historical default).
+    pub max_request_body_bytes: usize,
     /// How long a server-originated request surfaced by
     /// `GET /v1/sessions/{sessionId}/events(/stream)` stays answerable via
     /// `POST .../requests/{requestKey}/result` or `.../error` before it
@@ -242,6 +256,7 @@ impl Default for RestLimits {
             min_stream_poll_timeout: Duration::from_millis(250),
             max_text_turn_duration: Duration::from_secs(10 * 60),
             max_text_turn_output_bytes: 1024 * 1024,
+            max_request_body_bytes: 2 * 1024 * 1024,
             pending_request_ttl: Duration::from_secs(600),
             max_pending_requests_per_session: 64,
             events_channel_capacity: DEFAULT_EVENTS_CHANNEL_CAPACITY,
@@ -323,6 +338,10 @@ impl RestLimits {
             max_text_turn_output_bytes: env_usize(
                 "CODEX_APP_SERVER_REST_MAX_TEXT_TURN_OUTPUT_BYTES",
                 default.max_text_turn_output_bytes,
+            )?,
+            max_request_body_bytes: env_nonzero_usize(
+                "CODEX_APP_SERVER_REST_MAX_REQUEST_BODY_BYTES",
+                default.max_request_body_bytes,
             )?,
             pending_request_ttl: env_duration_ms(
                 "CODEX_APP_SERVER_REST_PENDING_REQUEST_TTL_MS",

@@ -1339,3 +1339,36 @@ async fn sse_event_stream_yields_to_the_executor_with_a_synchronous_backend() {
          if this resolved, the fake backend stopped being infinite"
     );
 }
+
+/// A request body over `RestLimits::max_request_body_bytes` is rejected with
+/// `413` before the handler runs - and distinguishably from malformed JSON,
+/// which is `400`. Guards the `DefaultBodyLimit` wiring plus `invalid_json`'s
+/// status-passthrough for the too-large case.
+#[tokio::test]
+async fn oversized_request_body_is_rejected_with_413_not_400() {
+    let options = RestRouterOptions::text_turn().with_limits(RestLimits {
+        max_request_body_bytes: 64,
+        ..RestLimits::default()
+    });
+    let app = router_with_backend_and_options(FakeBackend::default(), options);
+
+    // Well over the 64-byte cap: 413, and the crate's payload_too_large shape.
+    let big = json!({ "prompt": "x".repeat(500) });
+    let (status, body) = request_json(app.clone(), Method::POST, "/v1/text-turn", Some(big)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(body["error"], "payload_too_large");
+
+    // Small but malformed body stays a 400 invalid_json - the cap must not
+    // swallow the distinction between "too big" and "not JSON".
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/v1/text-turn")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("{not json"))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["error"], "invalid_json");
+}
