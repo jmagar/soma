@@ -350,6 +350,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it until this PR's `contract-audit` gate forced the catch-up, so the
   drift is real but still unrelated to the contracts split itself.
 
+- PR12 review fix (round 2): `crates/soma/client/src/client.rs`'s module doc
+  still said `` `SomaService` (in `soma-application`) wraps this `` — stale
+  from before the extraction; `SomaService` lives in `soma-service`, not
+  `soma-application`. The `client`-feature-disabled error path also still
+  said `"soma-service was built without the `client` feature"`, misnaming
+  the crate that actually owns the feature. Both now say `soma-client`. The
+  crate-root doc in `lib.rs` overclaimed "no ... validation logic of its
+  own" when `resolve_remote_rest_call`/`remote_provider_route` do resolve
+  REST method/path from the provider catalog and `validate_action_path_segment`
+  does validate the action segment; the doc now describes that as
+  transport-shape routing rather than denying it exists. Added missing
+  `soma-client` unit coverage for `ready()` (stub always-ready, upstream
+  `/health` success and non-2xx failure), `call_deployed_api_method`'s
+  non-success-status and invalid-JSON-body error branches,
+  `remote_provider_route`'s `surfaces.rest == false` bail branch, and
+  `validate_action_path_segment` (empty/`/`-containing actions, plus
+  `call_rest_action` short-circuiting before any network call). Fixed a
+  discarded `axum::serve` `Result` in the new
+  `apps/soma/tests/mcp_http_roundtrip.rs` test harness that would have
+  silently swallowed a server-task failure instead of surfacing it. Fixed
+  an unrestored `SOMA_SUPPRESS_STALE_BINARY_WARNING` env var in
+  `crates/soma/cli/src/cli_tests.rs`'s `run_status_command_prints_status_json`
+  that could leak into other tests sharing the same test binary.
+
 - PR12 review fix: the `soma-client` extraction (`soma.rs` → `client.rs`)
   left several docs and the `cargo xtask scaffold --adapt-plan` generator
   still pointing new-service authors at the deleted
@@ -364,16 +388,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - PR11 review fix: `soma-integrations::CodeModeApplicationPort` was
   implemented and unit-tested but never constructed anywhere outside its own
-  tests, so `soma(action="code_mode")`-style callers still silently fell back
-  to `UnavailableEnginePort` in production. `ApplicationPorts` gained
+  tests, so any future caller of `SomaApplication::codemode_execute` (no
+  MCP action, CLI command, or REST route dispatches to it yet — that wiring
+  is a separate follow-up) would have silently hit `UnavailableEnginePort` in
+  production instead of a real adapter. `ApplicationPorts` gained
   `with_codemode()`/`with_openapi()` builders alongside the existing
   `with_gateway()`, and `apps/soma`'s `runtime_for_components` now wires
-  `CodeModeApplicationPort::default()` into every runtime it builds.
+  `CodeModeApplicationPort::default()` into every runtime it builds — proven
+  by a new `apps/soma` test that calls `codemode_execute` through the real
+  composition and asserts the error is no longer `engine_unavailable`.
   `apps/soma`'s `soma-integrations` dependency is also now optional and
   feature-gated (`mcp-stdio`, `mcp-http`, `test-support`) instead of
   unconditional, so `soma-gateway`'s `protected-routes` feature is no longer
   pulled into builds — e.g. a `cli`-only, `default-features = false` build of
   the lib crate — that never construct `ApplicationPorts` from it.
+  `CodeModeApplicationPort::execute` also now checks `CodeModeConfig::enabled`
+  before running a snippet (the wired default is disabled) and maps
+  `soma-codemode`'s `ToolError` variants to distinct `PortError` codes
+  instead of one generic `codemode_execution_failed`; `soma-integrations`'s
+  gateway MCP-proxy error mapping now reuses `soma-gateway`'s own exhaustive
+  `GatewayManagerError` → `GatewayStructuredError` classification instead of
+  marking every proxy failure `retryable: true`.
+
+- `soma-provider-adapters` PR10 second review pass: `UpstreamMcpProvider`'s
+  `static_args` (a per-manifest pin, e.g. restricting a generic upstream
+  tool's `action`) were applied *before* caller-supplied params and so could
+  be silently overridden by a colliding caller key; merge order is now
+  reversed so the pin always wins. `openapi.rs`'s `validate_base_url` now
+  fails closed when a provider's `capabilities.network` grant is absent or
+  disabled — previously that silently skipped the allowlist check the
+  adapter's own docs describe as its SSRF defense — and its dispatch client
+  now disables HTTP redirects so an allowlisted host can't hand a request off
+  to a non-allowlisted address via a 3xx response. `soma-openapi`'s internal
+  `execute_operation_inner` now takes a `DispatchTrust` enum instead of two
+  independent booleans, making the untested/unneeded
+  `enforce_ssrf && lenient_body` combination unrepresentable. The `wasm`
+  feature was missing its `sidecar` feature dependency (compiled only by
+  accident whenever another sidecar-owning feature was also enabled);
+  `manifest_file::build_provider` returning `None` for an unbuilt provider
+  kind is now a per-manifest `FileProviderLoadError` instead of an
+  `unreachable!()` that would have crashed the whole server; and
+  `project_gateway_action_catalog` returns `Result` instead of panicking on
+  an invalid provider id. Also: capture bounded upstream stderr as private
+  diagnostics on MCP stdio provider failures (previously piped to
+  `Stdio::null()` and discarded), log (rather than silently swallow) upstream
+  MCP session-cancel errors and invalid provider catalog timeout env values,
+  and add unit coverage for `expand_env_templates`, the `static_args` pin,
+  and the fail-closed network-capability/params-must-be-object/path-parameter
+  behaviors that shipped undocumented-but-untested in the first PR10 pass.
 
 - `soma-provider-adapters::openapi` review fix: `OpenApiProvider` now
   delegates HTTP dispatch to `soma-openapi` (`http::execute_operation_for_allowlisted_host`,
