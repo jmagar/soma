@@ -1080,7 +1080,7 @@ curl -H "Authorization: Bearer $SOMA_API_KEY" \
 Use this when creating a new server from soma:
 
 - [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
-- [ ] Implement API client in `crates/soma/service/src/soma.rs` (transport only)
+- [ ] Implement API client in `crates/soma/client/src/client.rs` (transport only)
 - [ ] Add service methods to `crates/soma/service/src/app.rs` (all logic here)
 - [ ] Add tool actions to `crates/soma/contracts/src/actions.rs`, `crates/soma/mcp/src/tools.rs`, and `crates/soma/mcp/src/schemas.rs`
 - [ ] Add CLI commands to `crates/soma/cli/src/lib.rs`
@@ -1573,7 +1573,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Updated Checklist for New Servers
 
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
-- [ ] Implement API client in `crates/soma/service/src/soma.rs` (transport only)
+- [ ] Implement API client in `crates/soma/client/src/client.rs` (transport only)
 - [ ] Add service methods to `crates/soma/service/src/app.rs` (ALL logic here)
 - [ ] Add actions to `crates/soma/contracts/src/actions.rs`, `crates/soma/mcp/src/tools.rs`, and `crates/soma/mcp/src/schemas.rs` (thin shim ONLY)
 - [ ] Add CLI commands to `crates/soma/cli/src/lib.rs` (thin shim ONLY)
