@@ -13,7 +13,13 @@ use axum::Router;
 use tokio::net::{TcpListener, ToSocketAddrs};
 
 /// Error binding a listener or running the server loop.
+///
+/// Non-exhaustive: this crate is shared plumbing consumed by multiple
+/// product surfaces, so new failure variants may be added without that
+/// being a breaking change for callers that only use `?`/`Display`/
+/// `Error::source` rather than exhaustively matching.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ServerError {
     /// Binding `addr` failed (e.g. already in use, permission denied).
     Bind {

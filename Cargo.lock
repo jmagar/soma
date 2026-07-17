@@ -3824,7 +3824,6 @@ name = "soma-http-server"
 version = "0.1.0"
 dependencies = [
  "axum",
- "serde",
  "serde_json",
  "soma-http-api",
  "tokio",

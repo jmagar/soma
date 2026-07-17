@@ -453,6 +453,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the `/` its sibling `uri_template` field always uses, so a resource
   under a subdirectory reported a `file_name` that looked nothing like
   its own URI on Windows.
+- PR15 review fix: `soma-http-server`'s `Cargo.toml` carried an unused
+  `serde` dependency and a `serde_json` dependency that was only ever used
+  by `#[cfg(test)]` code (moved to `[dev-dependencies]`); `ServerError` is
+  now `#[non_exhaustive]` since it's a shared-crate error type multiple
+  product surfaces will consume; `apps/soma`'s CORS origin-parsing now logs
+  an aggregate `error` (not just per-origin `warn`s) when every configured
+  origin fails to parse, since that specific outcome silently converts an
+  intended allow-list into "no browser origin permitted"; corrected several
+  doc comments in the new crate that overclaimed adoption in present tense
+  (`request_id`/`method_not_allowed`/`health` router helpers have no
+  consumer yet; the `request_id.rs` doc example contradicted `tracing.rs`'s
+  own doc about what the default trace layer captures, and was excluded
+  from compilation via `` ```ignore ``, so the mismatch went unnoticed);
+  documented `shutdown.rs`'s known limitation where a failed signal-handler
+  registration silently degrades or disables graceful shutdown; and added
+  missing test coverage: a disallowed-CORS-origin case, an exact-body-size
+  boundary case, a test proving an in-flight request actually drains across
+  graceful shutdown rather than merely not hanging, and a regression test
+  for the `apps/soma` unmatched-route 404 envelope.
 
 ## [0.4.7]
 
