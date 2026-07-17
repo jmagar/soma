@@ -4,13 +4,13 @@ use serde_json::json;
 use soma_contracts::{
     provider_validation::validate_provider_manifest_value, providers::CapabilityGrant,
 };
+use soma_provider_adapters::openapi::OpenApiProvider;
 use soma_service::{
     capabilities::CapabilityBroker,
     provider_registry::{
         ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry, ProviderRequestLimits,
-        ProviderSurface,
+        ProviderSurface, SharedAdapter,
     },
-    providers::openapi::OpenApiProvider,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -28,7 +28,7 @@ fn openapi_catalog() -> soma_contracts::providers::ProviderCatalog {
 
 #[tokio::test]
 async fn openapi_provider_network_is_default_denied_before_execution() {
-    let provider = OpenApiProvider::arc(openapi_catalog());
+    let provider = SharedAdapter::wrap(OpenApiProvider::arc(openapi_catalog()));
     let registry = ProviderRegistry::new(vec![provider]).expect("registry");
     let error = registry
         .dispatch(call())
@@ -81,7 +81,7 @@ async fn openapi_provider_executes_pinned_local_operation() {
             "path": "/upstream/weather"
         }
     });
-    let provider = OpenApiProvider::arc(catalog);
+    let provider = SharedAdapter::wrap(OpenApiProvider::arc(catalog));
     let registry = ProviderRegistry::with_capabilities(
         vec![provider],
         CapabilityBroker::new(vec![CapabilityGrant::Network {
@@ -114,7 +114,7 @@ async fn openapi_provider_rejects_absolute_operation_urls() {
             "path": "http://169.254.169.254/latest/meta-data"
         }
     });
-    let provider = OpenApiProvider::arc(catalog);
+    let provider = SharedAdapter::wrap(OpenApiProvider::arc(catalog));
     let registry = ProviderRegistry::with_capabilities(
         vec![provider],
         CapabilityBroker::new(vec![CapabilityGrant::Network {
