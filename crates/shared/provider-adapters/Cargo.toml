@@ -19,7 +19,7 @@ layer = "shared"
 default = []
 # Bounded child-process sidecar runner shared by the ai-sdk and python
 # adapters, and by any product-layer resource-reader that also needs to run a
-# sandboxed sidecar (e.g. soma-service's dynamic resource-file readers).
+# sandboxed sidecar (e.g. soma-application's dynamic resource-file readers).
 sidecar = ["dep:tokio"]
 static-echo = []
 ai-sdk = ["sidecar", "dep:tokio"]
@@ -51,7 +51,7 @@ soma-gateway = { workspace = true, optional = true }
 
 # shared by openapi + gateway features: both speak reqwest 0.13/rustls,
 # matching the rest of the shared MCP/OpenAPI ecosystem (soma-mcp-client,
-# soma-gateway, soma-openapi) rather than soma-service's older reqwest 0.12.
+# soma-gateway, soma-openapi) rather than soma-application's older reqwest 0.12.
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "query", "rustls", "rustls-no-provider"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"], optional = true }
 url = { version = "2", optional = true }

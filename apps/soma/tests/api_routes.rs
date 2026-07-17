@@ -12,12 +12,14 @@ use soma::{
     server::{self, AuthPolicy},
     testing::{bearer_state, loopback_state, loopback_state_with_registry},
 };
+use soma_application::provider_registry::{
+    Provider, ProviderCall, ProviderOutput, ProviderRegistry,
+};
+use soma_application::ProviderError;
 use soma_domain::actions::ACTION_SPECS;
 use soma_provider_core::{
     ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool, RestOverlay,
 };
-use soma_service::provider_registry::{Provider, ProviderCall, ProviderOutput, ProviderRegistry};
-use soma_service::ProviderError;
 use std::sync::Arc;
 use tower::ServiceExt;
 

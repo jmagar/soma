@@ -149,7 +149,7 @@ fn cli_shim_does_not_perform_transport_work() {
     ] {
         assert!(
             !src.contains(forbidden),
-            "cli/lib.rs must not own provider report domain logic ({forbidden}); use soma-service"
+            "cli/lib.rs must not own provider report domain logic ({forbidden}); use soma-application"
         );
     }
 }
@@ -200,10 +200,6 @@ fn runtime_state_exposes_the_application_facade_not_legacy_engines() {
     assert!(
         dependency_names.contains(&"soma-application"),
         "soma-runtime must own the initialized SomaApplication handle"
-    );
-    assert!(
-        !dependency_names.contains(&"soma-service"),
-        "soma-runtime must not depend directly on the legacy service crate"
     );
 
     let runtime_sources = collect_rs_files("crates/soma/runtime/src");
@@ -311,12 +307,10 @@ fn codemode_openapi_crates_have_no_forbidden_internal_dependencies() {
             "soma-api",
             "soma-auth",
             "soma-cli",
-            "soma-contracts",
             "soma-mcp",
             "soma-observability",
             "soma-plugin-support",
             "soma-runtime",
-            "soma-service",
             "soma-test-support",
             "soma-web",
         ] {
@@ -367,10 +361,8 @@ fn codemode_openapi_feature_graph_is_explicit() {
         "soma-api",
         "soma-auth",
         "soma-cli",
-        "soma-contracts",
         "soma-mcp",
         "soma-runtime",
-        "soma-service",
         "soma-web",
     ] {
         assert!(
@@ -524,8 +516,8 @@ fn bare_mcp_profile_compiles_without_client_or_observability_features() {
     ]);
     let service = tree
         .lines()
-        .find(|line| line.contains("soma-service v"))
-        .expect("bare MCP graph contains soma-service");
+        .find(|line| line.contains("soma-application v"))
+        .expect("bare MCP graph contains soma-application");
     assert!(
         !service.contains("client"),
         "unexpected client feature: {service}"
