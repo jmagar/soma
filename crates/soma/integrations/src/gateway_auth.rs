@@ -1,3 +1,14 @@
+//! Gateway-to-auth bridge: translates `soma-auth`'s upstream OAuth runtime
+//! (Soma's product OAuth storage, refresh, and credential cache) into
+//! `soma-gateway`'s generic `UpstreamOAuthProvider`/`UpstreamOAuthManager`
+//! traits, so the standalone gateway engine can authenticate to upstream MCP
+//! servers without knowing about Soma's auth types (plan section 3.20).
+//!
+//! Moved out of `apps/soma` (formerly `gateway_auth.rs`), where it was kept
+//! as a temporary bridge for mergeability — this crate is its permanent home
+//! per PR 11's acceptance criterion that `apps/soma` constructs adapters but
+//! contains none of their implementation logic.
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use anyhow::{Context, Result};

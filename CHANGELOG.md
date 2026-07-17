@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `crates/soma/integrations` (`soma-integrations`, layer
+  `product-integration`), the product-adapter crate connecting
+  `soma-application`'s transport-neutral ports to Soma's shared engines (plan
+  section 3.20). Moves `apps/soma`'s temporary `GatewayPort` implementation
+  (`gateway.rs`), gateway-to-auth OAuth bridge (`gateway_auth.rs`, `oauth`
+  feature), and Soma's product auth default mapping (`auth.rs`, `auth`
+  feature) out of `apps/soma`, which now only constructs these adapters. Adds
+  a new `CodeModePort` adapter (`codemode.rs`) delegating to
+  `soma_codemode::execute::execute_inline` — the port existed but had no
+  product implementation before this crate. `OpenApiPort` still has no
+  adapter: `OpenApiExecuteRequest` has no spec/label field and no
+  `soma_openapi::registry::OpenApiRegistry` is constructed anywhere in the
+  runtime, so a real adapter would invent an unspecified wire shape rather
+  than move existing, tested behavior — left for a focused follow-up. The
+  product-specific providers PR10 left in `soma-service` (`static_rust.rs`,
+  `remote.rs`, `resource_files.rs`/`resource_uri.rs`) still depend on
+  `SomaService` and `soma-service`'s local `Provider`/`ProviderCall` traits,
+  neither of which are in `soma-integrations`'s declared dependency shape;
+  moving them stays PR12's job (`soma-service` split), as PR10's own
+  changelog entry already noted.
 - Add `crates/shared/provider-adapters` (`soma-provider-adapters`), a
   feature-gated, product-neutral crate of reusable provider implementations
   (static-echo, ai-sdk, python, wasm, openapi, and a thin upstream-MCP/gateway
@@ -128,6 +148,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the inherited `~/.lab`.
 
 ### Fixed
+
+- PR11 review fix: `soma-integrations::CodeModeApplicationPort` was
+  implemented and unit-tested but never constructed anywhere outside its own
+  tests, so any future caller of `SomaApplication::codemode_execute` (no
+  MCP action, CLI command, or REST route dispatches to it yet — that wiring
+  is a separate follow-up) would have silently hit `UnavailableEnginePort` in
+  production instead of a real adapter. `ApplicationPorts` gained
+  `with_codemode()`/`with_openapi()` builders alongside the existing
+  `with_gateway()`, and `apps/soma`'s `runtime_for_components` now wires
+  `CodeModeApplicationPort::default()` into every runtime it builds — proven
+  by a new `apps/soma` test that calls `codemode_execute` through the real
+  composition and asserts the error is no longer `engine_unavailable`.
+  `apps/soma`'s `soma-integrations` dependency is also now optional and
+  feature-gated (`mcp-stdio`, `mcp-http`, `test-support`) instead of
+  unconditional, so `soma-gateway`'s `protected-routes` feature is no longer
+  pulled into builds — e.g. a `cli`-only, `default-features = false` build of
+  the lib crate — that never construct `ApplicationPorts` from it.
+  `CodeModeApplicationPort::execute` also now checks `CodeModeConfig::enabled`
+  before running a snippet (the wired default is disabled) and maps
+  `soma-codemode`'s `ToolError` variants to distinct `PortError` codes
+  instead of one generic `codemode_execution_failed`; `soma-integrations`'s
+  gateway MCP-proxy error mapping now reuses `soma-gateway`'s own exhaustive
+  `GatewayManagerError` → `GatewayStructuredError` classification instead of
+  marking every proxy failure `retryable: true`.
 
 - `soma-provider-adapters` PR10 second review pass: `UpstreamMcpProvider`'s
   `static_args` (a per-manifest pin, e.g. restricting a generic upstream

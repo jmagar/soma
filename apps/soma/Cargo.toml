@@ -47,6 +47,7 @@ soma-cli = { workspace = true, optional = true }
 soma-contracts = { workspace = true }
 soma-domain = { workspace = true }
 soma-gateway = { workspace = true }
+soma-integrations = { workspace = true, optional = true }
 mcp-client = { workspace = true, optional = true, features = ["oauth"] }
 soma-mcp = { workspace = true, optional = true }
 soma-observability = { workspace = true, optional = true }
@@ -71,6 +72,7 @@ mcp-stdio = [
   "mcp",
   "dep:rmcp",
   "dep:serde_json",
+  "dep:soma-integrations",
   "rmcp/transport-io",
   "soma-gateway/protected-routes",
   "soma-application/client",
@@ -81,6 +83,7 @@ api = ["auth", "dep:serde_json", "dep:soma-api"]
 auth = [
   "dep:soma-auth",
   "soma-api?/auth",
+  "soma-integrations/auth",
   "soma-mcp?/auth",
   "soma-runtime/auth",
 ]
@@ -91,6 +94,7 @@ oauth = [
   "dep:futures",
   "soma-auth/upstream-oauth-rmcp",
   "soma-gateway/oauth",
+  "soma-integrations/oauth",
   "soma-mcp?/oauth",
   "soma-runtime/oauth",
 ]
@@ -106,6 +110,7 @@ mcp-http = [
   "dep:axum",
   "dep:reqwest",
   "dep:serde_json",
+  "dep:soma-integrations",
   "dep:tower",
   "dep:tower-http",
   "soma-gateway/protected-routes",
@@ -118,7 +123,7 @@ web = ["api", "dep:soma-web"]
 local-adapter = ["cli", "mcp-stdio"]
 server = ["cli", "api", "mcp-http", "mcp-stdio"]
 full = ["local-adapter", "server", "web", "oauth", "observability", "plugin"]
-test-support = ["soma-mcp?/test-support"]
+test-support = ["dep:soma-integrations", "soma-mcp?/test-support"]
 
 [dev-dependencies]
 axum = "0.8"

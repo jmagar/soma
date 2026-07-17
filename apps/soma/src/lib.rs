@@ -43,8 +43,6 @@ pub use soma_web as web;
     )
 ))]
 mod application_ports;
-#[cfg(feature = "oauth")]
-mod gateway_auth;
 #[cfg(feature = "mcp-http")]
 mod protected_routes;
 #[cfg(feature = "mcp-http")]

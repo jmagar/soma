@@ -49,7 +49,7 @@ async fn local_cli_composition_builds_the_application_catalog() {
 #[cfg(feature = "auth")]
 #[test]
 fn soma_auth_config_builder_supports_upstream_oauth_without_inbound_oauth() {
-    let cfg = soma_mcp_auth_config_builder()
+    let cfg = soma_integrations::auth::soma_auth_config_builder()
         .build_from_sources([
             (
                 "SOMA_MCP_PUBLIC_URL".to_string(),
