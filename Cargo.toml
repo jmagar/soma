@@ -11,6 +11,7 @@ members = [
   "crates/shared/auth",
   "crates/shared/codemode",
   "crates/shared/codex-app-server-client",
+  "crates/shared/incus-client",
   "crates/shared/mcp/client",
   "crates/shared/mcp/gateway",
   "crates/shared/mcp/proxy",
