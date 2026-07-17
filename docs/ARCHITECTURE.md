@@ -10,7 +10,7 @@ scope: "soma"
 source_of_truth: false
 upstream_refs:
   - "docs/PATTERNS.md"
-last_reviewed: "2026-05-15"
+last_reviewed: "2026-07-17"
 ---
 
 # Architecture
@@ -52,16 +52,16 @@ crates/
     domain/                ← action metadata, invariant rules, error taxonomy, scopes
     integrations/          ← product bridges from application ports to shared engines (gateway, auth)
     mcp/                   ← Soma-specific MCP schemas, tools, prompts, transport
-    palette/                ← Palette product routes/DTOs shared by server and desktop app
+    palette/               ← Palette product routes/DTOs shared by server and desktop app
     runtime/               ← AppState, SomaRuntime, auth policy, protected-route HTTP middleware
     test-support/          ← shared Soma test fixtures and harness helpers
     web/                   ← static web asset serving and source bundle helpers
   shared/
     auth/                  ← reusable bearer/OAuth auth policy and token handling
-    cli-core/               ← reusable terminal/output/confirmation mechanics
+    cli-core/              ← reusable terminal/output/confirmation mechanics
     codemode/              ← reusable Code Mode runtime and runner support
-    http-api/               ← reusable API response/error/probe helpers
-    http-server/            ← reusable Axum lifecycle/middleware helpers
+    http-api/              ← reusable API response/error/probe helpers
+    http-server/           ← reusable Axum lifecycle/middleware helpers
     mcp/
       client/              ← reusable outbound MCP upstream client runtime
       gateway/             ← reusable MCP aggregation gateway runtime
@@ -69,9 +69,9 @@ crates/
       server/              ← reusable inbound MCP server protocol helpers
     observability/         ← reusable tracing/metrics wiring
     openapi/               ← reusable OpenAPI operation registry and dispatcher
-    provider-adapters/      ← reusable concrete provider implementations
-    provider-core/          ← generic provider registry/contracts engine
-    tauri-shell/            ← reusable Tauri shell mechanics
+    provider-adapters/     ← reusable concrete provider implementations
+    provider-core/         ← generic provider registry/contracts engine
+    tauri-shell/           ← reusable Tauri shell mechanics
     traces/                ← reusable RMCP trace capture/support
     codex-app-server-client/
                            ← generated reusable Codex app-server client
@@ -88,9 +88,9 @@ client → application → shim pattern:
 - `xtask/` - repo-local build/release tooling (version-sync checks, release
   planning, schema codegen for `codex-app-server-client`). Its
   `codex-schema` subcommand has no dependency on `soma-*` crates, but `xtask`
-  itself depends on `soma-application`, `soma-client`, `soma-config`, and
-  `soma-domain` (path deps) for its other duties, such as version-sync and
-  release-plan checks. See `docs/XTASKS.md`.
+  itself depends on `soma-application`, `soma-client`, `soma-config`,
+  `soma-domain`, and `soma-provider-core` (path deps) for its other duties,
+  such as version-sync and release-plan checks. See `docs/XTASKS.md`.
 
 ## Core files
 

@@ -354,6 +354,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR19 review fix (second pass): fixed a stale sidecar-test comment in
+  `crates/soma/application/src/service.rs` that still pointed at the deleted
+  `app_tests.rs` name instead of `service_tests.rs`; corrected an
+  `apps/soma/src/lib.rs` doc comment that attributed `SomaService`'s move
+  into `soma-application` to PR 12 (PR 12 only extracted provider-catalog
+  contracts into `soma-provider-core`; `SomaService`/`ProviderRegistry`
+  itself moved in PR 19, per the plan's own execution ledger); corrected the
+  plan's PR 12 ledger row to match; synced `docs/ARCHITECTURE.md` and
+  `docs/PATTERNS.md`'s module-layout trees (missing `soma-provider-core` in
+  `xtask`'s dependency list, missing `palette`/`cli-core`/`http-api`/
+  `http-server`/`provider-adapters`/`provider-core`/`tauri-shell` rows,
+  misaligned arrows, stale `last_reviewed` date). Also regenerated
+  `apps/palette/src-tauri/Cargo.lock` (a separate Cargo workspace this PR's
+  ecosystem-artifact sweep missed): it still resolved `soma-service` as a
+  dependency of `soma-application` from before the crate was deleted.
 - PR19 review fix: `protected_routes.rs` and `protected_routes_proxy.rs`
   (moved to `crates/soma/integrations` as a PR 18 review fix behind a
   `protected-http` feature) made `soma-integrations` optionally depend on

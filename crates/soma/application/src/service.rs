@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 
 use soma_client::SomaClient;
 
-// Unit tests live in a sidecar file — see src/app_tests.rs for the pattern.
+// Unit tests live in a sidecar file — see src/service_tests.rs for the pattern.
 #[cfg(test)]
 #[path = "service_tests.rs"]
 mod tests;

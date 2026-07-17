@@ -37,7 +37,8 @@ pub use soma_observability::logging;
 pub use soma_web as web;
 
 /// Business-logic facade. `SomaService` now lives in `soma-application`
-/// (plan section PR 12); this module preserves the `soma::app::SomaService`
+/// (plan section PR 19, which finished moving it out of the deleted
+/// `crates/soma/service`); this module preserves the `soma::app::SomaService`
 /// path for callers that have not migrated their import yet.
 pub mod app {
     pub use soma_application::SomaService;

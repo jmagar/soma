@@ -36,7 +36,7 @@ numbers below are open GitHub PRs against that chain, not yet merged to
 | PR 9 - extract canonical `soma-provider-core` | Completed | #149; shared-only provider contracts/registry with Soma as a product-policy wrapper |
 | PR 10 - provider adapters and engine reconciliation | Completed | #152 (also opened against `main` as #153) |
 | PR 11 - `soma-integrations` | Completed | #154 |
-| PR 12 - split `soma-service` | Completed | #155 (business workflows, provider registry, capabilities, and drop-in providers moved into `soma-application`; PR 19 finished the crate deletion — see its own row) |
+| PR 12 - split `soma-service` | Completed | #155 (provider catalog contracts extracted into `soma-provider-core`; `SomaService`, `ProviderRegistry`, `CapabilityBroker`, and the drop-in providers themselves were left in `crates/soma/service` — that migration into `soma-application`, plus the crate deletion, was finished by PR 19; see its own row) |
 | PR 13 - split `soma-contracts` | Completed | #156 (actions/errors/scopes/token_limit/provider_validation to `soma-domain`, config/env_registry to `soma-config`, provider metadata to `soma-provider-core`; PR 19 finished the crate deletion) |
 | PR 14 - finish MCP role-crate cleanup | Completed | #157 |
 | PR 15 - extract `soma-http-server` | Completed | #158 |

@@ -52,12 +52,16 @@ crates/
     domain/                ← action metadata, invariant rules, error taxonomy
     integrations/          ← product bridges to shared engines (gateway, auth)
     mcp/                  ← Soma-specific MCP schemas, tools, prompts, transport
-    runtime/              ← AppState, auth policy, shared runtime wiring
+    palette/               ← Palette product routes/DTOs shared by server and desktop app
+    runtime/              ← AppState, SomaRuntime, auth policy, protected-route HTTP middleware
     test-support/         ← Soma integration-test helpers
     web/                  ← static web asset serving and source bundle helpers
   shared/
     auth/                 ← reusable bearer/OAuth/JWT support
+    cli-core/              ← reusable terminal/output/confirmation mechanics
     codemode/             ← reusable Code Mode runtime
+    http-api/              ← reusable API response/error/probe helpers
+    http-server/           ← reusable Axum lifecycle/middleware helpers
     mcp/
       client/             ← reusable upstream MCP client support
       gateway/            ← neutral MCP gateway engine
@@ -65,7 +69,10 @@ crates/
       server/             ← reusable MCP server support
     observability/        ← reusable logging/metrics helpers
     openapi/              ← reusable OpenAPI provider support
-    traces/               ← reusable RMCP trace capture/support
+    provider-adapters/     ← reusable concrete provider implementations
+    provider-core/         ← generic provider registry/contracts engine
+    tauri-shell/            ← reusable Tauri shell mechanics
+    traces/                ← reusable RMCP trace capture/support
     codex-app-server-client/
                           ← generated reusable Codex app-server client
 
