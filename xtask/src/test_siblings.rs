@@ -150,12 +150,13 @@ const CHECKED_SRC_ROOTS: &[&str] = &[
 
 /// Source trees deliberately *not* checked, each with the reason.
 ///
-/// Both conventions genuinely coexist in this repo. The sibling convention is
-/// the default for Soma's own crates; the trees below use inline
-/// `#[cfg(test)] mod tests` instead, and forcing siblings on them would be a
-/// large mechanical churn that buys nothing. An entry here is a decision, not
-/// an oversight - which is exactly what the old bare allowlist could not
-/// express.
+/// Three test layouts genuinely coexist in this repo. The sibling convention
+/// is the default for Soma's own crates; some trees use inline
+/// `#[cfg(test)] mod tests`; and at least one tests entirely through its
+/// public API from `tests/`. Forcing siblings on the latter two would be
+/// mechanical churn that buys nothing, or would defeat the point outright. An
+/// entry here is a decision, not an oversight - which is exactly what the old
+/// bare allowlist could not express.
 const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
     (
         "crates/shared/auth/src",
@@ -167,6 +168,14 @@ const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
          lifted wholesale into another repo (see its README.md), so its tests \
          travel inside the files they cover rather than depending on this \
          repo's sibling layout.",
+    ),
+    (
+        "crates/shared/provider-core/src",
+        "tests exclusively through the public API from tests/ (22 tests across \
+         7 files) - no inline modules and no siblings anywhere in the crate. \
+         That is the point: the crate is the provider contract, so its tests \
+         exercise it the way a provider author would rather than reaching into \
+         private internals. Siblings here would invite the opposite.",
     ),
     (
         "crates/shared/traces/src",
