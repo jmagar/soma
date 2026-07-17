@@ -19,12 +19,9 @@ use soma_provider_core::{Provider, ProviderCatalog, ProviderKind};
 /// the ai-sdk and python adapters' `EnvRequirement` resolution.
 ///
 /// Returns `None` when the crate was not built with the feature that owns
-/// `catalog`'s kind, or when the kind has no shared-adapter projection at
-/// all (`ProviderKind::StaticRust` drop-in manifests use
-/// [`crate::static_rust::StaticEchoProvider`] directly via that kind's own
-/// constructor, since it also needs the source `path` — call sites that want
-/// it should construct it themselves rather than going through this
-/// dispatcher, matching every other adapter here).
+/// `catalog`'s kind. Every `ProviderKind` has a matching adapter here,
+/// feature-gated per plan section 3.9 ("Do not over-split") so a consumer
+/// only pays for the runtimes it actually drop-in-loads.
 #[allow(unused_variables)]
 pub fn build_provider(
     path: PathBuf,

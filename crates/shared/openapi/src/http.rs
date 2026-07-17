@@ -44,7 +44,28 @@ pub async fn execute_operation(
     op: &OperationHandle,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, OpenApiError> {
-    execute_operation_inner(client, op, params, true).await
+    execute_operation_inner(client, op, params, true, false).await
+}
+
+/// Dispatches an operation while skipping this crate's DNS-pinned SSRF guard
+/// and tolerating a non-JSON success body (wrapped as `{ "text": <body> }`
+/// instead of erroring).
+///
+/// This exists solely for `soma-provider-adapters::openapi`'s manifest-driven
+/// OpenAPI provider. That adapter's trust model is an operator-declared
+/// `capabilities.network.allowed_hosts` allowlist rather than public-internet
+/// DNS pinning, and the allowlist may legitimately include loopback/private
+/// hosts (e.g. a local sidecar) — see that crate's `openapi` module docs.
+/// Callers MUST have already restricted `op.base_url`'s host through an
+/// equivalent explicit allowlist before calling this. Registry/spec-driven
+/// dispatch (`dispatch_openapi_call`) must keep going through
+/// `execute_operation`, never this function.
+pub async fn execute_operation_for_allowlisted_host(
+    client: &reqwest::Client,
+    op: &OperationHandle,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, OpenApiError> {
+    execute_operation_inner(client, op, params, false, true).await
 }
 
 #[cfg(test)]
@@ -53,7 +74,7 @@ pub(crate) async fn execute_operation_no_ssrf(
     op: &OperationHandle,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, OpenApiError> {
-    execute_operation_inner(client, op, params, false).await
+    execute_operation_inner(client, op, params, false, false).await
 }
 
 async fn execute_operation_inner(
@@ -61,6 +82,7 @@ async fn execute_operation_inner(
     op: &OperationHandle,
     params: serde_json::Value,
     enforce_ssrf: bool,
+    lenient_body: bool,
 ) -> Result<serde_json::Value, OpenApiError> {
     let (used_path_params, url) = params::build_url_with_params(op, &params)?;
     let (send_client, pinned_ip) = if enforce_ssrf {
@@ -90,6 +112,11 @@ async fn execute_operation_inner(
     }
     let body =
         body::collect_response_capped(response, MAX_RESPONSE_BYTES, &op.operation_id).await?;
+    if lenient_body {
+        let parsed = serde_json::from_str::<serde_json::Value>(&body)
+            .unwrap_or_else(|_| serde_json::json!({ "text": body }));
+        return Ok(parsed);
+    }
     if body.trim().is_empty() {
         return Ok(serde_json::Value::Null);
     }

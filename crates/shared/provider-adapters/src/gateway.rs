@@ -18,19 +18,31 @@
 //! `UpstreamMcpProvider` still opens its own per-call `rmcp` session with
 //! the raw `TokioChildProcess` / `StreamableHttpClientTransport` transports
 //! rather than routing through `soma-mcp-client`'s pooled `UpstreamPool`.
-//! That would be the fuller reconciliation the plan calls for, but
-//! `UpstreamPool`/`UpstreamConfig` currently only support a single
-//! `bearer_token_env` for HTTP auth, while this provider's manifest contract
-//! (`provider.meta.mcp.http.headers`) supports arbitrary, `${VAR}`
-//! -interpolated custom headers with no test coverage proving that capability
-//! is unused. Narrowing it silently to single-bearer-token auth risks a real,
-//! undetectable behavior regression; extending `soma-mcp-client`'s config
-//! contract to carry arbitrary headers is a reasonable follow-up but is out
-//! of this slice's bounded scope. This adapter is still a real improvement
-//! over the pre-PR10 state: it is physically consolidated into the shared,
-//! product-neutral adapters crate (no soma-service dependency), and it is
-//! the only upstream-MCP transport implementation outside `soma-mcp-client`
-//! /`soma-gateway` in the workspace.
+//! That would be the fuller reconciliation the plan calls for (acceptance:
+//! "no second upstream MCP transport stack"), but it is a genuinely
+//! cross-cutting change, not a mechanical swap:
+//!
+//! - `UpstreamPool`/`UpstreamConfig` (`crates/shared/mcp/client/src/config.rs`)
+//!   currently support only a single `bearer_token_env` for HTTP auth, while
+//!   this provider's manifest contract (`provider.meta.mcp.http.headers`)
+//!   supports arbitrary, `${VAR}`-interpolated custom headers with no test
+//!   coverage proving that capability is unused. Narrowing it silently to
+//!   single-bearer-token auth risks a real, undetectable behavior regression.
+//! - `UpstreamConfig::validate()` runs `SpawnGuard` command validation and a
+//!   restricted `name` character set that this provider's manifest-driven
+//!   stdio commands have never been checked against; migrating without
+//!   reconciling those rules risks rejecting previously-working manifests.
+//! - `UpstreamConfig` has no per-upstream timeout field equivalent to
+//!   `provider.meta.mcp.timeout_ms`.
+//! - `UpstreamPool` is a registered, stateful pool (`register_config` then
+//!   `ensure_connected`/`call_tool`); this provider is stateless per
+//!   `ProviderCall` today and has no "register once" phase to hook into.
+//!
+//! Tracked as its own scoped follow-up: bead `rmcp-template-fnz0`. This
+//! adapter is still a real improvement over the pre-PR10 state: it is
+//! physically consolidated into the shared, product-neutral adapters crate
+//! (no soma-service dependency), and it is the only upstream-MCP transport
+//! implementation outside `soma-mcp-client`/`soma-gateway` in the workspace.
 
 use std::{collections::HashMap, process::Stdio, sync::Arc, time::Duration};
 

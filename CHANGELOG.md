@@ -129,6 +129,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `soma-provider-adapters::openapi` review fix: `OpenApiProvider` now
+  delegates HTTP dispatch to `soma-openapi` (`http::execute_operation_for_allowlisted_host`,
+  a new entry point for callers that have already restricted the target host
+  through their own allowlist) instead of hand-rolling a second reqwest
+  GET/POST/PUT/PATCH/DELETE executor, satisfying PR10's "no duplicate OpenAPI
+  HTTP executor" acceptance criterion while preserving the tested loopback
+  allowlist behavior and the absolute-operation-URL rejection. `manifest_file::build_provider`'s
+  doc comment was also corrected — every `ProviderKind` (including
+  `StaticRust`) is dispatched through it when its owning feature is enabled;
+  none are constructed by call sites directly. `provider-adapters::gateway`'s
+  duplicate upstream-MCP transport stack (`UpstreamMcpProvider` vs.
+  `soma-mcp-client`'s pooled `UpstreamPool`) was assessed and intentionally
+  left as a documented deviation — full migration needs `UpstreamConfig` to
+  grow arbitrary-header support and reconciled `SpawnGuard`/timeout/response-shape
+  semantics; tracked as its own follow-up (bead `rmcp-template-fnz0`) rather
+  than folded into this fixup.
+
 - `soma-auth` module size: `authorize.rs` (869 effective lines) and
   `upstream/manager.rs` (1080 effective lines) exceeded the repo's
   `xtask patterns` file-size hard limit (700). Split DCR client

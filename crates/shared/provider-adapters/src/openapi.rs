@@ -2,31 +2,46 @@
 //! declared `base_url` + `path`/`method`, gated by the manifest's
 //! `capabilities.network.allowed_hosts` grant.
 //!
-//! ## Why this does not delegate to `soma-openapi`
+//! ## Delegates to `soma-openapi`
 //!
-//! Plan section 3.9 suggests `provider-adapters::openapi` delegate to
-//! `soma-openapi`'s dispatch engine. That engine (`soma_openapi::http::
-//! execute_operation`) enforces DNS-pinned SSRF protection and an
-//! HTTPS-only transport policy (`crates/shared/openapi/src/http/client.rs`),
-//! rejecting loopback and other private-range hosts outright — a trust
-//! model built for calling untrusted third-party APIs over the public
-//! internet. This adapter's trust model is different and is itself part of
+//! Dispatch goes through `soma_openapi::http::execute_operation_for_allowlisted_host`
+//! — the same request-building, capped response reading, and JSON
+//! parsing/status handling as `soma-openapi`'s registry-driven dispatch path
+//! (`crates/shared/openapi/src/http.rs`). This module keeps only what is
+//! specific to the drop-in-manifest shape: resolving `base_url`/`path`/
+//! `method` out of `provider.meta`/`tool.meta`, and the operator-controlled
+//! `capabilities.network.allowed_hosts` gate.
+//!
+//! That entry point (unlike `soma_openapi::http::execute_operation`, used by
+//! `soma-openapi`'s own spec-driven dispatch) skips the crate's DNS-pinned
+//! SSRF guard. This adapter's trust model is different and is itself part of
 //! the tested, documented contract: an operator explicitly allowlists hosts
 //! via `provider.capabilities.network.allowed_hosts`, and that allowlist may
 //! legitimately include loopback/private hosts (a local sidecar service, for
 //! example) — see `openapi_provider_executes_pinned_local_operation` in
 //! `apps/soma/tests/openapi_provider.rs`, which calls a plain-HTTP
-//! `127.0.0.1` server and would be rejected by `soma-openapi`'s SSRF
-//! checks. Delegating here would silently narrow a tested capability, not
-//! just change presentation, so this slice keeps this adapter's own
-//! lightweight executor. Reconciling the two trust models (e.g. an
-//! "allow-private" escape hatch in `soma-openapi`) is a larger, cross-cutting
-//! change appropriately scoped to a follow-up — see the PR10 deviation notes.
+//! `127.0.0.1` server and would be rejected by the DNS-pinned guard. The
+//! allowlist check below (`validate_base_url`) is this adapter's own SSRF
+//! defense and runs before any request is dispatched.
+//!
+//! A small amount of behavior differs from the pre-delegation implementation,
+//! documented here rather than hidden:
+//! - `{name}` placeholders in a declared operation `path` are now honored as
+//!   path parameters (previously inert literal text); this is additive.
+//! - An operation path that resolves outside the declared `base_url`'s own
+//!   path prefix (e.g. via `..` segments) is now rejected; previously
+//!   unchecked.
+//! - `call.params` must now be a JSON object for every method, not only
+//!   GET/DELETE; previously POST/PUT/PATCH accepted any JSON value as the
+//!   request body.
+//! - A non-2xx upstream response no longer includes the HTTP status code in
+//!   the error message (the `openapi_upstream_error` error `code` is
+//!   unchanged).
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::Value;
 use soma_provider_core::{
     Provider, ProviderCall, ProviderCatalog, ProviderError, ProviderOutput, ProviderTool,
 };
@@ -67,49 +82,31 @@ impl Provider for OpenApiProvider {
         ensure_rustls_crypto_provider();
         let tool = self.tool(&call)?;
         let operation = OpenApiOperation::from_catalog(&self.catalog, tool, &call)?;
-        let client = reqwest::Client::new();
-        let query_params;
-        let request = match operation.method.as_str() {
-            "GET" => {
-                query_params = object_pairs(&call.params)?;
-                client.get(operation.url).query(&query_params)
-            }
-            "DELETE" => {
-                query_params = object_pairs(&call.params)?;
-                client.delete(operation.url).query(&query_params)
-            }
-            "POST" => client.post(operation.url).json(&call.params),
-            "PUT" => client.put(operation.url).json(&call.params),
-            "PATCH" => client.patch(operation.url).json(&call.params),
-            method => {
-                return Err(ProviderError::validation(
-                    &self.catalog.provider.name,
-                    &call.action,
-                    "unsupported_openapi_method",
-                    format!("unsupported OpenAPI provider method `{method}`"),
-                ));
-            }
-        };
-        let response = request.send().await.map_err(|error| {
-            ProviderError::execution(&self.catalog.provider.name, call.action.clone(), error)
-        })?;
-
-        let status = response.status();
-        let body = response.text().await.map_err(|error| {
-            ProviderError::execution(&self.catalog.provider.name, call.action.clone(), error)
-        })?;
-        let parsed =
-            serde_json::from_str::<Value>(&body).unwrap_or_else(|_| json!({ "text": body }));
-        if !status.is_success() {
-            return Err(ProviderError::new(
-                "openapi_upstream_error",
+        if !call.params.is_object() {
+            return Err(ProviderError::validation(
                 &self.catalog.provider.name,
-                Some(call.action),
-                format!("OpenAPI upstream returned HTTP {}", status.as_u16()),
-                "Check the provider endpoint, input, and credentials, then retry.",
+                &call.action,
+                "openapi_params_must_be_object",
+                "OpenAPI provider params must be a JSON object",
             ));
         }
-        Ok(ProviderOutput::json(parsed))
+
+        let client = reqwest::Client::new();
+        let handle = soma_openapi::registry::OperationHandle {
+            operation_id: call.action.clone(),
+            method: operation.method,
+            path_template: operation.path,
+            base_url: operation.base,
+            credential: None,
+        };
+        let value = soma_openapi::http::execute_operation_for_allowlisted_host(
+            &client,
+            &handle,
+            call.params,
+        )
+        .await
+        .map_err(|error| map_openapi_error(&self.catalog.provider.name, &call.action, error))?;
+        Ok(ProviderOutput::json(value))
     }
 }
 
@@ -131,8 +128,9 @@ impl OpenApiProvider {
 }
 
 struct OpenApiOperation {
-    method: String,
-    url: Url,
+    method: reqwest::Method,
+    base: Url,
+    path: String,
 }
 
 impl OpenApiOperation {
@@ -176,14 +174,41 @@ impl OpenApiOperation {
                     .and_then(|rest| rest.path.as_deref())
                     .unwrap_or("")
             });
-        let method = operation_meta
+        validate_relative_path(catalog, &call.action, path)?;
+
+        let method_str = operation_meta
             .and_then(|value| value.get("method"))
             .and_then(Value::as_str)
             .or_else(|| tool.rest.as_ref().and_then(|rest| rest.method.as_deref()))
             .unwrap_or("POST")
             .to_ascii_uppercase();
-        let url = join_pinned_path(catalog, &call.action, &base, path)?;
-        Ok(Self { method, url })
+        let method = parse_supported_method(catalog, &call.action, &method_str)?;
+
+        Ok(Self {
+            method,
+            base,
+            path: path.to_owned(),
+        })
+    }
+}
+
+fn parse_supported_method(
+    catalog: &ProviderCatalog,
+    action: &str,
+    method: &str,
+) -> Result<reqwest::Method, ProviderError> {
+    match method {
+        "GET" => Ok(reqwest::Method::GET),
+        "POST" => Ok(reqwest::Method::POST),
+        "PUT" => Ok(reqwest::Method::PUT),
+        "PATCH" => Ok(reqwest::Method::PATCH),
+        "DELETE" => Ok(reqwest::Method::DELETE),
+        other => Err(ProviderError::validation(
+            &catalog.provider.name,
+            action,
+            "unsupported_openapi_method",
+            format!("unsupported OpenAPI provider method `{other}`"),
+        )),
     }
 }
 
@@ -224,12 +249,16 @@ fn validate_base_url(
     Ok(())
 }
 
-fn join_pinned_path(
+/// Rejects an operation path that is itself an absolute URL, so a manifest
+/// cannot redirect a call away from the pinned, allowlisted `base_url`. The
+/// remaining relative-path resolution (joining onto `base_url`, `{name}`
+/// path-parameter substitution, and containment under `base_url`'s own path
+/// prefix) is delegated to `soma_openapi::http`.
+fn validate_relative_path(
     catalog: &ProviderCatalog,
     action: &str,
-    base: &Url,
     path: &str,
-) -> Result<Url, ProviderError> {
+) -> Result<(), ProviderError> {
     if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("//") {
         return Err(ProviderError::validation(
             &catalog.provider.name,
@@ -238,26 +267,43 @@ fn join_pinned_path(
             "OpenAPI provider operation paths must be relative to the pinned base_url",
         ));
     }
-    let mut url = base.clone();
-    url.set_path(path);
-    url.set_query(None);
-    url.set_fragment(None);
-    Ok(url)
+    Ok(())
 }
 
-fn object_pairs(value: &Value) -> Result<Vec<(&str, &Value)>, ProviderError> {
-    let Value::Object(map) = value else {
-        return Err(ProviderError::validation(
-            "openapi",
-            "",
-            "openapi_params_must_be_object",
-            "OpenAPI provider params must be a JSON object",
-        ));
-    };
-    Ok(map
-        .iter()
-        .map(|(key, value)| (key.as_str(), value))
-        .collect())
+fn map_openapi_error(
+    provider: &str,
+    action: &str,
+    error: soma_openapi::OpenApiError,
+) -> ProviderError {
+    use soma_openapi::OpenApiError as E;
+    match &error {
+        E::InvalidPathParam { param, .. } => ProviderError::validation(
+            provider,
+            action,
+            "openapi_invalid_path_param",
+            format!("OpenAPI provider path parameter `{param}` is missing or invalid"),
+        ),
+        E::UpstreamTimeout { .. } => ProviderError::new(
+            "openapi_upstream_timeout",
+            provider,
+            Some(action.to_owned()),
+            "OpenAPI upstream request timed out",
+            "Check the provider endpoint, input, and credentials, then retry.",
+        ),
+        E::RequestBlockedPrivateAddr { .. } => ProviderError::validation(
+            provider,
+            action,
+            "openapi_operation_path_escapes_base",
+            "OpenAPI provider operation path resolved outside the pinned base_url",
+        ),
+        other => ProviderError::new(
+            "openapi_upstream_error",
+            provider,
+            Some(action.to_owned()),
+            format!("OpenAPI upstream request failed: {other}"),
+            "Check the provider endpoint, input, and credentials, then retry.",
+        ),
+    }
 }
 
 #[cfg(test)]

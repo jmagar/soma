@@ -3889,6 +3889,7 @@ dependencies = [
  "serde_json",
  "soma-codemode",
  "soma-gateway",
+ "soma-openapi",
  "soma-provider-core",
  "tempfile",
  "thiserror 2.0.18",
