@@ -1727,6 +1727,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "soma-tauri-shell",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
@@ -3194,6 +3195,18 @@ dependencies = [
  "wasm-bindgen",
  "web-sys",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "soma-tauri-shell"
+version = "0.4.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin-global-shortcut",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
