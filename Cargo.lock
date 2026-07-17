@@ -3696,6 +3696,7 @@ dependencies = [
  "serde",
  "serde_json",
  "soma-application",
+ "soma-cli-core",
  "soma-config",
  "soma-domain",
  "soma-provider-core",
@@ -3704,6 +3705,14 @@ dependencies = [
  "soma-test-support",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "soma-cli-core"
+version = "0.4.1"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
