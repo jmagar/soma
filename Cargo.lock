@@ -5210,6 +5210,7 @@ dependencies = [
  "soma-mcp",
  "soma-mcp-client",
  "soma-observability",
+ "soma-palette",
  "soma-provider-adapters",
  "soma-provider-core",
  "soma-runtime",

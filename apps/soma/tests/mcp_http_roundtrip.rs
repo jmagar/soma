@@ -5,7 +5,7 @@
 //! Every existing `list_tools()`/`call_tool()` test in this suite
 //! (`drop_provider_probe.rs`, `mcp_provider.rs`, `stdio_remote_api.rs`,
 //! `stdio_mcp.rs`) drives a stdio-spawned client.
-//! `routes_tests.rs::cors_preflight_allows_mcp_protocol_headers` only checks
+//! `http_tests.rs::cors_preflight_allows_mcp_protocol_headers` only checks
 //! CORS response headers for `POST /mcp`; `transport_tests.rs` only
 //! unit-tests `allowed_hosts`/`allowed_origins` string computation; and
 //! `soma_serve.rs::soma_serve_starts_http_runtime` only polls `GET /health`.
@@ -16,7 +16,7 @@
 //! to a loopback TCP port with `axum::serve` (mirroring `soma_serve.rs`'s
 //! server-spawn pattern, but in-process rather than subprocess) and drives it
 //! with rmcp's real `StreamableHttpClientTransport` (reqwest-backed) client —
-//! a genuine network round trip through `apps/soma/src/routes.rs`'s
+//! a genuine network round trip through `apps/soma/src/http.rs`'s
 //! `mcp_state_for_state`/`streamable_http_service` wiring, which PR 12/13
 //! will change as `SomaApplication` and `Config` move to split crates.
 #![cfg(feature = "mcp-http")]
@@ -58,7 +58,7 @@ async fn streamable_http_round_trip_lists_tools_and_calls_actions() -> anyhow::R
     let url = format!("http://127.0.0.1:{port}/mcp");
 
     // Real rmcp client, real reqwest-backed Streamable HTTP transport, real
-    // TCP connection to the router built by apps/soma/src/routes.rs — this
+    // TCP connection to the router built by apps/soma/src/http.rs — this
     // performs the actual initialize -> notifications/initialized ->
     // tools/list -> tools/call JSON-RPC exchange over HTTP.
     let transport = StreamableHttpClientTransport::from_uri(url);

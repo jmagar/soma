@@ -13,6 +13,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Restructured `apps/soma` (plan section 3.1, PR 18) into a composition-only
+  layout: `bootstrap.rs` builds the concrete dependency graph (config, the
+  transport client, provider registries, gateway/Code Mode adapters,
+  `SomaApplication`, `SomaRuntime`); `invocation.rs` classifies `argv` into an
+  execution `Mode` (help/version/serve/stdio/cli); `local.rs` runs one-shot
+  CLI commands against `Arc<SomaApplication>`; `http.rs` merges the MCP
+  Streamable HTTP transport, REST API, Palette product API, OAuth discovery,
+  Prometheus metrics, and the web UI fallback into one router and serves it;
+  `stdio.rs` starts the product MCP adapter over stdio; `shutdown.rs` owns the
+  process shutdown signal. `bin/soma.rs` is now a two-line process entry point
+  that forwards `argv` to the new `soma::run` library entrypoint — mode
+  selection, engine construction, and router/lifecycle composition all moved
+  out of the binary and into the library crate. `http.rs` also wires
+  `soma-palette`'s `/v1/palette/*` router into the composed HTTP router for
+  the first time (previously built but unmounted). Replaces `runtime.rs`,
+  `routes.rs`, and `application_ports.rs`. `protected_routes.rs` and
+  `protected_routes_proxy.rs` remain in `apps/soma` as router-composition
+  glue for now — extracting their OAuth-scope/proxy-dispatch logic into a
+  lower layer is tracked as follow-up, not done in this slice. Behavior is
+  unchanged: the full pre-existing `apps/soma` test suite (unit, integration,
+  and architecture-boundary tests) passes unmodified in substance, with only
+  file-path references updated to match the new module names.
 - Add `crates/shared/http-server` (`soma-http-server`, layer `shared`), plan
   section 3.12's crate for reusable Axum server plumbing: listener binding
   and the `axum::serve` run loop (`server.rs`), a graceful-shutdown signal

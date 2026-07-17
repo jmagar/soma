@@ -1,13 +1,23 @@
-//! Axum router — wires HTTP endpoints to the MCP service, REST API, and auth middleware.
+//! Merges Soma's HTTP routers and runs the HTTP server.
+//!
+//! `router(state)` composes the MCP Streamable HTTP transport
+//! (`soma_mcp::streamable_http_service`), the REST API (`soma_api`), the
+//! Palette product API (`soma_palette`), OAuth discovery routes
+//! (`soma_auth`), Prometheus metrics (`soma_observability`), and the
+//! embedded web UI fallback (`soma_web`) into one Axum `Router`. `serve()`
+//! builds the `AppState` (via `bootstrap::http_state`), binds a listener, and
+//! calls `soma_http_server::serve_with_shutdown` with `shutdown::signal()`
+//! (plan section 3.1).
 //!
 //! Endpoints:
-//!   `POST /mcp`         — MCP Streamable HTTP transport (tools, resources, prompts)
-//!   `GET  /health`      — Health check (unauthenticated)
-//!   `GET  /status`      — Runtime status (unauthenticated, redacts secrets)
-//!   `GET  /openapi.json` — Generated REST OpenAPI schema (unauthenticated)
-//!   `GET  /v1/capabilities` — Direct REST route inventory
-//!   `/v1/*`            — Direct REST API routes (see `crate::api`)
-//!   `/*`                — SPA fallback for embedded web UI (when web feature enabled)
+//!   `POST /mcp`              — MCP Streamable HTTP transport (tools, resources, prompts)
+//!   `GET  /health`           — Health check (unauthenticated)
+//!   `GET  /status`           — Runtime status (unauthenticated, redacts secrets)
+//!   `GET  /openapi.json`     — Generated REST OpenAPI schema (unauthenticated)
+//!   `GET  /v1/capabilities`  — Direct REST route inventory
+//!   `/v1/palette/*`          — Palette product API (see `soma_palette`)
+//!   `/v1/*`                  — Direct REST API routes (see `crate::api`)
+//!   `/*`                     — SPA fallback for embedded web UI (when web feature enabled)
 
 use std::sync::Arc;
 
@@ -19,12 +29,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use tracing::info;
 
 use crate::api::{
     health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
     v1_greet, v1_help, v1_provider_tool_action, v1_providers, v1_service_status,
 };
-use crate::application_ports::{authorization_mode, mcp_state_for_state};
+use crate::bootstrap::{authorization_mode, mcp_state_for_state};
 use crate::gateway_api::v1_gateway_action;
 use soma_api::ApiState;
 use soma_http_server::middleware::body_limit::body_limit_layer;
@@ -35,9 +46,35 @@ use soma_runtime::server::{build_auth_layer, AppState, AuthPolicy};
 
 const MCP_BODY_LIMIT_BYTES: usize = 65_536;
 
+/// Build the HTTP `AppState`, compose the router, bind a listener, and serve
+/// until a shutdown signal drains in-flight requests.
+pub(crate) async fn serve() -> anyhow::Result<()> {
+    let state = crate::bootstrap::http_state().await?;
+
+    // Install the Prometheus recorder once, before the router exposes /metrics.
+    #[cfg(feature = "observability")]
+    soma_observability::metrics::init();
+
+    info!(
+        bind = %state.config.bind_addr(),
+        server_name = %state.config.server_name,
+        auth = ?state.auth_policy,
+        "MCP HTTP server starting"
+    );
+
+    let bind = state.config.bind_addr();
+    let app = router(state).layer(soma_http_server::middleware::tracing::trace_layer());
+    let listener = soma_http_server::bind(&bind).await?;
+    info!(bind = %bind, "MCP HTTP server listening");
+
+    soma_http_server::serve_with_shutdown(listener, app, crate::shutdown::signal()).await?;
+    Ok(())
+}
+
 pub fn router(state: AppState) -> Router {
     let rmcp_config = streamable_http_config(&state.config);
     let api_state = api_state(&state);
+    let palette_state = palette_state(&state);
 
     let resource_url = match &state.auth_policy {
         AuthPolicy::Mounted { .. } => state
@@ -78,10 +115,12 @@ pub fn router(state: AppState) -> Router {
                 .patch(v1_dynamic_provider_route)
                 .delete(v1_dynamic_provider_route),
         );
+    let palette: Router<soma_palette::PaletteState> = soma_palette::router();
 
     let api_and_mcp_resolved: Router<()> = mcp
         .with_state(mcp_state.clone())
-        .merge(api.with_state(api_state.clone()));
+        .merge(api.with_state(api_state.clone()))
+        .merge(palette.with_state(palette_state));
 
     let authenticated = if let Some(layer) = auth_layer {
         api_and_mcp_resolved.layer(layer)
@@ -162,9 +201,13 @@ pub(crate) fn api_state(state: &AppState) -> ApiState {
     )
 }
 
+fn palette_state(state: &AppState) -> soma_palette::PaletteState {
+    soma_palette::PaletteState::new(state.application_handle(), authorization_mode(state))
+}
+
 /// `GET /metrics` — Prometheus text exposition (unauthenticated).
 ///
-/// Returns 503 until the recorder is installed (which `serve_http_mcp` does at
+/// Returns 503 until the recorder is installed (which `serve` does at
 /// startup), so scraping never panics on a partially-initialized process.
 #[cfg(feature = "observability")]
 async fn metrics_handler() -> axum::response::Response {
@@ -220,5 +263,5 @@ fn cors_layer(config: &soma_config::McpConfig) -> soma_http_server::middleware::
 }
 
 #[cfg(test)]
-#[path = "routes_tests.rs"]
+#[path = "http_tests.rs"]
 mod tests;

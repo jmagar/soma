@@ -31,7 +31,7 @@ use super::router;
 fn api_and_mcp_states_share_the_runtime_application() {
     let state = crate::testing::loopback_state();
     let api = super::api_state(&state);
-    let mcp = crate::application_ports::mcp_state_for_state(&state);
+    let mcp = crate::bootstrap::mcp_state_for_state(&state);
 
     assert!(std::ptr::eq(state.application(), api.application()));
     assert!(std::ptr::eq(state.application(), mcp.application()));

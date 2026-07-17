@@ -1,162 +1,130 @@
-//! Binary runtime helpers shared by the local and server entrypoints.
+//! Builds the concrete Soma dependency graph.
 //!
-//! Binaries decide which modes they expose. The functions here keep the actual
-//! CLI, stdio MCP, and HTTP server wiring in one place.
+//! This module is the only place `apps/soma` constructs engines: it loads
+//! `SomaConfig`, builds the transport client and provider registry, wires
+//! gateway/Code Mode adapters into `ApplicationPorts`, and constructs
+//! `SomaApplication` and `SomaRuntime`. `local.rs`, `http.rs`, and `stdio.rs`
+//! call into these constructors — they never build engines themselves (plan
+//! section 3.1).
 
-use anyhow::Result;
-#[cfg(any(feature = "cli", all(feature = "mcp-http", feature = "auth")))]
 use std::sync::Arc;
 
-#[cfg(feature = "mcp-stdio")]
-use rmcp::{transport::stdio, ServiceExt};
-#[cfg(feature = "mcp-http")]
-use tracing::info;
-use tracing_subscriber::{fmt, EnvFilter};
-
+use anyhow::Result;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_client::SomaClient;
+#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_config::Config;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_service::SomaService;
 
-#[cfg(feature = "cli")]
 use soma_application::{ApplicationPorts, SomaApplication};
-#[cfg(feature = "cli")]
-use soma_cli as cli;
-#[cfg(feature = "mcp-stdio")]
-use soma_mcp as mcp;
 #[cfg(any(feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_runtime::server::gateway_product_state_from_env;
+#[cfg(feature = "mcp")]
+use soma_runtime::server::AppState;
+#[cfg(any(feature = "mcp-stdio", feature = "mcp-http", feature = "oauth"))]
+use soma_runtime::server::AuthPolicy;
 #[cfg(feature = "mcp-http")]
 use soma_runtime::server::{resolve_auth_policy_kind, AuthPolicyKind};
-#[cfg(all(feature = "mcp", not(feature = "mcp-stdio")))]
-use soma_runtime::server::{AppState, AuthPolicy};
-#[cfg(feature = "mcp-stdio")]
-use soma_runtime::server::{AppState, AuthPolicy};
+#[cfg(any(
+    feature = "mcp-stdio",
+    feature = "mcp-http",
+    all(
+        any(test, feature = "test-support"),
+        any(feature = "cli", feature = "mcp", feature = "api")
+    )
+))]
+use soma_runtime::server::{GatewayProductState, SomaRuntime};
+#[cfg(any(
+    feature = "mcp-stdio",
+    feature = "mcp-http",
+    all(
+        any(test, feature = "test-support"),
+        any(feature = "cli", feature = "mcp", feature = "api")
+    )
+))]
+use soma_service::ProviderRegistry;
+#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
+use tracing_subscriber::{fmt, EnvFilter};
 
-pub fn init_logging(stdio_mode: bool, serve_mode: bool) {
+/// Initialize tracing at `level` unless `RUST_LOG` overrides it.
+///
+/// Stdio mode always runs at `warn` (see [`crate::invocation::Mode`]) so
+/// JSON-RPC framing on stdout is never corrupted by log lines; the HTTP
+/// server defaults to `info`.
+#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
+pub(crate) fn init_logging(level: &str) {
     fmt()
         .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new(default_log_level(stdio_mode, serve_mode))),
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(level)),
         )
         .with_writer(std::io::stderr)
         .with_target(true)
         .init();
 }
 
-fn default_log_level(stdio_mode: bool, serve_mode: bool) -> &'static str {
-    if stdio_mode || !serve_mode {
-        "warn"
-    } else {
-        "info"
+/// Build `SomaApplication`'s ports from `soma-integrations` adapters and wrap
+/// it with `SomaRuntime`. The only constructor for `SomaRuntime` — every mode
+/// that needs a runtime goes through it.
+#[cfg(any(
+    feature = "mcp-stdio",
+    feature = "mcp-http",
+    all(
+        any(test, feature = "test-support"),
+        any(feature = "cli", feature = "mcp", feature = "api")
+    )
+))]
+pub(crate) fn runtime_for_components(
+    service: SomaService,
+    provider_registry: ProviderRegistry,
+    gateway: GatewayProductState,
+) -> Arc<SomaRuntime> {
+    let ports = ApplicationPorts::unavailable()
+        .with_gateway(Arc::new(soma_integrations::GatewayApplicationPort::new(
+            gateway.clone(),
+        )))
+        .with_codemode(Arc::new(
+            soma_integrations::CodeModeApplicationPort::default(),
+        ));
+    let application = Arc::new(SomaApplication::new(
+        Arc::new(service),
+        Arc::new(provider_registry),
+        ports,
+    ));
+    Arc::new(SomaRuntime::new(application, gateway))
+}
+
+#[cfg(feature = "mcp")]
+pub(crate) fn authorization_mode(state: &AppState) -> soma_domain::AuthorizationMode {
+    match &state.auth_policy {
+        soma_runtime::server::AuthPolicy::LoopbackDev => {
+            soma_domain::AuthorizationMode::LoopbackDev
+        }
+        soma_runtime::server::AuthPolicy::TrustedGatewayUnscoped => {
+            soma_domain::AuthorizationMode::TrustedGateway
+        }
+        soma_runtime::server::AuthPolicy::Mounted { .. } => soma_domain::AuthorizationMode::Mounted,
     }
 }
 
-/// Start the MCP HTTP server (Streamable HTTP transport).
-#[cfg(feature = "mcp-http")]
-pub async fn serve_http_mcp() -> Result<()> {
-    let config = Config::load()?;
-    let state = build_state(config).await?;
-
-    // Install the Prometheus recorder once, before the router exposes /metrics.
-    #[cfg(feature = "observability")]
-    soma_observability::metrics::init();
-
-    info!(
-        bind = %state.config.bind_addr(),
-        server_name = %state.config.server_name,
-        auth = ?state.auth_policy,
-        "MCP HTTP server starting"
-    );
-
-    let bind = state.config.bind_addr();
-    let app =
-        crate::routes::router(state).layer(soma_http_server::middleware::tracing::trace_layer());
-    let listener = soma_http_server::bind(&bind).await?;
-    info!(bind = %bind, "MCP HTTP server listening");
-
-    soma_http_server::serve_with_shutdown(listener, app, soma_http_server::shutdown_signal())
-        .await?;
-    Ok(())
+#[cfg(feature = "mcp")]
+pub(crate) fn mcp_state_for_state(state: &AppState) -> soma_mcp::McpState {
+    soma_mcp::McpState::new(
+        state.application_handle(),
+        state.config.clone(),
+        authorization_mode(state),
+        state.response_pages.clone(),
+    )
 }
 
-/// Start the MCP stdio transport (for local/subprocess MCP clients).
-///
-/// Stdio is always LoopbackDev: it is a local trusted pipe between parent and
-/// child process. HTTP auth middleware does not apply.
-#[cfg(feature = "mcp-stdio")]
-pub async fn serve_stdio_mcp() -> Result<()> {
-    let config = Config::load()?;
-    let service = SomaService::new(SomaClient::new(&config.soma)?);
-    let remote_adapter = config.soma.is_remote_adapter();
-    let provider_registry = if remote_adapter {
-        soma_service::remote_provider_registry(service.clone()).await?
-    } else {
-        soma_service::dynamic_provider_registry(service.clone())?
-    };
-    let gateway = gateway_product_state_from_env()?;
-    #[cfg(feature = "oauth")]
-    configure_gateway_upstream_oauth_from_env(&gateway).await?;
-    let runtime =
-        crate::application_ports::runtime_for_components(service, provider_registry, gateway);
-    let state = AppState::new(
-        config.mcp,
-        AuthPolicy::LoopbackDev,
-        runtime,
-        Default::default(),
-    );
-    let svc = mcp::rmcp_server(crate::application_ports::mcp_state_for_state(&state))
-        .serve(stdio())
-        .await?;
-    svc.waiting().await?;
-    Ok(())
-}
-
-/// Dispatch CLI subcommands.
+/// Build the `Arc<SomaApplication>` a one-shot CLI command runs against.
 #[cfg(feature = "cli")]
-pub async fn run_cli() -> Result<()> {
-    let parsed = cli::parse_args()?;
-    // Translate CLAUDE_PLUGIN_OPTION_* into SOMA_* env vars BEFORE Config::load()
-    // so the plugin hook can call the binary directly (no plugin-setup.sh wrapper).
-    if matches!(
-        parsed,
-        Some(cli::Command::Setup(cli::SetupCommand::PluginHook { .. }))
-    ) {
-        cli::apply_plugin_options();
-    }
-    let config = Config::load()?;
-    match parsed {
-        Some(cli::Command::Doctor { json }) => cli::doctor::run_doctor(&config, json).await,
-        Some(cli::Command::Watch { url, interval }) => {
-            let base = url.unwrap_or_else(|| format!("http://localhost:{}", config.mcp.port));
-            cli::watch::run_watch(&base, interval).await
-        }
-        Some(cli::Command::Setup(command)) => cli::run_setup(&config, command).await,
-        Some(cli::Command::PackageGenerate { write }) => cli::run_package_generate(write),
-        Some(cli::Command::Providers(command)) if command.is_non_executing() => {
-            cli::run_non_executing_provider_command(command)
-        }
-        Some(cmd) => {
-            let application = build_cli_application(&config).await?;
-            let mut io = cli::StandardCliIo;
-            cli::run(application, cmd.into(), &mut io).await?;
-            Ok(())
-        }
-        None => {
-            eprintln!("Unknown command. Run `example --help` for usage.");
-            std::process::exit(1);
-        }
-    }
+pub(crate) async fn cli_application(config: &Config) -> Result<Arc<SomaApplication>> {
+    cli_application_with_provider_dir(config, None).await
 }
 
 #[cfg(feature = "cli")]
-async fn build_cli_application(config: &Config) -> Result<Arc<SomaApplication>> {
-    build_cli_application_with_provider_dir(config, None).await
-}
-
-#[cfg(feature = "cli")]
-async fn build_cli_application_with_provider_dir(
+pub(crate) async fn cli_application_with_provider_dir(
     config: &Config,
     provider_dir: Option<&std::path::Path>,
 ) -> Result<Arc<SomaApplication>> {
@@ -182,16 +150,42 @@ async fn build_cli_application_with_provider_dir(
     )))
 }
 
+/// Build the stdio MCP `AppState`. Stdio is always `AuthPolicy::LoopbackDev`:
+/// it is a local trusted pipe between parent and child process, so HTTP auth
+/// middleware does not apply.
+#[cfg(feature = "mcp-stdio")]
+pub(crate) async fn stdio_state() -> Result<AppState> {
+    let config = Config::load()?;
+    let service = SomaService::new(SomaClient::new(&config.soma)?);
+    let remote_adapter = config.soma.is_remote_adapter();
+    let provider_registry = if remote_adapter {
+        soma_service::remote_provider_registry(service.clone()).await?
+    } else {
+        soma_service::dynamic_provider_registry(service.clone())?
+    };
+    let gateway = gateway_product_state_from_env()?;
+    #[cfg(feature = "oauth")]
+    configure_gateway_upstream_oauth_from_env(&gateway).await?;
+    let runtime = runtime_for_components(service, provider_registry, gateway);
+    Ok(AppState::new(
+        config.mcp,
+        AuthPolicy::LoopbackDev,
+        runtime,
+        Default::default(),
+    ))
+}
+
+/// Build the HTTP MCP/REST `AppState`, resolving the auth policy from config.
 #[cfg(feature = "mcp-http")]
-async fn build_state(config: Config) -> Result<AppState> {
-    let auth_policy = build_auth_policy(&config).await?;
+pub(crate) async fn http_state() -> Result<AppState> {
+    let config = Config::load()?;
+    let auth_policy = http_auth_policy(&config).await?;
     let service = SomaService::new(SomaClient::new(&config.soma)?);
     let provider_registry = soma_service::dynamic_provider_registry(service.clone())?;
     let gateway = gateway_product_state_from_env()?;
     #[cfg(feature = "oauth")]
     configure_gateway_upstream_oauth_for_policy(&gateway, &auth_policy).await?;
-    let runtime =
-        crate::application_ports::runtime_for_components(service, provider_registry, gateway);
+    let runtime = runtime_for_components(service, provider_registry, gateway);
     Ok(AppState::new(
         config.mcp,
         auth_policy,
@@ -264,7 +258,7 @@ fn gateway_has_oauth_upstreams(gateway: &soma_runtime::server::GatewayProductSta
 }
 
 #[cfg(feature = "mcp-http")]
-async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
+async fn http_auth_policy(config: &Config) -> Result<AuthPolicy> {
     match resolve_auth_policy_kind(config, config.mcp.trusted_gateway)? {
         AuthPolicyKind::LoopbackDev => Ok(AuthPolicy::LoopbackDev),
         AuthPolicyKind::TrustedGatewayUnscoped => Ok(AuthPolicy::TrustedGatewayUnscoped),
@@ -294,5 +288,5 @@ fn mounted_bearer_policy() -> AuthPolicy {
 }
 
 #[cfg(test)]
-#[path = "runtime_tests.rs"]
+#[path = "bootstrap_tests.rs"]
 mod tests;

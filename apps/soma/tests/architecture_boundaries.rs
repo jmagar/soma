@@ -219,13 +219,13 @@ fn runtime_state_exposes_the_application_facade_not_legacy_engines() {
         }
     }
 
-    let routes = read_workspace_file("apps/soma/src/routes.rs");
+    let routes = read_workspace_file("apps/soma/src/http.rs");
     assert!(
         routes.contains("state.application_handle()") && !routes.contains("application_for_state"),
         "HTTP adapters must receive the stored application facade instead of rebuilding it"
     );
 
-    let composition = read_workspace_file("apps/soma/src/application_ports.rs");
+    let composition = read_workspace_file("apps/soma/src/bootstrap.rs");
     assert_eq!(
         composition.matches("SomaRuntime::new(").count(),
         1,
@@ -497,7 +497,7 @@ fn application_ports_are_available_to_all_composition_profiles() {
     assert!(
         source.contains("feature = \"mcp-stdio\"") && source.contains("feature = \"mcp-http\"")
     );
-    assert!(lines.contains(&"mod application_ports;"));
+    assert!(lines.contains(&"mod bootstrap;"));
 }
 
 #[test]
