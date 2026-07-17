@@ -172,6 +172,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR12 review fix (round 2): `crates/soma/client/src/client.rs`'s module doc
+  still said `` `SomaService` (in `soma-application`) wraps this `` — stale
+  from before the extraction; `SomaService` lives in `soma-service`, not
+  `soma-application`. The `client`-feature-disabled error path also still
+  said `"soma-service was built without the `client` feature"`, misnaming
+  the crate that actually owns the feature. Both now say `soma-client`. The
+  crate-root doc in `lib.rs` overclaimed "no ... validation logic of its
+  own" when `resolve_remote_rest_call`/`remote_provider_route` do resolve
+  REST method/path from the provider catalog and `validate_action_path_segment`
+  does validate the action segment; the doc now describes that as
+  transport-shape routing rather than denying it exists. Added missing
+  `soma-client` unit coverage for `ready()` (stub always-ready, upstream
+  `/health` success and non-2xx failure), `call_deployed_api_method`'s
+  non-success-status and invalid-JSON-body error branches,
+  `remote_provider_route`'s `surfaces.rest == false` bail branch, and
+  `validate_action_path_segment` (empty/`/`-containing actions, plus
+  `call_rest_action` short-circuiting before any network call). Fixed a
+  discarded `axum::serve` `Result` in the new
+  `apps/soma/tests/mcp_http_roundtrip.rs` test harness that would have
+  silently swallowed a server-task failure instead of surfacing it. Fixed
+  an unrestored `SOMA_SUPPRESS_STALE_BINARY_WARNING` env var in
+  `crates/soma/cli/src/cli_tests.rs`'s `run_status_command_prints_status_json`
+  that could leak into other tests sharing the same test binary.
+
 - PR12 review fix: the `soma-client` extraction (`soma.rs` → `client.rs`)
   left several docs and the `cargo xtask scaffold --adapt-plan` generator
   still pointing new-service authors at the deleted
