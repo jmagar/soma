@@ -13,6 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `crates/shared/http-server` (`soma-http-server`, layer `shared`), plan
+  section 3.12's crate for reusable Axum server plumbing: listener binding
+  and the `axum::serve` run loop (`server.rs`), a graceful-shutdown signal
+  future (`shutdown.rs`), request-ID/tracing/timeout/body-limit/CORS
+  middleware constructors (`middleware/`), generic liveness/readiness route
+  wiring on top of `soma-http-api`'s probe DTOs (`health.rs`), and a generic
+  not-found/method-not-allowed rejection envelope (`rejection.rs`). `apps/soma`
+  now delegates its `serve_http_mcp` bind/serve/shutdown loop, its request
+  tracing and body-limit layers, and its `/*` fallback to this crate instead
+  of hand-rolling them, and its CORS builder wraps the crate's generic
+  `cors_layer` with Soma's own origin/header policy; `apps/soma` no longer
+  depends on `tower-http` directly. Acceptance: a fake Axum router with no
+  Soma types anywhere in it is bound, served, and gracefully shut down
+  end-to-end through the crate's `bind`/`serve`/`serve_with_shutdown`
+  (`server_tests.rs`).
 - Add `crates/soma/config` (`soma-config`, layer `product-support`), plan
   section 3.18's dedicated crate for Soma's own configuration/environment
   loading. Moves `Config`/`SomaConfig`/`McpConfig`/`AuthConfig`/`RuntimeMode`/

@@ -3602,6 +3602,7 @@ dependencies = [
  "soma-config",
  "soma-domain",
  "soma-gateway",
+ "soma-http-server",
  "soma-integrations",
  "soma-mcp",
  "soma-mcp-client",
@@ -3615,7 +3616,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower",
- "tower-http 0.7.0",
  "tracing",
  "tracing-subscriber",
  "wat",
@@ -3817,6 +3817,20 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "soma-http-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde",
+ "serde_json",
+ "soma-http-api",
+ "tokio",
+ "tower",
+ "tower-http 0.7.0",
+ "tracing",
 ]
 
 [[package]]
@@ -4451,9 +4465,11 @@ dependencies = [
  "http-body-util",
  "percent-encoding",
  "pin-project-lite",
+ "tokio",
  "tower-layer",
  "tower-service",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

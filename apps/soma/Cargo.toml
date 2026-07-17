@@ -48,6 +48,7 @@ soma-client = { workspace = true }
 soma-config = { workspace = true }
 soma-domain = { workspace = true }
 soma-gateway = { workspace = true }
+soma-http-server = { workspace = true, optional = true }
 soma-integrations = { workspace = true, optional = true }
 mcp-client = { workspace = true, optional = true, features = ["oauth"] }
 soma-mcp = { workspace = true, optional = true }
@@ -58,7 +59,6 @@ rmcp = { workspace = true, optional = true }
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls-no-provider", "stream"], optional = true }
 serde_json = { version = "1", optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
-tower-http = { version = "0.7", features = ["cors", "limit", "trace"], optional = true }
 
 [features]
 default = ["full"]
@@ -111,9 +111,9 @@ mcp-http = [
   "dep:axum",
   "dep:reqwest",
   "dep:serde_json",
+  "dep:soma-http-server",
   "dep:soma-integrations",
   "dep:tower",
-  "dep:tower-http",
   "soma-gateway/protected-routes",
   "soma-application/client",
   "soma-mcp/http",

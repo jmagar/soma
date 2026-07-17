@@ -71,12 +71,12 @@ pub async fn serve_http_mcp() -> Result<()> {
     );
 
     let bind = state.config.bind_addr();
-    let app = crate::routes::router(state).layer(tower_http::trace::TraceLayer::new_for_http());
-    let listener = tokio::net::TcpListener::bind(&bind).await?;
+    let app =
+        crate::routes::router(state).layer(soma_http_server::middleware::tracing::trace_layer());
+    let listener = soma_http_server::bind(&bind).await?;
     info!(bind = %bind, "MCP HTTP server listening");
 
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
+    soma_http_server::serve_with_shutdown(listener, app, soma_http_server::shutdown_signal())
         .await?;
     Ok(())
 }
@@ -291,35 +291,6 @@ fn mounted_bearer_policy() -> AuthPolicy {
 #[cfg(all(feature = "mcp-http", not(feature = "auth")))]
 fn mounted_bearer_policy() -> AuthPolicy {
     AuthPolicy::Mounted {}
-}
-
-#[cfg(feature = "mcp-http")]
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        if let Err(e) = tokio::signal::ctrl_c().await {
-            tracing::error!(error = %e, "CTRL+C handler failed");
-            std::future::pending::<()>().await;
-        }
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-            Ok(mut s) => {
-                s.recv().await;
-            }
-            Err(e) => {
-                tracing::error!(error = %e, "SIGTERM handler failed");
-                std::future::pending::<()>().await;
-            }
-        }
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! { _ = ctrl_c => {}, _ = terminate => {} }
-    tracing::info!("Shutdown signal received");
 }
 
 #[cfg(test)]
