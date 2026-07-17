@@ -172,6 +172,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR12 review fix: the `soma-client` extraction (`soma.rs` → `client.rs`)
+  left several docs and the `cargo xtask scaffold --adapt-plan` generator
+  still pointing new-service authors at the deleted
+  `crates/soma/service/src/soma.rs` path. Updated `docs/ARCHITECTURE.md`
+  (diagram, module layout, file-map table), `docs/QUICKSTART.md`'s
+  adaptation checklist, `docs/contracts/plugin-stdio-adapter.md`'s
+  `upstream_refs`, `README.md`, and its duplicate in
+  `packages/soma-rmcp/README.md` to point at `crates/soma/client/src/client.rs`.
+  Updated `xtask/src/scaffold.rs`'s adapt-plan output string and its
+  `adapt_plan_is_profile_aware_and_path_specific` test assertion to match, so
+  the test no longer locks in the stale path as expected output.
+
 - PR11 review fix: `soma-integrations::CodeModeApplicationPort` was
   implemented and unit-tested but never constructed anywhere outside its own
   tests, so `soma(action="code_mode")`-style callers still silently fell back

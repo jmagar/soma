@@ -732,7 +732,7 @@ cargo xtask scaffold \
 This writes `docs/action-starters/` in the generated project with snippets for
 action metadata, MCP dispatch, CLI variants, service stubs, and test coverage.
 
-1. Replace the stub client in `crates/soma/service/src/soma.rs` only when the provider file path is not enough.
+1. Replace the stub client in `crates/soma/client/src/client.rs` only when the provider file path is not enough.
 2. Put domain logic in `crates/soma/service/src/app.rs` or focused service modules.
 3. Register native provider/action metadata so MCP, CLI, REST, docs, and plugins stay registry-driven.
 4. Regenerate MCP schema docs, provider surface docs, and OpenAPI so generated surfaces reflect the provider registry.
