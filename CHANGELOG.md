@@ -13,6 +13,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `crates/soma/config` (`soma-config`, layer `product-support`), plan
+  section 3.18's dedicated crate for Soma's own configuration/environment
+  loading. Moves `Config`/`SomaConfig`/`McpConfig`/`AuthConfig`/`RuntimeMode`/
+  `AuthMode`/`default_data_dir`/`load_dotenv` (`config.rs`) and the canonical
+  env-var registry (`env_registry.rs`) out of `soma-contracts` verbatim,
+  including their test suites.
+- Add `crates/shared/http-api` (`soma-http-api`, layer `shared`), plan
+  section 3.11's crate for reusable HTTP API surface mechanics: a generic
+  JSON error envelope (`response.rs`, `problem.rs`), a generic
+  "parse-JSON-body-or-default" helper (`json.rs`), liveness/readiness probe
+  DTOs and response builders (`probe.rs`), a generic route-inventory shape
+  and capabilities-response builder (`route_inventory.rs`), and pagination
+  query/response DTOs (`pagination.rs`, not yet consumed — no current Soma
+  route needs pagination, declared per the plan's suggested layout for the
+  first one that does). `soma-api` now delegates to these helpers instead of
+  keeping duplicate copies (`responses.rs`, `gateway.rs`'s formerly
+  hand-rolled JSON-rejection handling, `probes.rs`, `route_inventory.rs`,
+  `api.rs`'s `json_body_or_empty`). `cargo tree -p soma-http-api
+  --all-features` resolves to external crates only (axum/serde/serde_json) —
+  no `soma-*` dependency — matching the plan's shared-layer contract.
+- Split `crates/soma/contracts` by ownership (plan section 6.2 "From
+  soma-contracts", PR 13 "Split soma-contracts"): `actions.rs`
+  (`SomaAction`, `ACTION_SPECS`, `ActionSpec`/`ParamSpec`/`CliSpec`, scope
+  constants, `ActionError`/`ActionValidationError`), `errors.rs`
+  (`ToolError`/`ServiceErrorKind`), `scopes.rs` (`ADMIN_SCOPE`), and
+  `provider_validation.rs`'s Soma-specific CLI-reserved-command policy move
+  into `soma-domain`, together with their test suites — placed in
+  `soma-domain` rather than `soma-application` because `soma-service` (a
+  dependency of `soma-application` during the PR 12 strangler migration)
+  also builds its static-Rust provider catalog directly from these types;
+  putting them in `soma-application` would create an
+  `application` ↔ `service` dependency cycle, while every consumer
+  (application, service, api, cli, mcp, integrations, runtime, apps/soma)
+  can already depend on `soma-domain` without one. `token_limit.rs`
+  (`MAX_RESPONSE_BYTES`, `truncate_if_needed`) moves into `soma-domain` for
+  the same reason, deviating from the plan's literal "product response
+  policy → soma-application" assignment (`soma-service`'s provider registry
+  and `soma-mcp`'s response paging both read `MAX_RESPONSE_BYTES` and
+  neither can depend on `soma-application`). `config.rs`/`env_registry.rs`
+  move into the new `soma-config` crate. `soma-contracts` becomes a
+  deprecated re-export facade for one migration window (every module still
+  resolves at its old `soma_contracts::*` path via `pub use`) with a small
+  smoke test per module confirming the re-export still resolves; PR 19
+  deletes the crate. `soma-application` drops its `soma-contracts`
+  dependency entirely — it now imports `soma_provider_core::{ProviderPrompt,
+  ProviderResource}`, `soma_domain::scopes::{READ_SCOPE, WRITE_SCOPE}`, and
+  `soma_domain::token_limit::MAX_RESPONSE_BYTES` directly — retiring the
+  `application → contracts` `TEMPORARY_EXCEPTIONS` entry in
+  `xtask/src/architecture.rs`. `soma-client` similarly drops `soma-contracts`
+  in favor of a direct `soma-config` dependency (its only use of the facade
+  was `SomaConfig`). `xtask/src/architecture_graph.rs` maps
+  `crates/soma/config` to the `product-support` layer alongside
+  `soma-client`. Fixed several xtask/doc-generation checks that text-scanned
+  the old hardcoded `crates/soma/contracts/src/actions.rs` /
+  `crates/soma/contracts/src/config.rs` paths (`xtask/src/patterns/actions.rs`,
+  `xtask/src/patterns/checks.rs`, `xtask/src/scripts_lane_d.rs`,
+  `scripts/generate-docs.py`, `apps/soma/tests/soma_invariants.rs`) to point
+  at the new canonical locations, and regenerated the derived docs
+  (`docs/ENV.md`, `docs/MCP_SCHEMA.md`, `docs/generated/openapi.json`,
+  `docs/generated/plugin-settings.md`) — presentation/citation-only diffs,
+  no action/schema/route content changed. While validating the
+  `contract-audit` gate, also regenerated `docs/generated/palette-manifest.json`
+  and `docs/generated/provider-surfaces.json` (plus their downstream
+  `plugin.json`/marketplace/skill artifacts): confirmed via key-sorted diff
+  against `HEAD` and a from-scratch regeneration on the unmodified base
+  branch that this drift was pre-existing key-ordering/fingerprint
+  non-determinism in the provider-catalog JSON serialization, unrelated to
+  this split — included as a minimal drive-by fix since it blocked the
+  gate.
 - Add `crates/soma/client` (`soma-client`, layer `product-support`), plan
   section 3.19's dedicated crate for the concrete outbound HTTP transport to
   a deployed `soma serve` REST API. Moves `SomaClient` (`soma.rs` →
