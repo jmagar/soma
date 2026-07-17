@@ -13,6 +13,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `crates/soma/client` (`soma-client`, layer `product-support`), plan
+  section 3.19's dedicated crate for the concrete outbound HTTP transport to
+  a deployed `soma serve` REST API. Moves `SomaClient` (`soma.rs` →
+  `client.rs`, plus its sidecar tests) out of `soma-service`; `soma-service`
+  now re-exports `SomaClient` from `soma-client` behind
+  `#[deprecated(note = "use soma_client::SomaClient")]` for one migration
+  window (plan PR 12's compatibility stage). All non-test production
+  consumers (`apps/soma`, `xtask`) and every in-repo test import
+  `soma_client::SomaClient` directly rather than the deprecated path, so
+  `cargo clippy -D warnings` stays clean. `soma-service`'s own `client` and
+  `observability` Cargo features now forward to `soma-client`'s identically
+  named features so the existing bare-MCP-profile feature-unification
+  contract (`soma-service` pulls in neither `client` nor `observability`,
+  and `soma-observability` never appears in that graph) is unchanged. This
+  is a partial slice of plan PR 12 ("split `soma-service`"): the remaining
+  moves — business workflows into `soma-application`, invariant rules into
+  `soma-domain`, the provider registry/capabilities/concrete providers into
+  `soma-provider-core`/`soma-provider-adapters`/`soma-integrations`, and
+  retiring the `soma-application` → `soma-service` architecture exception —
+  are deferred to a follow-up slice; see the PR body for the itemized
+  rationale (the provider registry still depends on `soma-contracts`, which
+  the shared-layer rule blocks from moving into `crates/shared/*` until
+  PR 13 splits `soma-contracts`).
 - Add `crates/soma/integrations` (`soma-integrations`, layer
   `product-integration`), the product-adapter crate connecting
   `soma-application`'s transport-neutral ports to Soma's shared engines (plan
