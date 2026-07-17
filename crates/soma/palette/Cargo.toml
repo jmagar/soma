@@ -22,7 +22,6 @@ oauth = ["auth"]
 axum = "0.8"
 soma-auth = { path = "../../shared/auth", optional = true, features = ["http-axum"] }
 soma-application = { path = "../application", default-features = false }
-soma-contracts = { path = "../contracts" }
 soma-domain = { path = "../domain" }
 soma-provider-core = { path = "../../shared/provider-core" }
 serde = { version = "1", features = ["derive"] }

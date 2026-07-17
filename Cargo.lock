@@ -5576,7 +5576,6 @@ dependencies = [
  "serde_json",
  "soma-application",
  "soma-auth",
- "soma-contracts",
  "soma-domain",
  "soma-provider-core",
  "tokio",

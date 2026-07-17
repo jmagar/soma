@@ -1,7 +1,6 @@
 use serde_json::json;
 use soma_application::CatalogSnapshot;
-use soma_contracts::providers::{PaletteOverlay, ProviderManifest, ToolSpec};
-use soma_provider_core::ProviderId;
+use soma_provider_core::{PaletteOverlay, ProviderId, ProviderManifest, ToolSpec};
 
 use super::find_schema;
 

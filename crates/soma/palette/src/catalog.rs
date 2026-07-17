@@ -2,8 +2,7 @@
 //! launcher actions, plus in-memory search over the mapped catalog.
 
 use soma_application::CatalogSnapshot;
-use soma_contracts::providers::ToolSpec;
-use soma_provider_core::ProviderSurface;
+use soma_provider_core::{ProviderSurface, ToolSpec};
 
 use crate::dto::{LauncherCatalogEntry, LauncherCatalogResponse};
 
