@@ -51,15 +51,17 @@ worktree. Do not begin PR 10 as part of the PR 9 delivery.
    freeze exists to guard. Audit the PR 1 snapshot list for real coverage before
    PR 12 starts deleting, rather than assuming "distributed" means complete.
 
-2. **Shared crate publish names are still Soma-branded.** Twelve of sixteen
-   shared crates carry `soma-*` package names. Section 2 defers the
-   brand-neutral rename as a separate decision "before publishing", but PR 19
-   rewrites the README, `docs/ARCHITECTURE.md`, scaffold output, the
+2. **Shared crate publish names are still Soma-branded — rename decided, names
+   pending.** Twelve of sixteen shared crates carry `soma-*` package names.
+   PR 19 rewrites the README, `docs/ARCHITECTURE.md`, scaffold output, the
    cargo-generate template, generated provider docs, plugin metadata,
-   Dockerfiles, and CI workflows. A rename after PR 19 redoes all of it. Decide
-   before PR 19: either rename in its own slice ahead of the artifact sweep, or
-   state plainly that publishing is out of scope for this refactor and the
-   `soma-*` names stand.
+   Dockerfiles, and CI workflows; a rename after PR 19 would redo all of it.
+   **Decided 2026-07-16:** the shared crates get brand-neutral names in a
+   dedicated rename slice that lands after PR 16 (once all shared crates
+   exist) and before PR 19 (so the artifact sweep writes final names once).
+   Choosing the concrete names is a separate exercise tracked in beads; until
+   that slice lands, `soma-*` names remain valid in-repo and must not be
+   published to crates.io.
 
 This revision adopts the physical workspace taxonomy selected for Soma:
 
@@ -264,7 +266,7 @@ The physical path determines the architectural layer. The package name determine
 | `crates/soma/test-support` | `soma-test-support` | `soma_test_support` | product |
 | `crates/soma/web` | `soma-web` | `soma_web` | product |
 
-The nested path is the architectural signal. Existing incoming package names may remain unchanged during the migration to reduce Cargo churn, but brand-neutral shared package names should be a separate explicit decision before publishing these crates outside the repo.
+The nested path is the architectural signal. Existing incoming package names may remain unchanged during the migration to reduce Cargo churn. Brand-neutral shared package names are **decided** (2026-07-16): the rename happens in a dedicated slice after PR 16 and before PR 19, so PR 19's ecosystem-artifact sweep writes the final names exactly once. Concrete name selection is tracked as its own bead; nothing ships to crates.io under a `soma-*` name.
 
 Avoid `-kit` for shared crate names unless the crate is truly a loose grab bag. Prefer `*-core` for foundational contracts that other crates build around, `*-adapters` for concrete implementations, `*-client`/`*-server`/`*-proxy` for protocol roles, and concrete purpose names such as `http-api` or `http-server` when the boundary is obvious.
 
