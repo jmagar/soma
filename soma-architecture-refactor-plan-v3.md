@@ -16,8 +16,8 @@ safety-net effort rather than a standalone pull request.
 
 | Plan slice | Status | Merge evidence or remaining outcome |
 |---|---|---|
-| PR 0 - merge preparation and shared-crate corrections | Completed | Traces #134 and shared MCP/gateway foundations #141, plus the reviewed gateway landing |
-| PR 1 - freeze post-merge behavior | Completed (distributed) | Characterization, contract, profile, schema, parity, and compatibility gates were expanded and run throughout PRs 0 and 2-9 |
+| PR 0 - merge preparation and shared-crate corrections | Completed, with carryover | Traces #134 and shared MCP/gateway foundations #141, plus the reviewed gateway landing. Carryover: section 9.1's `[workspace.dependencies]` centralization was never built; reassigned to PR 10 |
+| PR 1 - freeze post-merge behavior | Completed (distributed), unaudited | Characterization, contract, profile, schema, parity, and compatibility gates were expanded and run throughout PRs 0 and 2-9. The freeze was built alongside the moves rather than ahead of them; audit coverage before PR 12 |
 | PR 2 - physical workspace taxonomy | Completed | #139 |
 | PR 3 - architecture enforcement | Completed | #140 |
 | PR 4 - `soma-domain` and `soma-application` | Completed | #143 |
@@ -39,6 +39,27 @@ safety-net effort rather than a standalone pull request.
 
 Current stopping point: merge and clean PR 9, then resume with PR 10 in a new
 worktree. Do not begin PR 10 as part of the PR 9 delivery.
+
+### Open risks carried into PR 10 and later
+
+1. **The behavior freeze was built after the moves it was meant to protect.**
+   Section 14 ordered PR 1 second, ahead of the physical taxonomy, so that later
+   refactors could prove behavior did not change. It was instead satisfied
+   incrementally across PRs 0 and 2-9. That was survivable for slices that were
+   mostly mechanical moves. PRs 12, 13, and 19 delete `soma-service` and
+   `soma-contracts` and drop their compatibility re-exports — exactly what the
+   freeze exists to guard. Audit the PR 1 snapshot list for real coverage before
+   PR 12 starts deleting, rather than assuming "distributed" means complete.
+
+2. **Shared crate publish names are still Soma-branded.** Twelve of sixteen
+   shared crates carry `soma-*` package names. Section 2 defers the
+   brand-neutral rename as a separate decision "before publishing", but PR 19
+   rewrites the README, `docs/ARCHITECTURE.md`, scaffold output, the
+   cargo-generate template, generated provider docs, plugin metadata,
+   Dockerfiles, and CI workflows. A rename after PR 19 redoes all of it. Decide
+   before PR 19: either rename in its own slice ahead of the artifact sweep, or
+   state plainly that publishing is out of scope for this refactor and the
+   `soma-*` names stand.
 
 This revision adopts the physical workspace taxonomy selected for Soma:
 
@@ -697,11 +718,32 @@ crates/shared/mcp/gateway/src/
 
 ### Depends on
 
+Target:
+
 ```text
+soma-gateway ─────────────▶ soma-mcp-client
+soma-gateway ─────────────▶ soma-mcp-server
 soma-gateway ─────────────▶ soma-mcp-proxy
 soma-mcp-proxy ───────────▶ soma-mcp-client
 soma-mcp-proxy ───────────▶ soma-mcp-server
 ```
+
+The gateway composes the role crates directly; it does not reach the client only
+through the proxy. This matches the shared-layer DAG in section 4.3.
+
+Live as of 2026-07-16, the `soma-mcp-server` edges do not exist yet:
+
+```text
+soma-gateway ─────────────▶ soma-mcp-client      present
+soma-gateway ─────────────▶ soma-mcp-proxy       present
+soma-mcp-proxy ───────────▶ soma-mcp-client      present
+```
+
+Both crates still reach for `rmcp` server types directly instead of going through
+`soma-mcp-server`. PR 14 closes that gap when it moves the residual inbound
+lifecycle, paging, and protocol mechanics into the server role crate. Until then
+the two diagrams above differ on purpose — do not "fix" section 4.3 to match the
+manifests.
 
 The gateway is the reusable engine that users instantiate when they want a full MCP aggregation runtime. It is not the primitive client or server library. A project that only needs to call upstream MCP servers depends on `soma-mcp-client`; a project that only needs to expose an MCP server depends on `soma-mcp-server`; a project that needs to bridge inbound MCP requests to upstream servers depends on `soma-mcp-proxy`.
 
@@ -1943,7 +1985,7 @@ apps/soma
             ├── soma-auth
             ├── soma-observability
             ├── soma-client
-            ├── soma-provider-core ───────▶ soma-provider-adapters
+            ├── soma-provider-adapters ───▶ soma-provider-core
             ├── soma-gateway ────────────▶ soma-mcp-proxy
             │                              ├── soma-mcp-client
             │                              └── soma-mcp-server
@@ -2314,27 +2356,56 @@ Recommended root structure:
 resolver = "2"
 members = [
     "apps/soma",
-    "crates/shared/traces",
     "crates/shared/auth",
+    "crates/shared/cli-core",
+    "crates/shared/codemode",
+    "crates/shared/codex-app-server-client",
+    "crates/shared/http-api",
+    "crates/shared/http-server",
+    "crates/shared/mcp/client",
+    "crates/shared/mcp/gateway",
+    "crates/shared/mcp/proxy",
+    "crates/shared/mcp/server",
     "crates/shared/observability",
     "crates/shared/openapi",
-    "crates/shared/codemode",
-    "crates/shared/http-api",
-    "crates/shared/mcp/*",
-    "crates/shared/provider-core",
     "crates/shared/provider-adapters",
-    "crates/shared/http-server",
-    "crates/shared/cli-core",
+    "crates/shared/provider-core",
     "crates/shared/tauri-shell",
-    "crates/shared/codex-app-server-client",
-    "crates/soma/*",
+    "crates/shared/traces",
+    "crates/soma/api",
+    "crates/soma/application",
+    "crates/soma/cli",
+    "crates/soma/client",
+    "crates/soma/config",
+    "crates/soma/domain",
+    "crates/soma/integrations",
+    "crates/soma/mcp",
+    "crates/soma/palette",
+    "crates/soma/runtime",
+    "crates/soma/test-support",
+    "crates/soma/web",
     "xtask",
 ]
 ```
 
-Keep non-Rust frontend directories such as `apps/web` outside Cargo membership. Keep `apps/palette/src-tauri` as an app-local Tauri workspace/package by default; it may depend on root workspace crates by path but does not need to be a root workspace member. Do not use a broad `crates/shared/*` member glob once `crates/shared/mcp/` exists unless the parent directory is explicitly excluded; otherwise Cargo may try to treat the grouping directory as a package.
+Enumerate members explicitly rather than globbing. This matches the live manifest
+and avoids two hazards: a `crates/shared/*` glob would try to treat the
+`crates/shared/mcp/` grouping directory as a package, and a `crates/soma/*` glob
+silently picks up any stray directory that appears under the product tree. The
+cost of the explicit list is one line per crate at creation time; the benefit is
+that workspace membership is reviewable in the diff.
 
-Centralize all internal paths:
+Keep non-Rust frontend directories such as `apps/web` outside Cargo membership. Keep `apps/palette/src-tauri` as an app-local Tauri workspace/package by default; it may depend on root workspace crates by path but does not need to be a root workspace member.
+
+Centralize all internal paths.
+
+> **Outstanding as of 2026-07-16.** The root manifest has no
+> `[workspace.dependencies]` table at all. Every crate declares raw relative
+> paths (`soma-runtime = { path = "../../crates/soma/runtime" }`) and the rmcp
+> pin is copy-pasted across eight manifests. Section 9.1 assigned this to PR 0
+> and PR 0 is marked completed, because the *outcome* it tested for — a single
+> resolved rmcp version — holds. The mechanism was never built, and no remaining
+> slice picks it up. PR 10 owns it now; see its prerequisite step.
 
 ```toml
 [workspace.dependencies]
@@ -3077,6 +3148,25 @@ The dependency graph is shared-only.
 
 Create one adapter layer instead of parallel OpenAPI, Code Mode, gateway, and provider implementations.
 
+### Prerequisite: centralize internal paths
+
+Build the `[workspace.dependencies]` table from section 7 before moving any code.
+It does not exist today; section 9.1 assigned it to PR 0 and it was not done.
+
+Do it here because every remaining slice relocates crates, and each relocation
+without the table means hand-editing every consumer's relative path instead of
+one workspace entry. PRs 12, 13, and 19 are the worst affected. The rmcp pin,
+currently duplicated across eight manifests, moves to `rmcp.workspace = true` at
+the same time.
+
+```bash
+cargo tree -d | rg 'rmcp|modelcontext'   # still one rmcp version afterward
+```
+
+This is mechanical and behavior-preserving. Land it as its own commit inside
+PR 10, or as a standalone PR ahead of it — do not interleave it with the adapter
+extraction.
+
 ### Move generic providers
 
 - manifest/file-backed provider
@@ -3163,6 +3253,18 @@ Any temporary gateway/auth bridge added for mergeability now moves from `apps/so
 
 Remove the legacy multi-layer crate.
 
+### Create
+
+```text
+crates/soma/client
+```
+
+It does not exist yet, and the "remote Soma HTTP client" move below assumes it as
+a destination. Create it as an empty package with
+`[package.metadata.soma-architecture] layer = "product-support"`, register it in
+the root workspace members list, then move code into it. (`soma-integrations`,
+the other destination below, is created by PR 11.)
+
 ### Move
 
 ```text
@@ -3207,6 +3309,17 @@ All non-test consumers use the new crates. Delete `soma-service` when downstream
 ### Goal
 
 Replace the shared-type drawer with owner-specific contracts.
+
+### Create
+
+```text
+crates/soma/config
+```
+
+It does not exist yet, and the configuration/environment move below assumes it as
+a destination. Create it as an empty package with
+`[package.metadata.soma-architecture] layer = "product-support"` and register it
+in the root workspace members list before moving code into it.
 
 ### Move by ownership
 
