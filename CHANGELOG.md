@@ -149,6 +149,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR11 review fix: `soma-integrations::CodeModeApplicationPort` was
+  implemented and unit-tested but never constructed anywhere outside its own
+  tests, so `soma(action="code_mode")`-style callers still silently fell back
+  to `UnavailableEnginePort` in production. `ApplicationPorts` gained
+  `with_codemode()`/`with_openapi()` builders alongside the existing
+  `with_gateway()`, and `apps/soma`'s `runtime_for_components` now wires
+  `CodeModeApplicationPort::default()` into every runtime it builds.
+  `apps/soma`'s `soma-integrations` dependency is also now optional and
+  feature-gated (`mcp-stdio`, `mcp-http`, `test-support`) instead of
+  unconditional, so `soma-gateway`'s `protected-routes` feature is no longer
+  pulled into builds — e.g. a `cli`-only, `default-features = false` build of
+  the lib crate — that never construct `ApplicationPorts` from it.
+
 - `soma-provider-adapters::openapi` review fix: `OpenApiProvider` now
   delegates HTTP dispatch to `soma-openapi` (`http::execute_operation_for_allowlisted_host`,
   a new entry point for callers that have already restricted the target host

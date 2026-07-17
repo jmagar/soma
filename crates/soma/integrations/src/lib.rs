@@ -29,4 +29,5 @@ pub mod gateway_auth;
 
 pub mod codemode;
 
+pub use codemode::CodeModeApplicationPort;
 pub use gateway::GatewayApplicationPort;

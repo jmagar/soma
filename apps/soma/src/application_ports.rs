@@ -18,9 +18,13 @@ pub(crate) fn runtime_for_components(
     provider_registry: ProviderRegistry,
     gateway: GatewayProductState,
 ) -> Arc<SomaRuntime> {
-    let ports = ApplicationPorts::unavailable().with_gateway(Arc::new(
-        soma_integrations::GatewayApplicationPort::new(gateway.clone()),
-    ));
+    let ports = ApplicationPorts::unavailable()
+        .with_gateway(Arc::new(soma_integrations::GatewayApplicationPort::new(
+            gateway.clone(),
+        )))
+        .with_codemode(Arc::new(
+            soma_integrations::CodeModeApplicationPort::default(),
+        ));
     let application = Arc::new(SomaApplication::new(
         Arc::new(service),
         Arc::new(provider_registry),
