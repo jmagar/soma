@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use soma_application::ExecuteActionRequest;
-use soma_contracts::actions::SomaAction;
+use soma_domain::actions::SomaAction;
 use soma_http_api::json::{json_body_or_else, JsonBodyOutcome};
 
 use crate::responses::{

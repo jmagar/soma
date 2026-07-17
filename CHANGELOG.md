@@ -76,12 +76,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no action/schema/route content changed. While validating the
   `contract-audit` gate, also regenerated `docs/generated/palette-manifest.json`
   and `docs/generated/provider-surfaces.json` (plus their downstream
-  `plugin.json`/marketplace/skill artifacts): confirmed via key-sorted diff
-  against `HEAD` and a from-scratch regeneration on the unmodified base
-  branch that this drift was pre-existing key-ordering/fingerprint
-  non-determinism in the provider-catalog JSON serialization, unrelated to
-  this split — included as a minimal drive-by fix since it blocked the
-  gate.
+  `plugin.json`/marketplace/skill artifacts). This is a real, substantive
+  schema change to the committed JSON — new top-level fields
+  (`schema_version`, `title`, `publisher`, `security_policy`, `website`,
+  `provider_fingerprint`, a restructured `mcp_server` block, a new
+  `surfaces` block) — not mere key-ordering. It is still unrelated to this
+  split, though: `xtask/src/generated_surfaces.rs`'s emitted schema already
+  gained every one of these fields back in `df11915` ("chore: harden soma
+  metadata validation"), a commit already on `main` well before this
+  branch existed. `docs/generated/plugin.json` and
+  `docs/generated/provider-surfaces.json` were simply never regenerated and
+  committed against that schema afterward, so `main`'s checked-in copies
+  have been stale relative to `main`'s own generator this whole time.
+  Bringing them current is unrelated to the contracts split, but it is not
+  presentation-only either — flagged here in case a schema consumer expects
+  the old shape. Included as a minimal drive-by fix since the stale files
+  otherwise fail the `contract-audit` gate this PR must pass.
 - Add `crates/soma/client` (`soma-client`, layer `product-support`), plan
   section 3.19's dedicated crate for the concrete outbound HTTP transport to
   a deployed `soma serve` REST API. Moves `SomaClient` (`soma.rs` →
@@ -240,6 +250,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the inherited `~/.lab`.
 
 ### Fixed
+
+- PR13 review fix: 9 of the 11 crates touched by the `soma-contracts` split
+  (`soma-api`, `soma-cli`, `soma-mcp`, `soma-integrations`, `soma-runtime`,
+  `soma-service`, `soma-test-support`, `apps/soma`, `xtask`) still declared
+  `soma-contracts = { workspace = true }` and imported `soma_contracts::*`
+  throughout `src/`/`tests/`, so PR 13's stated acceptance criterion ("No
+  production crate depends on `soma-contracts`") was unmet even though
+  `soma-application` and `soma-client` had already migrated. Repointed every
+  remaining `soma_contracts::actions`/`config`/`env_registry`/`errors`/
+  `provider_validation`/`providers`/`scopes`/`token_limit` import to its real
+  home (`soma_domain`, `soma_config`, or `soma_provider_core`) across ~50
+  files, and swapped each crate's `soma-contracts` `Cargo.toml` dependency
+  for the specific `soma-domain`/`soma-config`/`soma-provider-core` entries
+  its code actually uses. Only `crates/soma/contracts` itself (the facade,
+  self-contained) still depends on the split crates going forward.
+  `xtask/src/architecture.rs`'s `check_layer_edge()` only forbade
+  `ProductDomain`/`ProductApplication` from depending outward to `Legacy`,
+  so `cargo xtask check-architecture` kept reporting a clean pass throughout
+  — it never actually enforced this PR's acceptance bar, and couldn't
+  simply forbid the whole `Legacy` layer either, since `soma-service`
+  shares that layer and is still a legitimate strangler-pattern dependency
+  for several surfaces. Added a dedicated `DEPRECATED_CONTRACTS_FACADE_PATH`
+  check that names `crates/soma/contracts` explicitly: any edge into it now
+  fails the gate, with a new `any_layer_depending_on_deprecated_contracts_facade_fails`
+  regression test covering surface/integration/runtime/app/legacy callers.
+  Also fixed a stale `crates/soma/cli/src/lib.rs` comment referencing
+  `soma_contracts::provider_validation` (moved to `soma_domain::provider_validation`
+  by this same split) and corrected a `CHANGELOG.md` entry that
+  mischaracterized the regenerated `docs/generated/plugin.json`/
+  `provider-surfaces.json` diff as "key-ordering/fingerprint
+  non-determinism" — it is a real schema change (new `schema_version`,
+  `publisher`, `security_policy`, `website`, `provider_fingerprint`,
+  restructured `mcp_server`/`surfaces` blocks), just one whose generator
+  code (`xtask/src/generated_surfaces.rs`) already landed on `main` via
+  `df11915` ("chore: harden soma metadata validation") well before this
+  branch existed — the committed JSON was simply never regenerated against
+  it until this PR's `contract-audit` gate forced the catch-up, so the
+  drift is real but still unrelated to the contracts split itself.
 
 - PR12 review fix: the `soma-client` extraction (`soma.rs` → `client.rs`)
   left several docs and the `cargo xtask scaffold --adapt-plan` generator

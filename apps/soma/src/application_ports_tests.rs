@@ -1,6 +1,6 @@
 use super::authorization_mode;
 use soma_client::SomaClient;
-use soma_contracts::config::{McpConfig, SomaConfig};
+use soma_config::{McpConfig, SomaConfig};
 use soma_domain::AuthorizationMode;
 use soma_runtime::server::{empty_gateway_product_state, AppState, AuthPolicy};
 use soma_service::SomaService;
