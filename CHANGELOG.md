@@ -162,6 +162,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   around the dispatcher stay in `soma-service` pending `crates/soma/integrations`
   (PR11). See the PR10 deviation notes for why the OpenAPI and upstream-MCP
   adapters were not fully delegated to `soma-openapi`/`soma-mcp-client`.
+- Add `soma-tauri-shell`, a reusable, product-neutral Tauri desktop shell
+  crate (window show/hide/resize/center, tray setup, global shortcut parse
+  and rebind, blur-dismiss state and window-lifecycle helpers, atomic
+  app-data JSON persistence, and Tauri command result/error helpers), and
+  `soma-palette`, Soma's Palette product surface crate owning
+  `/v1/palette/{catalog,search,schema,execute}` routes, Palette DTOs shared
+  by the HTTP server and desktop app, the `ToolSpec` Palette-overlay to
+  launcher-action mapping, launcher execution/auth policy, and Palette route
+  OpenAPI metadata. `apps/palette/src-tauri` stays an app-local Tauri
+  package (not a root workspace member) and now path-depends on
+  `soma-tauri-shell` for its window/tray/shortcut/persistence mechanics.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.
