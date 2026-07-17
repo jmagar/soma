@@ -36,6 +36,10 @@ pub enum UnifiError {
         method: String,
         /// Full request URL.
         url: String,
+        /// Underlying transport error (kept for `Error::source()` chain-walking
+        /// even though the message above doesn't repeat its text).
+        #[source]
+        source: reqwest::Error,
     },
 
     /// The controller could not be reached (DNS, TCP, or TLS handshake failure).
@@ -47,6 +51,10 @@ pub enum UnifiError {
         method: String,
         /// Full request URL.
         url: String,
+        /// Underlying transport error (kept for `Error::source()` chain-walking
+        /// even though the message above doesn't repeat its text).
+        #[source]
+        source: reqwest::Error,
     },
 
     /// A transport-level failure other than timeout or connect.
@@ -61,12 +69,17 @@ pub enum UnifiError {
         source: reqwest::Error,
     },
 
-    /// The controller rejected the API key (HTTP 401).
-    #[error("UNIFI_API_KEY rejected by {url} (HTTP 401) - generate a new API key in UniFi Settings > API")]
-    Unauthorized {
+    /// The controller rejected the API key (HTTP 401). Unlike the other
+    /// status-class variants this has no `method` field: a rejected key is
+    /// rejected the same way for every verb, so there's nothing extra to
+    /// carry — not an oversight.
+    #[error(
+        "UNIFI_API_KEY rejected by {0} (HTTP 401) - generate a new API key in UniFi Settings > API"
+    )]
+    Unauthorized(
         /// Full request URL.
-        url: String,
-    },
+        String,
+    ),
 
     /// The API key is valid but lacks permission for the request (HTTP 403).
     #[error("UniFi API key lacks permission for {method} {url} (HTTP 403)")]

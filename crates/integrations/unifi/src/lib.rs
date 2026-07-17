@@ -63,6 +63,7 @@ pub mod http;
 mod client;
 mod config;
 mod service;
+mod util;
 
 pub use actions::{ActionDispatcher, ActionRequest};
 pub use client::UnifiClient;

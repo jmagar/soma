@@ -39,9 +39,11 @@ pub fn build_client(cfg: &UnifiConfig) -> Result<Client> {
 /// Returns [`UnifiError::Timeout`] / [`UnifiError::Connect`] / [`UnifiError::Request`]
 /// for transport failures, [`UnifiError::Unauthorized`] / [`UnifiError::Forbidden`] /
 /// [`UnifiError::NotFound`] for the status codes UniFi controllers use for those
-/// conditions, [`UnifiError::EmptyBody`] for a `GET` with no response body,
-/// [`UnifiError::Decode`] for a non-JSON body, and [`UnifiError::UnexpectedStatus`]
-/// for any other non-success status.
+/// conditions, and [`UnifiError::UnexpectedStatus`] for any other non-success
+/// status (its `body` is JSON when the response was JSON, otherwise the raw
+/// text). For a success status, returns [`UnifiError::EmptyBody`] for a `GET`
+/// with no response body, or [`UnifiError::Decode`] if the body isn't valid
+/// JSON.
 pub async fn request_json(
     client: &Client,
     base_url: &str,
@@ -76,7 +78,7 @@ pub async fn request_json(
         .map_err(|source| map_transport_error(&method, &url, source))?;
     let status = response.status();
     match status {
-        StatusCode::UNAUTHORIZED => return Err(UnifiError::Unauthorized { url }),
+        StatusCode::UNAUTHORIZED => return Err(UnifiError::Unauthorized(url)),
         StatusCode::FORBIDDEN => {
             return Err(UnifiError::Forbidden {
                 method: method.to_string(),
@@ -97,34 +99,41 @@ pub async fn request_json(
         .await
         .map_err(|source| map_transport_error(&method, &url, source))?;
 
-    let value = if bytes.is_empty() {
+    // Check the status before doing anything with the body: a non-success
+    // response (500, a proxy's HTML error page, ...) is a status failure
+    // first and foremost. Parsing it strictly as JSON here would turn a
+    // perfectly diagnosable "HTTP 500" into an opaque `UnifiError::Decode`
+    // whenever the error body isn't JSON — which upstream error pages
+    // commonly aren't. Capture the body best-effort instead.
+    if !status.is_success() {
+        let body = if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice::<Value>(&bytes)
+                .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()))
+        };
+        return Err(UnifiError::UnexpectedStatus {
+            status: status.as_u16(),
+            url,
+            body: Box::new(body),
+        });
+    }
+
+    if bytes.is_empty() {
         if method == Method::GET {
             return Err(UnifiError::EmptyBody {
                 method: method.to_string(),
                 url,
             });
         }
-        json!({
+        return Ok(json!({
             "success": true,
             "status": status.as_u16(),
             "method": method.as_str(),
             "path": path,
-        })
-    } else {
-        serde_json::from_slice::<Value>(&bytes).map_err(|source| UnifiError::Decode {
-            url: url.clone(),
-            source,
-        })?
-    };
-
-    if !status.is_success() {
-        return Err(UnifiError::UnexpectedStatus {
-            status: status.as_u16(),
-            url,
-            body: Box::new(value),
-        });
+        }));
     }
-    Ok(value)
+    serde_json::from_slice::<Value>(&bytes).map_err(|source| UnifiError::Decode { url, source })
 }
 
 fn map_transport_error(method: &Method, url: &str, source: reqwest::Error) -> UnifiError {
@@ -132,11 +141,13 @@ fn map_transport_error(method: &Method, url: &str, source: reqwest::Error) -> Un
         UnifiError::Timeout {
             method: method.to_string(),
             url: url.to_string(),
+            source,
         }
     } else if source.is_connect() {
         UnifiError::Connect {
             method: method.to_string(),
             url: url.to_string(),
+            source,
         }
     } else {
         UnifiError::Request {

@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use crate::api::{internal::InternalNetworkApi, path, ApiSourceFamily};
 use crate::capabilities::Capability;
 use crate::error::{Result, UnifiError};
+use crate::util::truncate_data_array;
 use crate::UnifiClient;
 
 /// Runs one internal-API `capability` against `client`.
@@ -85,7 +86,13 @@ async fn execute_generic(
         &mut path,
         &mut effective_params,
     );
-    let path = path::substitute_path(path, params, &[])?;
+    // Substitute against `effective_params`, not the original `params` —
+    // `normalize_internal_request` above can rewrite params (it currently
+    // only ever injects `body`, never a path parameter, so this was latent
+    // rather than live), and path/query/body must all read from the one
+    // post-normalization source or a future normalization rule that does
+    // touch a path parameter would be silently ignored here.
+    let path = path::substitute_path(path, &effective_params, &[])?;
     let api = InternalNetworkApi::new(&client.url, client.site(), client.legacy());
     let full_path = resolve_internal_path(&api, &path, client.legacy());
     let mut value = client
@@ -104,7 +111,9 @@ async fn execute_generic(
 
 /// Internal-API paths come in three shapes that each map onto the controller
 /// URL differently: the fixed `/api/self` endpoint, other legacy `/api/...`
-/// endpoints, and the `/v2/...` endpoints that live under a per-site prefix.
+/// endpoints, and the `/v2/...` endpoints that live under a per-site prefix
+/// supplied by `api` (never by the capability's own path template — none of
+/// the bundled inventory's `/v2/...` paths embed a site segment themselves).
 fn resolve_internal_path(api: &InternalNetworkApi, path: &str, legacy: bool) -> String {
     if path == "/api/self" {
         if legacy {
@@ -119,7 +128,7 @@ fn resolve_internal_path(api: &InternalNetworkApi, path: &str, legacy: bool) -> 
             format!("/proxy/network{path}")
         }
     } else if let Some(suffix) = path.strip_prefix("/v2/") {
-        api.v2_site_path(suffix.trim_start_matches("api/site/{site}/"))
+        api.v2_site_path(suffix)
     } else {
         api.v1_site_path(path)
     }
@@ -141,15 +150,6 @@ fn normalize_internal_request(
             *method = Method::POST;
             *path = "/v2/system-log/all";
             ensure_body(params, json!({}));
-        }
-        "unifi_get_traffic_flow_statistics" => {
-            *method = Method::POST;
-            *path = "/v2/traffic-flows";
-            ensure_body(params, json!({}));
-        }
-        "unifi_get_gateway_settings" => {
-            *method = Method::GET;
-            *path = "/get/setting/mgmt";
         }
         "unifi_get_client_sessions" => {
             ensure_body(params, default_session_body());
@@ -208,15 +208,6 @@ fn retain_security_events(value: &mut Value) {
                 .and_then(Value::as_str)
                 .is_some_and(|subcategory| subcategory.contains("SECURITY"))
     });
-}
-
-fn truncate_data_array(value: &mut Value, limit: Option<usize>) {
-    let Some(limit) = limit else {
-        return;
-    };
-    if let Some(items) = value.get_mut("data").and_then(Value::as_array_mut) {
-        items.truncate(limit);
-    }
 }
 
 #[cfg(test)]
@@ -306,6 +297,46 @@ mod tests {
     }
 
     #[test]
+    fn normalize_internal_request_does_not_reroute_traffic_flow_statistics_to_the_flows_listing() {
+        // Regression test: this used to overwrite the inventory-declared
+        // `GET /v2/traffic-flow-latest-statistics` with the unrelated
+        // `POST /v2/traffic-flows` (the same rewrite `unifi_get_traffic_flows`
+        // gets), silently returning the wrong data.
+        let mut method = Method::GET;
+        let mut path = "/v2/traffic-flow-latest-statistics";
+        let mut params = Value::Null;
+
+        normalize_internal_request(
+            "unifi_get_traffic_flow_statistics",
+            &mut method,
+            &mut path,
+            &mut params,
+        );
+
+        assert_eq!(method, Method::GET);
+        assert_eq!(path, "/v2/traffic-flow-latest-statistics");
+    }
+
+    #[test]
+    fn normalize_internal_request_does_not_reroute_gateway_settings_to_mgmt_settings() {
+        // Regression test: this used to overwrite the inventory-declared
+        // `/get/setting/gateway` with `/get/setting/mgmt`, a different
+        // settings object.
+        let mut method = Method::GET;
+        let mut path = "/get/setting/gateway";
+        let mut params = Value::Null;
+
+        normalize_internal_request(
+            "unifi_get_gateway_settings",
+            &mut method,
+            &mut path,
+            &mut params,
+        );
+
+        assert_eq!(path, "/get/setting/gateway");
+    }
+
+    #[test]
     fn default_session_body_covers_a_24_hour_window() {
         let body = default_session_body();
 
@@ -329,14 +360,5 @@ mod tests {
         retain_security_events(&mut value);
 
         assert_eq!(value["data"].as_array().unwrap().len(), 3);
-    }
-
-    #[test]
-    fn truncate_data_array_limits_when_given() {
-        let mut value = json!({ "data": [1, 2, 3, 4] });
-
-        truncate_data_array(&mut value, Some(1));
-
-        assert_eq!(value, json!({ "data": [1] }));
     }
 }

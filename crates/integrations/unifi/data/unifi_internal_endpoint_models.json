@@ -48,11 +48,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_block_client",
@@ -60,11 +60,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to the read-only unifi_list_clients endpoint and cannot perform a block; disabled from dispatch until the real blocking endpoint (e.g. POST cmd/stamgr with a block-sta command) is confirmed and added"
     },
     {
       "action": "unifi_configure_port_aggregation",
@@ -456,11 +456,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_forget_client",
@@ -468,11 +468,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_get_acl_rule_details",
@@ -1560,11 +1560,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_rename_device",
@@ -1584,11 +1584,11 @@
       "method": "GET",
       "path": "/v2/firewall-policies",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/firewall-policies) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_revoke_voucher",
@@ -1608,11 +1608,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_set_device_led",
@@ -1644,11 +1644,11 @@
       "method": "GET",
       "path": "/stat/device",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /stat/device) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_set_site_leds",
@@ -1704,11 +1704,11 @@
       "method": "GET",
       "path": "/v2/firewall-policies",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/firewall-policies) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_toggle_oon_policy",
@@ -1716,11 +1716,11 @@
       "method": "GET",
       "path": "/v2/object-oriented-network-configs",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/object-oriented-network-configs) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_toggle_port_forward",
@@ -1728,11 +1728,11 @@
       "method": "GET",
       "path": "/rest/portforward",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/portforward) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_toggle_qos_rule_enabled",
@@ -1740,11 +1740,11 @@
       "method": "GET",
       "path": "/v2/qos-rules",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/qos-rules) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_toggle_traffic_route",
@@ -1752,11 +1752,11 @@
       "method": "GET",
       "path": "/v2/trafficroutes",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/trafficroutes) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_toggle_wlan",
@@ -1764,11 +1764,11 @@
       "method": "GET",
       "path": "/rest/wlanconf",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/wlanconf) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_trigger_rf_scan",
@@ -1800,11 +1800,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_unblock_client",
@@ -1812,11 +1812,11 @@
       "method": "GET",
       "path": "/rest/user",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/user) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_update_acl_rule",
@@ -1836,11 +1836,11 @@
       "method": "GET",
       "path": "/v2/apgroups",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/apgroups) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_update_autobackup_settings",
@@ -1884,11 +1884,11 @@
       "method": "GET",
       "path": "/stat/device",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /stat/device) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_update_dns_record",
@@ -1920,11 +1920,11 @@
       "method": "GET",
       "path": "/v2/firewall-policies",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/firewall-policies) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_update_gateway_settings",
@@ -1944,11 +1944,11 @@
       "method": "GET",
       "path": "/rest/networkconf",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/networkconf) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_update_oon_policy",
@@ -2040,11 +2040,11 @@
       "method": "GET",
       "path": "/v2/trafficroutes",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /v2/trafficroutes) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_update_usergroup",
@@ -2088,11 +2088,11 @@
       "method": "GET",
       "path": "/rest/wlanconf",
       "mutating": true,
-      "runtime": true,
-      "verified": true,
-      "verification_mode": "contract_ok",
+      "runtime": false,
+      "verified": false,
+      "verification_mode": "unverified_path_mismatch",
       "auth_scope": "admin",
-      "evidence": "neutral upstream Network MCP manifest plus source ApiRequest mapping"
+      "evidence": "declared path/method (GET /rest/wlanconf) is identical to a read-only listing endpoint and cannot perform this mutation; disabled from dispatch until the real endpoint is confirmed and added"
     },
     {
       "action": "unifi_upgrade_device",

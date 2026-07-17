@@ -15,7 +15,9 @@ pub struct UnifiConfig {
     pub api_key: String,
     /// Site name (`UNIFI_SITE`, default `"default"`).
     pub site: String,
-    /// Skip TLS certificate verification; required for self-signed certs.
+    /// Skip TLS certificate verification. Defaults to `false` (verify) —
+    /// self-signed local UniFi controllers need this explicitly set to
+    /// `true`; a client should never silently accept invalid certificates.
     pub skip_tls_verify: bool,
     /// Legacy controller mode: no `/proxy/network` prefix, typically port 8443.
     pub legacy: bool,
@@ -27,7 +29,7 @@ impl Default for UnifiConfig {
             url: String::new(),
             api_key: String::new(),
             site: "default".to_string(),
-            skip_tls_verify: true,
+            skip_tls_verify: false,
             legacy: false,
         }
     }

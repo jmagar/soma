@@ -12,15 +12,21 @@ use crate::error::{Result, UnifiError};
 /// Resolves `action` to a concrete `(target_action, params)` pair.
 ///
 /// # Errors
-/// Returns [`UnifiError::HybridRouting`] if `params.prefer` is set to
-/// something other than `"official"`/`"internal"`, or if `action` has no
-/// mapping for the resolved side.
+/// Returns [`UnifiError::HybridRouting`] if `params.prefer` is present but
+/// not a `"official"`/`"internal"` string, or if `action` has no mapping for
+/// the resolved side.
 pub fn resolve(action: &str, params: &Value) -> Result<(&'static str, Value)> {
-    let prefer = params
-        .get("prefer")
-        .and_then(Value::as_str)
-        .map(str::to_ascii_lowercase);
-    let has_site_id = params.get("siteId").is_some();
+    let prefer = match params.get("prefer") {
+        None => None,
+        Some(Value::String(value)) => Some(value.to_ascii_lowercase()),
+        Some(_) => {
+            return Err(UnifiError::HybridRouting(
+                "hybrid preference must be a string".to_string(),
+            ))
+        }
+    };
+    // A present-but-null siteId is the same as not providing one.
+    let has_site_id = params.get("siteId").is_some_and(|value| !value.is_null());
     let target = match prefer.as_deref() {
         Some("official") => official_target(action),
         Some("internal") => internal_target(action),
@@ -128,5 +134,19 @@ mod tests {
         assert!(
             matches!(err, UnifiError::HybridRouting(msg) if msg.contains("unknown hybrid action"))
         );
+    }
+
+    #[test]
+    fn resolve_errors_on_a_non_string_preference() {
+        let err = resolve("list_clients", &json!({ "prefer": 1 })).unwrap_err();
+
+        assert!(matches!(err, UnifiError::HybridRouting(msg) if msg.contains("must be a string")));
+    }
+
+    #[test]
+    fn resolve_treats_a_null_site_id_as_absent() {
+        let (target, _) = resolve("list_clients", &json!({ "siteId": null })).unwrap();
+
+        assert_eq!(target, "clients");
     }
 }

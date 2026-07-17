@@ -52,10 +52,15 @@ async fn an_expired_api_key_maps_to_unauthorized() {
 
     let err = client.clients().await.unwrap_err();
 
-    assert!(
-        matches!(err, UnifiError::Unauthorized { .. }),
-        "expected Unauthorized, got {err:?}"
-    );
+    match err {
+        UnifiError::Unauthorized(url) => {
+            assert!(
+                url.ends_with("/proxy/network/api/s/default/stat/sta"),
+                "unexpected url: {url}"
+            );
+        }
+        other => panic!("expected Unauthorized, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -71,10 +76,16 @@ async fn a_missing_endpoint_maps_to_not_found() {
 
     let err = client.clients().await.unwrap_err();
 
-    assert!(
-        matches!(err, UnifiError::NotFound { .. }),
-        "expected NotFound, got {err:?}"
-    );
+    match err {
+        UnifiError::NotFound { method, url } => {
+            assert_eq!(method, "GET");
+            assert!(
+                url.ends_with("/proxy/network/api/s/default/stat/sta"),
+                "unexpected url: {url}"
+            );
+        }
+        other => panic!("expected NotFound, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -90,10 +101,16 @@ async fn an_empty_body_on_a_get_maps_to_empty_body() {
 
     let err = client.clients().await.unwrap_err();
 
-    assert!(
-        matches!(err, UnifiError::EmptyBody { .. }),
-        "expected EmptyBody, got {err:?}"
-    );
+    match err {
+        UnifiError::EmptyBody { method, url } => {
+            assert_eq!(method, "GET");
+            assert!(
+                url.ends_with("/proxy/network/api/s/default/stat/sta"),
+                "unexpected url: {url}"
+            );
+        }
+        other => panic!("expected EmptyBody, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -113,6 +130,28 @@ async fn an_unexpected_status_carries_the_response_body() {
         UnifiError::UnexpectedStatus { status, body, .. } => {
             assert_eq!(status, 500);
             assert_eq!(*body, json!({ "error": "boom" }));
+        }
+        other => panic!("expected UnexpectedStatus, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn an_unexpected_status_with_a_non_json_body_still_reports_the_status() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/proxy/network/api/s/default/stat/sta"))
+        .respond_with(ResponseTemplate::new(502).set_body_string("<html>Bad Gateway</html>"))
+        .mount(&server)
+        .await;
+
+    let client = UnifiClient::new(&config(server.uri())).unwrap();
+
+    let err = client.clients().await.unwrap_err();
+
+    match err {
+        UnifiError::UnexpectedStatus { status, body, .. } => {
+            assert_eq!(status, 502);
+            assert_eq!(*body, json!("<html>Bad Gateway</html>"));
         }
         other => panic!("expected UnexpectedStatus, got {other:?}"),
     }

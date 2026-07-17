@@ -55,6 +55,11 @@ impl ActionDispatcher {
             ApiSourceFamily::Hybrid => {
                 let (target, params) =
                     hybrid::resolve(capability.action.as_str(), &request.params)?;
+                // Intentionally InvalidRequest, not UnknownAction: `request.action`
+                // itself was a registered hybrid capability. This branch only
+                // fires if hybrid::resolve's own routing table names a target
+                // action that isn't in the catalog — a bug in this crate's data,
+                // not a caller-supplied bad action name.
                 let Some(target_capability) = find_capability(target) else {
                     return Err(UnifiError::InvalidRequest {
                         context: capability.action.clone(),

@@ -57,7 +57,12 @@ pub fn capabilities() -> Vec<Capability> {
         legacy("devices", "Devices", "GET", "/stat/device"),
         legacy("wlans", "WLANs", "GET", "/rest/wlanconf"),
         legacy("health", "Health", "GET", "/stat/health"),
-        legacy("alarms", "Alarms", "GET", "/stat/alarm"),
+        // Matches UnifiClient::alarms()'s actual call in client.rs — a
+        // catalog/{legacy alias} path mismatch here was found in review;
+        // "alarms" is dispatched through the named handler in
+        // actions/internal.rs, so this path is discovery metadata only,
+        // but it must describe what will really be called.
+        legacy("alarms", "Alarms", "GET", "/rest/alarm"),
         legacy("events", "Events", "GET", "/rest/event"),
         legacy("sysinfo", "System Info", "GET", "/stat/sysinfo"),
         legacy("me", "Current User", "GET", "/api/self"),
@@ -118,6 +123,58 @@ mod tests {
         assert!(caps
             .iter()
             .any(|cap| cap.action == "list_clients" && cap.source == ApiSourceFamily::Hybrid));
+    }
+
+    #[test]
+    fn unifi_block_client_is_excluded_until_its_real_endpoint_is_verified() {
+        // The bundled inventory declares this mutating admin action with the
+        // same GET path as the read-only client listing — dispatching it
+        // would silently no-op instead of blocking anything. It must stay
+        // `runtime: false` (and therefore absent here) until fixed.
+        let caps = capabilities();
+
+        assert!(!caps.iter().any(|cap| cap.action == "unifi_block_client"));
+    }
+
+    #[test]
+    fn no_dispatchable_mutating_action_shares_a_get_path_with_a_read_only_action() {
+        // A mutating admin action declared as a GET against the exact same
+        // path a read-only action already uses cannot actually mutate
+        // anything: dispatching it just re-runs the read and returns a
+        // misleadingly successful result (this is precisely the bug
+        // `unifi_block_client`, and 20 siblings alongside it, shipped with —
+        // see the `evidence` field on any `unverified_path_mismatch` entry
+        // in data/unifi_internal_endpoint_models.json for the fix history).
+        // This is a catalog-wide invariant, not a one-action regression pin:
+        // it catches the whole bug class, including future additions.
+        let caps = capabilities();
+        let read_only_paths: std::collections::HashSet<&str> = caps
+            .iter()
+            .filter(|cap| !cap.mutating)
+            .filter_map(|cap| cap.path.as_deref())
+            .collect();
+
+        let offenders: Vec<&str> = caps
+            .iter()
+            .filter(|cap| cap.mutating)
+            .filter(|cap| {
+                cap.method
+                    .as_deref()
+                    .is_some_and(|m| m.eq_ignore_ascii_case("GET"))
+                    && cap
+                        .path
+                        .as_deref()
+                        .is_some_and(|p| read_only_paths.contains(p))
+            })
+            .map(|cap| cap.action.as_str())
+            .collect();
+
+        assert!(
+            offenders.is_empty(),
+            "mutating actions with a GET path identical to a read-only action's path \
+             (cannot actually mutate anything; disable via runtime:false in the JSON \
+             inventory until the real endpoint is confirmed): {offenders:?}"
+        );
     }
 
     #[test]
