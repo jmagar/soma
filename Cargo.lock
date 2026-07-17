@@ -4606,11 +4606,13 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 name = "unifi"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
+ "wiremock",
 ]
 
 [[package]]

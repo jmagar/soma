@@ -1,3 +1,7 @@
+//! Builds [`Capability`] entries from the internal-API endpoint inventory
+//! baked into `data/unifi_internal_endpoint_models.json`, plus a handful of
+//! hand-written legacy and hybrid aliases.
+
 use serde::Deserialize;
 
 use crate::api::ApiSourceFamily;
@@ -20,6 +24,14 @@ struct Tool {
     verification_mode: String,
 }
 
+/// One [`Capability`] per `runtime`-flagged tool in the bundled endpoint
+/// inventory, plus the fixed legacy aliases ([`UnifiClient`](crate::UnifiClient)'s
+/// named methods) and hybrid entries this crate resolves at dispatch time.
+///
+/// # Panics
+/// Panics if the bundled inventory JSON fails to parse, or if it contains an
+/// `auth_scope` other than `"read"`/`"admin"` — see [`super::all_capabilities`]
+/// for why that can only happen from a broken build, not at runtime.
 pub fn capabilities() -> Vec<Capability> {
     let inventory: Inventory = serde_json::from_str(include_str!(
         "../../data/unifi_internal_endpoint_models.json"
@@ -88,6 +100,46 @@ fn auth_scope(scope: &str) -> AuthScope {
     match scope {
         "read" => AuthScope::Read,
         "admin" => AuthScope::Admin,
-        other => panic!("unknown internal auth_scope {other}"),
+        other => panic!("unknown internal auth_scope {other} in bundled inventory JSON"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capabilities_parses_the_bundled_inventory_and_appends_aliases() {
+        let caps = capabilities();
+
+        assert!(caps
+            .iter()
+            .any(|cap| cap.action == "clients" && cap.source == ApiSourceFamily::Internal));
+        assert!(caps
+            .iter()
+            .any(|cap| cap.action == "list_clients" && cap.source == ApiSourceFamily::Hybrid));
+    }
+
+    #[test]
+    fn legacy_aliases_are_read_scoped_and_non_mutating() {
+        let cap = legacy("clients", "Clients", "GET", "/stat/sta");
+
+        assert_eq!(cap.auth_scope, AuthScope::Read);
+        assert!(!cap.mutating);
+    }
+
+    #[test]
+    fn hybrid_entries_have_no_method_or_path() {
+        let cap = hybrid("list_clients", "List Clients");
+
+        assert_eq!(cap.source, ApiSourceFamily::Hybrid);
+        assert!(cap.method.is_none());
+        assert!(cap.path.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown internal auth_scope")]
+    fn auth_scope_panics_on_an_unrecognized_value() {
+        auth_scope("write");
     }
 }

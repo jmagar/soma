@@ -1,20 +1,39 @@
-use anyhow::{bail, Context, Result};
-use reqwest::Method;
-use serde_json::{json, Value};
+//! Dispatch for [`ApiSourceFamily::Internal`] capabilities: the UniFi
+//! controller's own (undocumented, but stable in practice) web-UI API.
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{
-    api::{internal::InternalNetworkApi, path, ApiSourceFamily},
-    capabilities::Capability,
-    http, UnifiClient, UnifiConfig,
-};
+use reqwest::Method;
+use serde_json::{json, Value};
 
-pub async fn execute(cfg: &UnifiConfig, capability: &Capability, params: &Value) -> Result<Value> {
+use crate::api::{internal::InternalNetworkApi, path, ApiSourceFamily};
+use crate::capabilities::Capability;
+use crate::error::{Result, UnifiError};
+use crate::UnifiClient;
+
+/// Runs one internal-API `capability` against `client`.
+///
+/// Known actions (`clients`, `devices`, `wlans`, `health`, `alarms`,
+/// `events`, `sysinfo`, `me`) go through [`UnifiClient`]'s named methods;
+/// everything else is dispatched generically from the capability's
+/// `method`/`path`.
+///
+/// # Errors
+/// Returns [`UnifiError::InvalidRequest`] if `capability` isn't an
+/// internal-API capability; see [`UnifiError`] for the other failure cases
+/// this can return.
+pub async fn execute(
+    client: &UnifiClient,
+    capability: &Capability,
+    params: &Value,
+) -> Result<Value> {
     if capability.source != ApiSourceFamily::Internal {
-        bail!("{} is not an internal API action", capability.action);
+        return Err(UnifiError::InvalidRequest {
+            context: capability.action.clone(),
+            message: "not an internal API action".to_string(),
+        });
     }
 
-    let client = UnifiClient::new(cfg)?;
     match capability.action.as_str() {
         "clients" => client.clients().await,
         "devices" => client.devices().await,
@@ -22,7 +41,7 @@ pub async fn execute(cfg: &UnifiConfig, capability: &Capability, params: &Value)
         "health" => client.health().await,
         "alarms" => client.alarms().await,
         "events" => {
-            let mut events = execute_generic(cfg, capability, params).await?;
+            let mut events = execute_generic(client, capability, params).await?;
             truncate_data_array(
                 &mut events,
                 params
@@ -34,12 +53,12 @@ pub async fn execute(cfg: &UnifiConfig, capability: &Capability, params: &Value)
         }
         "sysinfo" => client.sysinfo().await,
         "me" => client.me().await,
-        _ => execute_generic(cfg, capability, params).await,
+        _ => execute_generic(client, capability, params).await,
     }
 }
 
 async fn execute_generic(
-    cfg: &UnifiConfig,
+    client: &UnifiClient,
     capability: &Capability,
     params: &Value,
 ) -> Result<Value> {
@@ -48,11 +67,17 @@ async fn execute_generic(
         .as_deref()
         .unwrap_or("GET")
         .parse::<Method>()
-        .context("invalid internal HTTP method")?;
+        .map_err(|_| UnifiError::InvalidRequest {
+            context: capability.action.clone(),
+            message: format!("invalid HTTP method {:?}", capability.method),
+        })?;
     let mut path = capability
         .path
         .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("internal action {} has no path", capability.action))?;
+        .ok_or_else(|| UnifiError::InvalidRequest {
+            context: capability.action.clone(),
+            message: "internal action has no path configured".to_string(),
+        })?;
     let mut effective_params = params.clone();
     normalize_internal_request(
         capability.action.as_str(),
@@ -61,38 +86,50 @@ async fn execute_generic(
         &mut effective_params,
     );
     let path = path::substitute_path(path, params, &[])?;
-    let api = InternalNetworkApi::new(&cfg.url, &cfg.site, cfg.legacy);
-    let full_path = if path == "/api/self" {
-        if cfg.legacy {
-            path
-        } else {
-            "/proxy/network/api/self".to_string()
-        }
-    } else if path.starts_with("/api/") {
-        if cfg.legacy {
-            path
-        } else {
-            format!("/proxy/network{path}")
-        }
-    } else if let Some(suffix) = path.strip_prefix("/v2/") {
-        api.v2_site_path(suffix.trim_start_matches("api/site/{site}/"))
-    } else {
-        api.v1_site_path(&path)
-    };
-    let mut value = http::request_json(
-        cfg,
-        method,
-        &full_path,
-        effective_params.get("query"),
-        effective_params.get("body"),
-    )
-    .await?;
+    let api = InternalNetworkApi::new(&client.url, client.site(), client.legacy());
+    let full_path = resolve_internal_path(&api, &path, client.legacy());
+    let mut value = client
+        .request_json(
+            method,
+            &full_path,
+            effective_params.get("query"),
+            effective_params.get("body"),
+        )
+        .await?;
     if capability.action == "unifi_get_ips_events" {
         retain_security_events(&mut value);
     }
     Ok(value)
 }
 
+/// Internal-API paths come in three shapes that each map onto the controller
+/// URL differently: the fixed `/api/self` endpoint, other legacy `/api/...`
+/// endpoints, and the `/v2/...` endpoints that live under a per-site prefix.
+fn resolve_internal_path(api: &InternalNetworkApi, path: &str, legacy: bool) -> String {
+    if path == "/api/self" {
+        if legacy {
+            path.to_string()
+        } else {
+            "/proxy/network/api/self".to_string()
+        }
+    } else if path.starts_with("/api/") {
+        if legacy {
+            path.to_string()
+        } else {
+            format!("/proxy/network{path}")
+        }
+    } else if let Some(suffix) = path.strip_prefix("/v2/") {
+        api.v2_site_path(suffix.trim_start_matches("api/site/{site}/"))
+    } else {
+        api.v1_site_path(path)
+    }
+}
+
+/// A handful of internal actions don't map 1:1 onto their capability's
+/// declared method/path/body — the controller's web UI issues them as `POST`
+/// with a JSON body even though the capability catalog (built for
+/// discoverability) lists them as simple lookups. Patch the request here
+/// rather than special-casing the catalog.
 fn normalize_internal_request(
     action: &str,
     method: &mut Method,
@@ -100,12 +137,7 @@ fn normalize_internal_request(
     params: &mut Value,
 ) {
     match action {
-        "events" | "unifi_recent_events" => {
-            *method = Method::POST;
-            *path = "/v2/system-log/all";
-            ensure_body(params, json!({}));
-        }
-        "unifi_get_ips_events" => {
+        "events" | "unifi_recent_events" | "unifi_get_ips_events" => {
             *method = Method::POST;
             *path = "/v2/system-log/all";
             ensure_body(params, json!({}));
@@ -145,6 +177,9 @@ fn ensure_body(params: &mut Value, body: Value) {
     }
 }
 
+/// A 24-hour window ending now, in epoch milliseconds — the default range
+/// the controller's client-session endpoint expects when the caller didn't
+/// supply one.
 fn default_session_body() -> Value {
     let end = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -154,6 +189,8 @@ fn default_session_body() -> Value {
     json!({ "start": start, "end": end })
 }
 
+/// `unifi_get_ips_events` shares its endpoint with the general system-log
+/// feed; keep only entries that are actually IPS/threat security events.
 fn retain_security_events(value: &mut Value) {
     let Some(items) = value.get_mut("data").and_then(Value::as_array_mut) else {
         return;
@@ -179,5 +216,127 @@ fn truncate_data_array(value: &mut Value, limit: Option<usize>) {
     };
     if let Some(items) = value.get_mut("data").and_then(Value::as_array_mut) {
         items.truncate(limit);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_internal_path_maps_self_endpoint() {
+        let api = InternalNetworkApi::new("https://unifi.local", "default", false);
+
+        assert_eq!(
+            resolve_internal_path(&api, "/api/self", false),
+            "/proxy/network/api/self"
+        );
+        assert_eq!(resolve_internal_path(&api, "/api/self", true), "/api/self");
+    }
+
+    #[test]
+    fn resolve_internal_path_maps_legacy_api_endpoints() {
+        let api = InternalNetworkApi::new("https://unifi.local", "default", false);
+
+        assert_eq!(
+            resolve_internal_path(&api, "/api/stat/sta", false),
+            "/proxy/network/api/stat/sta"
+        );
+        assert_eq!(
+            resolve_internal_path(&api, "/api/stat/sta", true),
+            "/api/stat/sta"
+        );
+    }
+
+    #[test]
+    fn resolve_internal_path_maps_v2_endpoints_through_the_site_prefix() {
+        let api = InternalNetworkApi::new("https://unifi.local", "default", false);
+
+        assert_eq!(
+            resolve_internal_path(&api, "/v2/system-log/all", false),
+            "/proxy/network/v2/api/site/default/system-log/all"
+        );
+    }
+
+    #[test]
+    fn resolve_internal_path_falls_back_to_v1_site_path() {
+        let api = InternalNetworkApi::new("https://unifi.local", "default", false);
+
+        assert_eq!(
+            resolve_internal_path(&api, "stat/sta", false),
+            "/proxy/network/api/s/default/stat/sta"
+        );
+    }
+
+    #[test]
+    fn normalize_internal_request_rewrites_events_to_a_post() {
+        let mut method = Method::GET;
+        let mut path = "/rest/event";
+        let mut params = Value::Null;
+
+        normalize_internal_request("events", &mut method, &mut path, &mut params);
+
+        assert_eq!(method, Method::POST);
+        assert_eq!(path, "/v2/system-log/all");
+        assert_eq!(params.get("body"), Some(&json!({})));
+    }
+
+    #[test]
+    fn normalize_internal_request_preserves_a_caller_supplied_body() {
+        let mut method = Method::GET;
+        let mut path = "/rest/event";
+        let mut params = json!({ "body": { "start": 1 } });
+
+        normalize_internal_request("events", &mut method, &mut path, &mut params);
+
+        assert_eq!(params.get("body"), Some(&json!({ "start": 1 })));
+    }
+
+    #[test]
+    fn normalize_internal_request_leaves_unmapped_actions_alone() {
+        let mut method = Method::GET;
+        let mut path = "/stat/sta";
+        let mut params = Value::Null;
+
+        normalize_internal_request("clients", &mut method, &mut path, &mut params);
+
+        assert_eq!(method, Method::GET);
+        assert_eq!(path, "/stat/sta");
+        assert_eq!(params, Value::Null);
+    }
+
+    #[test]
+    fn default_session_body_covers_a_24_hour_window() {
+        let body = default_session_body();
+
+        let start = body["start"].as_u64().unwrap();
+        let end = body["end"].as_u64().unwrap();
+
+        assert_eq!(end - start, 24 * 60 * 60 * 1000);
+    }
+
+    #[test]
+    fn retain_security_events_keeps_only_security_flagged_items() {
+        let mut value = json!({
+            "data": [
+                { "category": "SECURITY", "key": "x" },
+                { "category": "OTHER", "key": "THREAT_DETECTED" },
+                { "category": "OTHER", "subcategory": "SECURITY_ALERT" },
+                { "category": "OTHER", "key": "noise" },
+            ]
+        });
+
+        retain_security_events(&mut value);
+
+        assert_eq!(value["data"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn truncate_data_array_limits_when_given() {
+        let mut value = json!({ "data": [1, 2, 3, 4] });
+
+        truncate_data_array(&mut value, Some(1));
+
+        assert_eq!(value, json!({ "data": [1] }));
     }
 }

@@ -1,17 +1,27 @@
-use anyhow::{Context, Result};
-use reqwest::Client;
+use std::fmt;
+
+use reqwest::{Client, Method};
 use serde_json::Value;
 
+use crate::error::{Result, UnifiError};
 use crate::{http, UnifiConfig};
 
 /// HTTP REST client for UniFi controllers.
 ///
-/// Supports both modern UniFi OS with `/proxy/network` and legacy controllers
-/// without that prefix. Authentication uses the `X-API-KEY` header.
+/// Supports both modern UniFi OS controllers (behind `/proxy/network`) and
+/// legacy controllers (no prefix, typically port 8443). Authentication uses
+/// the `X-API-KEY` header.
+///
+/// Builds and holds one pooled [`reqwest::Client`] for its lifetime — clone
+/// and share a `UnifiClient` rather than constructing a new one per request,
+/// so requests reuse connections instead of paying a fresh TLS handshake
+/// each time.
+///
+/// `Debug` redacts the API key, same as [`UnifiConfig`].
 #[derive(Clone)]
 pub struct UnifiClient {
-    client: Client,
-    /// Base URL, e.g. `https://unifi.local`.
+    http: Client,
+    /// Base URL, e.g. `https://unifi.local`, with any trailing slash trimmed.
     pub url: String,
     api_key: String,
     site: String,
@@ -19,23 +29,38 @@ pub struct UnifiClient {
     legacy: bool,
 }
 
+impl fmt::Debug for UnifiClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UnifiClient")
+            .field("url", &self.url)
+            .field(
+                "api_key",
+                &format_args!("<redacted, {} bytes>", self.api_key.len()),
+            )
+            .field("site", &self.site)
+            .field("skip_tls_verify", &self.skip_tls_verify)
+            .field("legacy", &self.legacy)
+            .finish()
+    }
+}
+
 impl UnifiClient {
+    /// Builds a client from `cfg`.
+    ///
+    /// # Errors
+    /// Returns [`UnifiError::MissingUrl`] or [`UnifiError::MissingApiKey`] if the
+    /// corresponding config field is empty, or [`UnifiError::ClientBuild`] if the
+    /// underlying HTTP client fails to construct.
     pub fn new(cfg: &UnifiConfig) -> Result<Self> {
         if cfg.url.is_empty() {
-            anyhow::bail!(
-                "UNIFI_URL is not set - set it to your controller's base URL, \
-                 e.g. UNIFI_URL=https://unifi.local"
-            );
+            return Err(UnifiError::MissingUrl);
         }
         if cfg.api_key.is_empty() {
-            anyhow::bail!(
-                "UNIFI_API_KEY is not set - generate an API key in \
-                 UniFi Settings > API"
-            );
+            return Err(UnifiError::MissingApiKey);
         }
-        let client = http::client(cfg)?;
+        let http = http::build_client(cfg)?;
         Ok(Self {
-            client,
+            http,
             url: cfg.url.trim_end_matches('/').to_string(),
             api_key: cfg.api_key.clone(),
             site: cfg.site.clone(),
@@ -44,6 +69,17 @@ impl UnifiClient {
         })
     }
 
+    /// Site slug this client targets (`UnifiConfig::site`).
+    pub fn site(&self) -> &str {
+        &self.site
+    }
+
+    /// Whether this client targets a legacy controller (no `/proxy/network` prefix).
+    pub fn legacy(&self) -> bool {
+        self.legacy
+    }
+
+    /// Reconstructs the [`UnifiConfig`] this client was built from.
     pub fn config(&self) -> UnifiConfig {
         UnifiConfig {
             url: self.url.clone(),
@@ -52,6 +88,32 @@ impl UnifiClient {
             skip_tls_verify: self.skip_tls_verify,
             legacy: self.legacy,
         }
+    }
+
+    /// Issues a request against this client's controller, reusing its pooled
+    /// connection. This is the primitive the dynamic action dispatcher
+    /// ([`crate::ActionDispatcher`]) builds on; the named methods below
+    /// (`clients`, `devices`, ...) are thin, discoverable wrappers around it.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn request_json(
+        &self,
+        method: Method,
+        path: &str,
+        query: Option<&Value>,
+        body: Option<&Value>,
+    ) -> Result<Value> {
+        http::request_json(
+            &self.http,
+            &self.url,
+            &self.api_key,
+            method,
+            path,
+            query,
+            body,
+        )
+        .await
     }
 
     fn site_path(&self, suffix: &str) -> String {
@@ -67,143 +129,12 @@ impl UnifiClient {
         }
     }
 
-    async fn get(&self, path: &str) -> Result<Value> {
-        let url = format!("{}{path}", self.url);
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-API-KEY", &self.api_key)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    anyhow::anyhow!(
-                        "UniFi controller at {url} timed out after 30s - \
-                         check UNIFI_SKIP_TLS_VERIFY=true for self-signed certs, \
-                         or verify the controller is reachable"
-                    )
-                } else if e.is_connect() {
-                    anyhow::anyhow!(
-                        "UniFi controller at {url} unreachable - \
-                         check UNIFI_URL is correct and the controller is running. \
-                         For self-signed certs set UNIFI_SKIP_TLS_VERIFY=true"
-                    )
-                } else {
-                    anyhow::anyhow!("GET {url} failed: {e}")
-                }
-            })?;
-
-        let status = resp.status();
-
-        if status == reqwest::StatusCode::UNAUTHORIZED {
-            anyhow::bail!(
-                "UNIFI_API_KEY rejected by {url} (HTTP 401) - \
-                 generate a new API key in UniFi Settings > API"
-            );
-        }
-
-        let body: Value = resp
-            .json()
-            .await
-            .with_context(|| format!("failed to parse JSON response from {url}"))?;
-
-        if !status.is_success() {
-            anyhow::bail!("UniFi HTTP {status} from {url}: {body}");
-        }
-
-        Ok(body)
-    }
-
-    /// Connected clients (wireless and wired).
-    pub async fn clients(&self) -> Result<Value> {
-        let path = self.site_path("stat/sta");
-        let span = tracing::info_span!("upstream.clients", site = %self.site);
+    async fn get(&self, path: &str, action: &'static str) -> Result<Value> {
+        let span = tracing::info_span!("upstream", %action, site = %self.site);
         let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi clients API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "clients");
-        result
-    }
-
-    /// Network devices: APs, switches, gateways.
-    pub async fn devices(&self) -> Result<Value> {
-        let path = self.site_path("stat/device");
-        let span = tracing::info_span!("upstream.devices", site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi devices API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "devices");
-        result
-    }
-
-    /// WLAN (WiFi network) configurations.
-    pub async fn wlans(&self) -> Result<Value> {
-        let path = self.site_path("rest/wlanconf");
-        let span = tracing::info_span!("upstream.wlans", site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi wlans API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "wlans");
-        result
-    }
-
-    /// Site health summary.
-    pub async fn health(&self) -> Result<Value> {
-        let path = self.site_path("stat/health");
-        let span = tracing::info_span!("upstream.health", site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi health API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "health");
-        result
-    }
-
-    /// Active alarms / alerts.
-    pub async fn alarms(&self) -> Result<Value> {
-        let path = self.site_path("rest/alarm");
-        let span = tracing::info_span!("upstream.alarms", site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi alarms API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "alarms");
-        result
-    }
-
-    /// Recent events.
-    pub async fn events(&self) -> Result<Value> {
-        let path = self.site_path("rest/event");
-        let span = tracing::info_span!("upstream.events", site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi events API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "events");
-        result
-    }
-
-    /// Controller system info.
-    pub async fn sysinfo(&self) -> Result<Value> {
-        let path = self.site_path("stat/sysinfo");
-        let span = tracing::info_span!("upstream.sysinfo", site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi sysinfo API");
-        let result = self.get(&path).await;
-        self.log_result(&result, "sysinfo");
-        result
-    }
-
-    /// Authenticated user info.
-    pub async fn me(&self) -> Result<Value> {
-        let span = tracing::info_span!("upstream.me");
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi me API");
-        let result = self.get(self.self_path()).await;
-        self.log_result(&result, "me");
-        result
-    }
-
-    fn log_result(&self, result: &Result<Value>, action: &str) {
-        match result {
+        tracing::debug!(url = %self.url, "calling UniFi API");
+        let result = self.request_json(Method::GET, path, None, None).await;
+        match &result {
             Ok(v) => {
                 let count = v
                     .get("data")
@@ -212,9 +143,72 @@ impl UnifiClient {
                     .unwrap_or(0);
                 tracing::debug!(action, count, "upstream call ok");
             }
-            Err(e) => {
-                tracing::warn!(action, error = %e, "upstream call failed");
-            }
+            Err(e) => tracing::warn!(action, error = %e, "upstream call failed"),
         }
+        result
+    }
+
+    /// Connected clients (wireless and wired).
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn clients(&self) -> Result<Value> {
+        self.get(&self.site_path("stat/sta"), "clients").await
+    }
+
+    /// Network devices: APs, switches, gateways.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn devices(&self) -> Result<Value> {
+        self.get(&self.site_path("stat/device"), "devices").await
+    }
+
+    /// WLAN (WiFi network) configurations.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn wlans(&self) -> Result<Value> {
+        self.get(&self.site_path("rest/wlanconf"), "wlans").await
+    }
+
+    /// Site health summary.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn health(&self) -> Result<Value> {
+        self.get(&self.site_path("stat/health"), "health").await
+    }
+
+    /// Active alarms / alerts.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn alarms(&self) -> Result<Value> {
+        self.get(&self.site_path("rest/alarm"), "alarms").await
+    }
+
+    /// Recent events.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn events(&self) -> Result<Value> {
+        self.get(&self.site_path("rest/event"), "events").await
+    }
+
+    /// Controller system info.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn sysinfo(&self) -> Result<Value> {
+        self.get(&self.site_path("stat/sysinfo"), "sysinfo").await
+    }
+
+    /// Authenticated user info.
+    ///
+    /// # Errors
+    /// See [`UnifiError`] for the failure cases this can return.
+    pub async fn me(&self) -> Result<Value> {
+        self.get(self.self_path(), "me").await
     }
 }

@@ -1,3 +1,6 @@
+//! Builds [`Capability`] entries from the official-API OpenAPI operation
+//! inventory baked into `data/unifi_official_network_v10_3_58.json`.
+
 use serde::Deserialize;
 
 use crate::api::ApiSourceFamily;
@@ -16,6 +19,12 @@ struct Operation {
     summary: String,
 }
 
+/// One [`Capability`] per operation in the bundled OpenAPI inventory.
+///
+/// # Panics
+/// Panics if the bundled inventory JSON fails to parse — see
+/// [`super::all_capabilities`] for why that can only happen from a broken
+/// build, not at runtime.
 pub fn capabilities() -> Vec<Capability> {
     let inventory: Inventory = serde_json::from_str(include_str!(
         "../../data/unifi_official_network_v10_3_58.json"
@@ -44,6 +53,9 @@ pub fn capabilities() -> Vec<Capability> {
         .collect()
 }
 
+/// Maps an OpenAPI `operationId` to this crate's action-name convention:
+/// a curated override for names that read better shortened, otherwise
+/// `official_` + the operation id in `snake_case`.
 pub fn action_name(operation_id: &str) -> String {
     let override_name = match operation_id {
         "ConnectorDelete" => Some("official_connector_delete"),
@@ -76,4 +88,42 @@ fn camel_to_snake(input: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capabilities_parses_the_bundled_inventory() {
+        let caps = capabilities();
+
+        assert!(!caps.is_empty());
+        assert!(caps
+            .iter()
+            .all(|cap| cap.source == ApiSourceFamily::Official));
+    }
+
+    #[test]
+    fn action_name_uses_curated_overrides() {
+        assert_eq!(action_name("getSiteOverviewPage"), "official_list_sites");
+    }
+
+    #[test]
+    fn action_name_falls_back_to_snake_case_with_a_prefix() {
+        assert_eq!(action_name("getFooBarBaz"), "official_get_foo_bar_baz");
+    }
+
+    #[test]
+    fn camel_to_snake_does_not_prefix_a_leading_capital_with_an_underscore() {
+        assert_eq!(camel_to_snake("Connector"), "connector");
+    }
+
+    #[test]
+    fn camel_to_snake_splits_on_every_capital() {
+        assert_eq!(
+            camel_to_snake("getWifiBroadcastPage"),
+            "get_wifi_broadcast_page"
+        );
+    }
 }
