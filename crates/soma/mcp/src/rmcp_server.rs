@@ -3,7 +3,7 @@
 //! This is the adapter between the rmcp crate and your application. It:
 //!   - Advertises tools, resources, and prompts to MCP clients
 //!   - Enforces auth scopes on every call
-//!   - Delegates business logic to `tools.rs` → `app.rs` → `soma.rs`
+//!   - Delegates business logic to `tools.rs` → `app.rs` → `soma-client`
 //!
 //! **Customize**: rename `SomaRmcpServer`. Update action metadata in
 //! `src/actions.rs` to keep schemas, scope rules, and dispatch in sync.

@@ -8,7 +8,7 @@
 //! The pattern:
 //!   - `SomaClient::new()` builds the transport (HTTP client, connection pool, etc.)
 //!   - Each method corresponds to one remote operation and returns `Result<Value>`
-//!   - `SomaService` in `app.rs` wraps this and adds any business logic
+//!   - `SomaService` (in `soma-application`) wraps this and adds any business logic
 //!   - MCP tools in `mcp/tools.rs` call `SomaService`, never `SomaClient` directly
 
 #[cfg(feature = "client")]
@@ -23,10 +23,10 @@ use reqwest::{header, Url};
 #[cfg(feature = "client")]
 use std::time::Duration;
 
-// Unit tests live in a sidecar file — see src/soma_tests.rs for the pattern.
+// Unit tests live in a sidecar file — see src/client_tests.rs for the pattern.
 // CUSTOMIZE: Copy this block into every module that needs unit tests.
 #[cfg(test)]
-#[path = "soma_tests.rs"]
+#[path = "client_tests.rs"]
 mod tests;
 
 /// HTTP (or other transport) client for the Soma runtime.

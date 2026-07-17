@@ -17,6 +17,7 @@ pub use soma_api::api;
 pub use soma_api::gateway as gateway_api;
 #[cfg(feature = "cli")]
 pub use soma_cli as cli;
+pub use soma_client as soma;
 pub use soma_contracts::actions;
 pub use soma_contracts::config;
 pub use soma_contracts::env_registry;
@@ -27,7 +28,6 @@ pub use soma_observability::binary_status;
 #[cfg(feature = "observability")]
 pub use soma_observability::logging;
 pub use soma_service::app;
-pub use soma_service::soma;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 pub mod runtime;
 pub use soma_contracts::token_limit;

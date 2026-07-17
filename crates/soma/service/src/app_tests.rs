@@ -15,7 +15,7 @@
 //! For services with complex business logic, consider adding mock clients.
 
 use super::*;
-use crate::soma::SomaClient;
+use soma_client::SomaClient;
 use soma_contracts::config::SomaConfig;
 
 /// Build a stub SomaService for testing without real credentials.

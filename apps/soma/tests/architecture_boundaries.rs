@@ -130,7 +130,7 @@ fn mcp_tools_shim_does_not_touch_the_transport_client() {
     );
     assert!(
         !src.contains("reqwest"),
-        "tools.rs must not perform transport/HTTP work; that belongs in soma.rs (the client)"
+        "tools.rs must not perform transport/HTTP work; that belongs in soma-client (the transport crate)"
     );
 }
 

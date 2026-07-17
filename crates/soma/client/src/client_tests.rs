@@ -1,21 +1,21 @@
-//! Unit tests for SomaClient — sidecar file for src/soma.rs
+//! Unit tests for SomaClient — sidecar file for src/client.rs
 //!
 //! # Sidecar test pattern
 //!
 //! Tests live in a separate `*_tests.rs` file (this file) rather than inline in
-//! `soma.rs`. The parent module declares them with:
+//! `client.rs`. The parent module declares them with:
 //!
 //! ```rust
 //! #[cfg(test)]
-//! #[path = "soma_tests.rs"]
+//! #[path = "client_tests.rs"]
 //! mod tests;
 //! ```
 //!
 //! Benefits of the sidecar pattern:
-//!   - `soma.rs` stays focused on production code — no test boilerplate
+//!   - `client.rs` stays focused on production code — no test boilerplate
 //!   - Tests can be found quickly (always `<module>_tests.rs`)
 //!   - Large test suites don't inflate the source file line count
-//!   - IDE navigation: open `soma.rs`, jump to `mod tests`, find the file
+//!   - IDE navigation: open `client.rs`, jump to `mod tests`, find the file
 //!
 //! **Customize**: Copy this pattern for every module that needs unit tests.
 //!   1. Create `src/<module>_tests.rs`

@@ -9,7 +9,7 @@
 use anyhow::Result;
 use serde_json::{json, Value};
 
-use crate::soma::SomaClient;
+use soma_client::SomaClient;
 
 // Unit tests live in a sidecar file — see src/app_tests.rs for the pattern.
 #[cfg(test)]
