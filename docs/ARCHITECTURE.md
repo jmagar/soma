@@ -53,7 +53,7 @@ crates/
     integrations/          ← product bridges from application ports to shared engines (gateway, auth)
     mcp/                   ← Soma-specific MCP schemas, tools, prompts, transport
     palette/                ← Palette product routes/DTOs shared by server and desktop app
-    runtime/               ← AppState, SomaRuntime, auth policy, shared runtime wiring
+    runtime/               ← AppState, SomaRuntime, auth policy, protected-route HTTP middleware
     test-support/          ← shared Soma test fixtures and harness helpers
     web/                   ← static web asset serving and source bundle helpers
   shared/

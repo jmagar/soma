@@ -179,6 +179,24 @@ fn check_layer_edge(graph: &Graph, edge: &Edge, from: &Package, to: &Package) ->
             graph.edge_label(edge)
         ));
     }
+
+    // Plan section 3.20's target dependency shape for soma-integrations lists
+    // application ports and concrete shared engines only (auth,
+    // observability, client, provider-adapters, gateway, codemode, openapi)
+    // — never the runtime or surface layers built on top of it. A
+    // PR 18 review fix once routed protected-route HTTP middleware through
+    // soma-integrations because it needed both soma-runtime's `AppState` and
+    // soma-mcp's `McpState`, silently inverting this rule; that middleware
+    // now lives in soma-runtime instead (PR 19 review fix). Keep the rule
+    // enforced so a future change can't reintroduce the same inversion.
+    if from.layer == Layer::ProductIntegration
+        && matches!(to.layer, Layer::ProductRuntime | Layer::ProductSurface)
+    {
+        failures.push(format!(
+            "product-integration packages must not depend on product-runtime or product-surface crates (plan section 3.20's target dependency shape excludes soma-runtime/soma-mcp)\n  edge: {}",
+            graph.edge_label(edge)
+        ));
+    }
     failures
 }
 

@@ -1,12 +1,24 @@
 //! Protected-route HTTP middleware: bearer-token authentication, OAuth-scope
 //! authorization, resource metadata responses, and gateway-subset dispatch
-//! for `soma-runtime`'s protected MCP routes (`protected-http` feature).
+//! for this crate's protected MCP routes (`protected-routes` feature).
 //!
-//! Moved out of `apps/soma` (formerly `protected_routes.rs`) as a PR 18
-//! review fix — this crate is its permanent home per PR 18's acceptance
-//! criterion that `apps/soma` contains no business rules (authorization
-//! decisions and gateway dispatch workflows are explicitly out of scope for
-//! the composition root; plan section 3.1 "Does not own").
+//! Moved here from `crates/soma/integrations` as a PR 19 review fix.
+//! `soma-integrations` (`product-integration`) previously carried this
+//! module behind a `protected-http` feature that pulled in `soma-runtime`
+//! and `soma-mcp`, inverting plan section 3.20's target dependency shape
+//! (`soma-integrations` depends on application ports and concrete shared
+//! engines only — auth, observability, client, provider-adapters, gateway,
+//! codemode, openapi — never on the runtime or surface layers built on top
+//! of it) and contradicting this crate's own `gateway.rs`, which documents
+//! taking the gateway manager directly "rather than depending on
+//! `soma-runtime`... keeping this crate's dependency shape limited". This
+//! module needs both `AppState` (already native to `soma-runtime`, which
+//! also already owns `AuthPolicy`/`build_auth_layer`) and `soma-mcp`'s
+//! `McpState`/HTTP router, so it lives in `soma-runtime` behind the
+//! `protected-routes` feature instead — the crate that was going to own the
+//! `AppState` half of this either way, now additionally depending on
+//! `soma-mcp` (a `product-surface` crate) only under that feature. No
+//! behavior change: bodies are unmodified, only import paths.
 
 use std::{convert::Infallible, str::FromStr};
 
@@ -23,8 +35,9 @@ use soma_gateway::{
     config::{protected_routes::normalize_public_host, ProtectedMcpRouteConfig},
     gateway::protected_routes::resolve_scope,
 };
-use soma_runtime::server::{AppState, AuthPolicy};
 use tower::ServiceExt;
+
+use crate::server::{AppState, AuthPolicy};
 
 use crate::protected_routes_proxy::proxy_protected_mcp_route;
 

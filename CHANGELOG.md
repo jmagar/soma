@@ -354,6 +354,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR19 review fix: `protected_routes.rs` and `protected_routes_proxy.rs`
+  (moved to `crates/soma/integrations` as a PR 18 review fix behind a
+  `protected-http` feature) made `soma-integrations` optionally depend on
+  `soma-runtime` and `soma-mcp`, inverting plan section 3.20's target
+  dependency shape (`soma-integrations` depends on application ports and
+  concrete shared engines only — auth, observability, client,
+  provider-adapters, gateway, codemode, openapi — never the runtime or
+  surface layers built on top of it) and contradicting this crate's own
+  `gateway.rs`, whose comment explicitly limits the crate's dependency
+  shape to `soma-application`, `soma-domain`, and `soma-gateway` for exactly
+  this reason. Moved both modules again, this time to `crates/soma/runtime`
+  behind that crate's existing `protected-routes` feature (previously used
+  only to forward `soma-gateway/protected-routes`; `AppState` already
+  exposed `resolve_protected_route`/`resolve_protected_route_metadata`/
+  `protected_route_list` under it, and `soma-runtime` already owned
+  `AuthPolicy`/`build_auth_layer`). `soma-runtime` now additionally depends
+  on `soma-mcp` (a `product-surface` crate) under `protected-routes` alone,
+  for `McpState` and the Streamable HTTP router the gateway-subset dispatch
+  path nests. `soma-integrations`'s `protected-http` feature and its
+  exclusive `axum`/`reqwest`/`soma-mcp`/`soma-runtime`/`tower` dependencies
+  are removed entirely. `apps/soma/src/http.rs` now wires
+  `soma_runtime::protected_routes::*` instead of `soma_integrations::
+  protected_routes::*`; no behavior change (bodies are unmodified, only
+  import paths). Also hardened `xtask/src/architecture.rs`'s
+  `check_layer_edge` to fail any `product-integration -> product-runtime`
+  or `product-integration -> product-surface` edge, since neither
+  `check_layer_edge` nor `check_mixed_application_and_engine_edges`
+  previously caught this class of inversion; added
+  `product_integration_cannot_depend_on_runtime_or_surface_crates` to
+  `xtask/src/architecture_tests.rs` covering both target layers.
 - PR18 review fix: `protected_routes.rs` and `protected_routes_proxy.rs`
   (bearer-token authentication, OAuth-scope authorization, gateway-subset
   dispatch, and inbound-to-upstream proxy forwarding for protected MCP

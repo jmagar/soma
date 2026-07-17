@@ -17,16 +17,39 @@ layer = "product-runtime"
 default = []
 auth = ["dep:soma-auth"]
 oauth = ["auth", "soma-gateway/oauth"]
-protected-routes = ["soma-gateway/protected-routes"]
+# Protected-route HTTP middleware: bearer-token authentication/scope
+# authorization for this crate's protected MCP routes, plus the
+# inbound-to-upstream proxy and gateway-subset dispatch that serve them
+# (`protected_routes.rs`, `protected_routes_proxy.rs`). Implies `auth`
+# because the middleware matches on `AuthPolicy::Mounted`'s `auth_state`
+# field, which only exists under that feature.
+protected-routes = [
+  "auth",
+  "dep:axum",
+  "dep:reqwest",
+  "dep:serde_json",
+  "dep:soma-mcp",
+  "dep:tower",
+  "soma-gateway/protected-routes",
+  "soma-mcp/http",
+]
 
 [dependencies]
 anyhow = "1"
+axum = { version = "0.8", optional = true }
+reqwest = { version = "0.13.2", default-features = false, features = [
+  "rustls-no-provider",
+  "stream",
+], optional = true }
+serde_json = { version = "1", optional = true }
 soma-auth = { workspace = true, optional = true, features = ["http-axum"] }
 soma-application = { workspace = true }
 soma-config = { workspace = true }
 soma-domain = { workspace = true }
 soma-gateway = { workspace = true }
+soma-mcp = { workspace = true, optional = true, features = ["http"] }
 soma-mcp-server = { workspace = true }
+tower = { version = "0.5", features = ["util"], optional = true }
 tracing = "0.1"
 url = "2"
 

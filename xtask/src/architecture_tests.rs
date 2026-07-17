@@ -207,6 +207,31 @@ fn all_product_surfaces_are_isolated_by_layer_not_name_list() {
 }
 
 #[test]
+fn product_integration_cannot_depend_on_runtime_or_surface_crates() {
+    for (name, path, layer) in [
+        ("soma-runtime", "crates/soma/runtime", "product-runtime"),
+        ("soma-mcp", "crates/soma/mcp", "product-surface"),
+    ] {
+        let failures = failures(vec![
+            pkg(
+                "soma-integrations",
+                "crates/soma/integrations",
+                "product-integration",
+                vec![dep(name, path)],
+            ),
+            pkg(name, path, layer, vec![]),
+        ]);
+
+        assert!(
+            failures.join("\n").contains(
+                "product-integration packages must not depend on product-runtime or product-surface crates"
+            ),
+            "expected direct edge to {name} to fail: {failures:#?}"
+        );
+    }
+}
+
+#[test]
 fn product_domain_rules_follow_layer_even_when_package_name_changes() {
     let failures = failures(vec![
         pkg(

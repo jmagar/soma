@@ -115,7 +115,6 @@ mcp-http = [
   "dep:tower",
   "soma-gateway/protected-routes",
   "soma-application/client",
-  "soma-integrations/protected-http",
   "soma-mcp/http",
   "soma-runtime/protected-routes",
 ]

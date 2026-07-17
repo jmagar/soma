@@ -161,7 +161,7 @@ pub fn router(state: AppState) -> Router {
         .route("/openapi.json", get(openapi_json));
     let public_runtime: Router<AppState> = Router::new().route(
         "/.well-known/oauth-protected-resource/{*route}",
-        get(soma_integrations::protected_routes::protected_route_resource_metadata),
+        get(soma_runtime::protected_routes::protected_route_resource_metadata),
     );
     // Prometheus metrics are only meaningful when the observability feature
     // installed a recorder at startup; gate the route on the same feature.
@@ -187,8 +187,8 @@ pub fn router(state: AppState) -> Router {
     let base = base.fallback(not_found_handler);
 
     let base = base.layer(middleware::from_fn_with_state(
-        soma_integrations::protected_routes::ProtectedMcpState::new(state.clone(), mcp_state),
-        soma_integrations::protected_routes::protected_mcp_intercept,
+        soma_runtime::protected_routes::ProtectedMcpState::new(state.clone(), mcp_state),
+        soma_runtime::protected_routes::protected_mcp_intercept,
     ));
 
     base.layer(body_limit_layer(MCP_BODY_LIMIT_BYTES))

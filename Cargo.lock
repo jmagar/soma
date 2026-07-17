@@ -5447,20 +5447,15 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
  "futures",
- "reqwest 0.13.4",
  "serde_json",
  "soma-application",
  "soma-auth",
  "soma-codemode",
  "soma-domain",
  "soma-gateway",
- "soma-mcp",
  "soma-mcp-client",
- "soma-runtime",
  "tokio",
- "tower",
  "tracing",
 ]
 
@@ -5625,14 +5620,19 @@ name = "soma-runtime"
 version = "0.4.1"
 dependencies = [
  "anyhow",
+ "axum",
+ "reqwest 0.13.4",
+ "serde_json",
  "soma-application",
  "soma-auth",
  "soma-config",
  "soma-domain",
  "soma-gateway",
+ "soma-mcp",
  "soma-mcp-server",
  "tempfile",
  "tokio",
+ "tower",
  "tracing",
  "url",
 ]

@@ -1,13 +1,12 @@
 //! Inbound-to-upstream HTTP forwarding for protected MCP routes: resolves
 //! the backend target (static URL, named upstream, or gateway subset),
 //! attaches upstream auth, and streams the request/response through
-//! (`protected-http` feature).
+//! (`protected-routes` feature).
 //!
-//! Moved out of `apps/soma` (formerly `protected_routes_proxy.rs`) as a
-//! PR 18 review fix — this crate is its permanent home per PR 18's
-//! acceptance criterion that `apps/soma` contains no business rules
-//! (`apps/soma` "Does not own: gateway business workflows"; plan
-//! section 3.1).
+//! Moved here from `crates/soma/integrations` as a PR 19 review fix,
+//! alongside its sibling `protected_routes.rs` — see that module's doc
+//! comment for the full rationale (soma-integrations must not depend on
+//! soma-runtime/soma-mcp per plan section 3.20's target dependency shape).
 
 use std::time::Instant;
 
@@ -20,7 +19,8 @@ use soma_gateway::{
     config::{ProtectedMcpRouteConfig, UpstreamConfig},
     gateway::protected_routes::validate_backend_for_dispatch,
 };
-use soma_runtime::server::AppState;
+
+use crate::server::AppState;
 
 const PROTECTED_PROXY_BODY_LIMIT: usize = 50 * 1024 * 1024;
 #[cfg(feature = "oauth")]
