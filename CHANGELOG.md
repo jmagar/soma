@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `crates/shared/provider-adapters` (`soma-provider-adapters`), a
+  feature-gated, product-neutral crate of reusable provider implementations
+  (static-echo, ai-sdk, python, wasm, openapi, and a thin upstream-MCP/gateway
+  projection adapter), plus a generic `manifest_file::build_provider` kind
+  dispatcher. `soma-service`'s drop-in provider loader now builds these kinds
+  through the shared crate (wrapped by a new `provider_registry::SharedAdapter`)
+  instead of implementing them itself. Product-specific providers (Soma's
+  built-in actions provider, the remote-catalog provider that calls
+  `SomaService`) and the directory-scanning/Soma-CLI-policy orchestrator
+  around the dispatcher stay in `soma-service` pending `crates/soma/integrations`
+  (PR11). See the PR10 deviation notes for why the OpenAPI and upstream-MCP
+  adapters were not fully delegated to `soma-openapi`/`soma-mcp-client`.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.
