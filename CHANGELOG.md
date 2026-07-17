@@ -251,6 +251,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR13 review fix (second pass): the multi-agent PR review toolkit surfaced
+  further issues in the `soma-http-api`/`soma-domain` split beyond the
+  dependency-migration fix above. `crates/shared/http-api/src/probe.rs`'s
+  `LivenessBody`/`ReadinessBody.status` fields were bare `&'static str`
+  (stringly-typed, unenforced) even though each has an exhaustively known
+  set of valid values; replaced with `LivenessStatus`/`ReadinessStatus`
+  enums (`#[serde(rename_all = "snake_case")]`, wire-compatible — same
+  `"ok"`/`"ready"`/`"not_ready"` JSON). `crates/shared/http-api/src/
+  pagination.rs`'s `PageParams::clamped()` doc comment overclaimed a
+  "guarantee" the type does not actually enforce (`clamped()` is opt-in;
+  nothing stops an unclamped `PageParams` reaching `Page::new`); reworded to
+  state the gap explicitly instead. `crates/shared/http-api/src/problem.rs`'s
+  `ErrorBody` doc claimed `error` is always "a short machine-readable code,"
+  but `response.rs`'s own `json_rejection_response` (pre-existing behavior,
+  unchanged by this PR) puts the framework's full rejection text there
+  instead; reworded the doc to describe both real usages rather than change
+  the wire response shape. Added a `crates/soma/domain/src/lib.rs` crate-doc
+  comment — it was the only one of the three crates this PR adds/touches
+  (`soma-config`, `soma-http-api`, `soma-domain`) missing the orientation
+  doc its siblings have. Added missing test coverage: `json_rejection_response`'s
+  `413 Payload Too Large` branch had no dedicated unit test in the crate
+  that owns it (only covered indirectly by an unrelated `apps/soma`
+  integration test); added `json_rejection_response_maps_oversized_body_to_413`
+  and `_maps_malformed_json_to_400` (driving real Axum extraction failures
+  through a minimal router + `DefaultBodyLimit`, new `tower` dev-dependency
+  on `soma-http-api`, matching the existing pattern in `json.rs`'s tests),
+  plus `page_omits_total_when_unknown` for `Page`'s `total: None`
+  serialization case. Fixed three stale `crates/soma/contracts/src/*.rs`
+  path references in this repo's own `CLAUDE.md` module map / "how to add
+  an action" instructions (now point at `crates/soma/config/src/config.rs`,
+  `crates/soma/domain/src/token_limit.rs`, `crates/soma/domain/src/actions.rs`)
+  — following those instructions as written would have pointed a future
+  session at the deprecated re-export facade instead of the real crate. The
+  same stale `crates/soma/contracts/src/{actions,config}.rs` path pointers
+  were also live (not just historical/narrative) in fourteen more stable
+  docs this PR's split made incorrect: `docs/ARCHITECTURE.md` (module table plus
+  its "all action metadata starts in..." invariant and its `xtask` dependency
+  list), `docs/CLAUDE.md`'s "env var names are authoritative in..." rule,
+  `docs/AGENTS-FIRST.md`, `docs/API.md`, `docs/CONFIG.md`, `docs/AUTH.md`,
+  `docs/DOCS.md`, `docs/PATTERNS.md`, `docs/SERVICE_SURFACE_SUGGESTIONS.md`,
+  `docs/QUICKSTART.md`, `docs/specs/scaffold-intent-handoff.md`, `README.md`,
+  `scripts/README.md`, and its duplicate `packages/soma-rmcp/README.md` —
+  repointed all of them at `crates/soma/domain/src/actions.rs` /
+  `crates/soma/config/src/config.rs`. (`docs/sessions/**`,
+  `docs/superpowers/plans/**`, and `soma-architecture-refactor-plan-v3.md`
+  are historical/ledger records per `docs/CLAUDE.md` and intentionally left
+  alone.) Two functional (non-doc) staleness bugs of the same shape: `xtask/
+  src/patterns/checks.rs`'s `REQUIRED_PATTERN_FILES` — the file-existence
+  list backing `cargo xtask patterns`'s `docs/PATTERNS.md` conformance check
+  — still listed `crates/soma/contracts/src/{actions,config}.rs`; since the
+  deprecated facade files still physically exist, the check keeps passing
+  today but is asserting the wrong path is canonical, and would break for
+  an unrelated reason (files genuinely missing) once PR 19 deletes the
+  facade unless someone remembered to fix this list first. Repointed it now,
+  consistent with `action_surfaces()`'s and `config_and_auth()`'s
+  already-repointed reads in the same module. `xtask/src/scaffold.rs`'s
+  `cargo xtask scaffold --adapt-plan`/action-snippet generators (the same
+  adapt-plan output a PR12 review fix already repointed off a deleted
+  `soma.rs` path) still told new-service authors to add actions/config to
+  `crates/soma/contracts/src/*.rs`; repointed to `soma-domain`/`soma-config`.
+
 - PR13 review fix: 9 of the 11 crates touched by the `soma-contracts` split
   (`soma-api`, `soma-cli`, `soma-mcp`, `soma-integrations`, `soma-runtime`,
   `soma-service`, `soma-test-support`, `apps/soma`, `xtask`) still declared

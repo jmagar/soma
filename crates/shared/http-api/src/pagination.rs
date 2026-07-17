@@ -30,8 +30,11 @@ impl Default for PageParams {
 }
 
 impl PageParams {
-    /// Clamp `limit` to `max`, guaranteeing callers never build an
-    /// unbounded query from client-supplied input.
+    /// Clamp `limit` to `max`. This is opt-in — the type itself does not
+    /// enforce a bound, so callers that build a `Page` from client-supplied
+    /// `PageParams` must call this (or otherwise validate `limit`) before
+    /// passing the params to a query; nothing at the type level prevents
+    /// skipping this step.
     #[must_use]
     pub fn clamped(mut self, max: usize) -> Self {
         self.limit = self.limit.min(max);
@@ -101,5 +104,14 @@ mod tests {
         assert_eq!(page.limit, 2);
         assert_eq!(page.offset, 4);
         assert_eq!(page.total, Some(10));
+    }
+
+    #[test]
+    fn page_omits_total_when_unknown() {
+        let page = Page::new(vec!["a"], PageParams::default(), None);
+        assert_eq!(
+            serde_json::to_value(&page).unwrap(),
+            serde_json::json!({ "items": ["a"], "limit": 50, "offset": 0 })
+        );
     }
 }
