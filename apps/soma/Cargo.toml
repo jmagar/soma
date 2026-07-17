@@ -44,6 +44,7 @@ soma-api = { workspace = true, optional = true }
 soma-application = { workspace = true }
 soma-auth = { workspace = true, optional = true, features = ["http-axum"] }
 soma-cli = { workspace = true, optional = true }
+soma-client = { workspace = true }
 soma-contracts = { workspace = true }
 soma-domain = { workspace = true }
 soma-gateway = { workspace = true }
@@ -149,4 +150,5 @@ wat = "1.252.0"
 rmcp = { workspace = true, features = [
   "client",
   "transport-child-process",
+  "transport-streamable-http-client-reqwest",
 ] }

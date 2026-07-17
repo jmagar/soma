@@ -29,6 +29,7 @@ const CORE_RUST_FORBIDDEN: &[&str] = &[
     "Command::new",
     "SomaClient::new",
     "crate::soma::SomaClient",
+    "soma_client::SomaClient",
 ];
 
 const WEB_FORBIDDEN: &[&str] = &[

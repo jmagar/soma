@@ -23,6 +23,7 @@ members = [
   "crates/soma/api",
   "crates/soma/application",
   "crates/soma/cli",
+  "crates/soma/client",
   "crates/soma/contracts",
   "crates/soma/domain",
   "crates/soma/integrations",
@@ -82,6 +83,7 @@ soma-provider-core = { path = "crates/shared/provider-core", default-features = 
 soma-api = { path = "crates/soma/api" }
 soma-application = { path = "crates/soma/application", default-features = false }
 soma-cli = { path = "crates/soma/cli" }
+soma-client = { path = "crates/soma/client", default-features = false }
 soma-contracts = { path = "crates/soma/contracts" }
 soma-domain = { path = "crates/soma/domain" }
 soma-integrations = { path = "crates/soma/integrations", default-features = false }

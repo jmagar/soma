@@ -1,12 +1,12 @@
 use std::{fs, process::Command, time::Duration};
 
 use serde_json::{json, Value};
+use soma_client::SomaClient;
 use soma_contracts::config::SomaConfig;
 use soma_service::{
     dynamic_provider_registry_from_dir, provider_registry::ProviderAuthMode,
     provider_registry::ProviderCall, provider_registry::ProviderPrincipal,
-    provider_registry::ProviderRequestLimits, provider_registry::ProviderSurface, SomaClient,
-    SomaService,
+    provider_registry::ProviderRequestLimits, provider_registry::ProviderSurface, SomaService,
 };
 
 #[tokio::test]

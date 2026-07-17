@@ -2,6 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde_json::{json, Value};
+use soma_client::SomaClient;
 use soma_contracts::{
     actions::{READ_SCOPE, WRITE_SCOPE},
     config::SomaConfig,
@@ -12,7 +13,7 @@ use soma_domain::{
 };
 use soma_service::{
     provider_registry::Provider, DynamicResourceTemplate, ProviderCall, ProviderError,
-    ProviderOutput, ProviderRegistry, SomaClient, SomaService, StaticRustProvider,
+    ProviderOutput, ProviderRegistry, SomaService, StaticRustProvider,
 };
 
 use super::{

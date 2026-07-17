@@ -26,7 +26,7 @@ subcommands select HTTP server, stdio MCP, or CLI adapter mode.
 
 | File | Role |
 |------|------|
-| `crates/soma/service/src/soma.rs` | `SomaClient` — HTTP/API transport stub; one method per remote operation |
+| `crates/soma/client/src/client.rs` | `SomaClient` — HTTP/API transport stub; one method per remote operation |
 | `crates/soma/service/src/app.rs` | `SomaService` — business layer; all logic lives here, never in shims |
 | `crates/soma/runtime/src/server.rs` | `SomaRuntime`, `AppState`, `AuthPolicy`, `build_auth_layer` — process facade, HTTP state, and auth policy |
 | `apps/soma/src/routes.rs` | Axum router: `/mcp`, `/health`, `/status`, OAuth discovery routes |
@@ -64,7 +64,7 @@ Dynamic providers load from `./providers` by default or `SOMA_PROVIDER_DIR`. Two
 
 ## How to add an action
 
-1. **`crates/soma/service/src/soma.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).
+1. **`crates/soma/client/src/client.rs`** — add `pub async fn your_action(&self, ...) -> Result<Value>` with the actual HTTP/API call (or stub).
 
 2. **`crates/soma/service/src/app.rs`** — add a delegating method: `pub async fn your_action(&self, ...) -> Result<Value> { self.client.your_action(...).await }`.
 

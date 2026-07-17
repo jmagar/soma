@@ -1,8 +1,9 @@
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
+use soma_client::SomaClient;
 use soma_contracts::config::SomaConfig;
 use soma_contracts::providers::ProviderCatalog;
-use soma_service::{dynamic_provider_registry, static_provider_registry, SomaClient, SomaService};
+use soma_service::{dynamic_provider_registry, static_provider_registry, SomaService};
 use std::{fs, path::Path};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

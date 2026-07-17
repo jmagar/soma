@@ -1,21 +1,21 @@
-//! Unit tests for SomaClient — sidecar file for src/soma.rs
+//! Unit tests for SomaClient — sidecar file for src/client.rs
 //!
 //! # Sidecar test pattern
 //!
 //! Tests live in a separate `*_tests.rs` file (this file) rather than inline in
-//! `soma.rs`. The parent module declares them with:
+//! `client.rs`. The parent module declares them with:
 //!
 //! ```rust
 //! #[cfg(test)]
-//! #[path = "soma_tests.rs"]
+//! #[path = "client_tests.rs"]
 //! mod tests;
 //! ```
 //!
 //! Benefits of the sidecar pattern:
-//!   - `soma.rs` stays focused on production code — no test boilerplate
+//!   - `client.rs` stays focused on production code — no test boilerplate
 //!   - Tests can be found quickly (always `<module>_tests.rs`)
 //!   - Large test suites don't inflate the source file line count
-//!   - IDE navigation: open `soma.rs`, jump to `mod tests`, find the file
+//!   - IDE navigation: open `client.rs`, jump to `mod tests`, find the file
 //!
 //! **Customize**: Copy this pattern for every module that needs unit tests.
 //!   1. Create `src/<module>_tests.rs`
@@ -25,7 +25,8 @@
 use super::*;
 use axum::{
     extract::State,
-    http::{HeaderMap, Uri},
+    http::{HeaderMap, StatusCode, Uri},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
@@ -287,6 +288,159 @@ async fn remote_provider_action_uses_catalog_custom_route() {
     assert_eq!(observed[0].body["text"], "hello");
 }
 
+#[tokio::test]
+async fn ready_is_ok_when_target_is_stub() {
+    // Stub mode has no upstream, so readiness is trivially satisfied without
+    // making a network call.
+    let client = SomaClient::new(&stub_config()).expect("stub client should build");
+    client.ready().await.expect("stub client should be ready");
+}
+
+#[tokio::test]
+async fn ready_succeeds_when_upstream_health_is_ok() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed).await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        ..SomaConfig::default()
+    })
+    .expect("remote client should build");
+
+    let result = client.ready().await;
+    handle.abort();
+
+    result.expect("readiness probe should succeed when /health returns 2xx");
+}
+
+#[tokio::test]
+async fn ready_fails_when_upstream_health_is_not_ok() {
+    let (base_url, handle) =
+        mock_fixed_response(StatusCode::SERVICE_UNAVAILABLE, "unavailable").await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        ..SomaConfig::default()
+    })
+    .expect("remote client should build");
+
+    let result = client.ready().await;
+    handle.abort();
+
+    let err = result.expect_err("readiness probe should fail on non-2xx /health response");
+    assert!(
+        err.to_string().contains("upstream not ready"),
+        "error should explain readiness failure, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn call_deployed_api_errors_on_non_success_status() {
+    let (base_url, handle) = mock_fixed_response(StatusCode::INTERNAL_SERVER_ERROR, "boom").await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        ..SomaConfig::default()
+    })
+    .expect("remote client should build");
+
+    let result = client.status().await;
+    handle.abort();
+
+    let err = result.expect_err("non-2xx deployed API response should error");
+    assert!(
+        err.to_string().contains("HTTP 500"),
+        "error should surface the HTTP status, got: {err}"
+    );
+}
+
+#[tokio::test]
+async fn call_deployed_api_errors_on_invalid_json_body() {
+    let (base_url, handle) = mock_fixed_response(StatusCode::OK, "not json").await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        ..SomaConfig::default()
+    })
+    .expect("remote client should build");
+
+    let result = client.status().await;
+    handle.abort();
+
+    let err = result.expect_err("non-JSON deployed API body should error");
+    assert!(
+        err.to_string().contains("invalid JSON"),
+        "error should explain the JSON decode failure, got: {err}"
+    );
+}
+
+#[test]
+fn validate_action_path_segment_rejects_empty_action() {
+    let err = validate_action_path_segment("").expect_err("empty action should fail validation");
+    assert!(err.to_string().contains("non-empty path segment"));
+}
+
+#[test]
+fn validate_action_path_segment_rejects_path_separators() {
+    let err = validate_action_path_segment("a/b")
+        .expect_err("action containing '/' should fail validation");
+    assert!(err.to_string().contains("non-empty path segment"));
+}
+
+#[test]
+fn validate_action_path_segment_accepts_plain_action() {
+    validate_action_path_segment("greet").expect("plain action name should validate");
+}
+
+#[tokio::test]
+async fn call_rest_action_rejects_invalid_action_before_any_network_call() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "secret-token".to_string(),
+        runtime_mode: RuntimeMode::Remote,
+    })
+    .expect("remote client should build");
+
+    let result = client.call_rest_action("a/b", json!({})).await;
+    handle.abort();
+
+    result.expect_err("action containing '/' should be rejected before any request is made");
+    assert!(
+        observed
+            .lock()
+            .expect("observed requests should lock")
+            .is_empty(),
+        "invalid action should short-circuit before reaching the network"
+    );
+}
+
+#[test]
+fn remote_provider_route_rejects_non_rest_exposed_tool() {
+    let catalog = json!({
+        "providers": [{
+            "name": "remote-tools",
+            "tools": [{
+                "name": "internal-only",
+                "surfaces": { "mcp": true, "rest": false, "cli": true }
+            }]
+        }]
+    });
+
+    let err = remote_provider_route(&catalog, "internal-only")
+        .expect_err("non-REST-exposed tool should error instead of silently routing");
+    assert!(
+        err.to_string().contains("not REST-exposed"),
+        "error should explain why the route was rejected, got: {err}"
+    );
+}
+
 #[derive(Debug, Clone)]
 struct ObservedRequest {
     path: String,
@@ -306,6 +460,7 @@ async fn mock_deployed_api(
         .route("/v1/providers", get(mock_provider_catalog))
         .route("/v1/tools/weather_current", post(mock_provider_tool))
         .route("/v1/providers/ai-sdk-brief", post(mock_provider_tool))
+        .route("/health", get(mock_health_ok))
         .with_state(observed);
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -339,6 +494,35 @@ async fn mock_echo(
 async fn mock_status(State(observed): State<ObservedRequests>, headers: HeaderMap) -> Json<Value> {
     push_observed(&observed, &headers, "/v1/status", Value::Null);
     Json(json!({ "status": "remote-ok" }))
+}
+
+async fn mock_health_ok() -> StatusCode {
+    StatusCode::OK
+}
+
+/// Mock server that returns a fixed HTTP status and raw body for every path —
+/// used for exercising `call_deployed_api_method`'s non-success-status and
+/// invalid-JSON-body error branches without needing per-route wiring.
+async fn mock_fixed_response(
+    status: StatusCode,
+    body: &'static str,
+) -> (String, tokio::task::JoinHandle<std::io::Result<()>>) {
+    async fn handler(
+        State((status, body)): State<(StatusCode, &'static str)>,
+    ) -> impl IntoResponse {
+        (status, body)
+    }
+
+    let app = Router::new()
+        .route("/{*path}", get(handler).post(handler))
+        .route("/health", get(handler))
+        .with_state((status, body));
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("mock API should bind");
+    let addr = listener.local_addr().expect("mock API should have addr");
+    let handle = tokio::spawn(async move { axum::serve(listener, app.into_make_service()).await });
+    (format!("http://{addr}/"), handle)
 }
 
 async fn mock_provider_catalog() -> Json<Value> {

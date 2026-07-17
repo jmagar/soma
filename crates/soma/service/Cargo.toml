@@ -15,8 +15,8 @@ layer = "legacy"
 
 [features]
 default = ["client", "observability"]
-client = ["soma-provider-core/preserve-order"]
-observability = ["dep:soma-observability", "dep:metrics"]
+client = ["soma-client/client", "soma-provider-core/preserve-order"]
+observability = ["dep:soma-observability", "dep:metrics", "soma-client/observability"]
 test-support = []
 
 [dependencies]
@@ -25,7 +25,7 @@ async-trait = "0.1"
 base64 = "0.22"
 jsonschema = "0.47"
 metrics = { version = "0.24", optional = true }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+soma-client = { workspace = true }
 soma-contracts = { workspace = true }
 soma-provider-adapters = { workspace = true, features = [
   "ai-sdk",

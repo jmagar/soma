@@ -3,7 +3,6 @@ pub mod capabilities;
 pub mod provider_errors;
 pub mod provider_registry;
 pub mod providers;
-pub mod soma;
 
 use anyhow::{anyhow, Result};
 use serde_json::Value;
@@ -21,7 +20,12 @@ pub use provider_registry::{
 pub use providers::filesystem::FileProviderSource;
 pub use providers::remote::RemoteCatalogProvider;
 pub use providers::static_rust::StaticRustProvider;
-pub use soma::SomaClient;
+/// Deprecated re-export: `SomaClient` now lives in `soma-client` (plan section
+/// 3.19). This alias exists for one migration window so downstream templates
+/// and generators have time to update their import paths before PR 19 deletes
+/// this crate.
+#[deprecated(note = "use soma_client::SomaClient")]
+pub use soma_client::SomaClient;
 
 /// Unified dispatch seam shared by every surface (MCP, REST, CLI).
 ///

@@ -1,9 +1,10 @@
 use super::authorization_mode;
 use soma_application::{CodeModeExecuteRequest, ExecutionContext};
+use soma_client::SomaClient;
 use soma_contracts::config::{McpConfig, SomaConfig};
 use soma_domain::{AuthorizationMode, RequestId, Surface};
 use soma_runtime::server::{empty_gateway_product_state, AppState, AuthPolicy};
-use soma_service::{SomaClient, SomaService};
+use soma_service::SomaService;
 
 fn state(auth_policy: AuthPolicy) -> AppState {
     let service = SomaService::new(

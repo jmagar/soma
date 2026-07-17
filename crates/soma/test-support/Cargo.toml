@@ -18,6 +18,7 @@ async-trait = "0.1"
 soma-application = { workspace = true }
 soma-api = { workspace = true, features = ["auth"] }
 soma-auth = { workspace = true, features = ["http-axum"] }
+soma-client = { workspace = true }
 soma-contracts = { workspace = true }
 soma-service = { workspace = true, features = ["observability"] }
 serde_json = "1"

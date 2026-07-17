@@ -20,7 +20,7 @@ last_reviewed: "2026-05-15"
 ## Layer diagram
 
 ```
-SomaClient  (crates/soma/service/src/soma.rs) → HTTP/API transport ONLY — network calls, no logic
+SomaClient  (crates/soma/client/src/client.rs) → HTTP/API transport ONLY — network calls, no logic
 SomaService (crates/soma/service/src/app.rs)     → ALL business logic, validation, enrichment
 MCP shim       (crates/soma/mcp/src/tools.rs)       → parse JSON args → call service → return Value
 CLI shim       (crates/soma/cli/src/lib.rs)         → parse argv → call service → print
@@ -45,10 +45,11 @@ crates/
   soma/
     api/                   ← REST API handlers
     cli/                   ← CLI parser, doctor/setup/watch commands
+    client/                ← SomaClient — HTTP/API transport
     contracts/             ← action metadata, config, DTOs, token limits
     mcp/                   ← Soma-specific MCP schemas, tools, prompts, transport
     runtime/               ← AppState, auth policy, shared runtime wiring
-    service/               ← SomaClient + SomaService business layer
+    service/               ← SomaService business layer
     test-support/          ← shared Soma test fixtures and harness helpers
     web/                   ← static web asset serving and source bundle helpers
   shared/
@@ -85,7 +86,7 @@ client → service → shim pattern:
 
 | File | Responsibility |
 |---|---|
-| `crates/soma/service/src/soma.rs` | Upstream/client transport stub. Replace with your service API client. |
+| `crates/soma/client/src/client.rs` | Upstream/client transport stub. Replace with your service API client. |
 | `crates/soma/service/src/app.rs` | Service layer. All business rules live here. |
 | `crates/soma/contracts/src/actions.rs` | Canonical action metadata, parsing, REST dispatch helpers. |
 | `crates/soma/mcp/src/tools.rs` | MCP tool dispatch and elicitation-only actions. |

@@ -13,9 +13,11 @@ use rmcp::{transport::stdio, ServiceExt};
 use tracing::info;
 use tracing_subscriber::{fmt, EnvFilter};
 
+#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
+use soma_client::SomaClient;
 use soma_contracts::config::Config;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
-use soma_service::{SomaClient, SomaService};
+use soma_service::SomaService;
 
 #[cfg(feature = "cli")]
 use soma_application::{ApplicationPorts, SomaApplication};

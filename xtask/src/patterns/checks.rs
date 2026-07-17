@@ -11,7 +11,7 @@ use super::{
 };
 
 const REQUIRED_PATTERN_FILES: &[&str] = &[
-    "crates/soma/service/src/soma.rs",
+    "crates/soma/client/src/client.rs",
     "crates/soma/service/src/app.rs",
     "crates/soma/contracts/src/actions.rs",
     "crates/soma/mcp/src/lib.rs",

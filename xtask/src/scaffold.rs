@@ -1141,7 +1141,7 @@ fn render_adapt_plan(root: &Path) -> Result<String> {
     }
 
     output.push_str("\n## 1. Domain and config\n\n");
-    output.push_str("- Replace the stub client in `crates/soma/service/src/soma.rs`.\n");
+    output.push_str("- Replace the stub client in `crates/soma/client/src/client.rs`.\n");
     output.push_str("- Put validation, defaults, retries, caching, and domain rules in `crates/soma/service/src/app.rs` or focused modules under `crates/soma/service/src/`.\n");
     output.push_str(
         "- Update config structs and env prefixes in `crates/soma/contracts/src/config.rs`.\n",
@@ -1357,7 +1357,7 @@ mod tests {
 
         assert!(plan.contains("# Adaptation Plan"));
         assert!(plan.contains("Profile: full"));
-        assert!(plan.contains("crates/soma/service/src/soma.rs"));
+        assert!(plan.contains("crates/soma/client/src/client.rs"));
         assert!(plan.contains("crates/soma/api/src/api.rs"));
         assert!(plan.contains("apps/web"));
         assert!(plan.contains("server.json"));
