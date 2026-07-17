@@ -87,6 +87,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Centralize all internal crate paths and the exact `rmcp = "=2.2.0"` pin in a
+  root `[workspace.dependencies]` table; member manifests now inherit them via
+  `workspace = true` instead of duplicating relative paths and the rmcp pin
+  across manifests. Behavior-preserving: dependency resolution and feature
+  unification are unchanged.
 - Store one `SomaApplication` facade in the process-wide `SomaRuntime` and keep
   legacy service, provider-registry, and gateway engines private behind narrow
   application/runtime interfaces shared by CLI, stdio, and HTTP surfaces.

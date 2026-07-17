@@ -26,13 +26,13 @@ base64 = "0.22"
 jsonschema = "0.47"
 metrics = { version = "0.24", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-rmcp = { version = "=2.2.0", default-features = false, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
+rmcp = { workspace = true, features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
 # rmcp >= 2.2 builds its HTTP transport on reqwest 0.13, which requires the
 # process to install a rustls crypto provider before any TLS client is built.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
-soma-contracts = { path = "../contracts" }
-soma-provider-core = { path = "../../shared/provider-core", default-features = false }
-soma-observability = { path = "../../shared/observability", optional = true }
+soma-contracts = { workspace = true }
+soma-provider-core = { workspace = true }
+soma-observability = { workspace = true, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

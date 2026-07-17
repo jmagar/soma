@@ -17,7 +17,7 @@ layer = "shared"
 default = []
 
 [dependencies]
-rmcp = { version = "=2.2.0", default-features = false, features = ["server"] }
+rmcp = { workspace = true, features = ["server"] }
 serde_json = "1"
 
 [dev-dependencies]

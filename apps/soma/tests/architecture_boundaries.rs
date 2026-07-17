@@ -354,7 +354,9 @@ fn codemode_openapi_feature_graph_is_explicit() {
     assert!(
         manifest.contains("reqwest = ")
             && manifest.contains("optional = true")
-            && manifest.contains("soma-openapi = { path = \"../openapi\", optional = true }"),
+            && manifest.contains(
+                "soma-openapi = { workspace = true, optional = true, default-features = true }"
+            ),
         "soma-codemode reqwest and soma-openapi dependencies must be optional"
     );
 
