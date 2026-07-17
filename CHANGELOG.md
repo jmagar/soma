@@ -241,6 +241,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer depends directly on runtime, service, or gateway engines, while
   preserving structured error, discovery, scope, and remote-error privacy
   contracts.
+- Finished the MCP role-crate split (PR 14): moved the remaining generic
+  inbound mechanics out of `soma-mcp` into `soma-mcp-server` — response-page
+  store (already there), MCP conformance-suite fixtures, `rmcp::model::Tool`
+  JSON/descriptor conversion, tool-error result shaping and the generic
+  "unknown tool" protocol error, trace metadata extraction integrating
+  `rmcp-traces`, and the Streamable HTTP allowed-host/origin computation and
+  transport builders (new `http` feature). `soma-mcp` now only supplies Soma
+  tool schemas, prompts/resources, scope mapping, and application-request
+  translation; `crates/soma/mcp/src/{rmcp_server,transport,protocol_errors,gateway_proxy}.rs`
+  delegate to the role crate instead of duplicating it. `soma-mcp-proxy`
+  gained `rmcp_tool_from_route`/`rmcp_resource_from_route`/
+  `rmcp_prompt_from_route` (built on `soma-mcp-server`, closing the
+  `soma-mcp-proxy -> soma-mcp-server` edge from section 3.7 of the refactor
+  plan), and `soma-gateway` gained `GatewayManager::rmcp_{tool,resource,prompt}_routes[_for_subject]`
+  built the same way, closing the `soma-gateway -> soma-mcp-server` edge and
+  replacing gateway's unused direct `rmcp` "server" feature request. A fake
+  unrelated `ServerHandler` and a fake unrelated gateway now exercise these
+  role crates end to end with no Soma product crate on their dependency
+  graph (`crates/shared/mcp/server/tests/fake_server.rs`,
+  `crates/shared/mcp/proxy/tests/fake_gateway.rs`).
 
 - `soma-auth` no longer forces a Google re-consent screen on every dynamic
   client registration attempt — `force_consent` is now only set the first

@@ -1,9 +1,10 @@
 //! Official MCP conformance-suite reference fixtures.
 //!
-//! These fixtures are intentionally hidden behind
-//! `SOMA_MCP_CONFORMANCE_FIXTURES=true`. They let Soma run
-//! the upstream reference scenarios without advertising test-only tools,
-//! resources, or prompts in real derived servers.
+//! These are generic, spec-defined test scenarios (simple text, image,
+//! audio, embedded-resource, and mixed content blocks; error handling; JSON
+//! Schema 2020-12 features) with no product concepts attached. A host server
+//! typically hides these behind its own opt-in flag so real deployments do
+//! not advertise test-only tools, resources, or prompts.
 
 use std::{borrow::Cow, sync::Arc};
 
@@ -18,7 +19,7 @@ const PNG_1X1_RED: &str =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mP8z8BQDwAFgwJ/lZc47wAAAABJRU5ErkJggg==";
 const WAV_SILENCE: &str = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
 
-pub(super) fn tool_definitions() -> Vec<Tool> {
+pub fn tool_definitions() -> Vec<Tool> {
     [
         ("test_simple_text", "Returns a simple text content block."),
         (
@@ -62,7 +63,7 @@ pub(super) fn tool_definitions() -> Vec<Tool> {
     .collect()
 }
 
-pub(super) fn call_tool(name: &str) -> Option<CallToolResult> {
+pub fn call_tool(name: &str) -> Option<CallToolResult> {
     let result = match name {
         "test_simple_text" => CallToolResult::success(vec![ContentBlock::text(
             "This is a simple text response for testing.",
@@ -99,7 +100,7 @@ pub(super) fn call_tool(name: &str) -> Option<CallToolResult> {
     Some(result)
 }
 
-pub(super) fn resources() -> Vec<Resource> {
+pub fn resources() -> Vec<Resource> {
     vec![
         Resource::new("test://static-text", "static text fixture")
             .with_description("MCP conformance text resource fixture")
@@ -110,7 +111,7 @@ pub(super) fn resources() -> Vec<Resource> {
     ]
 }
 
-pub(super) fn resource_templates() -> Vec<ResourceTemplate> {
+pub fn resource_templates() -> Vec<ResourceTemplate> {
     vec![
         ResourceTemplate::new("test://template/{id}/data", "template data by id")
             .with_description("MCP conformance templated JSON resource fixture")
@@ -118,7 +119,7 @@ pub(super) fn resource_templates() -> Vec<ResourceTemplate> {
     ]
 }
 
-pub(super) fn read_resource(uri: &str) -> Option<ReadResourceResult> {
+pub fn read_resource(uri: &str) -> Option<ReadResourceResult> {
     let contents = match uri {
         "test://static-text" => vec![ResourceContents::text(
             "This is the content of the static text resource.",
@@ -139,7 +140,7 @@ pub(super) fn read_resource(uri: &str) -> Option<ReadResourceResult> {
     Some(ReadResourceResult::new(contents))
 }
 
-pub(super) fn prompts() -> Vec<Prompt> {
+pub fn prompts() -> Vec<Prompt> {
     vec![
         Prompt::new(
             "test_simple_prompt",
@@ -173,7 +174,7 @@ pub(super) fn prompts() -> Vec<Prompt> {
     ]
 }
 
-pub(super) fn get_prompt(request: GetPromptRequestParams) -> Option<GetPromptResult> {
+pub fn get_prompt(request: GetPromptRequestParams) -> Option<GetPromptResult> {
     let result = match request.name.as_str() {
         "test_simple_prompt" => GetPromptResult::new(vec![PromptMessage::new_text(
             Role::User,
