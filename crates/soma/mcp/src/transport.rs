@@ -5,7 +5,7 @@
 //! layer: how connections are accepted and which origins are allowed. The
 //! deterministic host/origin computation and the generic Streamable HTTP
 //! transport wiring live in `soma-mcp-server`; this file only adapts Soma's
-//! `McpConfig` into the primitives that role crate expects.
+//! `McpConfig` into the primitives that the role crate expects.
 
 #[cfg(test)]
 #[path = "transport_tests.rs"]
@@ -41,6 +41,7 @@ pub fn allowed_hosts(config: &McpConfig) -> Vec<String> {
         port: config.port,
         extra_hosts: &config.allowed_hosts,
         public_url: config.auth.public_url.as_deref(),
+        public_url_label: "SOMA_MCP_PUBLIC_URL",
     })
 }
 
@@ -49,5 +50,7 @@ pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
         port: config.port,
         extra_origins: &config.allowed_origins,
         public_url: config.auth.public_url.as_deref(),
+        extra_origins_label: "SOMA_MCP_ALLOWED_ORIGINS",
+        public_url_label: "SOMA_MCP_PUBLIC_URL",
     })
 }

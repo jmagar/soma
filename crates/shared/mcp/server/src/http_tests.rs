@@ -13,6 +13,7 @@ fn hosts_input<'a>(
         port,
         extra_hosts,
         public_url: None,
+        public_url_label: "public_url",
     }
 }
 
@@ -68,6 +69,68 @@ fn host_with_port_not_doubled() {
     );
 }
 
+#[test]
+fn allowed_hosts_includes_public_url_host_with_explicit_port() {
+    let hosts = allowed_hosts(AllowedHostsInput {
+        bind_host: "0.0.0.0",
+        port: 3000,
+        extra_hosts: &[],
+        public_url: Some("https://mcp.example.com:8443"),
+        public_url_label: "public_url",
+    });
+    assert!(hosts.contains(&"mcp.example.com:8443".to_string()));
+}
+
+#[test]
+fn allowed_hosts_includes_public_url_host_with_scheme_default_port() {
+    let hosts = allowed_hosts(AllowedHostsInput {
+        bind_host: "0.0.0.0",
+        port: 3000,
+        extra_hosts: &[],
+        public_url: Some("https://mcp.example.com"),
+        public_url_label: "public_url",
+    });
+    assert!(hosts.contains(&"mcp.example.com".to_string()));
+    assert!(hosts.contains(&"mcp.example.com:443".to_string()));
+}
+
+#[test]
+fn allowed_hosts_falls_back_to_listen_port_for_non_http_scheme() {
+    let hosts = allowed_hosts(AllowedHostsInput {
+        bind_host: "0.0.0.0",
+        port: 3000,
+        extra_hosts: &[],
+        public_url: Some("ws://mcp.example.com"),
+        public_url_label: "public_url",
+    });
+    assert!(hosts.contains(&"mcp.example.com:3000".to_string()));
+}
+
+#[test]
+fn allowed_hosts_skips_invalid_public_url() {
+    let hosts = allowed_hosts(AllowedHostsInput {
+        bind_host: "0.0.0.0",
+        port: 3000,
+        extra_hosts: &[],
+        public_url: Some("not-a-url"),
+        public_url_label: "public_url",
+    });
+    // Invalid public_url must not panic and must not corrupt the baseline set.
+    assert!(hosts.contains(&"localhost".to_string()));
+}
+
+#[test]
+fn allowed_hosts_skips_wildcard_public_url_host() {
+    let hosts = allowed_hosts(AllowedHostsInput {
+        bind_host: "0.0.0.0",
+        port: 3000,
+        extra_hosts: &[],
+        public_url: Some("https://*.example.com"),
+        public_url_label: "public_url",
+    });
+    assert!(!hosts.iter().any(|h| h.contains('*')));
+}
+
 // ── allowed_origins ───────────────────────────────────────────────────────────
 
 fn origins_input<'a>(port: u16, extra_origins: &'a [String]) -> AllowedOriginsInput<'a> {
@@ -75,6 +138,8 @@ fn origins_input<'a>(port: u16, extra_origins: &'a [String]) -> AllowedOriginsIn
         port,
         extra_origins,
         public_url: None,
+        extra_origins_label: "extra_origins",
+        public_url_label: "public_url",
     }
 }
 
@@ -139,6 +204,8 @@ fn allowed_origins_includes_public_url_origin() {
         port: 3000,
         extra_origins: &[],
         public_url: Some("https://mcp.example.com"),
+        extra_origins_label: "extra_origins",
+        public_url_label: "public_url",
     });
     assert!(origins.contains(&"https://mcp.example.com".to_string()));
 }

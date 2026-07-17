@@ -25,6 +25,12 @@ pub struct AllowedHostsInput<'a> {
     pub port: u16,
     pub extra_hosts: &'a [String],
     pub public_url: Option<&'a str>,
+    /// Label used in diagnostic logs when `public_url` fails to parse or
+    /// contains a wildcard host — typically the product's env var name (for
+    /// example `SOMA_MCP_PUBLIC_URL`) so operators can trace a warning back
+    /// to the setting that produced it. Pass a generic label such as
+    /// `"public_url"` if no product-specific name applies.
+    pub public_url_label: &'a str,
 }
 
 pub fn allowed_hosts(input: AllowedHostsInput<'_>) -> Vec<String> {
@@ -37,7 +43,7 @@ pub fn allowed_hosts(input: AllowedHostsInput<'_>) -> Vec<String> {
         push_host_variants(&mut hosts, host, input.port);
     }
     if let Some(public_url) = input.public_url {
-        push_public_url_hosts(&mut hosts, public_url, input.port);
+        push_public_url_hosts(&mut hosts, public_url, input.port, input.public_url_label);
     }
     hosts.sort();
     hosts.dedup();
@@ -53,6 +59,16 @@ pub struct AllowedOriginsInput<'a> {
     pub port: u16,
     pub extra_origins: &'a [String],
     pub public_url: Option<&'a str>,
+    /// Label used in diagnostic logs for a rejected entry in `extra_origins`
+    /// — typically the product's env var name (for example
+    /// `SOMA_MCP_ALLOWED_ORIGINS`). Pass a generic label such as
+    /// `"extra_origins"` if no product-specific name applies.
+    pub extra_origins_label: &'a str,
+    /// Label used in diagnostic logs when `public_url` fails to parse —
+    /// typically the product's env var name (for example
+    /// `SOMA_MCP_PUBLIC_URL`). Pass a generic label such as `"public_url"`
+    /// if no product-specific name applies.
+    pub public_url_label: &'a str,
 }
 
 pub fn allowed_origins(input: AllowedOriginsInput<'_>) -> Vec<String> {
@@ -61,10 +77,10 @@ pub fn allowed_origins(input: AllowedOriginsInput<'_>) -> Vec<String> {
         format!("http://127.0.0.1:{}", input.port),
     ];
     for origin in input.extra_origins {
-        push_configured_origin(&mut origins, origin);
+        push_configured_origin(&mut origins, origin, input.extra_origins_label);
     }
     if let Some(public_url) = input.public_url {
-        if let Some(origin) = extract_origin(public_url) {
+        if let Some(origin) = extract_origin_with_label(public_url, input.public_url_label) {
             origins.push(origin);
         }
     }
@@ -102,8 +118,8 @@ where
 
 // ── private helpers ───────────────────────────────────────────────────────────
 
-fn push_configured_origin(origins: &mut Vec<String>, origin: &str) {
-    let Some(origin) = extract_configured_origin_with_label(origin, "allowed_origins") else {
+fn push_configured_origin(origins: &mut Vec<String>, origin: &str, label: &str) {
+    let Some(origin) = extract_configured_origin_with_label(origin, label) else {
         return;
     };
     origins.push(origin);
@@ -130,16 +146,24 @@ fn push_host_variants(hosts: &mut Vec<String>, host: &str, port: u16) {
     }
 }
 
-fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
+fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16, label: &str) {
     let Ok(parsed) = url::Url::parse(url) else {
-        tracing::warn!(public_url = url, "MCP public URL is not a valid URL");
+        tracing::warn!(
+            setting = label,
+            public_url = url,
+            "MCP public URL is not a valid URL"
+        );
         return;
     };
     let Some(host) = parsed.host_str() else {
         return;
     };
     if host.contains('*') {
-        tracing::warn!(host, "MCP public URL host contains wildcard; skipping");
+        tracing::warn!(
+            setting = label,
+            host,
+            "MCP public URL host contains wildcard; skipping"
+        );
         return;
     }
     let explicit_port = parsed.port();
@@ -174,11 +198,7 @@ fn has_port(host: &str) -> bool {
         .is_some()
 }
 
-fn extract_origin(url: &str) -> Option<String> {
-    extract_origin_with_label(url, "public_url")
-}
-
-fn extract_origin_with_label(url: &str, label: &'static str) -> Option<String> {
+fn extract_origin_with_label(url: &str, label: &str) -> Option<String> {
     let parsed = url::Url::parse(url)
         .map_err(|e| tracing::warn!(setting = label, url, error = %e, "invalid MCP origin URL"))
         .ok()?;
@@ -212,7 +232,7 @@ fn extract_origin_with_label(url: &str, label: &'static str) -> Option<String> {
     Some(origin)
 }
 
-fn extract_configured_origin_with_label(url: &str, label: &'static str) -> Option<String> {
+fn extract_configured_origin_with_label(url: &str, label: &str) -> Option<String> {
     match extract_origin_with_label(url, label) {
         Some(origin) => Some(origin),
         None => {

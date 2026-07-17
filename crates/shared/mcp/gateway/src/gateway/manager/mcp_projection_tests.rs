@@ -1,4 +1,5 @@
 use crate::config::{GatewayConfig, UpstreamConfig};
+use crate::gateway::manager::GatewayLifecycle;
 use crate::upstream::pool::{InProcessUpstream, UpstreamPool};
 use crate::upstream::{
     PromptDescriptor, ResourceDescriptor, ToolDescriptor, TransportKind, UpstreamSnapshot,
@@ -66,6 +67,45 @@ async fn rmcp_prompt_routes_carries_description() {
     assert_eq!(prompts.len(), 1);
     assert_eq!(prompts[0].name, "help");
     assert_eq!(prompts[0].description.as_deref(), Some("prompt"));
+}
+
+#[tokio::test]
+async fn rmcp_tool_routes_propagates_not_ready_error_instead_of_panicking() {
+    let manager = GatewayManager::new(GatewayConfig::default()).expect("manager");
+    manager.set_lifecycle_for_tests(GatewayLifecycle::Reloading);
+
+    let result = manager.rmcp_tool_routes().await;
+
+    assert!(
+        matches!(result, Err(GatewayManagerError::GatewayReloading)),
+        "expected GatewayReloading, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn rmcp_resource_routes_propagates_not_ready_error_instead_of_panicking() {
+    let manager = GatewayManager::new(GatewayConfig::default()).expect("manager");
+    manager.set_lifecycle_for_tests(GatewayLifecycle::Reloading);
+
+    let result = manager.rmcp_resource_routes().await;
+
+    assert!(
+        matches!(result, Err(GatewayManagerError::GatewayReloading)),
+        "expected GatewayReloading, got {result:?}"
+    );
+}
+
+#[tokio::test]
+async fn rmcp_prompt_routes_propagates_not_ready_error_instead_of_panicking() {
+    let manager = GatewayManager::new(GatewayConfig::default()).expect("manager");
+    manager.set_lifecycle_for_tests(GatewayLifecycle::Reloading);
+
+    let result = manager.rmcp_prompt_routes().await;
+
+    assert!(
+        matches!(result, Err(GatewayManagerError::GatewayReloading)),
+        "expected GatewayReloading, got {result:?}"
+    );
 }
 
 fn manager_with_pool(pool: UpstreamPool) -> GatewayManager {

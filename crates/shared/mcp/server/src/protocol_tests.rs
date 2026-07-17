@@ -34,6 +34,19 @@ fn tool_from_json_definition_requires_name_and_input_schema() {
 }
 
 #[test]
+fn tool_from_json_definition_rejects_non_object_output_schema() {
+    let result = tool_from_json_definition(serde_json::json!({
+        "name": "soma",
+        "inputSchema": { "type": "object" },
+        "outputSchema": "not-an-object"
+    }));
+    assert!(
+        result.is_err(),
+        "a non-object outputSchema must fail rather than being silently accepted"
+    );
+}
+
+#[test]
 fn tool_from_descriptor_defaults_missing_schema_to_object() {
     let tool = tool_from_descriptor("echo", None, None, None, false);
 
@@ -43,6 +56,40 @@ fn tool_from_descriptor_defaults_missing_schema_to_object() {
         tool.annotations.as_ref().and_then(|a| a.destructive_hint),
         Some(false)
     );
+}
+
+#[test]
+fn tool_from_descriptor_defaults_non_object_input_schema_to_object() {
+    // Documented "never fails" behavior: a malformed (non-object) input
+    // schema from an upstream/route source is defaulted rather than
+    // propagated as an error.
+    let tool = tool_from_descriptor(
+        "echo",
+        None,
+        Some(serde_json::json!("not-an-object")),
+        None,
+        false,
+    );
+    assert_eq!(tool.input_schema["type"], "object");
+    assert_eq!(
+        tool.input_schema.len(),
+        1,
+        "malformed schema is discarded, not merged"
+    );
+}
+
+#[test]
+fn tool_from_descriptor_drops_non_object_output_schema() {
+    // Documented "never fails" behavior: a malformed (non-object) output
+    // schema is dropped rather than propagated as an error.
+    let tool = tool_from_descriptor(
+        "echo",
+        None,
+        None,
+        Some(serde_json::json!(["not", "an", "object"])),
+        false,
+    );
+    assert!(tool.output_schema.is_none());
 }
 
 #[test]

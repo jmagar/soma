@@ -733,19 +733,18 @@ soma-mcp-proxy ───────────▶ soma-mcp-server
 The gateway composes the role crates directly; it does not reach the client only
 through the proxy. This matches the shared-layer DAG in section 4.3.
 
-Live as of 2026-07-16, the `soma-mcp-server` edges do not exist yet:
-
-```text
-soma-gateway ─────────────▶ soma-mcp-client      present
-soma-gateway ─────────────▶ soma-mcp-proxy       present
-soma-mcp-proxy ───────────▶ soma-mcp-client      present
-```
-
-Both crates still reach for `rmcp` server types directly instead of going through
-`soma-mcp-server`. PR 14 closes that gap when it moves the residual inbound
-lifecycle, paging, and protocol mechanics into the server role crate. Until then
-the two diagrams above differ on purpose — do not "fix" section 4.3 to match the
-manifests.
+PR 14 closed the `soma-mcp-server` gap by moving the residual inbound
+lifecycle, paging, and protocol mechanics into the server role crate. All five
+target edges above are now present in the manifests (verified via
+`cargo tree -p soma-gateway --all-features -i soma-mcp-server` and
+`cargo tree -p soma-mcp-proxy --all-features -i soma-mcp-server`), and neither
+`soma-gateway` nor `soma-mcp-proxy` imports `rmcp` server-side types
+(`ServerHandler`, the tool/prompt router macros) directly — the only
+remaining `rmcp::` references in either crate's `src/` are `rmcp::model`
+wire-value types (`Tool`, `Resource`, `Prompt`) returned by
+`soma-mcp-server`/`soma-mcp-proxy` conversion helpers.
+`apps/soma/tests/gateway_architecture_boundaries.rs` enforces both the
+dependency edges and the absence of direct `rmcp` server-machinery usage.
 
 The gateway is the reusable engine that users instantiate when they want a full MCP aggregation runtime. It is not the primitive client or server library. A project that only needs to call upstream MCP servers depends on `soma-mcp-client`; a project that only needs to expose an MCP server depends on `soma-mcp-server`; a project that needs to bridge inbound MCP requests to upstream servers depends on `soma-mcp-proxy`.
 
