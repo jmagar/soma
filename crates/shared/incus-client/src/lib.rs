@@ -24,3 +24,4 @@ pub mod events;
 
 pub use config::ClientConfig;
 pub use error::{Error, Result};
+pub use transport::{Client, WithEtag};

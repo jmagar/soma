@@ -29,7 +29,7 @@ events = ["dep:tokio-tungstenite"]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
+tokio = { version = "1", features = ["rt", "macros", "sync", "time", "net", "io-util"] }
 tokio-tungstenite = { version = "0.29", features = ["rustls-tls-webpki-roots"], optional = true }
 tracing = "0.1"
 url = "2"
