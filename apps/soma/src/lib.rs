@@ -53,10 +53,6 @@ mod invocation;
 #[cfg(feature = "cli")]
 mod local;
 #[cfg(feature = "mcp-http")]
-mod protected_routes;
-#[cfg(feature = "mcp-http")]
-mod protected_routes_proxy;
-#[cfg(feature = "mcp-http")]
 mod shutdown;
 #[cfg(feature = "mcp-stdio")]
 mod stdio;
@@ -109,8 +105,12 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> anyhow::Result<()> {
 pub mod server {
     pub use soma_runtime::server::*;
 
+    // Reachable under `mcp-http` alone (independent of `run()`'s `cli` +
+    // `mcp-stdio` gate) so a downstream fork that only wants the HTTP server
+    // — e.g. embedding it without CLI/stdio deps — has a public entry point,
+    // matching the pre-PR18 `soma::runtime::serve_http_mcp()` shape.
     #[cfg(feature = "mcp-http")]
-    pub use crate::http::router;
+    pub use crate::http::{router, serve as serve_http_mcp};
 }
 
 /// Test helpers — available when `features = ["test-support"]` or in `cfg(test)`.

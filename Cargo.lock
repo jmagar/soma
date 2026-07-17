@@ -5452,15 +5452,21 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum",
  "futures",
+ "reqwest 0.13.4",
  "serde_json",
  "soma-application",
  "soma-auth",
  "soma-codemode",
  "soma-domain",
  "soma-gateway",
+ "soma-mcp",
  "soma-mcp-client",
+ "soma-runtime",
  "tokio",
+ "tower",
+ "tracing",
 ]
 
 [[package]]

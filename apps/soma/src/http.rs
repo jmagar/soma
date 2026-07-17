@@ -47,8 +47,10 @@ use soma_runtime::server::{build_auth_layer, AppState, AuthPolicy};
 const MCP_BODY_LIMIT_BYTES: usize = 65_536;
 
 /// Build the HTTP `AppState`, compose the router, bind a listener, and serve
-/// until a shutdown signal drains in-flight requests.
-pub(crate) async fn serve() -> anyhow::Result<()> {
+/// until a shutdown signal drains in-flight requests. Re-exported as
+/// `soma::server::serve_http_mcp` (reachable under the `mcp-http` feature
+/// alone; see `lib.rs`).
+pub async fn serve() -> anyhow::Result<()> {
     let state = crate::bootstrap::http_state().await?;
 
     // Install the Prometheus recorder once, before the router exposes /metrics.
@@ -159,7 +161,7 @@ pub fn router(state: AppState) -> Router {
         .route("/openapi.json", get(openapi_json));
     let public_runtime: Router<AppState> = Router::new().route(
         "/.well-known/oauth-protected-resource/{*route}",
-        get(crate::protected_routes::protected_route_resource_metadata),
+        get(soma_integrations::protected_routes::protected_route_resource_metadata),
     );
     // Prometheus metrics are only meaningful when the observability feature
     // installed a recorder at startup; gate the route on the same feature.
@@ -185,8 +187,8 @@ pub fn router(state: AppState) -> Router {
     let base = base.fallback(not_found_handler);
 
     let base = base.layer(middleware::from_fn_with_state(
-        crate::protected_routes::ProtectedMcpState::new(state.clone(), mcp_state),
-        crate::protected_routes::protected_mcp_intercept,
+        soma_integrations::protected_routes::ProtectedMcpState::new(state.clone(), mcp_state),
+        soma_integrations::protected_routes::protected_mcp_intercept,
     ));
 
     base.layer(body_limit_layer(MCP_BODY_LIMIT_BYTES))

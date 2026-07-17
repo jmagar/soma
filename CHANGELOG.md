@@ -28,10 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   out of the binary and into the library crate. `http.rs` also wires
   `soma-palette`'s `/v1/palette/*` router into the composed HTTP router for
   the first time (previously built but unmounted). Replaces `runtime.rs`,
-  `routes.rs`, and `application_ports.rs`. `protected_routes.rs` and
-  `protected_routes_proxy.rs` remain in `apps/soma` as router-composition
-  glue for now — extracting their OAuth-scope/proxy-dispatch logic into a
-  lower layer is tracked as follow-up, not done in this slice. Behavior is
+  `routes.rs`, and `application_ports.rs`. Behavior is
   unchanged: the full pre-existing `apps/soma` test suite (unit, integration,
   and architecture-boundary tests) passes unmodified in substance, with only
   file-path references updated to match the new module names.
@@ -327,6 +324,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR18 review fix: `protected_routes.rs` and `protected_routes_proxy.rs`
+  (bearer-token authentication, OAuth-scope authorization, gateway-subset
+  dispatch, and inbound-to-upstream proxy forwarding for protected MCP
+  routes — 560 of `apps/soma`'s ~1578 `src/` lines, ~35%) implemented real
+  authorization rules and gateway business workflows in the composition-root
+  binary crate, contradicting PR 18's own acceptance criterion (`apps/soma`
+  "contains no business rules"; plan section 3.1 lists both explicitly under
+  "Does not own"). Moved both modules verbatim to
+  `crates/soma/integrations` (`soma-integrations`, `product-integration`
+  layer — plan section 11.1's own architecture-check example names this
+  crate as the destination for exactly this kind of adapter) behind a new
+  `protected-http` feature, following the same "moved out of `apps/soma`,
+  permanent home here" precedent as PR 11's `gateway.rs`/`gateway_auth.rs`.
+  `apps/soma/src/http.rs` now wires `soma_integrations::protected_routes::*`
+  instead of constructing the logic itself; no behavior change (bodies are
+  unmodified, only import paths and one `pub(super)` → `pub(crate)`
+  visibility changed). Also restored a public HTTP-server bootstrap entry
+  point for the `mcp-http`-only build profile: pre-PR18,
+  `soma::runtime::serve_http_mcp()` was reachable under the `mcp-http`
+  feature alone; PR 18 made `mod http` private with its only caller
+  (`soma::run`) gated on `all(feature = "cli", feature = "mcp-stdio")`,
+  silently breaking a downstream fork that embeds only the HTTP server.
+  `apps/soma/src/http.rs`'s `serve()` is now `pub` and re-exported as
+  `soma::server::serve_http_mcp` under `mcp-http` alone, independent of
+  `cli`/`mcp-stdio`.
 - PR17 review fix: `soma-palette` duplicated `soma-api`'s
   `ApplicationError.code` → `StatusCode` mapping verbatim instead of sharing
   it through `soma-http-api` (both crates are `product-surface` and must not
