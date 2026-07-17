@@ -16,7 +16,7 @@ layer = "product-surface"
 [features]
 default = []
 stdio = ["rmcp/transport-io"]
-http = ["dep:axum", "rmcp/transport-streamable-http-server"]
+http = ["dep:axum", "rmcp/transport-streamable-http-server", "soma-mcp-server/http"]
 auth = ["dep:soma-auth"]
 oauth = ["auth"]
 test-support = []

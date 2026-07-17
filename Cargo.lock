@@ -3797,6 +3797,7 @@ dependencies = [
  "soma-codemode",
  "soma-mcp-client",
  "soma-mcp-proxy",
+ "soma-mcp-server",
  "soma-openapi",
  "sse-stream",
  "tempfile",
@@ -3890,8 +3891,11 @@ dependencies = [
 name = "soma-mcp-proxy"
 version = "0.4.1"
 dependencies = [
+ "rmcp",
  "serde_json",
  "soma-mcp-client",
+ "soma-mcp-server",
+ "tokio",
 ]
 
 [[package]]
@@ -3899,7 +3903,10 @@ name = "soma-mcp-server"
 version = "0.4.1"
 dependencies = [
  "rmcp",
+ "rmcp-traces",
  "serde_json",
+ "tracing",
+ "url",
 ]
 
 [[package]]

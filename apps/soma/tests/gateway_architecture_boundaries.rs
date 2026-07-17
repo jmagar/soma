@@ -31,6 +31,7 @@ const GATEWAY_OPTIONAL_LEAF_SOMA_DEPS: &[&str] = &[
     "soma-codemode",
     "soma-mcp-client",
     "soma-mcp-proxy",
+    "soma-mcp-server",
     "soma-openapi",
 ];
 

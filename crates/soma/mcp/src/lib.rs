@@ -3,7 +3,6 @@
 //! This module is strictly MCP concerns: the `ServerHandler` impl, tool schemas,
 //! prompt templates, and dispatch shims. Business operations flow through `SomaApplication`.
 
-mod conformance;
 mod gateway_proxy;
 mod prompts;
 mod protocol_errors;
