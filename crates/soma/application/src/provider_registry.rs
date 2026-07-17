@@ -525,7 +525,7 @@ fn provider_map(
 }
 
 /// Wraps a product-neutral `soma_provider_core::Provider` (as implemented by
-/// every adapter in `soma-provider-adapters`) so it satisfies soma-service's
+/// every adapter in `soma-provider-adapters`) so it satisfies this crate's
 /// own `Provider` trait, which carries additional auth/scope fields
 /// (`principal`, `auth_mode`, `destructive_confirmed`, `limits`) that no
 /// shared adapter reads — see `ProviderCall::provider_invocation()`, which

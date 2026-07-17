@@ -45,11 +45,14 @@ apps/
 crates/
   soma/
     api/                  ← REST API handlers
+    application/          ← SomaApplication facade + business/service layer
     cli/                  ← CLI parser, doctor/setup/watch commands
-    contracts/            ← action metadata, config, DTOs, token limits
+    client/               ← outbound remote Soma HTTP client
+    config/                ← config structs, env prefixes, DTOs, token limits
+    domain/                ← action metadata, invariant rules, error taxonomy
+    integrations/          ← product bridges to shared engines (gateway, auth)
     mcp/                  ← Soma-specific MCP schemas, tools, prompts, transport
     runtime/              ← AppState, auth policy, shared runtime wiring
-    service/              ← upstream client + SomaService business layer
     test-support/         ← Soma integration-test helpers
     web/                  ← static web asset serving and source bundle helpers
   shared/
@@ -67,12 +70,12 @@ crates/
                           ← generated reusable Codex app-server client
 
 Rule: keep business logic out of transports, but DO NOT force all logic into one giant file.
-The service layer may be split across multiple focused modules under `crates/soma/service/src/`; what matters
-is that transports stay thin and all domain logic lives in the service layer.
+The service layer may be split across multiple focused modules under `crates/soma/application/src/`; what matters
+is that transports stay thin and all domain logic lives in the service/application layer.
 
 **The golden rule:** If you are writing business logic in `mcp/tools.rs`,
 `cli.rs`, or the canonical binary entrypoint, you are doing it wrong. Move it
-to `app.rs`.
+to the application/service layer.
 
 ### What "thin shim" means
 
@@ -1081,10 +1084,10 @@ Use this when creating a new server from soma:
 
 - [ ] Replace every occurrence of `example`/`Example`/`EXAMPLE` with your service name
 - [ ] Implement API client in `crates/soma/client/src/client.rs` (transport only)
-- [ ] Add service methods to `crates/soma/service/src/app.rs` (all logic here)
-- [ ] Add tool actions to `crates/soma/contracts/src/actions.rs`, `crates/soma/mcp/src/tools.rs`, and `crates/soma/mcp/src/schemas.rs`
+- [ ] Add service methods to `crates/soma/application/src/service.rs` (all logic here)
+- [ ] Add tool actions to `crates/soma/domain/src/actions.rs`, `crates/soma/mcp/src/tools.rs`, and `crates/soma/mcp/src/schemas.rs`
 - [ ] Add CLI commands to `crates/soma/cli/src/lib.rs`
-- [ ] Update `crates/soma/contracts/src/config.rs` with service-specific config fields
+- [ ] Update `crates/soma/config/src/config.rs` with service-specific config fields
 - [ ] Set correct port in `config.toml` and `docker-compose.yml`
 - [ ] Update `EXPOSE` in `config/Dockerfile`
 - [ ] Update `plugin.json` userConfig for your service's credentials
@@ -1574,10 +1577,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ ] Replace `example`/`EXAMPLE` with your service name throughout
 - [ ] Implement API client in `crates/soma/client/src/client.rs` (transport only)
-- [ ] Add service methods to `crates/soma/service/src/app.rs` (ALL logic here)
-- [ ] Add actions to `crates/soma/contracts/src/actions.rs`, `crates/soma/mcp/src/tools.rs`, and `crates/soma/mcp/src/schemas.rs` (thin shim ONLY)
+- [ ] Add service methods to `crates/soma/application/src/service.rs` (ALL logic here)
+- [ ] Add actions to `crates/soma/domain/src/actions.rs`, `crates/soma/mcp/src/tools.rs`, and `crates/soma/mcp/src/schemas.rs` (thin shim ONLY)
 - [ ] Add CLI commands to `crates/soma/cli/src/lib.rs` (thin shim ONLY)
-- [ ] Update `crates/soma/contracts/src/config.rs` with service-specific fields
+- [ ] Update `crates/soma/config/src/config.rs` with service-specific fields
 - [ ] Add elicitation to destructive actions (or confirm flag fallback)
 - [ ] Set port in `config.toml` + `docker-compose.yml` + Dockerfile
 - [ ] Implement central auth policy resolution in library code

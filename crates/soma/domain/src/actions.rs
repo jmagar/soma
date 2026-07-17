@@ -653,14 +653,15 @@ pub fn is_validation_error(error: &anyhow::Error) -> bool {
 //
 // This module lives in soma-domain rather than soma-application (plan
 // section 6.2 nominally assigns "product use-case request/results" to
-// soma-application) because soma-service — a dependency of soma-application
-// during the strangler migration — also builds its static-Rust provider
-// catalog directly from this file's action-spec table and its per-entry
-// struct type. Placing this module in soma-application would force
-// soma-service to depend back on soma-application, creating a dependency
-// cycle. Every consumer (application, service, api, cli, mcp, integrations,
-// runtime, apps/soma) can already depend on soma-domain without cycles, so
-// this is the lowest common ancestor that keeps everything cycle-free.
+// soma-application) even though PR 19 folded the legacy soma-service crate's
+// business layer (`SomaService`, the static-Rust provider catalog) directly
+// into soma-application, which would no longer create a cross-crate cycle if
+// this table moved there too. It stays in soma-domain because ACTION_SPECS is
+// an invariant product contract (action names, scopes, transport
+// availability), not application orchestration logic, and every consumer
+// (application, api, cli, mcp, integrations, runtime, apps/soma, xtask) can
+// depend on soma-domain without cycles regardless of what else changes inside
+// soma-application.
 
 #[cfg(test)]
 #[path = "actions_tests.rs"]

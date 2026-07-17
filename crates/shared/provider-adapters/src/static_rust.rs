@@ -2,11 +2,12 @@
 //! with no external process, sidecar, or upstream call, whose tools either
 //! echo a canned `meta.result` value or, absent one, echo their own call
 //! shape back for inspection/testing. Ported from the private `FileProvider`
-//! struct in `soma-service`'s filesystem loader, which is the actual
-//! product-neutral "static Rust provider abstraction" referenced by the
-//! architecture plan — Soma's own concrete built-in-actions provider (also
-//! historically named `static_rust.rs`) is a distinct, product-specific
-//! instance that dispatches into `SomaService` and stays in soma-service.
+//! struct in Soma's filesystem loader (originally `soma-service`, now
+//! `crates/soma/application`), which is the actual product-neutral "static
+//! Rust provider abstraction" referenced by the architecture plan — Soma's
+//! own concrete built-in-actions provider (also historically named
+//! `static_rust.rs`) is a distinct, product-specific instance that dispatches
+//! into `SomaService` and stays in `crates/soma/application`.
 
 use std::{path::PathBuf, sync::Arc};
 

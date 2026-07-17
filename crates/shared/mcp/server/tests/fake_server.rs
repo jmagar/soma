@@ -3,9 +3,9 @@
 //! any Soma product crate.
 //!
 //! This file only pulls in `rmcp`, `serde_json`, and `soma_mcp_server` — no
-//! `soma-domain`, `soma-application`, `soma-contracts`, or `soma-mcp` symbol
-//! appears anywhere below. `FakeServer` is a stand-in for a hypothetical,
-//! entirely unrelated product's MCP server.
+//! `soma-domain`, `soma-application`, or `soma-mcp` symbol appears anywhere
+//! below. `FakeServer` is a stand-in for a hypothetical, entirely unrelated
+//! product's MCP server.
 
 use rmcp::{
     model::{CallToolRequestParams, CallToolResult, ListToolsResult, PaginatedRequestParams},

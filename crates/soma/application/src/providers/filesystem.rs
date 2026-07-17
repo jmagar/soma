@@ -476,16 +476,16 @@ impl std::error::Error for FileProviderLoadError {}
 /// Builds the concrete provider for `catalog`'s declared kind. Every kind's
 /// actual implementation lives in the product-neutral `soma-provider-adapters`
 /// crate (feature-gated per kind); this just dispatches to it and wraps the
-/// result to satisfy soma-service's own `Provider` trait — see
+/// result to satisfy this crate's own `Provider` trait — see
 /// `provider_registry::SharedAdapter` and the PR10 deviation notes on why
 /// this dispatch step, and the directory-scanning/Soma-policy orchestration
-/// around it, stayed in soma-service rather than moving wholesale.
+/// around it, stayed in this crate rather than moving wholesale.
 fn provider_for_catalog(path: PathBuf, catalog: ProviderCatalog) -> std::sync::Arc<dyn Provider> {
     let kind = catalog.provider.kind;
     match manifest_file::build_provider(path, catalog, PROVIDER_ENV_PREFIX) {
         Some(provider) => SharedAdapter::wrap(provider),
         None => unreachable!(
-            "soma-service enables every soma-provider-adapters kind feature; \
+            "soma-application enables every soma-provider-adapters kind feature; \
              manifest_file::build_provider returned None for kind `{}`",
             kind.as_str()
         ),

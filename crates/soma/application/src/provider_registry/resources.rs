@@ -39,7 +39,7 @@ impl DynamicResourceTemplate {
     /// The RFC 6570-flavored URI template string (e.g.
     /// `soma://resources/service/{name}`) advertised via MCP
     /// `resources/templates/list`. `ResourcePath` itself stays private to
-    /// `soma-service` — this is the only piece other crates need.
+    /// this crate — this is the only piece other crates need.
     pub fn uri_template(&self) -> String {
         self.path.uri_string()
     }

@@ -1,9 +1,12 @@
 //! Response size cap — prevents context-window exhaustion in MCP clients.
 //!
 //! Placed in `soma-domain` rather than `soma-application` (see the module
-//! doc on `actions.rs` for the general reasoning): `MAX_RESPONSE_BYTES` is
-//! read by `soma-service`'s provider registry and `soma-mcp`'s response
-//! paging, both of which cannot depend on `soma-application`.
+//! doc on `actions.rs` for the general reasoning): `MAX_RESPONSE_BYTES` is an
+//! invariant product constant read by `soma-application`'s provider registry
+//! and default limits (`ProviderRequestLimits::default()`), and directly by
+//! `soma-mcp`'s protocol-error rendering and response paging — putting it in
+//! `soma-domain` avoids every one of those call sites needing to reach into
+//! `soma-application` just for a `usize` constant.
 //!
 //! # CUSTOMIZE: The 10K token philosophy
 //!
