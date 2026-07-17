@@ -30,7 +30,7 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
-use soma_contracts::config::{RuntimeMode, SomaConfig};
+use soma_config::{RuntimeMode, SomaConfig};
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 
