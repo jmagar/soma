@@ -47,6 +47,7 @@ soma-cli = { workspace = true, optional = true }
 soma-contracts = { workspace = true }
 soma-domain = { workspace = true }
 soma-gateway = { workspace = true }
+soma-integrations = { workspace = true }
 mcp-client = { workspace = true, optional = true, features = ["oauth"] }
 soma-mcp = { workspace = true, optional = true }
 soma-observability = { workspace = true, optional = true }
@@ -81,6 +82,7 @@ api = ["auth", "dep:serde_json", "dep:soma-api"]
 auth = [
   "dep:soma-auth",
   "soma-api?/auth",
+  "soma-integrations/auth",
   "soma-mcp?/auth",
   "soma-runtime/auth",
 ]
@@ -91,6 +93,7 @@ oauth = [
   "dep:futures",
   "soma-auth/upstream-oauth-rmcp",
   "soma-gateway/oauth",
+  "soma-integrations/oauth",
   "soma-mcp?/oauth",
   "soma-runtime/oauth",
 ]

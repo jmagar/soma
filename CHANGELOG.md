@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `crates/soma/integrations` (`soma-integrations`, layer
+  `product-integration`), the product-adapter crate connecting
+  `soma-application`'s transport-neutral ports to Soma's shared engines (plan
+  section 3.20). Moves `apps/soma`'s temporary `GatewayPort` implementation
+  (`gateway.rs`), gateway-to-auth OAuth bridge (`gateway_auth.rs`, `oauth`
+  feature), and Soma's product auth default mapping (`auth.rs`, `auth`
+  feature) out of `apps/soma`, which now only constructs these adapters. Adds
+  a new `CodeModePort` adapter (`codemode.rs`) delegating to
+  `soma_codemode::execute::execute_inline` — the port existed but had no
+  product implementation before this crate. `OpenApiPort` still has no
+  adapter: `OpenApiExecuteRequest` has no spec/label field and no
+  `soma_openapi::registry::OpenApiRegistry` is constructed anywhere in the
+  runtime, so a real adapter would invent an unspecified wire shape rather
+  than move existing, tested behavior — left for a focused follow-up. The
+  product-specific providers PR10 left in `soma-service` (`static_rust.rs`,
+  `remote.rs`, `resource_files.rs`/`resource_uri.rs`) still depend on
+  `SomaService` and `soma-service`'s local `Provider`/`ProviderCall` traits,
+  neither of which are in `soma-integrations`'s declared dependency shape;
+  moving them stays PR12's job (`soma-service` split), as PR10's own
+  changelog entry already noted.
 - Add `crates/shared/provider-adapters` (`soma-provider-adapters`), a
   feature-gated, product-neutral crate of reusable provider implementations
   (static-echo, ai-sdk, python, wasm, openapi, and a thin upstream-MCP/gateway

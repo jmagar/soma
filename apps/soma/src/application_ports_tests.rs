@@ -1,54 +1,48 @@
-use soma_application::ExecutionContext;
-use soma_contracts::{actions::READ_SCOPE, scopes::ADMIN_SCOPE};
-use soma_domain::{AuthorizationMode, Principal, RequestId, ScopeSet, Surface};
+use super::authorization_mode;
+use soma_contracts::config::{McpConfig, SomaConfig};
+use soma_domain::AuthorizationMode;
+use soma_runtime::server::{empty_gateway_product_state, AppState, AuthPolicy};
+use soma_service::{SomaClient, SomaService};
 
-use super::{gateway_access, gateway_subject};
-
-fn mounted_context(scopes: &[&str]) -> ExecutionContext {
-    let mut context =
-        ExecutionContext::loopback(Surface::Rest, RequestId::new("rest-test").unwrap());
-    context.authorization_mode = AuthorizationMode::Mounted;
-    context.principal = Some(Principal::new(
-        "caller",
-        ScopeSet::new(scopes.iter().map(|scope| (*scope).to_owned())),
-    ));
-    context
+fn state(auth_policy: AuthPolicy) -> AppState {
+    let service = SomaService::new(
+        SomaClient::new(&SomaConfig {
+            api_url: String::new(),
+            api_key: "test".into(),
+            ..SomaConfig::default()
+        })
+        .expect("stub client should always build"),
+    );
+    let registry = soma_service::static_provider_registry(service.clone())
+        .expect("static provider registry should always build");
+    let runtime =
+        super::runtime_for_components(service, registry, empty_gateway_product_state());
+    AppState::new(
+        McpConfig::default(),
+        auth_policy,
+        runtime,
+        Default::default(),
+    )
 }
 
 #[test]
-fn mounted_gateway_access_distinguishes_read_and_admin_scopes() {
-    let read = gateway_access(&mounted_context(&[READ_SCOPE]));
-    assert!(read.read);
-    assert!(!read.admin);
-
-    let admin = gateway_access(&mounted_context(&[ADMIN_SCOPE]));
-    assert!(admin.read);
-    assert!(admin.admin);
+fn maps_loopback_dev_policy_to_loopback_dev_mode() {
+    let state = state(AuthPolicy::LoopbackDev);
+    assert_eq!(authorization_mode(&state), AuthorizationMode::LoopbackDev);
 }
 
 #[test]
-fn mounted_gateway_subject_preserves_per_user_oauth_identity() {
-    let context = mounted_context(&[READ_SCOPE]);
-
-    assert_eq!(gateway_subject(&context), "caller");
+fn maps_trusted_gateway_policy_to_trusted_gateway_mode() {
+    let state = state(AuthPolicy::TrustedGatewayUnscoped);
+    assert_eq!(
+        authorization_mode(&state),
+        AuthorizationMode::TrustedGateway
+    );
 }
 
+#[cfg(feature = "auth")]
 #[test]
-fn local_and_admin_principals_use_shared_gateway_credentials() {
-    let mut local = mounted_context(&[READ_SCOPE]);
-    local.principal = local
-        .principal
-        .take()
-        .map(|principal| principal.with_issuer("local"));
-    let admin = mounted_context(&[ADMIN_SCOPE]);
-
-    assert_eq!(gateway_subject(&local), "gateway");
-    assert_eq!(gateway_subject(&admin), "gateway");
-}
-
-#[test]
-fn non_mounted_gateway_subject_uses_shared_credentials() {
-    let context = ExecutionContext::loopback(Surface::Mcp, RequestId::new("mcp-test").unwrap());
-
-    assert_eq!(gateway_subject(&context), "gateway");
+fn maps_mounted_policy_to_mounted_mode() {
+    let state = state(AuthPolicy::Mounted { auth_state: None });
+    assert_eq!(authorization_mode(&state), AuthorizationMode::Mounted);
 }
