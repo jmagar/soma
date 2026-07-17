@@ -197,8 +197,15 @@ mod tests {
                 checked_in_path().display()
             )
         });
+        // Compare line-by-line rather than byte-for-byte: git checks this file
+        // out with CRLF on Windows (`core.autocrlf`), while `rendered()`
+        // always emits LF, so a byte compare fails there for a reason that has
+        // nothing to do with the spec's content. Same approach as
+        // `apps/soma/tests/architecture_boundaries.rs`, which hit this first.
+        // Still an exact comparison of every line, so real drift - a changed
+        // value, a added or removed key - fails exactly as before.
         assert!(
-            rendered == checked_in,
+            rendered.lines().eq(checked_in.lines()),
             "openapi_spec() no longer matches the checked-in openapi.json.\n\n\
              Regenerate it with:\n\
              CODEX_REST_OPENAPI_WRITE=1 cargo test -p codex-app-server-client --features rest openapi_spec_matches_checked_in_file\n\n\
