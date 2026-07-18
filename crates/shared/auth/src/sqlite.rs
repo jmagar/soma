@@ -450,6 +450,15 @@ impl SqliteStore {
     /// already completed the Google consent screen once" is a reasonable
     /// proxy for "we don't need to force full re-consent again" without
     /// having to know which subject is about to authenticate.
+    ///
+    /// No longer called internally — `authorize()` now uses the
+    /// provider-scoped [`Self::has_any_refresh_token_for_provider`] instead
+    /// (this unscoped version incorrectly treats "some OTHER provider
+    /// already has a refresh token on file" as a reason to skip forced
+    /// consent on a user's very first login with a *different* provider).
+    /// Retained as general-purpose public API for other consumers of this
+    /// shared crate, not because removing the internal call site was an
+    /// accident — do not assume this is dead code to delete.
     pub async fn has_any_refresh_token(&self) -> Result<bool, AuthError> {
         let now = now_unix();
         self.with_conn(move |conn| {
@@ -2260,6 +2269,72 @@ mod tests {
             .take_authorization_request("pre-migration-state")
             .await
             .unwrap();
+        assert_eq!(
+            row.provider, "google",
+            "pre-existing row must backfill to the 'google' default"
+        );
+        assert_eq!(row.client_id, "client-1");
+        assert_eq!(row.resource, "https://lab.example.com/mcp");
+    }
+
+    /// Same regression coverage as
+    /// `sqlite_store_backfills_provider_column_on_pre_migration_database`,
+    /// but for `refresh_tokens` specifically — the highest-stakes of the
+    /// remaining three migrated tables, since it feeds
+    /// `has_any_refresh_token_for_provider` and refresh-grant provider
+    /// dispatch (`token::refresh_token_grant`). Hand-writes the
+    /// post-v1/pre-`provider`-column `refresh_tokens` shape (hashed PK
+    /// already present, no `provider` column) via a raw
+    /// `rusqlite::Connection`, then confirms `SqliteStore::open` backfills
+    /// the pre-existing row to `provider = "google"`.
+    #[tokio::test]
+    async fn sqlite_store_backfills_provider_column_on_pre_migration_refresh_tokens_table() {
+        let path = temp_db_path();
+        let now = now_unix();
+        let plaintext_token = "pre-migration-refresh-token";
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE refresh_tokens (
+                    refresh_token_hash TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL,
+                    subject TEXT NOT NULL,
+                    resource TEXT NOT NULL DEFAULT '',
+                    scope TEXT NOT NULL,
+                    provider_refresh_token TEXT,
+                    created_at INTEGER NOT NULL,
+                    expires_at INTEGER NOT NULL
+                );",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO refresh_tokens (
+                    refresh_token_hash, client_id, subject, resource, scope,
+                    provider_refresh_token, created_at, expires_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![
+                    super::hash_token(plaintext_token),
+                    "client-1",
+                    "google-user",
+                    "https://lab.example.com/mcp",
+                    "lab",
+                    "provider-refresh-token",
+                    now,
+                    now + 3600,
+                ],
+            )
+            .unwrap();
+            // `conn` drops here, closing the raw connection before
+            // SqliteStore opens its own pool against the same file.
+        }
+        crate::util::set_restrictive_permissions(&path).unwrap();
+
+        let store = SqliteStore::open(path).await.unwrap();
+        let row = store
+            .find_refresh_token(plaintext_token)
+            .await
+            .unwrap()
+            .expect("pre-existing refresh token row must still be found by its hash");
         assert_eq!(
             row.provider, "google",
             "pre-existing row must backfill to the 'google' default"
