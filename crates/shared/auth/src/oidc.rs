@@ -9,6 +9,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 use crate::error::AuthError;
+use crate::provider_http::RequestTrace;
 
 const DEFAULT_JWKS_TTL: Duration = Duration::from_secs(60 * 60);
 /// Per-request timeout on the JWKS GET. Bound aggressively (5s) so a slow
@@ -58,6 +59,13 @@ struct CachedJwks {
 pub(crate) struct OidcVerifier {
     provider_id: &'static str,
     issuer: String,
+    /// Second accepted issuer value, checked alongside `issuer` on every
+    /// [`Self::verify`] call. Google's real ID tokens carry either the
+    /// `https://` form or the bare `accounts.google.com` form depending on
+    /// token version — pre-extraction `google.rs` accepted both
+    /// (`claims.iss != GOOGLE_ISSUER && claims.iss != "accounts.google.com"`).
+    /// `None` for providers with a single canonical issuer (Authelia).
+    alt_issuer: Option<String>,
     jwks_endpoint: Url,
     http: reqwest::Client,
     jwks_cache: Arc<RwLock<Option<CachedJwks>>>,
@@ -73,10 +81,19 @@ impl OidcVerifier {
         Self {
             provider_id,
             issuer,
+            alt_issuer: None,
             jwks_endpoint,
             http,
             jwks_cache: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Accept a second issuer value alongside `issuer` in [`Self::verify`].
+    /// See [`Self::alt_issuer`]'s doc comment for why this exists.
+    #[must_use]
+    pub(crate) fn with_alt_issuer(mut self, alt_issuer: impl Into<String>) -> Self {
+        self.alt_issuer = Some(alt_issuer.into());
+        self
     }
 
     #[cfg(test)]
@@ -125,7 +142,12 @@ impl OidcVerifier {
                 AuthError::Storage(format!("invalid {} id_token: {error}", self.provider_id))
             })?;
 
-        if claims.iss != self.issuer {
+        let issuer_matches = claims.iss == self.issuer
+            || self
+                .alt_issuer
+                .as_deref()
+                .is_some_and(|alt| claims.iss == alt);
+        if !issuer_matches {
             return Err(AuthError::Storage(format!(
                 "invalid {} id_token issuer `{}`",
                 self.provider_id, claims.iss
@@ -188,6 +210,7 @@ impl OidcVerifier {
     }
 
     async fn refresh_jwks_locked(&self, cache: &mut Option<CachedJwks>) -> Result<Jwks, AuthError> {
+        let trace = RequestTrace::start(self.provider_id, "fetch_jwks", "GET", &self.jwks_endpoint);
         let response = self
             .http
             .get(self.jwks_endpoint.clone())
@@ -195,16 +218,18 @@ impl OidcVerifier {
             .send()
             .await
             .map_err(|error| {
+                trace.error(None, &error);
                 warn!(provider = self.provider_id, error = %error, "jwks request failed");
                 AuthError::Storage(format!("fetch {} jwks: {error}", self.provider_id))
             })?;
         let status = response.status();
         let ttl = jwks_ttl(response.headers());
         let response = response.error_for_status().map_err(|error| {
+            trace.error(Some(status), &error);
             warn!(provider = self.provider_id, error = %error, "jwks request returned error status");
             AuthError::Storage(format!("{} jwks endpoint error: {error}", self.provider_id))
         })?;
-        let _ = status;
+        trace.finish(status);
         let jwks = response.json::<Jwks>().await.map_err(|error| {
             warn!(provider = self.provider_id, error = %error, "jwks payload unreadable");
             AuthError::Storage(format!(
