@@ -160,11 +160,6 @@ const CHECKED_SRC_ROOTS: &[&str] = &[
 /// bare allowlist could not express.
 const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
     (
-        "crates/integrations/unifi/src",
-        "newly vendored (crates/integrations/ layer) with inline #[cfg(test)] \
-         mod tests throughout - no siblings anywhere in the crate yet.",
-    ),
-    (
         "crates/shared/auth/src",
         "inline #[cfg(test)] mod tests throughout (21 modules, 0 siblings)",
     ),
