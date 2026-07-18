@@ -192,6 +192,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   OpenAPI metadata. `apps/palette/src-tauri` stays an app-local Tauri
   package (not a root workspace member) and now path-depends on
   `soma-tauri-shell` for its window/tray/shortcut/persistence mechanics.
+- `codex-app-server-client`'s optional `rest` feature became liftable and
+  operable end-to-end, without breaking the crate's zero-workspace-path-dependency
+  rule (no new crates entered the dependency graph — `futures-core`,
+  `tower-layer`, and `tower-service` were already transitive `axum` deps):
+  - **OpenAPI**: `rest::openapi_spec()` returns an OpenAPI 3.1.0 document for
+    the whole REST surface, checked in at
+    `crates/shared/codex-app-server-client/openapi.json` (13 routes, 19
+    schemas, `bearerAuth` scheme) so downstream clients can be generated
+    without building the crate. A test enforces spec/file parity, and a
+    route-coverage test probes the live router so a documented-but-unmounted
+    route fails the build.
+  - **Runnable binary**: `codex-app-server-rest --host --port --mode
+    text-turn|trusted-bridge|health-only [--token]`, with
+    `CODEX_APP_SERVER_REST_*` env fallbacks. It refuses to start on a
+    non-loopback bind in `trusted-bridge` mode without a token, and prints its
+    effective configuration (never the token) on startup.
+  - **Bearer auth**: `rest::bearer_auth(token)` is a batteries-included
+    `tower` layer — `rest::trusted_bridge_router().layer(rest::bearer_auth(token))`
+    — with constant-time token comparison and a configurable health-route
+    exemption (`/v1/compatibility` is never exempt).
+  - **SSE**: `GET /v1/sessions/{sessionId}/events/stream` streams the same
+    payloads as the long-poll `.../events` route as Server-Sent Events. A
+    session still allows only one event consumer; a second reader of either
+    kind gets `409 Conflict`. The stream yields to the executor on a bounded
+    number of consecutive synchronous backend polls, and `?timeoutMs=` is
+    clamped up to `RestLimits::min_stream_poll_timeout` (250ms) on this route
+    only — without either, a backend that resolves `poll_event` synchronously
+    (legal for the public `RestBackend` trait, and what a buffered event looks
+    like) let one request loop the runtime without bound. The long-poll route
+    keeps accepting `timeoutMs=0` verbatim: there it means "only if an event
+    is already waiting", and each repeat is paced by an HTTP round trip.
+  - **Operational knobs**: every `RestLimits` field (session TTL, max
+    sessions, concurrency caps, response byte cap, text-turn timeout, event
+    buffer size, SSE keep-alive, ...) gained a documented default and a
+    `CODEX_APP_SERVER_REST_*` override via `RestLimits::from_env()` /
+    `try_from_env()`. A malformed value is a hard error, never a silent
+    fallback. Event buffer size reaches the real per-session channel via the
+    new `SessionOptions::with_events_capacity` and
+    `CodexAppServerClient::{spawn,connect_streams,connect_unix}_with_events_capacity`,
+    so the REST limit configures it without misrepresenting the underlying
+    constant (now `DEFAULT_EVENTS_CHANNEL_CAPACITY`) as REST-specific.
+  - **Safety examples**: `rest_loopback_dev`, `rest_bearer_auth`,
+    `rest_trusted_gateway`, and `rest_admin_unsafe` document the four
+    deployment postures and what each does and does not protect.
+  - **TypeScript client**: generated from `openapi.json` under
+    `crates/shared/codex-app-server-client/clients/typescript/`, kept in sync
+    by `cargo xtask check-ts-client [--write|--check]` (which skips cleanly
+    when `node`/`pnpm` aren't installed). Building it proved the spec is
+    consumable by a real third-party generator, and immediately caught a bug
+    in it: `RestEventResponse`'s `discriminator.mapping` pointed at four
+    component schemas that were only ever built inline in the `oneOf` array
+    and never registered, which every spec-compliant generator rejects. The
+    four variants are now real named schemas — so generated clients get named
+    per-variant types rather than an anonymous union — and a new
+    `every_schema_ref_resolves_to_a_real_component` test fails the build if
+    any `$ref` or `discriminator.mapping` target ever dangles again.
+- Add `cargo xtask codex-schema drift [--dir <dump>] [--json] [--strict]`,
+  which diffs the vendored `codex-app-server-client` protocol schema against
+  the installed `codex` CLI's actual app-server surface and reports added,
+  removed, and changed methods per section. A scheduled
+  `codex-schema-drift-monitor` workflow opens/updates a tracking issue on
+  drift. A missing `codex` binary is always a graceful skip, never a failure.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.
@@ -271,6 +333,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON output rendering (`lib.rs` and `doctor.rs`), and `doctor` color
   output now delegate to it with no output change. See
   `crates/shared/cli-core/README.md`.
+- `codex-app-server-client` REST operational hardening:
+  - The `codex-app-server-rest` binary now shuts down gracefully on `SIGTERM`
+    (unix) and `ctrl-c`, draining in-flight requests instead of dropping active
+    sessions and orphaning their `codex app-server` children.
+  - `RestLimits::max_request_body_bytes` (env
+    `CODEX_APP_SERVER_REST_MAX_REQUEST_BODY_BYTES`, default 2 MiB) caps request
+    bodies on every route via axum's `DefaultBodyLimit`, replacing axum's silent
+    2 MiB default and closing the input-side gap in the "every limit documented
+    and overridable" contract. An oversized body is rejected with `413`
+    (distinct from a malformed-JSON `400`); every request-body route documents
+    it, guarded by `every_route_with_a_request_body_documents_413`.
 
 ### Changed
 
@@ -321,6 +394,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   interactive round trip that could time out impatient MCP clients on retry.
 - `soma-auth`'s default auth-database directory is now `~/.soma` instead of
   the inherited `~/.lab`.
+- The `codex-app-server-rest` binary runs on tokio's multi-threaded runtime
+  (was `current_thread`, copied unexamined from the example): it can hold up to
+  `max_sessions` concurrent sessions, each driving a `codex` child, and a
+  single-threaded runtime let one busy connection starve the rest. The
+  single-session `examples/rest_*.rs` stay `current_thread`. The
+  `rt-multi-thread` and `signal` tokio features are pulled in only by the
+  `rest` feature, so a library-only consumer does not pay for them.
 
 ### Removed
 
@@ -702,6 +782,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   semantics; tracked as its own follow-up (bead `rmcp-template-fnz0`) rather
   than folded into this fixup.
 
+- `codex-app-server-client`'s REST backend swept idle sessions on every single
+  `session()` call — i.e. on every event poll and session call — and each sweep
+  is an O(sessions) scan behind the global session lock. The sweep on that hot
+  path is now throttled to at most once per second (capped by
+  `idle_session_ttl`). `create_session` and `list_sessions` still sweep
+  unconditionally, because their correctness depends on a fresh view: one
+  reclaims a session slot before taking it, the other must not report a
+  session it is about to drop.
+- `cargo xtask check-test-siblings` reported "all source files have a
+  `_tests.rs` sibling" while only looking at 10 of the workspace's 22 members —
+  a pass that meant it had not looked. Its root list is now split into checked
+  and explicitly-exempt-with-a-reason, a test fails if a member is in neither
+  (so a new crate cannot be silently unchecked), and the command prints how
+  many trees it checked and names the ones it skipped. Coverage widened from 10
+  to 15 trees.
+- `codex-app-server-client`'s OpenAPI route table could drift in one
+  direction undetected: a route mounted in `routes.rs` but never added to
+  `ROUTES` compiled, passed every test, and was silently absent from
+  `openapi.json` and every generated client. A new test reads `routes.rs`'s
+  own `.route(...)` path literals and set-compares them against the table, so
+  both directions now fail loudly.
+- `codex-app-server-client` module size: `src/rest/openapi.rs` (1154 effective
+  lines) exceeded the `xtask patterns` file-size hard limit (700). Split into
+  `openapi/{json,route_table,schemas,paths}.rs` along the document's own
+  seams; `openapi.json` is byte-identical through the move, which its parity
+  test proves. `xtask patterns` also now exempts checked-in generator output
+  under a `src/generated/` directory (deliberately narrow, so a hand-written
+  module cannot opt out by naming): splitting is not an option for a file its
+  generator rewrites wholesale and a parity test guards, so the warning could
+  never be actionable.
+- `cargo xtask check-openapi --help` and `check-schema-docs --help` printed
+  usage and then ran the command anyway. `CheckMode::parse` now returns `None`
+  for `--help` so the caller stops. `check-ts-client` shares that parser
+  rather than hand-rolling a third copy of the same `--write`/`--check`
+  grammar, and its `--help` no longer triggers a `pnpm install`.
 - `soma-auth` module size: `authorize.rs` (869 effective lines) and
   `upstream/manager.rs` (1080 effective lines) exceeded the repo's
   `xtask patterns` file-size hard limit (700). Split DCR client

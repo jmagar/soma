@@ -652,6 +652,16 @@ jobs:
       - name: Install Rust and sccache
         uses: ./.github/actions/setup-rust-sccache
 
+      # Only used by "Check TypeScript REST client" below - `cargo xtask
+      # check-ts-client` itself skips gracefully (exit 0) if node/pnpm end up
+      # missing from PATH for any reason, so this step is not load-bearing
+      # for the rest of this job's Rust-only checks.
+      - name: Set up mise tools
+        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        with:
+          install_args: node pnpm
+          cache: true
+
       - name: Check PATTERNS.md contracts
         run: cargo xtask patterns
 
@@ -672,6 +682,9 @@ jobs:
 
       - name: Check OpenAPI docs
         run: cargo xtask check-openapi --check
+
+      - name: Check TypeScript REST client
+        run: cargo xtask check-ts-client --check
 
       - name: Check MCP registry manifest
         run: cargo xtask check-mcp-registry

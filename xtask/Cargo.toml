@@ -60,6 +60,8 @@ fancy-regex = "0.18"
 # typify-0.7.0 merge.rs panic while binary-searching for the culprit schema.
 typify = { version = "0.7", default-features = false }
 schemars = "0.8"
-
-[dev-dependencies]
+# codex-schema drift: creates a temp dir to hold a fresh `codex app-server
+# generate-json-schema` dump when `--dir` isn't given. Also used by
+# rmcp-release-monitor's tests (dev-dependency use is covered by this same
+# crate-wide dependency).
 tempfile = "3"
