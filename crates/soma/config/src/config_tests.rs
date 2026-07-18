@@ -253,3 +253,77 @@ fn config_load_rejects_invalid_runtime_mode_env() {
         "invalid runtime mode should fail config load"
     );
 }
+
+// ── TraceHeaderMode / SOMA_MCP_TRACE_HEADERS ──────────────────────────────────
+
+#[test]
+fn trace_headers_default_to_off() {
+    assert_eq!(McpConfig::default().trace_headers, TraceHeaderMode::Off);
+}
+
+#[test]
+#[serial]
+fn trace_headers_env_parses_all_three_values() {
+    let previous = std::env::var_os("SOMA_MCP_TRACE_HEADERS");
+
+    for (raw, expected) in [
+        ("off", TraceHeaderMode::Off),
+        ("trusted", TraceHeaderMode::Trusted),
+        ("trusted-with-baggage", TraceHeaderMode::TrustedWithBaggage),
+    ] {
+        std::env::set_var("SOMA_MCP_TRACE_HEADERS", raw);
+        let config = Config::load().expect("config should load");
+        assert_eq!(
+            config.mcp.trace_headers, expected,
+            "SOMA_MCP_TRACE_HEADERS={raw:?} should parse to {expected:?}"
+        );
+    }
+
+    match previous {
+        Some(value) => std::env::set_var("SOMA_MCP_TRACE_HEADERS", value),
+        None => std::env::remove_var("SOMA_MCP_TRACE_HEADERS"),
+    }
+}
+
+#[test]
+#[serial]
+fn trace_headers_env_rejects_invalid_value() {
+    let previous = std::env::var_os("SOMA_MCP_TRACE_HEADERS");
+    std::env::set_var("SOMA_MCP_TRACE_HEADERS", "bogus");
+
+    let error = Config::load().expect_err("invalid SOMA_MCP_TRACE_HEADERS should be rejected");
+    assert!(error.to_string().contains("SOMA_MCP_TRACE_HEADERS"));
+
+    match previous {
+        Some(value) => std::env::set_var("SOMA_MCP_TRACE_HEADERS", value),
+        None => std::env::remove_var("SOMA_MCP_TRACE_HEADERS"),
+    }
+}
+
+#[test]
+fn trace_header_mode_serde_uses_kebab_case() {
+    assert_eq!(
+        serde_json::to_value(TraceHeaderMode::TrustedWithBaggage).unwrap(),
+        serde_json::json!("trusted-with-baggage")
+    );
+    assert_eq!(
+        serde_json::from_value::<TraceHeaderMode>(serde_json::json!("trusted")).unwrap(),
+        TraceHeaderMode::Trusted
+    );
+}
+
+#[test]
+fn trace_headers_toml_file_config_parses_all_three_values() {
+    // Exercises the same `toml::from_str::<Config>` path `Config::load()` uses
+    // for `config.toml`, without needing filesystem/cwd scaffolding — proves
+    // file config (not just env) parses `mcp.trace_headers`.
+    for (raw, expected) in [
+        ("off", TraceHeaderMode::Off),
+        ("trusted", TraceHeaderMode::Trusted),
+        ("trusted-with-baggage", TraceHeaderMode::TrustedWithBaggage),
+    ] {
+        let toml_str = format!("[mcp]\ntrace_headers = \"{raw}\"\n");
+        let config: Config = toml::from_str(&toml_str).expect("toml should parse");
+        assert_eq!(config.mcp.trace_headers, expected, "raw TOML value {raw:?}");
+    }
+}

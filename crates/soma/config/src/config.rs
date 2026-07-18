@@ -101,6 +101,11 @@ pub struct McpConfig {
     pub allowed_hosts: Vec<String>,
     /// Additional allowed CORS origins (comma-separated in env).
     pub allowed_origins: Vec<String>,
+    /// Trusted HTTP trace-header extraction mode (SOMA_MCP_TRACE_HEADERS).
+    /// Only meaningful when the resolved auth policy is a real trust boundary
+    /// (loopback bind or a trusted gateway) — see
+    /// `soma_runtime::server::resolve_auth_policy_kind`.
+    pub trace_headers: TraceHeaderMode,
     /// OAuth sub-config (nested under `[mcp.auth]` in config.toml).
     pub auth: AuthConfig,
 }
@@ -157,6 +162,20 @@ pub enum AuthMode {
     OAuth,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum TraceHeaderMode {
+    /// No HTTP trace-header extraction. Default — safe for every deployment.
+    #[default]
+    Off,
+    /// Extract `traceparent`/`tracestate` from inbound HTTP headers after auth.
+    /// Baggage is never extracted in this mode.
+    Trusted,
+    /// Like `Trusted`, but also extracts validated `baggage`. Baggage can carry
+    /// sensitive user/session/application data — enable deliberately.
+    TrustedWithBaggage,
+}
+
 // ── defaults ──────────────────────────────────────────────────────────────────
 
 fn default_mcp_host() -> String {
@@ -204,6 +223,7 @@ impl Default for McpConfig {
             api_token: None,
             allowed_hosts: Vec::new(),
             allowed_origins: Vec::new(),
+            trace_headers: TraceHeaderMode::default(),
             auth: AuthConfig::default(),
         }
     }
@@ -365,6 +385,22 @@ impl Config {
                     other => {
                         return Err(anyhow::anyhow!(
                             "invalid SOMA_MCP_AUTH_MODE {:?}: must be \"bearer\" or \"oauth\"",
+                            other
+                        ));
+                    }
+                };
+            }
+        }
+        if let Ok(v) = std::env::var("SOMA_MCP_TRACE_HEADERS") {
+            if !v.is_empty() {
+                config.mcp.trace_headers = match v.to_lowercase().as_str() {
+                    "off" => TraceHeaderMode::Off,
+                    "trusted" => TraceHeaderMode::Trusted,
+                    "trusted-with-baggage" => TraceHeaderMode::TrustedWithBaggage,
+                    other => {
+                        return Err(anyhow::anyhow!(
+                            "invalid SOMA_MCP_TRACE_HEADERS {:?}: must be \"off\", \"trusted\", \
+                             or \"trusted-with-baggage\"",
                             other
                         ));
                     }
