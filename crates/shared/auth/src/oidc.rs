@@ -6,10 +6,12 @@ use reqwest::Url;
 use reqwest::header;
 use serde::Deserialize;
 use tokio::sync::RwLock;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::AuthError;
-use crate::provider_http::RequestTrace;
+use crate::oauth_provider::ProviderExchange;
+use crate::provider_http::{RequestErrors, RequestTrace, read_json_response};
+use crate::util::fingerprint;
 
 const DEFAULT_JWKS_TTL: Duration = Duration::from_secs(60 * 60);
 /// Per-request timeout on the JWKS GET. Bound aggressively (5s) so a slow
@@ -26,6 +28,16 @@ pub(crate) struct IdTokenClaims {
     pub email: Option<String>,
     #[serde(default)]
     pub email_verified: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OidcTokenResponse {
+    access_token: String,
+    #[serde(default)]
+    refresh_token: Option<String>,
+    #[serde(default)]
+    expires_in: Option<u64>,
+    id_token: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -101,6 +113,114 @@ impl OidcVerifier {
     pub(crate) fn with_jwks_endpoint(mut self, jwks_endpoint: Url) -> Self {
         self.jwks_endpoint = jwks_endpoint;
         self
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn exchange_code(
+        &self,
+        http: &reqwest::Client,
+        token_endpoint: &Url,
+        client_id: &str,
+        client_secret: &str,
+        redirect_uri: &Url,
+        code: &str,
+        code_verifier: &str,
+    ) -> Result<ProviderExchange, AuthError> {
+        let trace = RequestTrace::start(self.provider_id, "code_exchange", "POST", token_endpoint);
+        info!(
+            provider = self.provider_id,
+            oauth_code_id = %fingerprint(code),
+            redirect_uri = %redirect_uri,
+            "oauth upstream code exchange started"
+        );
+        let payload: OidcTokenResponse = read_json_response(
+            trace,
+            http.post(token_endpoint.clone()).form(&[
+                ("grant_type", "authorization_code"),
+                ("code", code),
+                ("client_id", client_id),
+                ("client_secret", client_secret),
+                ("redirect_uri", redirect_uri.as_str()),
+                ("code_verifier", code_verifier),
+            ]),
+            RequestErrors::new(
+                self.provider_id,
+                format!("exchange {} auth code", self.provider_id),
+                format!("{} token endpoint error", self.provider_id),
+                format!("decode {} token response", self.provider_id),
+            ),
+        )
+        .await?;
+        self.finish_exchange(payload, client_id, "code_exchange")
+            .await
+    }
+
+    pub(crate) async fn refresh(
+        &self,
+        http: &reqwest::Client,
+        token_endpoint: &Url,
+        client_id: &str,
+        client_secret: &str,
+        refresh_token: &str,
+    ) -> Result<ProviderExchange, AuthError> {
+        let trace = RequestTrace::start(self.provider_id, "refresh", "POST", token_endpoint);
+        info!(
+            provider = self.provider_id,
+            refresh_token_id = %fingerprint(refresh_token),
+            "oauth upstream refresh started"
+        );
+        let payload: OidcTokenResponse = read_json_response(
+            trace,
+            http.post(token_endpoint.clone()).form(&[
+                ("grant_type", "refresh_token"),
+                ("refresh_token", refresh_token),
+                ("client_id", client_id),
+                ("client_secret", client_secret),
+            ]),
+            RequestErrors::new(
+                self.provider_id,
+                format!("refresh {} token", self.provider_id),
+                format!("{} refresh endpoint error", self.provider_id),
+                format!("decode {} refresh response", self.provider_id),
+            ),
+        )
+        .await?;
+        self.finish_exchange(payload, client_id, "refresh").await
+    }
+
+    async fn finish_exchange(
+        &self,
+        payload: OidcTokenResponse,
+        client_id: &str,
+        operation: &'static str,
+    ) -> Result<ProviderExchange, AuthError> {
+        let claims = self.verify(&payload.id_token, client_id).await?;
+        if operation == "code_exchange" {
+            info!(
+                provider = self.provider_id,
+                subject_id = %fingerprint(&claims.sub),
+                has_refresh_token = payload.refresh_token.is_some(),
+                expires_in_secs = payload.expires_in,
+                "oauth upstream code exchange succeeded"
+            );
+        } else {
+            info!(
+                provider = self.provider_id,
+                subject_id = %fingerprint(&claims.sub),
+                has_refresh_token = payload.refresh_token.is_some(),
+                expires_in_secs = payload.expires_in,
+                "oauth upstream refresh succeeded"
+            );
+        }
+        Ok(ProviderExchange {
+            subject: claims.sub,
+            email: claims.email,
+            email_verified: claims.email_verified,
+            access_token: payload.access_token,
+            refresh_token: payload.refresh_token,
+            expires_in: payload.expires_in,
+            id_token: Some(payload.id_token),
+        })
     }
 
     pub(crate) async fn verify(

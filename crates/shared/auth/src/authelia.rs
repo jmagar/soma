@@ -2,14 +2,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::Url;
-use serde::Deserialize;
-use tracing::info;
 
 use crate::error::AuthError;
 use crate::oauth_provider::{AuthorizeUrlRequest, OAuthProvider, ProviderExchange};
 use crate::oidc::OidcVerifier;
-use crate::provider_http::{RequestErrors, RequestTrace, read_json_response};
-use crate::util::fingerprint;
+use crate::provider_http::build_authorize_url;
 
 const AUTHELIA_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 /// Authelia's OpenID Connect 1.0 Provider mounts its endpoints at these
@@ -40,16 +37,6 @@ impl std::fmt::Debug for AutheliaProvider {
             .field("scopes", &self.scopes)
             .finish_non_exhaustive()
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct AutheliaTokenResponse {
-    access_token: String,
-    #[serde(default)]
-    refresh_token: Option<String>,
-    #[serde(default)]
-    expires_in: Option<u64>,
-    id_token: String,
 }
 
 impl AutheliaProvider {
@@ -157,20 +144,14 @@ impl OAuthProvider for AutheliaProvider {
     }
 
     fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
-        let mut url = self.authorize_endpoint.clone();
-        let scope = self.scopes.join(" ");
-        url.query_pairs_mut()
-            .append_pair("client_id", &self.client_id)
-            .append_pair("redirect_uri", self.redirect_uri.as_str())
-            .append_pair("response_type", "code")
-            .append_pair("scope", &scope)
-            .append_pair("state", &request.state)
-            .append_pair("code_challenge", &request.code_challenge)
-            .append_pair("code_challenge_method", &request.code_challenge_method);
-        if request.force_consent {
-            url.query_pairs_mut().append_pair("prompt", "consent");
-        }
-        Ok(url)
+        Ok(build_authorize_url(
+            &self.authorize_endpoint,
+            &self.client_id,
+            &self.redirect_uri,
+            &self.scopes,
+            request,
+            &[],
+        ))
     }
 
     async fn exchange_code(
@@ -178,96 +159,29 @@ impl OAuthProvider for AutheliaProvider {
         code: &str,
         code_verifier: &str,
     ) -> Result<ProviderExchange, AuthError> {
-        let trace = RequestTrace::start("authelia", "code_exchange", "POST", &self.token_endpoint);
-        info!(
-            provider = "authelia",
-            oauth_code_id = %fingerprint(code),
-            redirect_uri = %self.redirect_uri,
-            "oauth upstream code exchange started"
-        );
-        let payload: AutheliaTokenResponse = read_json_response(
-            trace,
-            self.http.post(self.token_endpoint.clone()).form(&[
-                ("grant_type", "authorization_code"),
-                ("code", code),
-                ("client_id", self.client_id.as_str()),
-                ("client_secret", self.client_secret.as_str()),
-                ("redirect_uri", self.redirect_uri.as_str()),
-                ("code_verifier", code_verifier),
-            ]),
-            RequestErrors::new(
-                "authelia",
-                "exchange authelia auth code",
-                "authelia token endpoint error",
-                "decode authelia token response",
-            ),
-        )
-        .await?;
-        let claims = self
-            .verifier
-            .verify(&payload.id_token, &self.client_id)
-            .await?;
-        info!(
-            provider = "authelia",
-            subject_id = %fingerprint(&claims.sub),
-            has_refresh_token = payload.refresh_token.is_some(),
-            expires_in_secs = payload.expires_in,
-            "oauth upstream code exchange succeeded"
-        );
-        Ok(ProviderExchange {
-            subject: claims.sub,
-            email: claims.email,
-            email_verified: claims.email_verified,
-            access_token: payload.access_token,
-            refresh_token: payload.refresh_token,
-            expires_in: payload.expires_in,
-            id_token: Some(payload.id_token),
-        })
+        self.verifier
+            .exchange_code(
+                &self.http,
+                &self.token_endpoint,
+                &self.client_id,
+                &self.client_secret,
+                &self.redirect_uri,
+                code,
+                code_verifier,
+            )
+            .await
     }
 
     async fn refresh(&self, refresh_token: &str) -> Result<ProviderExchange, AuthError> {
-        let trace = RequestTrace::start("authelia", "refresh", "POST", &self.token_endpoint);
-        info!(
-            provider = "authelia",
-            refresh_token_id = %fingerprint(refresh_token),
-            "oauth upstream refresh started"
-        );
-        let payload: AutheliaTokenResponse = read_json_response(
-            trace,
-            self.http.post(self.token_endpoint.clone()).form(&[
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-                ("client_id", self.client_id.as_str()),
-                ("client_secret", self.client_secret.as_str()),
-            ]),
-            RequestErrors::new(
-                "authelia",
-                "refresh authelia token",
-                "authelia refresh endpoint error",
-                "decode authelia refresh response",
-            ),
-        )
-        .await?;
-        let claims = self
-            .verifier
-            .verify(&payload.id_token, &self.client_id)
-            .await?;
-        info!(
-            provider = "authelia",
-            subject_id = %fingerprint(&claims.sub),
-            has_refresh_token = payload.refresh_token.is_some(),
-            expires_in_secs = payload.expires_in,
-            "oauth upstream refresh succeeded"
-        );
-        Ok(ProviderExchange {
-            subject: claims.sub,
-            email: claims.email,
-            email_verified: claims.email_verified,
-            access_token: payload.access_token,
-            refresh_token: payload.refresh_token,
-            expires_in: payload.expires_in,
-            id_token: Some(payload.id_token),
-        })
+        self.verifier
+            .refresh(
+                &self.http,
+                &self.token_endpoint,
+                &self.client_id,
+                &self.client_secret,
+                refresh_token,
+            )
+            .await
     }
 }
 

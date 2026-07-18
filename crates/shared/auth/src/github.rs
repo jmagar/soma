@@ -7,7 +7,7 @@ use tracing::info;
 
 use crate::error::AuthError;
 use crate::oauth_provider::{AuthorizeUrlRequest, OAuthProvider, ProviderExchange};
-use crate::provider_http::{RequestErrors, RequestTrace, read_json_response};
+use crate::provider_http::{RequestErrors, RequestTrace, build_authorize_url, read_json_response};
 use crate::util::fingerprint;
 
 const GITHUB_AUTHORIZE_ENDPOINT: &str = "https://github.com/login/oauth/authorize";
@@ -240,20 +240,14 @@ impl OAuthProvider for GitHubProvider {
     }
 
     fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
-        let mut url = self.authorize_endpoint.clone();
-        let scope = self.scopes.join(" ");
-        url.query_pairs_mut()
-            .append_pair("client_id", &self.client_id)
-            .append_pair("redirect_uri", self.redirect_uri.as_str())
-            .append_pair("response_type", "code")
-            .append_pair("scope", &scope)
-            .append_pair("state", &request.state)
-            .append_pair("code_challenge", &request.code_challenge)
-            .append_pair("code_challenge_method", &request.code_challenge_method);
-        if request.force_consent {
-            url.query_pairs_mut().append_pair("prompt", "consent");
-        }
-        Ok(url)
+        Ok(build_authorize_url(
+            &self.authorize_endpoint,
+            &self.client_id,
+            &self.redirect_uri,
+            &self.scopes,
+            request,
+            &[],
+        ))
     }
 
     async fn exchange_code(

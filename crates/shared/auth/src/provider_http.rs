@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::time::Instant;
 
 use reqwest::Url;
@@ -6,6 +7,7 @@ use serde::de::DeserializeOwned;
 use tracing::{info, warn};
 
 use crate::error::AuthError;
+use crate::oauth_provider::AuthorizeUrlRequest;
 
 /// Installs the process-wide rustls crypto provider, if one isn't already
 /// installed.
@@ -20,6 +22,41 @@ use crate::error::AuthError;
 /// the same process), which is safe to ignore.
 pub(crate) fn install_rustls_default_once() {
     drop(rustls::crypto::ring::default_provider().install_default());
+}
+
+/// Build the common OAuth authorization URL shared by all upstream providers.
+///
+/// `extra_pairs` keeps provider-specific parameters in the same position as
+/// the previous hand-written implementations (Google uses it for offline
+/// access; Authelia and GitHub pass an empty slice).
+pub(crate) fn build_authorize_url(
+    authorize_endpoint: &Url,
+    client_id: &str,
+    redirect_uri: &Url,
+    scopes: &[String],
+    request: &AuthorizeUrlRequest,
+    extra_pairs: &[(&str, &str)],
+) -> Url {
+    let mut url = authorize_endpoint.clone();
+    let scope = scopes.join(" ");
+    let mut pairs = url.query_pairs_mut();
+    pairs
+        .append_pair("client_id", client_id)
+        .append_pair("redirect_uri", redirect_uri.as_str())
+        .append_pair("response_type", "code")
+        .append_pair("scope", &scope);
+    for (key, value) in extra_pairs {
+        pairs.append_pair(key, value);
+    }
+    pairs
+        .append_pair("state", &request.state)
+        .append_pair("code_challenge", &request.code_challenge)
+        .append_pair("code_challenge_method", &request.code_challenge_method);
+    if request.force_consent {
+        pairs.append_pair("prompt", "consent");
+    }
+    drop(pairs);
+    url
 }
 
 pub(crate) struct RequestTrace<'a> {
@@ -97,23 +134,28 @@ impl<'a> RequestTrace<'a> {
 
 pub(crate) struct RequestErrors {
     provider_id: &'static str,
-    transport_context: &'static str,
-    status_context: &'static str,
-    decode_context: &'static str,
+    transport_context: Cow<'static, str>,
+    status_context: Cow<'static, str>,
+    decode_context: Cow<'static, str>,
 }
 
 impl RequestErrors {
-    pub(crate) fn new(
+    pub(crate) fn new<T, S, D>(
         provider_id: &'static str,
-        transport_context: &'static str,
-        status_context: &'static str,
-        decode_context: &'static str,
-    ) -> Self {
+        transport_context: T,
+        status_context: S,
+        decode_context: D,
+    ) -> Self
+    where
+        T: Into<Cow<'static, str>>,
+        S: Into<Cow<'static, str>>,
+        D: Into<Cow<'static, str>>,
+    {
         Self {
             provider_id,
-            transport_context,
-            status_context,
-            decode_context,
+            transport_context: transport_context.into(),
+            status_context: status_context.into(),
+            decode_context: decode_context.into(),
         }
     }
 }
@@ -222,8 +264,9 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::{RequestErrors, RequestTrace, read_json_response};
+    use super::{RequestErrors, RequestTrace, build_authorize_url, read_json_response};
     use crate::error::AuthError;
+    use crate::oauth_provider::AuthorizeUrlRequest;
 
     #[derive(Debug, Deserialize)]
     struct TestPayload {
@@ -238,6 +281,45 @@ mod tests {
             "status error",
             "decode failed",
         )
+    }
+
+    #[test]
+    fn authorize_url_builder_preserves_common_extra_and_consent_parameters() {
+        let endpoint = reqwest::Url::parse("https://example.test/authorize").unwrap();
+        let redirect = reqwest::Url::parse("https://client.test/auth/callback").unwrap();
+        let request = AuthorizeUrlRequest {
+            state: "state".to_string(),
+            scope: "unused-local-scope".to_string(),
+            code_challenge: "challenge".to_string(),
+            code_challenge_method: "S256".to_string(),
+            force_consent: true,
+        };
+
+        let url = build_authorize_url(
+            &endpoint,
+            "client-id",
+            &redirect,
+            &["openid".to_string(), "email".to_string()],
+            &request,
+            &[("access_type", "offline")],
+        );
+        let pairs: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
+
+        assert_eq!(
+            pairs.get("client_id").map(String::as_str),
+            Some("client-id")
+        );
+        assert_eq!(
+            pairs.get("redirect_uri").map(String::as_str),
+            Some("https://client.test/auth/callback")
+        );
+        assert_eq!(pairs.get("scope").map(String::as_str), Some("openid email"));
+        assert_eq!(
+            pairs.get("access_type").map(String::as_str),
+            Some("offline")
+        );
+        assert_eq!(pairs.get("state").map(String::as_str), Some("state"));
+        assert_eq!(pairs.get("prompt").map(String::as_str), Some("consent"));
     }
 
     /// GitHub's secondary rate limit responds with 403 (not 429) but carries

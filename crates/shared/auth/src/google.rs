@@ -2,13 +2,12 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::Url;
-use serde::Deserialize;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::error::AuthError;
 use crate::oauth_provider::{AuthorizeUrlRequest, OAuthProvider, ProviderExchange};
 use crate::oidc::OidcVerifier;
-use crate::provider_http::{RequestErrors, RequestTrace, read_json_response};
+use crate::provider_http::build_authorize_url;
 use crate::util::fingerprint;
 
 const GOOGLE_AUTHORIZE_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -41,16 +40,6 @@ impl std::fmt::Debug for GoogleProvider {
             .field("scopes", &self.scopes)
             .finish_non_exhaustive()
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct GoogleTokenResponse {
-    access_token: String,
-    #[serde(default)]
-    refresh_token: Option<String>,
-    #[serde(default)]
-    expires_in: Option<u64>,
-    id_token: String,
 }
 
 impl GoogleProvider {
@@ -124,21 +113,18 @@ impl OAuthProvider for GoogleProvider {
     }
 
     fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
-        let mut url = self.authorize_endpoint.clone();
         let scope = self.scopes.join(" ");
-        url.query_pairs_mut()
-            .append_pair("client_id", &self.client_id)
-            .append_pair("redirect_uri", self.redirect_uri.as_str())
-            .append_pair("response_type", "code")
-            .append_pair("scope", &scope)
-            .append_pair("access_type", "offline")
-            .append_pair("include_granted_scopes", "true")
-            .append_pair("state", &request.state)
-            .append_pair("code_challenge", &request.code_challenge)
-            .append_pair("code_challenge_method", &request.code_challenge_method);
-        if request.force_consent {
-            url.query_pairs_mut().append_pair("prompt", "consent");
-        }
+        let url = build_authorize_url(
+            &self.authorize_endpoint,
+            &self.client_id,
+            &self.redirect_uri,
+            &self.scopes,
+            request,
+            &[
+                ("access_type", "offline"),
+                ("include_granted_scopes", "true"),
+            ],
+        );
         debug!(
             provider = "google",
             oauth_state_id = %fingerprint(&request.state),
@@ -154,96 +140,29 @@ impl OAuthProvider for GoogleProvider {
         code: &str,
         code_verifier: &str,
     ) -> Result<ProviderExchange, AuthError> {
-        let trace = RequestTrace::start("google", "code_exchange", "POST", &self.token_endpoint);
-        info!(
-            provider = "google",
-            oauth_code_id = %fingerprint(code),
-            redirect_uri = %self.redirect_uri,
-            "oauth upstream code exchange started"
-        );
-        let payload: GoogleTokenResponse = read_json_response(
-            trace,
-            self.http.post(self.token_endpoint.clone()).form(&[
-                ("grant_type", "authorization_code"),
-                ("code", code),
-                ("client_id", self.client_id.as_str()),
-                ("client_secret", self.client_secret.as_str()),
-                ("redirect_uri", self.redirect_uri.as_str()),
-                ("code_verifier", code_verifier),
-            ]),
-            RequestErrors::new(
-                "google",
-                "exchange google auth code",
-                "google token endpoint error",
-                "decode google token response",
-            ),
-        )
-        .await?;
-        let claims = self
-            .verifier
-            .verify(&payload.id_token, &self.client_id)
-            .await?;
-        info!(
-            provider = "google",
-            subject_id = %fingerprint(&claims.sub),
-            has_refresh_token = payload.refresh_token.is_some(),
-            expires_in_secs = payload.expires_in,
-            "oauth upstream code exchange succeeded"
-        );
-        Ok(ProviderExchange {
-            subject: claims.sub,
-            email: claims.email,
-            email_verified: claims.email_verified,
-            access_token: payload.access_token,
-            refresh_token: payload.refresh_token,
-            expires_in: payload.expires_in,
-            id_token: Some(payload.id_token),
-        })
+        self.verifier
+            .exchange_code(
+                &self.http,
+                &self.token_endpoint,
+                &self.client_id,
+                &self.client_secret,
+                &self.redirect_uri,
+                code,
+                code_verifier,
+            )
+            .await
     }
 
     async fn refresh(&self, refresh_token: &str) -> Result<ProviderExchange, AuthError> {
-        let trace = RequestTrace::start("google", "refresh", "POST", &self.token_endpoint);
-        info!(
-            provider = "google",
-            refresh_token_id = %fingerprint(refresh_token),
-            "oauth upstream refresh started"
-        );
-        let payload: GoogleTokenResponse = read_json_response(
-            trace,
-            self.http.post(self.token_endpoint.clone()).form(&[
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-                ("client_id", self.client_id.as_str()),
-                ("client_secret", self.client_secret.as_str()),
-            ]),
-            RequestErrors::new(
-                "google",
-                "refresh google token",
-                "google refresh endpoint error",
-                "decode google refresh response",
-            ),
-        )
-        .await?;
-        let claims = self
-            .verifier
-            .verify(&payload.id_token, &self.client_id)
-            .await?;
-        info!(
-            provider = "google",
-            subject_id = %fingerprint(&claims.sub),
-            has_refresh_token = payload.refresh_token.is_some(),
-            expires_in_secs = payload.expires_in,
-            "oauth upstream refresh succeeded"
-        );
-        Ok(ProviderExchange {
-            subject: claims.sub,
-            email: claims.email,
-            email_verified: claims.email_verified,
-            access_token: payload.access_token,
-            refresh_token: payload.refresh_token,
-            expires_in: payload.expires_in,
-            id_token: Some(payload.id_token),
-        })
+        self.verifier
+            .refresh(
+                &self.http,
+                &self.token_endpoint,
+                &self.client_id,
+                &self.client_secret,
+                refresh_token,
+            )
+            .await
     }
 }
 
