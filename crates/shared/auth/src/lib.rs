@@ -10,6 +10,7 @@ pub mod authorize;
 pub mod cimd;
 pub mod config;
 pub mod error;
+pub mod github;
 pub mod google;
 pub mod jwt;
 #[cfg(feature = "http-axum")]
