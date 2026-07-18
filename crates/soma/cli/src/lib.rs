@@ -16,6 +16,12 @@
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use soma_application::{ExecuteActionRequest, ExecutionContext, SomaApplication};
+use soma_cli_core::common_args::{
+    parse_bool_flag as core_parse_bool_flag,
+    parse_optional_value_flag as core_parse_optional_value_flag,
+    parse_required_value_flag as core_parse_required_value_flag, reject_args as core_reject_args,
+};
+use soma_cli_core::confirmation::confirm_typed;
 use soma_domain::actions::{ActionSpec, SomaAction};
 use soma_domain::{Confirmation, RequestId, Surface};
 use std::io::{BufRead, IsTerminal, Write};
@@ -278,7 +284,7 @@ pub async fn run(
         let result =
             run_provider_management_command(command, application.as_ref(), destructive_confirmed)
                 .await?;
-        io.stdout(&serde_json::to_string_pretty(&result)?)?;
+        io.stdout(&soma_cli_core::json::to_pretty_string(&result)?)?;
         return Ok(std::process::ExitCode::SUCCESS);
     }
 
@@ -304,12 +310,12 @@ pub async fn run(
     {
         Ok(output) => output.output,
         Err(error) => {
-            io.stderr(&serde_json::to_string_pretty(&error)?)?;
+            io.stderr(&soma_cli_core::json::to_pretty_string(&error)?)?;
             return Err(anyhow!(error.message));
         }
     };
 
-    io.stdout(&serde_json::to_string_pretty(&result)?)?;
+    io.stdout(&soma_cli_core::json::to_pretty_string(&result)?)?;
     Ok(std::process::ExitCode::SUCCESS)
 }
 
@@ -564,15 +570,8 @@ where
     R: BufRead,
     W: Write,
 {
-    write!(
-        writer,
-        "Action `{action}` is destructive. Type `{action}` to continue: "
-    )?;
-    writer.flush()?;
-
-    let mut input = String::new();
-    reader.read_line(&mut input)?;
-    if input.trim() == action {
+    let prompt = format!("Action `{action}` is destructive. Type `{action}` to continue: ");
+    if confirm_typed(writer, reader, &prompt, action)? {
         Ok(())
     } else {
         Err(anyhow!("aborted by user"))
@@ -582,59 +581,19 @@ where
 // ── arg parsing helpers ───────────────────────────────────────────────────────
 
 fn reject_args(args: &[String], command: &str) -> Result<()> {
-    if args.is_empty() {
-        Ok(())
-    } else {
-        Err(anyhow!("{command} does not accept argument `{}`", args[0]))
-    }
+    Ok(core_reject_args(args, command)?)
 }
 
 fn parse_bool_flag(args: &[String], command: &str, flag: &str) -> Result<bool> {
-    let mut found = false;
-    for arg in args {
-        if arg == flag {
-            if found {
-                return Err(anyhow!("{command} received duplicate {flag}"));
-            }
-            found = true;
-        } else {
-            return Err(anyhow!("{command} does not accept argument `{arg}`"));
-        }
-    }
-    Ok(found)
+    Ok(core_parse_bool_flag(args, command, flag)?)
 }
 
 fn parse_optional_value_flag(args: &[String], command: &str, flag: &str) -> Result<Option<String>> {
-    match args {
-        [] => Ok(None),
-        [found_flag, value] if found_flag == flag => {
-            if value.starts_with("--") {
-                Err(anyhow!("{command} requires a value after {flag}"))
-            } else {
-                Ok(Some(value.clone()))
-            }
-        }
-        [found_flag] if found_flag == flag => {
-            Err(anyhow!("{command} requires a value after {flag}"))
-        }
-        [found_flag, value, rest @ ..] if found_flag == flag => {
-            if value.starts_with("--") {
-                Err(anyhow!("{command} requires a value after {flag}"))
-            } else if rest.iter().any(|arg| arg == flag) {
-                Err(anyhow!("{command} received duplicate {flag}"))
-            } else {
-                Err(anyhow!("{command} does not accept argument `{}`", rest[0]))
-            }
-        }
-        [unexpected, ..] => Err(anyhow!("{command} does not accept argument `{unexpected}`")),
-    }
+    Ok(core_parse_optional_value_flag(args, command, flag)?)
 }
 
 fn parse_required_value_flag(args: &[String], command: &str, flag: &str) -> Result<Option<String>> {
-    match parse_optional_value_flag(args, command, flag)? {
-        Some(value) => Ok(Some(value)),
-        None => Ok(None),
-    }
+    Ok(core_parse_required_value_flag(args, command, flag)?)
 }
 
 fn parse_watch_flags(args: &[String]) -> Result<(Option<String>, Option<String>)> {

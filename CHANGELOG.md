@@ -233,6 +233,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ServerNotification::method_name()` for logging a notification's kind
   without its full (potentially sensitive) payload. See
   `crates/shared/codex-app-server-client/README.md`.
+- Added `soma-cli-core`, a reusable CLI plumbing crate extracted from
+  `soma-cli`: common flag-scanning primitives, output-format selection,
+  JSON rendering, confirmation I/O, and terminal/color capability policy
+  (including the Aurora CLI token palette as reusable shared defaults).
+  `soma-cli`'s argument-scanning helpers, destructive-confirmation prompt,
+  JSON output rendering (`lib.rs` and `doctor.rs`), and `doctor` color
+  output now delegate to it with no output change. See
+  `crates/shared/cli-core/README.md`.
 
 ### Changed
 
@@ -286,6 +294,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR16 review fix: `soma-cli-core`'s `terminal` module doc comment linked to
+  `crate::progress`, a module removed by the prior PR 16 reconciliation
+  commit (`0e0d2b3`) for having zero call sites — `cargo doc -p
+  soma-cli-core` emitted an unresolved intra-doc-link warning. Dropped the
+  dangling reference. Also wired `soma-cli`'s local `parse_required_value_flag`
+  to delegate to `soma_cli_core::common_args::parse_required_value_flag`
+  (matching the existing delegation pattern for `reject_args`/
+  `parse_bool_flag`/`parse_optional_value_flag`), giving that cli-core
+  function a real call site instead of only its own unit tests; made
+  `ArgParseError`'s message field private with a `message()` accessor so
+  every instance is built through the crate's consistent error-wording
+  helper; and added `terminal`/`confirmation` regression tests for the
+  `NO_COLOR`-on-a-tty and closed-stdin confirmation paths that were
+  previously untested.
 - PR13 review fix (second pass): the multi-agent PR review toolkit surfaced
   further issues in the `soma-http-api`/`soma-domain` split beyond the
   dependency-migration fix above. `crates/shared/http-api/src/probe.rs`'s

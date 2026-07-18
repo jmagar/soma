@@ -9,6 +9,7 @@
 members = [
   "apps/soma",
   "crates/shared/auth",
+  "crates/shared/cli-core",
   "crates/shared/codemode",
   "crates/shared/codex-app-server-client",
   "crates/shared/http-api",
@@ -68,6 +69,7 @@ rmcp-client = { package = "rmcp", version = "=2.2.0", default-features = false }
 # Shared crates
 rmcp-traces = { path = "crates/shared/traces" }
 soma-auth = { path = "crates/shared/auth" }
+soma-cli-core = { path = "crates/shared/cli-core" }
 soma-codemode = { path = "crates/shared/codemode", default-features = false }
 soma-gateway = { path = "crates/shared/mcp/gateway" }
 soma-http-api = { path = "crates/shared/http-api" }
