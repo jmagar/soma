@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 use crate::operations::{operation_from_envelope, Operation};
-use crate::transport::{Client, Method};
+use crate::transport::{precondition_failed_or, Client, Method, WithEtag};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Image {
@@ -38,13 +38,16 @@ impl Client {
         }
     }
 
-    pub async fn get_image(&self, fingerprint: &str) -> Result<Image> {
+    /// Fetches one image by fingerprint, along with its ETag for use as a
+    /// later `If-Match` precondition.
+    pub async fn get_image(&self, fingerprint: &str) -> Result<WithEtag<Image>> {
         let path = format!("/1.0/images/{fingerprint}");
         let envelope = self.request(Method::Get, &path, &[], None, None).await?;
         match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
+            crate::transport::IncusEnvelope::Sync { metadata, etag } => Ok(WithEtag {
+                value: serde_json::from_value(metadata)?,
+                etag,
+            }),
             other => Err(Error::InvalidResponse(format!(
                 "expected a sync image response, got {other:?}"
             ))),
@@ -61,15 +64,20 @@ impl Client {
         operation_from_envelope(envelope)
     }
 
+    /// Full replacement update (PUT). `etag`, if provided, is sent as
+    /// `If-Match` for optimistic concurrency; a stale ETag surfaces as
+    /// `Error::PreconditionFailed`, not the generic `Error::Api`.
     pub async fn update_image(
         &self,
         fingerprint: &str,
         new_definition: &serde_json::Value,
+        etag: Option<&str>,
     ) -> Result<Operation> {
         let path = format!("/1.0/images/{fingerprint}");
         let envelope = self
-            .request(Method::Put, &path, &[], Some(new_definition), None)
-            .await?;
+            .request(Method::Put, &path, &[], Some(new_definition), etag)
+            .await
+            .map_err(|err| precondition_failed_or(err, fingerprint))?;
         operation_from_envelope(envelope)
     }
 

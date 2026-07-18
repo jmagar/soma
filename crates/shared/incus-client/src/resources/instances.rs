@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::operations::{operation_from_envelope, Operation};
-use crate::transport::{Client, Method, WithEtag};
+use crate::transport::{precondition_failed_or, Client, Method, WithEtag};
 
 /// A container or virtual machine. `config`/`devices` stay untyped
 /// (`serde_json::Value`) - Incus's instance config schema is large and
@@ -48,17 +48,6 @@ pub struct CreateInstanceParams {
     #[serde(rename = "type")]
     pub instance_type: String,
     pub source: serde_json::Value,
-}
-
-fn precondition_failed_or(err: Error, resource: &str) -> Error {
-    match err {
-        Error::Api {
-            status_code: 412, ..
-        } => Error::PreconditionFailed {
-            resource: resource.to_owned(),
-        },
-        other => other,
-    }
 }
 
 impl Client {

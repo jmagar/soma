@@ -70,6 +70,23 @@ pub struct WithEtag<T> {
     pub etag: Option<String>,
 }
 
+/// Maps a 412 (Precondition Failed) API error - returned when a caller's
+/// `If-Match` ETag was stale - into `Error::PreconditionFailed { resource }`.
+/// Every other error passes through unchanged. Shared by every resource
+/// module's `update_*`/`patch_*` methods that accept an `etag: Option<&str>`
+/// precondition, so the 412-detection logic lives in exactly one place
+/// rather than once per resource type.
+pub(crate) fn precondition_failed_or(err: Error, resource: &str) -> Error {
+    match err {
+        Error::Api {
+            status_code: 412, ..
+        } => Error::PreconditionFailed {
+            resource: resource.to_owned(),
+        },
+        other => other,
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ClientInner {
     socket_path: PathBuf,
