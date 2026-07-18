@@ -66,6 +66,18 @@ impl Client {
         operation_from_envelope(envelope)
     }
 
+    pub async fn update_storage_pool(
+        &self,
+        name: &str,
+        new_definition: &serde_json::Value,
+    ) -> Result<Operation> {
+        let path = format!("/1.0/storage-pools/{name}");
+        let envelope = self
+            .request(Method::Put, &path, &[], Some(new_definition), None)
+            .await?;
+        operation_from_envelope(envelope)
+    }
+
     pub async fn delete_storage_pool(&self, name: &str) -> Result<Operation> {
         let path = format!("/1.0/storage-pools/{name}");
         let envelope = self.request(Method::Delete, &path, &[], None, None).await?;
@@ -108,6 +120,39 @@ impl Client {
         let path = format!("/1.0/storage-pools/{pool_name}/volumes");
         let envelope = self
             .request(Method::Post, &path, &[], Some(params), None)
+            .await?;
+        operation_from_envelope(envelope)
+    }
+
+    /// Fetches one volume's full object by pool, type, and name.
+    pub async fn get_storage_volume(
+        &self,
+        pool_name: &str,
+        volume_type: &str,
+        volume_name: &str,
+    ) -> Result<StorageVolume> {
+        let path = format!("/1.0/storage-pools/{pool_name}/volumes/{volume_type}/{volume_name}");
+        let envelope = self.request(Method::Get, &path, &[], None, None).await?;
+        match envelope {
+            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
+                Ok(serde_json::from_value(metadata)?)
+            }
+            other => Err(Error::InvalidResponse(format!(
+                "expected a sync storage volume response, got {other:?}"
+            ))),
+        }
+    }
+
+    pub async fn update_storage_volume(
+        &self,
+        pool_name: &str,
+        volume_type: &str,
+        volume_name: &str,
+        new_definition: &serde_json::Value,
+    ) -> Result<Operation> {
+        let path = format!("/1.0/storage-pools/{pool_name}/volumes/{volume_type}/{volume_name}");
+        let envelope = self
+            .request(Method::Put, &path, &[], Some(new_definition), None)
             .await?;
         operation_from_envelope(envelope)
     }

@@ -27,6 +27,12 @@ fn operation_json(id: &str) -> String {
     )
 }
 
+fn volume_json(name: &str) -> String {
+    format!(
+        r#"{{"type":"sync","status":"Success","status_code":200,"metadata":{{"name":"{name}","type":"custom","content_type":"filesystem","config":{{}}}}}}"#
+    )
+}
+
 #[tokio::test]
 async fn get_storage_pool_deserializes_the_documented_shape() {
     let body = pool_json("default");
@@ -136,4 +142,63 @@ async fn create_and_delete_storage_pool_return_operations() {
         .await
         .expect("delete_storage_pool should return an Operation");
     assert_eq!(delete_op.id.to_string(), id);
+}
+
+#[tokio::test]
+async fn update_storage_pool_returns_an_operation() {
+    let id = uuid::Uuid::new_v4().to_string();
+    let body = operation_json(&id);
+    let (socket_path, _dir) =
+        spawn_fake_daemon(move |_req| json_response("HTTP/1.1 202 Accepted", &body)).await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let op = client
+        .update_storage_pool("pool1", &serde_json::json!({"description": "updated"}))
+        .await
+        .expect("update_storage_pool should return an Operation");
+    assert_eq!(op.id.to_string(), id);
+}
+
+#[tokio::test]
+async fn get_storage_volume_deserializes_the_documented_shape() {
+    let body = volume_json("vol1");
+    let (socket_path, _dir) =
+        spawn_fake_daemon(move |_req| json_response("HTTP/1.1 200 OK", &body)).await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let volume = client
+        .get_storage_volume("default", "custom", "vol1")
+        .await
+        .expect("get_storage_volume should succeed");
+    assert_eq!(volume.name, "vol1");
+    assert_eq!(volume.volume_type, "custom");
+}
+
+#[tokio::test]
+async fn update_storage_volume_returns_an_operation() {
+    let id = uuid::Uuid::new_v4().to_string();
+    let body = operation_json(&id);
+    let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen = seen_request.clone();
+    let (socket_path, _dir) = spawn_fake_daemon(move |req| {
+        *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
+        json_response("HTTP/1.1 202 Accepted", &body)
+    })
+    .await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let op = client
+        .update_storage_volume(
+            "default",
+            "custom",
+            "vol1",
+            &serde_json::json!({"config": {}}),
+        )
+        .await
+        .expect("update_storage_volume should return an Operation");
+    assert_eq!(op.id.to_string(), id);
+    assert!(seen_request
+        .lock()
+        .unwrap()
+        .contains("/1.0/storage-pools/default/volumes/custom/vol1"));
 }
