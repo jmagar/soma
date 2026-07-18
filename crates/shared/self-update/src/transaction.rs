@@ -556,13 +556,9 @@ fn cleanup_marker_temp(state: &Path) -> Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(UpdateError::io(&temporary, error)),
     };
-    let parent = state.parent().ok_or(UpdateError::InvalidPolicy(
-        "state path must have a parent directory",
-    ))?;
-    let expected_uid = std::fs::metadata(parent)
-        .map_err(|error| UpdateError::io(parent, error))?
-        .uid();
-    if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
+    let effective_uid = nix::unistd::geteuid().as_raw();
+    if !metadata.file_type().is_file() || !marker_temp_owner_is_valid(metadata.uid(), effective_uid)
+    {
         return Err(UpdateError::InvalidMarker {
             path: state.to_path_buf(),
             message: "marker temporary must be an owned non-symlink regular file".into(),
@@ -570,6 +566,10 @@ fn cleanup_marker_temp(state: &Path) -> Result<()> {
     }
     std::fs::remove_file(&temporary).map_err(|error| UpdateError::io(&temporary, error))?;
     sync_parent(&temporary)
+}
+
+fn marker_temp_owner_is_valid(owner_uid: u32, effective_uid: u32) -> bool {
+    owner_uid == effective_uid
 }
 
 fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>> {

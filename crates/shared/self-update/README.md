@@ -69,9 +69,10 @@ race against an attacker who controls that directory. Installation writes and
 syncs a durable marker with explicit `prepared`, `installed`, `rolling_back`,
 and `rolled_back` phases. Marker replacement uses one deterministic
 lock-protected `<state>.tmp` sibling; startup recovery validates and reclaims an
-owned regular-file leftover before reading transaction state.
-retains a unique rollback backup, syncs the backup and its directory before the
-marker may reference it, then atomically renames the verified artifact. Unix
+effective-user-owned regular-file leftover before reading transaction state.
+The transaction retains a unique rollback backup, syncs the backup and its
+directory before the marker may reference it, then atomically renames the
+verified artifact. Unix
 staging preserves the existing executable mode (falling back to restrictive
 `0700` only when no target exists); copy-based rollback backups preserve that
 same mode. `BackupStrategy::Copy` is available when an adopter cannot use hard

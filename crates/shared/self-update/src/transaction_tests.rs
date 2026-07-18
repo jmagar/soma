@@ -132,3 +132,20 @@ async fn marker_temp_crash_is_reclaimed_under_the_state_lock() {
     );
     assert!(!marker_temp.exists());
 }
+
+#[test]
+fn marker_temp_owner_matches_service_even_when_directory_owner_differs() {
+    let root_owned_directory = 0;
+    let service_effective_uid = 1000;
+    let service_created_temp = service_effective_uid;
+
+    assert_ne!(root_owned_directory, service_effective_uid);
+    assert!(marker_temp_owner_is_valid(
+        service_created_temp,
+        service_effective_uid
+    ));
+    assert!(!marker_temp_owner_is_valid(
+        root_owned_directory,
+        service_effective_uid
+    ));
+}
