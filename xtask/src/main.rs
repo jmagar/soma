@@ -69,6 +69,7 @@ mod scripts_lane_b;
 mod scripts_lane_c;
 mod scripts_lane_d;
 mod test_siblings;
+mod trace_headers_smoke;
 mod ts_client;
 mod web_source;
 mod workspace_commands;
@@ -112,6 +113,7 @@ fn main() -> Result<()> {
         Some("generate-cli") => scripts_lane_a::generate_cli(),
         Some("repair") => scripts_lane_a::repair(),
         Some("test-mcp-auth") => scripts_lane_a::test_mcp_auth(&args[1..]),
+        Some("test-trace-headers") => trace_headers_smoke::test_trace_headers(&args[1..]),
         Some("block-env-commits") => scripts::block_env_commits(),
         Some("asciicheck") => scripts_lane_d::asciicheck(&args[1..]),
         Some("check-blob-size") => scripts_lane_c::check_blob_size(&args[1..]),
