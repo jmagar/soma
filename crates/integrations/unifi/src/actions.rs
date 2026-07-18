@@ -10,13 +10,30 @@ use crate::{api::ApiSourceFamily, UnifiClient};
 
 /// A dynamically-dispatched UniFi action: an action name matched against
 /// [`crate::capabilities::all_capabilities`], plus its JSON parameters.
+///
+/// `#[non_exhaustive]`: unlike this crate's other public types, this one
+/// *is* meant to be constructed by callers — use [`ActionRequest::new`]
+/// rather than a struct literal, so a future added field (e.g. a per-call
+/// timeout override) can default instead of being a downstream semver
+/// break.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ActionRequest {
     /// Action name, e.g. `"clients"` or `"official_list_devices"`.
     pub action: String,
     /// Action parameters. Shape depends on the action; see its
     /// [`crate::capabilities::Capability`] for the expected `path`/`query`/`body`.
     pub params: Value,
+}
+
+impl ActionRequest {
+    /// Builds a request for `action` with `params`.
+    pub fn new(action: impl Into<String>, params: Value) -> Self {
+        Self {
+            action: action.into(),
+            params,
+        }
+    }
 }
 
 /// Looks up an [`ActionRequest`]'s action against the capability catalog and
@@ -80,5 +97,22 @@ impl ActionDispatcher {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn new_accepts_a_string_or_a_str_and_sets_both_fields() {
+        let owned = ActionRequest::new("clients".to_string(), json!({ "a": 1 }));
+        let borrowed = ActionRequest::new("clients", json!({ "a": 1 }));
+
+        assert_eq!(owned.action, "clients");
+        assert_eq!(owned.params, json!({ "a": 1 }));
+        assert_eq!(borrowed.action, "clients");
+        assert_eq!(borrowed.params, json!({ "a": 1 }));
     }
 }

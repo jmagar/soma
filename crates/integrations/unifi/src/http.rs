@@ -18,13 +18,18 @@ use crate::UnifiConfig;
 
 /// Builds the pooled HTTP client used for every request against one controller.
 ///
+/// No cookie jar: authentication is entirely the `X-API-KEY` header (see the
+/// crate's module docs), and UniFi controllers were verified against a real
+/// controller to never send `Set-Cookie` for API-key-authenticated requests
+/// on either the official or internal API — a cookie store here would be
+/// dead weight, not a defense-in-depth measure.
+///
 /// # Errors
 /// Returns [`UnifiError::ClientBuild`] if `reqwest` fails to construct the
 /// client (in practice, only from an invalid TLS configuration).
 pub fn build_client(cfg: &UnifiConfig) -> Result<Client> {
     reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(cfg.skip_tls_verify)
-        .cookie_store(true)
         .timeout(cfg.request_timeout)
         .build()
         .map_err(UnifiError::ClientBuild)
@@ -32,6 +37,14 @@ pub fn build_client(cfg: &UnifiConfig) -> Result<Client> {
 
 /// Issues one request against `base_url` using the caller-supplied `client`,
 /// and maps the transport/status outcome into a [`Result`].
+///
+/// `action` is a friendly name (e.g. `"clients"`, `"official_list_sites"`)
+/// used only for the `tracing` span/logs this wraps the request in. Every
+/// dispatch path — the 8 named [`UnifiClient`](crate::UnifiClient) methods
+/// and the ~236 actions reachable only through
+/// [`ActionDispatcher`](crate::ActionDispatcher) — funnels through this one
+/// function, so this is the one place instrumentation needs to live for it
+/// to cover all of them consistently, rather than only the named methods.
 ///
 /// # Errors
 /// Returns [`UnifiError::Timeout`] / [`UnifiError::Connect`] / [`UnifiError::Request`]
@@ -42,16 +55,42 @@ pub fn build_client(cfg: &UnifiConfig) -> Result<Client> {
 /// the raw text). For a success status, returns [`UnifiError::EmptyBody`] for a `GET`
 /// with no response body, or [`UnifiError::Decode`] if the body isn't valid
 /// JSON.
+#[tracing::instrument(skip(client, api_key, query, body), fields(url))]
+#[allow(clippy::too_many_arguments)]
 pub async fn request_json(
     client: &Client,
     base_url: &str,
     api_key: &str,
+    action: &str,
     method: Method,
     path: &str,
     query: Option<&Value>,
     body: Option<&Value>,
 ) -> Result<Value> {
     let url = format!("{}{path}", base_url.trim_end_matches('/'));
+    tracing::Span::current().record("url", tracing::field::display(&url));
+    let result = send_request(client, &url, api_key, method, path, query, body).await;
+    match &result {
+        Ok(value) => {
+            let count = value.get("data").and_then(Value::as_array).map(Vec::len);
+            tracing::debug!(action, count, "upstream call ok");
+        }
+        Err(error) => tracing::warn!(action, %error, "upstream call failed"),
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_request(
+    client: &Client,
+    url: &str,
+    api_key: &str,
+    method: Method,
+    path: &str,
+    query: Option<&Value>,
+    body: Option<&Value>,
+) -> Result<Value> {
+    let url = url.to_string();
     let mut request = client
         .request(method.clone(), &url)
         .header("X-API-KEY", api_key)

@@ -1,53 +1,23 @@
-//! Standalone client for UniFi Network Controllers: authentication, both the
-//! official and internal REST APIs, capability discovery, and dynamic action
-//! dispatch.
-//!
-//! This crate has no dependency on `rmcp`, `axum`, or anything soma-specific
-//! — it only knows how to talk to a UniFi controller. It's meant to be
-//! embedded by an MCP server, a CLI, an HTTP handler, or anything else; see
-//! [`crate::service::UnifiService`] for the layer most embedders should
-//! build on rather than [`UnifiClient`] directly.
-//!
-//! # Quick start
-//!
-//! ```no_run
-//! use unifi::{UnifiClient, UnifiConfig};
-//!
-//! # async fn run() -> Result<(), unifi::UnifiError> {
-//! let client = UnifiClient::new(&UnifiConfig {
-//!     url: "https://unifi.local".to_string(),
-//!     api_key: std::env::var("UNIFI_API_KEY").unwrap_or_default(),
-//!     ..UnifiConfig::default()
-//! })?;
-//!
-//! let clients = client.clients().await?;
-//! println!("{clients}");
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! # Error handling
-//!
-//! Every fallible function returns [`UnifiError`] (aliased as [`Result`]),
-//! never `anyhow::Error` or a boxed `dyn Error` — match on it when a caller
-//! needs to react differently to, say, an expired API key versus an
-//! unreachable controller.
-//!
-//! # Layout
-//!
-//! - `client` / [`UnifiClient`] — the pooled HTTP client and its named,
-//!   fixed endpoints (`clients`, `devices`, `wlans`, ...).
-//! - `service` / [`UnifiService`] — the facade embedders should depend on.
-//! - [`actions`] — dynamic action dispatch ([`ActionDispatcher`]) driven by
-//!   the [`capabilities`] catalog.
-//! - [`api`] — path/URL construction for the official and internal APIs.
-//! - [`capabilities`] — the action catalog, built from the JSON inventories
-//!   in `data/`.
-//! - `config` / [`UnifiConfig`] — connection configuration.
-//! - [`http`] — the one place HTTP requests are made and errors mapped.
-//! - [`error`] — [`UnifiError`].
-
+// The README is this crate's entire rustdoc landing page — not just a
+// GitHub-facing summary. Every code block in it is a real doctest run by
+// `cargo test --doc`, and there is deliberately no separate, shorter `//!`
+// summary here to drift out of sync with it: one doc, one source of truth.
+#![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![forbid(unsafe_code)]
+// A library crate should never panic on data it doesn't control. Scoped to
+// non-test builds only — `.unwrap()`/`.expect()` in test code is normal,
+// idiomatic Rust, not a smell, and this crate's test suite uses both
+// extensively and correctly. The handful of non-test sites this denies by
+// default all have a documented, build-time-only justification (a bundled
+// data file that ships with the crate, not caller input) and are
+// explicitly `#[allow]`'d at that exact site — this exists so a *new*
+// unwrap/expect/panic in production code has to be a deliberate, reviewed
+// choice, not an accident.
+#![cfg_attr(
+    not(test),
+    deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)
+)]
 
 /// Dynamic action dispatch driven by the [`capabilities`] catalog.
 pub mod actions;

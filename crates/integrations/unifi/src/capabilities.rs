@@ -9,7 +9,13 @@ pub mod internal_network;
 pub mod official_network;
 
 /// Who is allowed to call a [`Capability`].
+///
+/// `#[non_exhaustive]`: a future third tier (e.g. a scope narrower than
+/// `Admin` for a specific subsystem) should not be a downstream semver
+/// break. See [`Capability::auth_scope`] for the important caveat that this
+/// crate does not itself enforce this scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum AuthScope {
     /// Read-only; safe for any authenticated caller.
     Read,
@@ -30,7 +36,13 @@ impl AuthScope {
 
 /// One dispatchable UniFi action: its name, which API serves it, and (for
 /// non-hybrid actions) the method/path template to call.
+///
+/// `#[non_exhaustive]`: instances only ever come from
+/// [`all_capabilities`]/[`find_capability`] — nothing outside this crate
+/// constructs one via struct literal — so a future added field (e.g. a
+/// rate-limit hint) should not be a downstream semver break.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Capability {
     /// Action name, as passed to [`crate::ActionRequest::action`].
     pub action: String,
@@ -46,7 +58,8 @@ pub struct Capability {
     pub path: Option<String>,
     /// Whether this action changes controller state.
     pub mutating: bool,
-    /// Minimum caller permission required.
+    /// Minimum caller permission required. **Not enforced by this crate** —
+    /// see the note on [`AuthScope`].
     pub auth_scope: AuthScope,
     /// Provenance/confidence tag from the source inventory (e.g.
     /// `"contract_ok"`, `"legacy_alias"`); informational only.
