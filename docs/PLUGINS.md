@@ -143,6 +143,12 @@ Sensitive Gemini settings use:
 
 Keep Gemini setting names aligned with Claude/Codex where possible. For example, prefer `server_url`, `api_token`, `<service>_api_url`, and `<service>_api_key` across all three surfaces.
 
+Trusted gateway deployments may also expose `trace_headers`, mapped to
+`SOMA_MCP_TRACE_HEADERS`. Its values are `off`, `trusted`, and
+`trusted-with-baggage`; the runtime rejects trusted header modes unless the
+server is using a loopback or trusted-gateway auth policy. Keep this option
+aligned across generated Claude and Gemini settings when adapting the plugin.
+
 The generated plugin option/env mapping table lives at
 [`docs/generated/plugin-settings.md`](generated/plugin-settings.md). It is
 rendered from `ENV_KEY_SPECS`; update the registry first when adding plugin
