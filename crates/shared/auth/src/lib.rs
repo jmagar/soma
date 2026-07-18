@@ -11,6 +11,7 @@ pub mod config;
 pub mod error;
 pub mod google;
 pub mod jwt;
+pub(crate) mod provider_http;
 #[cfg(feature = "http-axum")]
 pub mod metadata;
 #[cfg(feature = "http-axum")]
