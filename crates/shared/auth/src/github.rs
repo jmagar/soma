@@ -124,81 +124,6 @@ impl GitHubProvider {
         self
     }
 
-    pub fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
-        let mut url = self.authorize_endpoint.clone();
-        let scope = self.scopes.join(" ");
-        url.query_pairs_mut()
-            .append_pair("client_id", &self.client_id)
-            .append_pair("redirect_uri", self.redirect_uri.as_str())
-            .append_pair("response_type", "code")
-            .append_pair("scope", &scope)
-            .append_pair("state", &request.state)
-            .append_pair("code_challenge", &request.code_challenge)
-            .append_pair("code_challenge_method", &request.code_challenge_method);
-        if request.force_consent {
-            url.query_pairs_mut().append_pair("prompt", "consent");
-        }
-        Ok(url)
-    }
-
-    pub async fn exchange_code(
-        &self,
-        code: &str,
-        code_verifier: &str,
-    ) -> Result<ProviderExchange, AuthError> {
-        let trace = RequestTrace::start("github", "code_exchange", "POST", &self.token_endpoint);
-        info!(
-            provider = "github",
-            oauth_code_id = %fingerprint(code),
-            redirect_uri = %self.redirect_uri,
-            "oauth upstream code exchange started"
-        );
-        let payload: GitHubTokenResult = read_json_response(
-            trace,
-            self.http
-                .post(self.token_endpoint.clone())
-                .header(reqwest::header::ACCEPT, "application/json")
-                .form(&[
-                    ("grant_type", "authorization_code"),
-                    ("code", code),
-                    ("client_id", self.client_id.as_str()),
-                    ("client_secret", self.client_secret.as_str()),
-                    ("redirect_uri", self.redirect_uri.as_str()),
-                    ("code_verifier", code_verifier),
-                ]),
-            RequestErrors::new(
-                "github",
-                "exchange github auth code",
-                "github token endpoint error",
-                "decode github token response",
-            ),
-        )
-        .await?;
-        let payload = match payload {
-            GitHubTokenResult::Success(payload) => payload,
-            GitHubTokenResult::Error(error) => {
-                return Err(AuthError::InvalidGrant(format!(
-                    "github token exchange failed: {} ({})",
-                    error.error,
-                    error
-                        .error_description
-                        .as_deref()
-                        .unwrap_or("no description")
-                )));
-            }
-        };
-        self.fetch_exchange(payload).await
-    }
-
-    pub async fn refresh(&self, _refresh_token: &str) -> Result<ProviderExchange, AuthError> {
-        Err(AuthError::Config(
-            "github oauth apps do not support token refresh — access tokens do not expire; \
-             the user must re-authenticate via github once their local soma-issued refresh \
-             token expires"
-                .to_string(),
-        ))
-    }
-
     /// Fetches `GET /user` and `GET /user/emails` **concurrently** via
     /// `tokio::try_join!` — they are independent, both authenticated with the
     /// same bearer token, and running them sequentially (as an earlier draft
@@ -307,7 +232,20 @@ impl OAuthProvider for GitHubProvider {
     }
 
     fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
-        Self::authorize_url(self, request)
+        let mut url = self.authorize_endpoint.clone();
+        let scope = self.scopes.join(" ");
+        url.query_pairs_mut()
+            .append_pair("client_id", &self.client_id)
+            .append_pair("redirect_uri", self.redirect_uri.as_str())
+            .append_pair("response_type", "code")
+            .append_pair("scope", &scope)
+            .append_pair("state", &request.state)
+            .append_pair("code_challenge", &request.code_challenge)
+            .append_pair("code_challenge_method", &request.code_challenge_method);
+        if request.force_consent {
+            url.query_pairs_mut().append_pair("prompt", "consent");
+        }
+        Ok(url)
     }
 
     async fn exchange_code(
@@ -315,11 +253,57 @@ impl OAuthProvider for GitHubProvider {
         code: &str,
         code_verifier: &str,
     ) -> Result<ProviderExchange, AuthError> {
-        Self::exchange_code(self, code, code_verifier).await
+        let trace = RequestTrace::start("github", "code_exchange", "POST", &self.token_endpoint);
+        info!(
+            provider = "github",
+            oauth_code_id = %fingerprint(code),
+            redirect_uri = %self.redirect_uri,
+            "oauth upstream code exchange started"
+        );
+        let payload: GitHubTokenResult = read_json_response(
+            trace,
+            self.http
+                .post(self.token_endpoint.clone())
+                .header(reqwest::header::ACCEPT, "application/json")
+                .form(&[
+                    ("grant_type", "authorization_code"),
+                    ("code", code),
+                    ("client_id", self.client_id.as_str()),
+                    ("client_secret", self.client_secret.as_str()),
+                    ("redirect_uri", self.redirect_uri.as_str()),
+                    ("code_verifier", code_verifier),
+                ]),
+            RequestErrors::new(
+                "github",
+                "exchange github auth code",
+                "github token endpoint error",
+                "decode github token response",
+            ),
+        )
+        .await?;
+        let payload = match payload {
+            GitHubTokenResult::Success(payload) => payload,
+            GitHubTokenResult::Error(error) => {
+                return Err(AuthError::InvalidGrant(format!(
+                    "github token exchange failed: {} ({})",
+                    error.error,
+                    error
+                        .error_description
+                        .as_deref()
+                        .unwrap_or("no description")
+                )));
+            }
+        };
+        self.fetch_exchange(payload).await
     }
 
-    async fn refresh(&self, refresh_token: &str) -> Result<ProviderExchange, AuthError> {
-        Self::refresh(self, refresh_token).await
+    async fn refresh(&self, _refresh_token: &str) -> Result<ProviderExchange, AuthError> {
+        Err(AuthError::Config(
+            "github oauth apps do not support token refresh — access tokens do not expire; \
+             the user must re-authenticate via github once their local soma-issued refresh \
+             token expires"
+                .to_string(),
+        ))
     }
 }
 
@@ -331,6 +315,7 @@ mod tests {
 
     use super::{AuthorizeUrlRequest, GitHubProvider};
     use crate::error::AuthError;
+    use crate::oauth_provider::OAuthProvider;
 
     #[tokio::test]
     async fn github_exchange_uses_numeric_id_as_subject_and_primary_verified_email() {

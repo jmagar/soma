@@ -112,8 +112,19 @@ impl GoogleProvider {
         self.verifier = self.verifier.with_jwks_endpoint(jwks_endpoint);
         self
     }
+}
 
-    pub fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
+#[async_trait]
+impl OAuthProvider for GoogleProvider {
+    fn provider_id(&self) -> &'static str {
+        "google"
+    }
+
+    fn callback_path(&self) -> &str {
+        self.redirect_uri.path()
+    }
+
+    fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
         let mut url = self.authorize_endpoint.clone();
         let scope = self.scopes.join(" ");
         url.query_pairs_mut()
@@ -139,7 +150,7 @@ impl GoogleProvider {
         Ok(url)
     }
 
-    pub async fn exchange_code(
+    async fn exchange_code(
         &self,
         code: &str,
         code_verifier: &str,
@@ -191,7 +202,7 @@ impl GoogleProvider {
         })
     }
 
-    pub async fn refresh(&self, refresh_token: &str) -> Result<ProviderExchange, AuthError> {
+    async fn refresh(&self, refresh_token: &str) -> Result<ProviderExchange, AuthError> {
         let trace = RequestTrace::start("google", "refresh", "POST", &self.token_endpoint);
         info!(
             provider = "google",
@@ -237,33 +248,6 @@ impl GoogleProvider {
     }
 }
 
-#[async_trait]
-impl OAuthProvider for GoogleProvider {
-    fn provider_id(&self) -> &'static str {
-        "google"
-    }
-
-    fn callback_path(&self) -> &str {
-        self.redirect_uri.path()
-    }
-
-    fn authorize_url(&self, request: &AuthorizeUrlRequest) -> Result<Url, AuthError> {
-        Self::authorize_url(self, request)
-    }
-
-    async fn exchange_code(
-        &self,
-        code: &str,
-        code_verifier: &str,
-    ) -> Result<ProviderExchange, AuthError> {
-        Self::exchange_code(self, code, code_verifier).await
-    }
-
-    async fn refresh(&self, refresh_token: &str) -> Result<ProviderExchange, AuthError> {
-        Self::refresh(self, refresh_token).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use base64::Engine;
@@ -280,6 +264,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::{AuthorizeUrlRequest, GoogleProvider};
+    use crate::oauth_provider::OAuthProvider;
 
     #[test]
     fn google_authorize_url_includes_offline_access_prompt_and_pkce() {
