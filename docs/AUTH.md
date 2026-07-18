@@ -90,8 +90,9 @@ signal:
 - Google and Authelia both re-verify `email_verified` on every login, live,
   via the signed ID token returned in that login's token exchange.
 - GitHub has no ID token. Its `email_verified` signal is derived from the
-  `primary && verified` flag on a `GET /user/emails` entry — a point-in-time
-  claim that GitHub does not re-check on every subsequent login.
+  `primary && verified` flag on a `GET /user/emails` entry — a self-reported,
+  unsigned flag from a plain REST call, unlike Google/Authelia's
+  cryptographically-signed, audience/issuer-checked ID token claim.
 
 Full per-provider allowlist scoping (a schema change to `allowed_users`) was
 considered and rejected as disproportionate for this crate's actual
