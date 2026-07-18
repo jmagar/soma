@@ -1,9 +1,17 @@
 //! Generic rejection envelopes for routing-level failures: unmatched
 //! routes and disallowed methods. Rendered through `soma_http_api`'s
-//! structured error body so every Soma HTTP surface reports the same shape
-//! for the same failure class. Body-extraction rejections (malformed JSON,
-//! payload too large) are `soma_http_api::response::json_rejection_response`
-//! — an API-shape concern, not a transport concern, so they live there.
+//! structured error body so any HTTP surface that mounts these renders the
+//! same shape for the same failure class. Body-extraction rejections
+//! (malformed JSON, payload too large) are
+//! `soma_http_api::response::json_rejection_response` — an API-shape
+//! concern, not a transport concern, so they live there instead.
+//!
+//! [`not_found_handler`] is wired into `apps/soma`'s router `.fallback()`.
+//! [`method_not_allowed`] is available for a product router to wire up (via
+//! Axum's per-route method fallback) but is not currently mounted anywhere
+//! — Axum's `.fallback()` only intercepts unmatched *paths*, not
+//! matched-path/disallowed-method requests, so a consumer must opt in
+//! separately for 405s to use this envelope.
 
 use axum::{http::StatusCode, response::Response};
 use soma_http_api::problem::ErrorBody;

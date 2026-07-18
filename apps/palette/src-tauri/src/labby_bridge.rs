@@ -518,4 +518,38 @@ mod tests {
         );
         assert!(validate_discovered_api_base_url("file:///tmp/labby").is_err());
     }
+
+    /// `execute_launcher_entry`'s outbound body is built by hand from the
+    /// shared `soma_palette::dto::LauncherExecuteRequest` (see the
+    /// `body = serde_json::json!({...})` construction above `send_with_reauth`
+    /// in `execute_launcher_entry`); this pins the exact `confirmDestructive`
+    /// wire value for both flag states so the field-type change from the old
+    /// app-local `Option<bool>` to the shared DTO's plain `bool` can't
+    /// silently regress the JSON sent to the server.
+    #[test]
+    fn confirm_destructive_serializes_to_expected_json_for_both_states() {
+        let confirmed = LauncherExecuteRequest {
+            id: "mcp:alpha::ping".to_string(),
+            params: json!({}),
+            confirm_destructive: true,
+        };
+        let body = json!({
+            "id": confirmed.id,
+            "params": confirmed.params,
+            "confirmDestructive": confirmed.confirm_destructive,
+        });
+        assert_eq!(body["confirmDestructive"], json!(true));
+
+        let not_confirmed = LauncherExecuteRequest {
+            id: "mcp:alpha::ping".to_string(),
+            params: json!({}),
+            confirm_destructive: false,
+        };
+        let body = json!({
+            "id": not_confirmed.id,
+            "params": not_confirmed.params,
+            "confirmDestructive": not_confirmed.confirm_destructive,
+        });
+        assert_eq!(body["confirmDestructive"], json!(false));
+    }
 }

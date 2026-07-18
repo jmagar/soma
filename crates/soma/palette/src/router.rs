@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use soma_http_api::response::json_rejection_response;
 
 use crate::{
     auth::{palette_execution_context, AuthContext},
@@ -65,13 +66,11 @@ async fn post_execute(
 ) -> Response {
     let Json(request) = match body {
         Ok(body) => body,
-        Err(error) => {
-            return (
-                axum::http::StatusCode::BAD_REQUEST,
-                Json(serde_json::json!({"error": error.to_string()})),
-            )
-                .into_response()
-        }
+        // Delegate to `soma-http-api`'s shared rejection renderer — same
+        // 413/400 split and `ErrorBody` shape `soma-api` uses for every
+        // `JsonRejection` (see `soma_api::responses::rest_json_rejection_response`),
+        // instead of a palette-local, always-400, differently-shaped body.
+        Err(error) => return json_rejection_response(error),
     };
     let context = palette_execution_context(&state, auth.as_ref().map(|Extension(auth)| auth));
     let id = request.id.clone();

@@ -2,10 +2,17 @@
 //!
 //! Not a full RFC 7807 "problem+json" implementation — just the small
 //! reusable subset every JSON API surface in this workspace already agrees
-//! on: a short machine-readable `error` code and an optional human-readable
-//! `message`. Product-specific error shapes (with retry hints, remediation
-//! text, scoped codes, etc.) stay in the owning product crate and may
-//! `From`-convert into this type at the response boundary.
+//! on: an `error` value and an optional human-readable `message`. Product-
+//! specific error shapes (with retry hints, remediation text, scoped codes,
+//! etc.) stay in the owning product crate and may `From`-convert into this
+//! type at the response boundary.
+//!
+//! `error` is a short machine-readable code (e.g. `"validation_error"`) for
+//! call sites that classify their own failures. For framework-generated
+//! rejections with no natural short code — see `json_rejection_response` in
+//! `response.rs` — it is the framework's raw rejection text instead; there
+//! is no stable code to assign a body-parsing failure that didn't originate
+//! from this crate's own validation logic.
 
 use axum::{
     http::StatusCode,

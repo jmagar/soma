@@ -28,3 +28,7 @@ pub fn palette_execution_context(
     let scopes = auth.map(|auth| auth.scopes.as_slice()).unwrap_or_default();
     state.execution_context(auth.map(|auth| auth.sub.as_str()), scopes)
 }
+
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;

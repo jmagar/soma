@@ -363,6 +363,30 @@ async fn cors_preflight_allows_mcp_protocol_headers() {
     }
 }
 
+#[tokio::test]
+async fn unmatched_route_returns_the_not_found_envelope() {
+    // Regression guard for the fallback swap from an inline
+    // `Json(json!({"error": "not_found"}))` closure to
+    // `soma_http_server::rejection::not_found_handler`: the composed router
+    // must still answer an unmatched path with the same 404 JSON shape.
+    let response = router(crate::testing::loopback_state())
+        .oneshot(
+            Request::builder()
+                .uri("/this-route-does-not-exist")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body should read");
+    let body: serde_json::Value = serde_json::from_slice(&bytes).expect("body should be json");
+    assert_eq!(body["error"], "not_found");
+}
+
 async fn oauth_state_with_gateway(temp: &tempfile::TempDir, gateway: GatewayConfig) -> AppState {
     crate::testing::oauth_state_with_gateway(temp.path(), gateway).await
 }

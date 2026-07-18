@@ -101,7 +101,30 @@ fn schema_object(value: Option<Value>) -> Arc<Map<String, Value>> {
 fn schema_object_opt(value: Option<Value>) -> Option<Arc<Map<String, Value>>> {
     match value {
         Some(Value::Object(map)) => Some(Arc::new(map)),
-        _ => None,
+        Some(other) => {
+            // A schema was supplied but is not a JSON object — a data-quality
+            // issue in the upstream/provider/route source, not a reason to
+            // fail the whole conversion (see `tool_from_descriptor`'s doc
+            // comment). Still worth a log: silently dropping it would leave
+            // no trace of a malformed upstream schema.
+            tracing::warn!(
+                schema.type = %schema_type_name(&other),
+                "MCP tool schema is not a JSON object; dropping it"
+            );
+            None
+        }
+        None => None,
+    }
+}
+
+fn schema_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
     }
 }
 

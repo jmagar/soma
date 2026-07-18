@@ -18,8 +18,20 @@ use std::fmt;
 /// Carries a fully-formatted, human-readable message. Implements
 /// [`std::error::Error`] so it converts into `anyhow::Error` (or any other
 /// `Error`-based error type) via `?` without an explicit `map_err`.
+///
+/// The message field is private so every `ArgParseError` is built through
+/// this module's formatting helper, keeping wording consistent — construct
+/// one only via the functions below, and read the message back with
+/// [`ArgParseError::message`].
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ArgParseError(pub String);
+pub struct ArgParseError(String);
+
+impl ArgParseError {
+    /// The formatted, human-readable message.
+    pub fn message(&self) -> &str {
+        &self.0
+    }
+}
 
 impl fmt::Display for ArgParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

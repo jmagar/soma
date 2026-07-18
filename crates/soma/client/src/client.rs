@@ -8,7 +8,7 @@
 //! The pattern:
 //!   - `SomaClient::new()` builds the transport (HTTP client, connection pool, etc.)
 //!   - Each method corresponds to one remote operation and returns `Result<Value>`
-//!   - `SomaService` (in `soma-application`) wraps this and adds any business logic
+//!   - `SomaService` (in `soma-service`) wraps this and adds any business logic
 //!   - MCP tools in `mcp/tools.rs` call `SomaService`, never `SomaClient` directly
 
 #[cfg(feature = "client")]
@@ -329,7 +329,7 @@ fn build_target(cfg: &SomaConfig) -> Result<SomaTarget> {
 #[cfg(not(feature = "client"))]
 fn build_target(cfg: &SomaConfig) -> Result<SomaTarget> {
     if cfg.effective_runtime_mode() == EffectiveRuntimeMode::Remote && !cfg.api_url.is_empty() {
-        anyhow::bail!("soma-service was built without the `client` feature");
+        anyhow::bail!("soma-client was built without the `client` feature");
     }
     Ok(SomaTarget::Stub)
 }

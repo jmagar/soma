@@ -2,19 +2,26 @@
 //!
 //! Assigns a UUID to `x-request-id` on the way in (unless the caller already
 //! supplied one) and copies it back onto the response on the way out.
-//! Compose both layers with [`tower::ServiceBuilder`], `set` first (so a
-//! tracing layer placed between them can pick the ID up) and `propagate`
-//! last (so it survives handler and error-mapping layers):
+//! Compose both layers with [`tower::ServiceBuilder`]: `set` outermost (so
+//! it runs first on the way in) and `propagate` innermost (so it runs last
+//! on the way out, after the response has been fully built, and so
+//! survives handler and error-mapping layers placed between them):
 //!
-//! ```ignore
+//! ```
 //! use tower::ServiceBuilder;
-//! use soma_http_server::middleware::{request_id, tracing};
+//! use soma_http_server::middleware::request_id;
 //!
-//! let middleware = ServiceBuilder::new()
+//! let _middleware = ServiceBuilder::new()
 //!     .layer(request_id::set_request_id_layer())
-//!     .layer(tracing::trace_layer())
 //!     .layer(request_id::propagate_request_id_layer());
 //! ```
+//!
+//! Note: [`crate::middleware::tracing::trace_layer`] uses `tower_http`'s
+//! *default* HTTP span, which does **not** automatically include the
+//! request ID. A product wanting the ID inside its trace spans needs a
+//! custom `tower_http::trace::TraceLayer::new_for_http().make_span_with(..)`
+//! that reads the `x-request-id` header itself — layering `trace_layer()`
+//! between `set`/`propagate` alone does not achieve that.
 
 use axum::http::HeaderName;
 pub use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};

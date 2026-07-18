@@ -31,6 +31,33 @@ fn rmcp_tool_from_route_carries_schema_and_destructive_flag() {
 }
 
 #[test]
+fn rmcp_tool_from_route_carries_output_schema() {
+    let routes = tool_routes_from_candidates(
+        vec![(
+            "alpha".to_owned(),
+            ToolDescriptor {
+                name: "summarize".to_owned(),
+                description: None,
+                input_schema: Some(serde_json::json!({"type": "object"})),
+                output_schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": { "summary": { "type": "string" } }
+                })),
+                destructive: false,
+            },
+        )],
+        std::iter::empty::<&str>(),
+    );
+
+    let tool = rmcp_tool_from_route(&routes[0]);
+    let output_schema = tool
+        .output_schema
+        .as_ref()
+        .expect("output_schema should propagate through the route projection");
+    assert_eq!(output_schema["properties"]["summary"]["type"], "string");
+}
+
+#[test]
 fn rmcp_resource_from_route_falls_back_to_native_uri_when_unnamed() {
     let route = resource_route(
         "up.one",

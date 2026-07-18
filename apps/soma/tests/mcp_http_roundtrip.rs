@@ -38,7 +38,13 @@ async fn spawn_http_mcp_server() -> anyhow::Result<(u16, tokio::task::JoinHandle
 
     let app = soma::server::router(soma::testing::loopback_state());
     let handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app.into_make_service()).await;
+        if let Err(err) = axum::serve(listener, app.into_make_service()).await {
+            // The test aborts this task once the round trip completes, so an
+            // `Err` here only ever means the server died unexpectedly (not a
+            // clean shutdown) — surface it instead of letting the caller see
+            // an opaque "connection refused" with no indication why.
+            eprintln!("mcp http round-trip test server exited with error: {err}");
+        }
     });
     Ok((port, handle))
 }

@@ -16,7 +16,9 @@ pub fn hide(window: &WebviewWindow) -> CommandResult<()> {
 /// Show, un-maximize (if needed), focus, and raise `window`.
 pub fn show_and_focus(window: &WebviewWindow) -> CommandResult<()> {
     if window.is_maximized().unwrap_or(false) {
-        let _ = window.unmaximize();
+        if let Err(err) = window.unmaximize() {
+            tracing::warn!("failed to unmaximize window before showing: {err}");
+        }
     }
     window.show().command_result()?;
     window.set_focus().command_result()
@@ -32,12 +34,16 @@ pub fn resize_and_center(
     shadow: bool,
 ) -> CommandResult<()> {
     if window.is_maximized().unwrap_or(false) {
-        let _ = window.unmaximize();
+        if let Err(err) = window.unmaximize() {
+            tracing::warn!("failed to unmaximize window before resizing: {err}");
+        }
     }
     window
         .set_size(Size::Logical(LogicalSize { width, height }))
         .command_result()?;
-    let _ = window.set_shadow(shadow);
+    if let Err(err) = window.set_shadow(shadow) {
+        tracing::warn!("failed to set window shadow: {err}");
+    }
     window.center().command_result()
 }
 
@@ -53,7 +59,10 @@ pub fn toggle_maximize(window: &WebviewWindow) -> CommandResult<()> {
 /// Best-effort visibility check; treats an error resolving visibility as
 /// "not visible" so callers default to showing the window.
 pub fn is_visible(window: &WebviewWindow) -> bool {
-    window.is_visible().unwrap_or(false)
+    window.is_visible().unwrap_or_else(|err| {
+        tracing::warn!("failed to query window visibility, assuming hidden: {err}");
+        false
+    })
 }
 
 // No unit tests here: every function requires a live `WebviewWindow`, which
