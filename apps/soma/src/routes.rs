@@ -191,7 +191,9 @@ async fn metrics_handler() -> axum::response::Response {
 /// headers browser-based MCP clients send. The mechanical `CorsLayer`
 /// construction itself is generic and lives in `soma_http_server`.
 fn cors_layer(config: &soma_config::McpConfig) -> soma_http_server::middleware::cors::CorsLayer {
-    let origins: Vec<HeaderValue> = allowed_origins(config)
+    let configured = allowed_origins(config);
+    let configured_count = configured.len();
+    let origins: Vec<HeaderValue> = configured
         .into_iter()
         .filter_map(|o| match o.parse::<HeaderValue>() {
             Ok(hv) => Some(hv),
@@ -201,6 +203,16 @@ fn cors_layer(config: &soma_config::McpConfig) -> soma_http_server::middleware::
             }
         })
         .collect();
+    // Every configured origin failed to parse: the resulting CORS policy
+    // permits no browser origin at all, which is easy to miss among
+    // per-origin `warn` lines above — call it out at `error` so it's
+    // discoverable when triaging a "CORS is completely broken" report.
+    if configured_count > 0 && origins.is_empty() {
+        tracing::error!(
+            configured_count,
+            "all configured CORS origins failed to parse — effective CORS allow-list is empty"
+        );
+    }
     generic_cors_layer(
         origins,
         vec![Method::POST, Method::GET],

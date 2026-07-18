@@ -86,6 +86,63 @@ async fn fake_router_survives_graceful_shutdown_wiring() {
         .expect("server loop returned an error");
 }
 
+#[tokio::test]
+async fn shutdown_drains_an_in_flight_request_instead_of_cutting_it_off() {
+    // The previous test only proves the server exits cleanly once every
+    // request has already finished — it would still pass under a hard-abort
+    // shutdown that never actually waits for in-flight work. This test
+    // proves the "graceful" part: a request already being handled when the
+    // shutdown signal fires must still complete successfully, not be cut
+    // off mid-response.
+    let slow_router = Router::new().route(
+        "/slow",
+        get(|| async {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            "slow-done"
+        }),
+    );
+
+    let listener = bind("127.0.0.1:0")
+        .await
+        .expect("bind should succeed on an ephemeral port");
+    let addr = listener.local_addr().expect("listener has a local addr");
+
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let shutdown = async move {
+        let _ = shutdown_rx.await;
+    };
+    let server = tokio::spawn(serve_with_shutdown(listener, slow_router, shutdown));
+
+    // Start the slow request on its own task so we can trigger shutdown
+    // while it's still in flight.
+    let request_task = tokio::spawn(async move { get_raw(addr, "/slow").await });
+
+    // Give the connection time to be accepted and the handler to start
+    // sleeping, then fire shutdown mid-request — well before the handler's
+    // 300ms sleep elapses.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let _ = shutdown_tx.send(());
+
+    let response = tokio::time::timeout(Duration::from_secs(5), request_task)
+        .await
+        .expect("in-flight request did not complete in time")
+        .expect("request task panicked");
+    assert!(
+        response.starts_with("HTTP/1.1 200"),
+        "in-flight request must still succeed across a graceful shutdown, got:\n{response}"
+    );
+    assert!(
+        response.ends_with("slow-done"),
+        "in-flight request's response body must not be cut off, got:\n{response}"
+    );
+
+    tokio::time::timeout(Duration::from_secs(5), server)
+        .await
+        .expect("server did not shut down in time")
+        .expect("server task panicked")
+        .expect("server loop returned an error");
+}
+
 #[test]
 fn bind_error_display_names_the_address() {
     let error = ServerError::Bind {

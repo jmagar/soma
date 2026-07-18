@@ -10,20 +10,41 @@ use axum::{
 };
 use serde::Serialize;
 
+/// The one liveness value this crate emits. An enum (rather than a bare
+/// `&'static str`) so a second construction site can't drift to an
+/// unintended value — mirrors `ReadinessStatus` below.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LivenessStatus {
+    Ok,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct LivenessBody {
-    pub status: &'static str,
+    pub status: LivenessStatus,
 }
 
 impl Default for LivenessBody {
     fn default() -> Self {
-        Self { status: "ok" }
+        Self {
+            status: LivenessStatus::Ok,
+        }
     }
+}
+
+/// The two readiness values this crate emits. An enum (rather than a bare
+/// `&'static str`) so callers can't construct a third, unintended status
+/// value that this module's response builders never produce.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReadinessStatus {
+    Ready,
+    NotReady,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ReadinessBody {
-    pub status: &'static str,
+    pub status: ReadinessStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -42,7 +63,7 @@ pub fn readiness_response<E: std::fmt::Display>(result: Result<(), E>) -> Respon
         Ok(()) => (
             StatusCode::OK,
             Json(ReadinessBody {
-                status: "ready",
+                status: ReadinessStatus::Ready,
                 reason: None,
             }),
         )
@@ -50,7 +71,7 @@ pub fn readiness_response<E: std::fmt::Display>(result: Result<(), E>) -> Respon
         Err(error) => (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(ReadinessBody {
-                status: "not_ready",
+                status: ReadinessStatus::NotReady,
                 reason: Some(error.to_string()),
             }),
         )

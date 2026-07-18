@@ -1,17 +1,18 @@
 //! Projection of gateway routes into concrete `rmcp::model` types.
 //!
-//! [`super::mcp_routes`] returns loose route/descriptor structs (reused
-//! directly from `soma-mcp-proxy`). A caller that wants to hand these routes
+//! [`super::mcp_routes`] returns loose route/descriptor structs — reused
+//! directly from `soma-mcp-proxy` (`GatewayToolRoute` etc. are type aliases
+//! for `soma_mcp_proxy::Mcp*Route`). A caller that wants to hand these routes
 //! to its own inbound MCP clients — rather than just tracking route names —
-//! needs real `rmcp::model` objects. This module builds those directly on
-//! `soma-mcp-server`'s generic descriptor projection, so the gateway does not
-//! reach for `rmcp` server-side types on its own; it composes the role crate
-//! that owns that conversion.
+//! needs real `rmcp::model` objects. `soma-mcp-proxy` already owns that exact
+//! conversion (`rmcp_tool_from_route` and friends, itself built on
+//! `soma-mcp-server`'s generic descriptor projection), so this module
+//! delegates to it instead of re-deriving the conversion, keeping a single
+//! owner for "route struct -> rmcp::model type" and keeping the gateway off
+//! `rmcp` server-side types.
 
 use rmcp::model::{Prompt, Resource, Tool};
-use soma_mcp_server::protocol::{
-    prompt_from_descriptor, resource_from_descriptor, tool_from_descriptor,
-};
+use soma_mcp_proxy::{rmcp_prompt_from_route, rmcp_resource_from_route, rmcp_tool_from_route};
 
 use super::{GatewayManager, GatewayManagerError};
 
@@ -27,16 +28,8 @@ impl GatewayManager {
         Ok(self
             .tool_routes_for_subject(subject)
             .await?
-            .into_iter()
-            .map(|route| {
-                tool_from_descriptor(
-                    route.name,
-                    route.descriptor.description,
-                    route.descriptor.input_schema,
-                    route.descriptor.output_schema,
-                    route.descriptor.destructive,
-                )
-            })
+            .iter()
+            .map(rmcp_tool_from_route)
             .collect())
     }
 
@@ -51,14 +44,8 @@ impl GatewayManager {
         Ok(self
             .resource_routes_for_subject(subject)
             .await?
-            .into_iter()
-            .map(|route| {
-                let name = route
-                    .descriptor
-                    .name
-                    .unwrap_or_else(|| route.native_uri.clone());
-                resource_from_descriptor(route.uri, name)
-            })
+            .iter()
+            .map(rmcp_resource_from_route)
             .collect())
     }
 
@@ -73,10 +60,8 @@ impl GatewayManager {
         Ok(self
             .prompt_routes_for_subject(subject)
             .await?
-            .into_iter()
-            .map(|route| {
-                prompt_from_descriptor(route.name, route.descriptor.description.as_deref())
-            })
+            .iter()
+            .map(rmcp_prompt_from_route)
             .collect())
     }
 }
