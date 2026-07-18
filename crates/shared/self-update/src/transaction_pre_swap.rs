@@ -1,12 +1,23 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{Result, UpdateError, Updater, ValidatedArtifact};
 
 use super::TestFailpoint;
 use super::transaction_io::{
-    ensure_validated_artifact_mode, hash_stable_validated_artifact, remove_and_sync,
+    absolute, ensure_validated_artifact_mode, hash_stable_validated_artifact, remove_and_sync,
     remove_if_present_and_sync, restore_validated_artifact_mode,
 };
+
+pub(super) fn validated_artifact_path(
+    executable: &Path,
+    validated: &ValidatedArtifact,
+) -> Result<PathBuf> {
+    let path = absolute(validated.path())?;
+    if path.parent() != executable.parent() {
+        return Err(UpdateError::InvalidStagedArtifact { path });
+    }
+    Ok(path)
+}
 
 pub(super) fn cleanup_prepared_marker_failure(
     updater: &Updater,

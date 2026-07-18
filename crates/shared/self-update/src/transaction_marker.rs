@@ -3,10 +3,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use super::TestFailpoint;
 use super::artifacts::{
     exact_artifact_name, validate_marker_backup_metadata, validate_marker_staged_metadata,
 };
-use super::{TestFailpoint, absolute, suffix_path, sync_parent};
+use super::transaction_io::{absolute, suffix_path, sync_parent};
 use crate::{Result, UpdateError, Updater};
 
 const MAX_MARKER_BYTES: u64 = 64 * 1024;

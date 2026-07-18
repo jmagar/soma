@@ -348,6 +348,72 @@ async fn symlinked_executable_parent_does_not_hide_the_protected_stage() {
 }
 
 #[tokio::test]
+async fn install_rejects_artifact_staged_by_another_layout_before_lock_creation() {
+    let temp = tempdir().unwrap();
+    let first = temp.path().join("first");
+    let second = temp.path().join("second");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    let first_executable = first.join("example");
+    let second_executable = second.join("example");
+    let first_state = first.join("update.json");
+    let second_state = second.join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&first_executable, old).unwrap();
+    std::fs::write(&second_executable, old).unwrap();
+    let first_updater = Updater::new(
+        UpdateLayout::new(&first_executable, &first_state),
+        UpdatePolicy::default(),
+    );
+    let second_updater = Updater::new(
+        UpdateLayout::new(&second_executable, &second_state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&first_updater, new, "2.0.0").await;
+
+    assert!(matches!(
+        second_updater.install(artifact, "1.0.0").await,
+        Err(UpdateError::InvalidStagedArtifact { .. })
+    ));
+    assert_eq!(std::fs::read(&second_executable).unwrap(), old);
+    assert!(!second_state.exists());
+    assert!(!second_state.with_extension("json.lock").exists());
+}
+
+#[tokio::test]
+async fn install_rejects_stage_after_executable_parent_symlink_retarget() {
+    let temp = tempdir().unwrap();
+    let first = temp.path().join("first");
+    let second = temp.path().join("second");
+    let alias = temp.path().join("current");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    std::os::unix::fs::symlink(&first, &alias).unwrap();
+    let executable = alias.join("example");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(first.join("example"), old).unwrap();
+    std::fs::write(second.join("example"), old).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+    std::fs::remove_file(&alias).unwrap();
+    std::os::unix::fs::symlink(&second, &alias).unwrap();
+
+    assert!(matches!(
+        updater.install(artifact, "1.0.0").await,
+        Err(UpdateError::InvalidStagedArtifact { .. })
+    ));
+    assert_eq!(std::fs::read(second.join("example")).unwrap(), old);
+    assert!(!state.exists());
+    assert!(!state.with_extension("json.lock").exists());
+}
+
+#[tokio::test]
 async fn oversized_markers_fail_bounded_and_remain_for_diagnosis() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");

@@ -127,6 +127,10 @@ directory-sync failures use the same durable, combined-error cleanup contract.
 If writing the prepared marker fails after its rename, cleanup durably removes
 marker state before the backup; failure to remove state retains the backup for
 recovery rather than leaving a marker that references a deleted rollback.
+Install requires the validated artifact to remain in the currently resolved
+executable directory. Artifacts from another updater layout and artifacts
+staged before an executable-parent symlink retarget are rejected before lock
+creation or transaction mutation.
 If mode, identity, or digest validation fails after a prepared marker is
 durable but before replacement, the installer durably removes that marker
 first and then removes the rollback backup. Cleanup failures retain the primary

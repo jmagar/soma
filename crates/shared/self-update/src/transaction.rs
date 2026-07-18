@@ -27,8 +27,8 @@ use marker::{
 };
 use pre_swap::validate_or_cleanup;
 use transaction_io::{
-    absolute, create_backup, hash_file, hash_stable_validated_artifact, remove_and_sync,
-    remove_file, remove_if_present_and_sync, suffix_path, sync_parent, unique_backup,
+    create_backup, hash_file, hash_stable_validated_artifact, remove_and_sync, remove_file,
+    remove_if_present_and_sync, suffix_path, sync_parent, unique_backup,
 };
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -97,9 +97,9 @@ impl Updater {
         previous: String,
     ) -> Result<InstallOutcome> {
         let paths = self.validated_layout()?;
+        let validated_path = pre_swap::validated_artifact_path(&paths.executable, &validated)?;
         let _lock = self.transaction_lock(&paths.lock)?;
         let (executable, state) = (paths.executable, paths.state);
-        let validated_path = absolute(validated.path())?;
         let target = validated.target_version().to_owned();
         let backup = unique_backup(&executable);
         let marker_temp = suffix_path(&state, ".tmp");
