@@ -1,7 +1,9 @@
 use super::execute::execute_inline;
 use super::CodeModeConfig;
+use serial_test::serial;
 
 #[tokio::test]
+#[serial(code_mode_soma_home)]
 async fn execute_inline_runs_javy_expression() {
     let response = execute_inline(
         "1 + 2",
