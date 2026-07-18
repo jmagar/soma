@@ -145,6 +145,7 @@ fn test_client_builds_with_empty_config() {
 }
 
 #[test]
+#[cfg(feature = "client")]
 fn test_api_action_url_preserves_base_path() {
     let root = Url::parse("https://example.test/").unwrap();
     let nested = Url::parse("https://example.test/api").unwrap();
