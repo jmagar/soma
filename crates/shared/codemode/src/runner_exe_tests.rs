@@ -1,7 +1,8 @@
 #[cfg(unix)]
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+
+use serial_test::serial;
 
 use super::runner_exe::{resolve_runner_exe, resolve_runner_exe_from};
 
@@ -11,11 +12,6 @@ fn expected_runner_binary_name() -> &'static str {
     } else {
         "soma-codemode-runner"
     }
-}
-
-fn env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 #[cfg(unix)]
@@ -183,9 +179,11 @@ fn override_rejects_group_or_world_writable_file() {
 }
 
 #[test]
+#[serial(code_mode_runner_exe_env)]
 fn old_lab_env_name_is_not_preferred() {
-    let _guard = env_lock().lock().unwrap();
     let legacy_env = concat!("LAB", "BY_CODE_MODE_RUNNER_EXE");
+    let previous_runner = std::env::var_os("SOMA_CODE_MODE_RUNNER_EXE");
+    let previous_legacy = std::env::var_os(legacy_env);
     let temp = tempfile::tempdir().unwrap();
     let current = temp.path().join(expected_runner_binary_name());
     let legacy = temp.path().join("legacy-runner");
@@ -201,13 +199,21 @@ fn old_lab_env_name_is_not_preferred() {
 
     let resolved = resolve_runner_exe_from(current.clone(), None).unwrap();
 
-    std::env::remove_var(legacy_env);
+    match previous_runner {
+        Some(value) => std::env::set_var("SOMA_CODE_MODE_RUNNER_EXE", value),
+        None => std::env::remove_var("SOMA_CODE_MODE_RUNNER_EXE"),
+    }
+    match previous_legacy {
+        Some(value) => std::env::set_var(legacy_env, value),
+        None => std::env::remove_var(legacy_env),
+    }
     assert_eq!(resolved, current);
 }
 
 #[test]
+#[serial(code_mode_runner_exe_env)]
 fn env_override_success_uses_soma_name() {
-    let _guard = env_lock().lock().unwrap();
+    let previous = std::env::var_os("SOMA_CODE_MODE_RUNNER_EXE");
     let temp = tempfile::tempdir().unwrap();
     let override_path = temp.path().join("env-runner");
     std::fs::write(&override_path, b"binary").unwrap();
@@ -217,6 +223,9 @@ fn env_override_success_uses_soma_name() {
 
     let resolved = resolve_runner_exe().unwrap();
 
-    std::env::remove_var("SOMA_CODE_MODE_RUNNER_EXE");
+    match previous {
+        Some(value) => std::env::set_var("SOMA_CODE_MODE_RUNNER_EXE", value),
+        None => std::env::remove_var("SOMA_CODE_MODE_RUNNER_EXE"),
+    }
     assert_eq!(resolved, std::fs::canonicalize(override_path).unwrap());
 }

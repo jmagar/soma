@@ -3,7 +3,7 @@ use super::CodeModeConfig;
 use serial_test::serial;
 
 #[tokio::test]
-#[serial(code_mode_soma_home)]
+#[serial(code_mode_soma_home, code_mode_runner_exe_env)]
 async fn execute_inline_runs_javy_expression() {
     let response = execute_inline(
         "1 + 2",
