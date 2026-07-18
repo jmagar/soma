@@ -86,3 +86,7 @@ pub struct LauncherExecuteResponse {
     pub output: Value,
     pub request_id: String,
 }
+
+#[cfg(test)]
+#[path = "dto_tests.rs"]
+mod tests;

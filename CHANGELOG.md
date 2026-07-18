@@ -320,6 +320,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `soma_palette::catalog::catalog_response()` (backed by `ToolSpec` Palette
   overlays) superseded; it was constructed on every registry build but read
   nowhere in the workspace.
+- PR17 review fix (round 2): `crates/soma/palette/src/router.rs`'s
+  `post_execute` hand-rolled a `400`-only `JsonRejection` handler with its
+  own `{"error": ...}` body instead of delegating to
+  `soma_http_api::response::json_rejection_response` (the same helper
+  `soma-api` uses), losing the `413 Payload Too Large` distinction and the
+  shared `ErrorBody` shape; now delegates. `soma-palette`'s
+  `launcher_not_found` 404 body is now built as an `ApplicationError` value
+  instead of a hand-rolled `json!` literal, so every `/v1/palette/*` error
+  response shares one wire shape. Logged (previously silent) the
+  `soma-tauri-shell` poisoned-shortcut-mutex fallback and the discarded
+  `unmaximize`/`set_shadow`/`is_visible` window-mechanics errors. Fixed a
+  stale doc comment in `soma-palette`'s `search.rs` that described ranking
+  by match position instead of by which field matched. Added missing
+  behavioral test coverage: `execute_launcher`'s three outcomes, all four
+  `/v1/palette/*` HTTP handlers (via `tower::ServiceExt::oneshot`),
+  `palette_execution_context`'s auth/scope translation, DTO wire-format
+  contracts, and edge cases in `search`/`catalog`.
 - PR13 review fix: 9 of the 11 crates touched by the `soma-contracts` split
   (`soma-api`, `soma-cli`, `soma-mcp`, `soma-integrations`, `soma-runtime`,
   `soma-service`, `soma-test-support`, `apps/soma`, `xtask`) still declared

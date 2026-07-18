@@ -27,7 +27,7 @@ pub fn app_data_path(app: &AppHandle, file_name: &str) -> CommandResult<PathBuf>
 
 /// Read and parse `path` as JSON. A missing file is not an error — it
 /// returns `T::default()`, matching the common "no settings saved yet" case.
-pub fn read_json_or_default<T: DeserializeOwned + Default>(path: &Path) -> Result<T, String> {
+pub fn read_json_or_default<T: DeserializeOwned + Default>(path: &Path) -> CommandResult<T> {
     let contents = match fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(T::default()),
@@ -41,14 +41,14 @@ pub fn read_json_or_default<T: DeserializeOwned + Default>(path: &Path) -> Resul
 /// Parse `contents` as JSON, producing a message that names `path` on
 /// failure. Split out from [`read_json_or_default`] so parse failures can be
 /// tested without touching the filesystem.
-pub fn parse_json<T: DeserializeOwned>(contents: &str, path: &Path) -> Result<T, String> {
+pub fn parse_json<T: DeserializeOwned>(contents: &str, path: &Path) -> CommandResult<T> {
     serde_json::from_str(contents)
         .map_err(|err| format!("failed to parse {}: {err}", path.display()))
 }
 
 /// Serialize `value` to pretty JSON and write it to `path` atomically,
 /// creating parent directories as needed.
-pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> CommandResult<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create directory {}: {err}", parent.display()))?;
@@ -69,9 +69,9 @@ pub fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), Str
 /// `OpenOptions::mode`, so it is never world-readable even momentarily. On
 /// Windows no explicit permission change is applied; rely on the directory
 /// ACL to restrict access.
-pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), String> {
+pub fn atomic_write(path: &Path, data: &[u8]) -> CommandResult<()> {
     let tmp = path.with_extension(format!("tmp-{}", uuid::Uuid::new_v4()));
-    let write = || -> Result<(), String> {
+    let write = || -> CommandResult<()> {
         {
             let mut opts = fs::OpenOptions::new();
             opts.write(true).create(true).truncate(true);

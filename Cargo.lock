@@ -5579,7 +5579,9 @@ dependencies = [
  "soma-domain",
  "soma-http-api",
  "soma-provider-core",
+ "soma-test-support",
  "tokio",
+ "tower",
  "tracing",
 ]
 

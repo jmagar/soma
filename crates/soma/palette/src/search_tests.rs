@@ -76,3 +76,17 @@ fn respects_limit() {
     let results = search_entries(&entries, "", Some(1));
     assert_eq!(results.len(), 1);
 }
+
+#[test]
+fn zero_limit_clamps_to_one_rather_than_returning_empty() {
+    let entries = fixture();
+    let results = search_entries(&entries, "", Some(0));
+    assert_eq!(results.len(), 1);
+}
+
+#[test]
+fn whitespace_only_query_behaves_like_empty_query() {
+    let entries = fixture();
+    let results = search_entries(&entries, "   ", None);
+    assert_eq!(results.len(), entries.len());
+}

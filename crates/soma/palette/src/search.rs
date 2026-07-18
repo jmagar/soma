@@ -1,10 +1,11 @@
 //! In-memory search over the mapped Palette catalog.
 //!
 //! Search is intentionally simple: a case-insensitive substring match over
-//! `id`, `title`, `description`, and `category`, ranked by where the match
-//! starts (id/title matches first) then original catalog order. Callers that
-//! need fuzzier matching should do it client-side over the full catalog —
-//! this exists to keep `GET /v1/palette/search?q=` cheap and predictable.
+//! `id`, `title`, `category`, and `description`, ranked by which field
+//! matched first (`id`, then `title`, then `category`, then `description`),
+//! with original catalog order as the tiebreak. Callers that need fuzzier
+//! matching should do it client-side over the full catalog — this exists to
+//! keep `GET /v1/palette/search?q=` cheap and predictable.
 
 use crate::dto::LauncherCatalogEntry;
 

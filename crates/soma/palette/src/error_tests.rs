@@ -1,4 +1,4 @@
-use axum::http::StatusCode;
+use axum::{body::to_bytes, http::StatusCode};
 use soma_application::ApplicationError;
 
 use super::{launcher_not_found, palette_error_status};
@@ -34,4 +34,23 @@ fn defaults_unknown_codes_to_internal_error() {
 fn launcher_not_found_is_404() {
     let response = launcher_not_found("mystery:tool");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn launcher_not_found_body_matches_application_error_shape() {
+    let response = launcher_not_found("mystery:tool");
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    // Same wire shape as `palette_error_response` (an `ApplicationError`
+    // body), not a one-off `json!` literal with a different key set.
+    assert_eq!(value["code"], "launcher_not_found");
+    assert_eq!(
+        value["message"],
+        "no palette-exposed launcher entry `mystery:tool`"
+    );
+    assert_eq!(value["retryable"], false);
+    assert_eq!(
+        value["remediation"],
+        "Refresh the catalog and use a known launcher id."
+    );
 }
