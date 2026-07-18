@@ -334,6 +334,10 @@ fn write_env(data_dir: &Path, config: &Config) -> Result<()> {
         dotenv_assignment("SOMA_MCP_HOST", &config.mcp.host)?,
         dotenv_assignment("SOMA_MCP_PORT", &config.mcp.port.to_string())?,
         dotenv_assignment("SOMA_MCP_NO_AUTH", &config.mcp.no_auth.to_string())?,
+        dotenv_assignment(
+            "SOMA_MCP_TRACE_HEADERS",
+            &config.mcp.trace_headers.to_string(),
+        )?,
     ];
 
     if let Some(token) = config.mcp.api_token.as_deref().filter(|v| !v.is_empty()) {

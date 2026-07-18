@@ -6,6 +6,28 @@ use super::*;
 // separate processes).
 use serial_test::serial;
 
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
 #[test]
 #[serial]
 fn default_data_dir_honors_soma_home_override() {
@@ -264,7 +286,7 @@ fn trace_headers_default_to_off() {
 #[test]
 #[serial]
 fn trace_headers_env_parses_all_three_values() {
-    let previous = std::env::var_os("SOMA_MCP_TRACE_HEADERS");
+    let _env = EnvVarGuard::set("SOMA_MCP_TRACE_HEADERS", "off");
 
     for (raw, expected) in [
         ("off", TraceHeaderMode::Off),
@@ -278,26 +300,15 @@ fn trace_headers_env_parses_all_three_values() {
             "SOMA_MCP_TRACE_HEADERS={raw:?} should parse to {expected:?}"
         );
     }
-
-    match previous {
-        Some(value) => std::env::set_var("SOMA_MCP_TRACE_HEADERS", value),
-        None => std::env::remove_var("SOMA_MCP_TRACE_HEADERS"),
-    }
 }
 
 #[test]
 #[serial]
 fn trace_headers_env_rejects_invalid_value() {
-    let previous = std::env::var_os("SOMA_MCP_TRACE_HEADERS");
-    std::env::set_var("SOMA_MCP_TRACE_HEADERS", "bogus");
+    let _env = EnvVarGuard::set("SOMA_MCP_TRACE_HEADERS", "bogus");
 
     let error = Config::load().expect_err("invalid SOMA_MCP_TRACE_HEADERS should be rejected");
     assert!(error.to_string().contains("SOMA_MCP_TRACE_HEADERS"));
-
-    match previous {
-        Some(value) => std::env::set_var("SOMA_MCP_TRACE_HEADERS", value),
-        None => std::env::remove_var("SOMA_MCP_TRACE_HEADERS"),
-    }
 }
 
 #[test]

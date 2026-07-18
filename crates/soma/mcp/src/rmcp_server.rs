@@ -166,6 +166,25 @@ impl ServerHandler for SomaRmcpServer {
             )
             .await
             {
+                if result.is_error == Some(true) {
+                    trace_summary_event!(
+                        warn,
+                        trace_resolution,
+                        trace_context_conflict,
+                        "MCP gateway tool execution failed",
+                        tool = %tool_name,
+                        action = action_opt.as_deref().unwrap_or_default(),
+                    );
+                } else {
+                    trace_summary_event!(
+                        info,
+                        trace_resolution,
+                        trace_context_conflict,
+                        "MCP gateway tool execution completed",
+                        tool = %tool_name,
+                        action = action_opt.as_deref().unwrap_or_default(),
+                    );
+                }
                 return Ok(result);
             }
             trace_summary_event!(

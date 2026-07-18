@@ -162,7 +162,8 @@ fn setup_check_classifies_trace_header_trust_failure_separately() {
 #[test]
 fn setup_repair_creates_env_file() {
     let dir = tempfile::tempdir().unwrap();
-    let config = valid_config();
+    let mut config = valid_config();
+    config.mcp.trace_headers = TraceHeaderMode::TrustedWithBaggage;
 
     let report = with_plugin_data(dir.path(), || super::setup_repair(&config).unwrap());
 
@@ -172,6 +173,7 @@ fn setup_repair_creates_env_file() {
     let contents = std::fs::read_to_string(&env_path).unwrap();
     assert!(contents.contains("SOMA_API_URL=https://example.test/api"));
     assert!(contents.contains("SOMA_API_KEY=\"secret with spaces\""));
+    assert!(contents.contains("SOMA_MCP_TRACE_HEADERS=trusted-with-baggage"));
 
     #[cfg(unix)]
     {

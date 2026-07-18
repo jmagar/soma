@@ -34,11 +34,10 @@ use support::request_json;
 async fn protected_route_proxy_does_not_forward_inbound_trace_headers() {
     let seen_headers: Arc<Mutex<Vec<HeaderMap>>> = Arc::new(Mutex::new(Vec::new()));
     let backend = header_capturing_backend_server(seen_headers.clone()).await;
-    std::env::set_var("SOMA_TEST_UPSTREAM_TOKEN", "Bearer upstream-secret");
     let temp = tempfile::tempdir().unwrap();
     let state = soma::testing::oauth_state_with_gateway(
         temp.path(),
-        protected_gateway_config(Some(backend), Some("SOMA_TEST_UPSTREAM_TOKEN")),
+        protected_gateway_config(Some(backend), None),
     )
     .await;
     let token = protected_route_token(&state, "https://mcp.example.com/media", "soma:read");
@@ -63,7 +62,6 @@ async fn protected_route_proxy_does_not_forward_inbound_trace_headers() {
         .await
         .unwrap();
 
-    std::env::remove_var("SOMA_TEST_UPSTREAM_TOKEN");
     assert_eq!(response.status(), StatusCode::OK);
 
     let seen = seen_headers.lock().await;

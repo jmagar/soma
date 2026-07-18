@@ -309,8 +309,16 @@ impl ServerGuard {
     fn spawn(binary: &Path, home: &Path, port: u16, trace_headers: &str) -> Result<Self> {
         let log_path = home.join("server.log");
         let log_file = std::fs::File::create(&log_path).context("create server log")?;
-        let child = Command::new(binary)
+        let mut command = Command::new(binary);
+        for (key, _) in
+            std::env::vars_os().filter(|(key, _)| key.to_string_lossy().starts_with("SOMA_"))
+        {
+            command.env_remove(key);
+        }
+        let child = command
             .arg("serve")
+            .current_dir(home)
+            .env("HOME", home)
             .env("SOMA_HOME", home)
             .env("SOMA_MCP_HOST", "127.0.0.1")
             .env("SOMA_MCP_PORT", port.to_string())

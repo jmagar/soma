@@ -134,6 +134,17 @@ fn trusted_trace_headers_allowed_on_trusted_gateway_unscoped() {
     );
 }
 
+#[test]
+fn trusted_trace_headers_allowed_on_trusted_gateway_with_bearer_auth() {
+    let mut config = config("0.0.0.0");
+    config.mcp.api_token = Some("secret".into());
+    config.mcp.trace_headers = TraceHeaderMode::Trusted;
+    assert_eq!(
+        resolve_auth_policy_kind(&config, true).unwrap(),
+        AuthPolicyKind::MountedBearer
+    );
+}
+
 #[cfg(not(feature = "auth"))]
 #[test]
 fn non_loopback_oauth_requires_auth_feature() {

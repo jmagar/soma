@@ -2,8 +2,9 @@
 //! through the actual `/mcp` route.
 #![cfg(feature = "mcp-http")]
 
-use std::net::TcpListener as StdTcpListener;
+use std::{net::TcpListener as StdTcpListener, time::Duration};
 
+use anyhow::Context;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use rmcp::{
     model::CallToolRequestParams, service::ServiceExt, transport::StreamableHttpClientTransport,
@@ -14,6 +15,7 @@ use soma_config::{McpConfig, TraceHeaderMode};
 use soma_test_support::{tracing_test_lock, SharedBuf};
 
 const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
+const TEST_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 
 struct ServerHandle {
     port: u16,
@@ -90,19 +92,26 @@ fn client_with_headers(headers: &[(&str, &str)]) -> reqwest::Client {
 }
 
 async fn call_status(port: u16, client: reqwest::Client) -> anyhow::Result<()> {
-    let url = format!("http://127.0.0.1:{port}/mcp");
-    let transport = StreamableHttpClientTransport::with_client(
-        client,
-        rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig::with_uri(url),
-    );
-    let service = ().serve(transport).await?;
-    service
-        .call_tool(
-            CallToolRequestParams::new("soma")
-                .with_arguments(json!({"action": "status"}).as_object().unwrap().clone()),
-        )
-        .await?;
-    service.cancel().await?;
+    tokio::time::timeout(TEST_OPERATION_TIMEOUT, async move {
+        let url = format!("http://127.0.0.1:{port}/mcp");
+        let transport = StreamableHttpClientTransport::with_client(
+            client,
+            rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig::with_uri(
+                url,
+            ),
+        );
+        let service = ().serve(transport).await?;
+        service
+            .call_tool(
+                CallToolRequestParams::new("soma")
+                    .with_arguments(json!({"action": "status"}).as_object().unwrap().clone()),
+            )
+            .await?;
+        service.cancel().await?;
+        anyhow::Ok(())
+    })
+    .await
+    .context("timed out during MCP trace-header round trip")??;
     Ok(())
 }
 
@@ -242,17 +251,21 @@ async fn mounted_auth_failure_never_emits_trace_fields_even_with_headers_present
     ))
     .await?;
 
-    let response = client_with_headers(&[
-        ("traceparent", VALID_TRACEPARENT),
-        ("tracestate", "vendor=value"),
-        ("baggage", "accessToken=super-secret-value"),
-    ])
-    .post(format!("http://127.0.0.1:{}/mcp", server.port()))
-    .header("Content-Type", "application/json")
-    .header("Accept", "application/json, text/event-stream")
-    .body(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#)
-    .send()
-    .await?;
+    let response = tokio::time::timeout(
+        TEST_OPERATION_TIMEOUT,
+        client_with_headers(&[
+            ("traceparent", VALID_TRACEPARENT),
+            ("tracestate", "vendor=value"),
+            ("baggage", "accessToken=super-secret-value"),
+        ])
+        .post(format!("http://127.0.0.1:{}/mcp", server.port()))
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .body(r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#)
+        .send(),
+    )
+    .await
+    .context("timed out waiting for mounted-auth rejection")??;
     assert_eq!(response.status(), 401);
 
     let logs = capture.finish();

@@ -109,7 +109,7 @@ pub fn trusted_gateway_from_env() -> bool {
 pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Result<AuthPolicyKind> {
     validate_public_url(config)?;
     let kind = resolve_auth_policy_kind_unchecked(config, trusted_gateway)?;
-    validate_trace_headers_trust(&config.mcp, kind)?;
+    validate_trace_headers_trust(&config.mcp, kind, trusted_gateway)?;
     Ok(kind)
 }
 
@@ -177,8 +177,12 @@ fn resolve_auth_policy_kind_unchecked(
 /// server. Only a real transport-level trust boundary (loopback bind, or an
 /// explicitly trusted upstream gateway/proxy) may enable HTTP trace-header
 /// extraction.
-fn validate_trace_headers_trust(mcp: &McpConfig, kind: AuthPolicyKind) -> Result<()> {
-    if mcp.trace_headers == TraceHeaderMode::Off {
+fn validate_trace_headers_trust(
+    mcp: &McpConfig,
+    kind: AuthPolicyKind,
+    trusted_gateway: bool,
+) -> Result<()> {
+    if mcp.trace_headers == TraceHeaderMode::Off || trusted_gateway {
         return Ok(());
     }
     match kind {
