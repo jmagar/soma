@@ -148,4 +148,3 @@ rmcp = { workspace = true, features = [
   "transport-child-process",
   "transport-streamable-http-client-reqwest",
 ] }
-serial_test = "3"

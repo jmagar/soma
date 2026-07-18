@@ -5251,7 +5251,6 @@ dependencies = [
  "reqwest 0.13.4",
  "rmcp",
  "serde_json",
- "serial_test",
  "soma",
  "soma-api",
  "soma-application",
