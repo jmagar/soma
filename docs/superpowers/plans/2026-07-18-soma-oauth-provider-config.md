@@ -4,7 +4,7 @@
 
 **Goal:** Make the `soma` binary's own pre-flight validation (`soma setup`), `.env` persistence, plugin-option/env-var registry, and `soma doctor` output aware of the Authelia/GitHub providers added to `soma-auth` in `docs/superpowers/plans/2026-07-18-oauth-provider-trait.md`, instead of hardcoding "Google is the only OAuth provider."
 
-**Architecture:** `apps/soma/src/lib.rs`'s `build_auth_policy` already resolves OAuth config by calling `soma_auth::config::AuthConfigBuilder::build_from_sources(std::env::vars())` directly against the raw process environment — it does **not** go through `soma`'s own typed `soma_config::Config`/`AuthConfig` struct at all. That means an operator can already set `SOMA_MCP_AUTHELIA_CLIENT_ID` etc. and use the providers end-to-end at runtime with **zero changes to `apps/soma` or `crates/soma/runtime`**. What's not yet aware of the new providers is the product-support view used by pre-flight checks and generated docs: `crates/soma/config/src/config.rs` (typed config and env loading), `crates/soma/config/src/env_registry.rs` (canonical env-var/plugin-option metadata), `crates/soma/cli/src/setup.rs` (validation and `.env` persistence), and `crates/soma/cli/src/doctor/checks.rs` (the doctor auth label). `crates/soma/domain` owns action/error/scope contracts and is intentionally unchanged; OAuth configuration belongs in `soma-config` after the contracts-crate split.
+**Architecture:** `apps/soma/src/bootstrap.rs`'s `http_auth_policy` already resolves OAuth config by calling `soma_integrations::auth::soma_auth_config_builder().build_from_sources(std::env::vars())` directly against the raw process environment — it does **not** go through `soma`'s own typed `soma_config::Config`/`AuthConfig` struct at all. That means an operator can already set `SOMA_MCP_AUTHELIA_CLIENT_ID` etc. and use the providers end-to-end at runtime with **zero changes to `apps/soma` or `crates/soma/runtime`**. What's not yet aware of the new providers is the product-support view used by pre-flight checks and generated docs: `crates/soma/config/src/config.rs` (typed config and env loading), `crates/soma/config/src/env_registry.rs` (canonical env-var/plugin-option metadata), `crates/soma/cli/src/setup.rs` (validation and `.env` persistence), and `crates/soma/cli/src/doctor/checks.rs` (the doctor auth label). `crates/soma/domain` owns action/error/scope contracts and is intentionally unchanged; OAuth configuration belongs in `soma-config` after the contracts-crate split.
 
 **Tech Stack:** Rust 2024, same as the rest of `soma`. No new dependencies.
 
@@ -510,7 +510,7 @@ Engineering review's simplicity pass flagged that this file, `soma_auth::config:
         // Every combination below must produce the same pass/fail verdict
         // from this file's `check_auth` and from `soma_auth::config::
         // AuthConfig::validate()` (via `AuthConfigBuilder::build_from_sources`
-        // against the same env vars, mirroring what `apps/soma/src/lib.rs`
+        // against the same env vars, mirroring what `apps/soma/src/bootstrap.rs`
         // actually does at runtime). If this test ever needs updating because
         // the two disagree, that disagreement IS the bug — fix whichever
         // validator is wrong, don't just update the test to match.
@@ -722,41 +722,78 @@ Replace:
         }
 ```
 
-with:
-
-```rust
-        Ok(AuthPolicyKind::MountedOAuth) => DoctorCheck::pass(
-            "auth",
-            "Auth mode",
-            format!("OAuth ({})", configured_oauth_providers_label(config)),
-        ),
-```
-
 Add the helper function right above `check_auth_config`:
 
 ```rust
-/// Human-readable summary of which OAuth providers are configured, for the
-/// doctor report. Mirrors `soma_auth::config::AuthConfig::validate`'s
-/// "at least one provider" logic — this function only formats a label, it
-/// does not itself decide whether OAuth mode is valid (that's
-/// `resolve_auth_policy_kind`, unchanged by this plan).
-fn configured_oauth_providers_label(config: &Config) -> String {
+/// Validate the typed OAuth provider mirror and return a human-readable
+/// summary for the doctor report. `resolve_auth_policy_kind` only selects the
+/// mounted OAuth policy from `auth.mode`; it does not validate provider
+/// credentials, so doctor must reject partial provider configurations here.
+fn configured_oauth_providers_label(config: &Config) -> Result<String, String> {
     let mut providers = Vec::new();
-    if config.mcp.auth.google_client_id.is_some() {
-        providers.push("Google");
+    match (
+        config.mcp.auth.google_client_id.as_deref(),
+        config.mcp.auth.google_client_secret.as_deref(),
+    ) {
+        (Some(_), Some(_)) => providers.push("Google"),
+        (Some(_), None) | (None, Some(_)) => {
+            return Err("Google OAuth requires both client ID and client secret".into());
+        }
+        (None, None) => {}
     }
-    if config.mcp.auth.authelia_client_id.is_some() {
-        providers.push("Authelia");
+    match (
+        config.mcp.auth.authelia_issuer_url.as_deref(),
+        config.mcp.auth.authelia_client_id.as_deref(),
+        config.mcp.auth.authelia_client_secret.as_deref(),
+    ) {
+        (Some(_), Some(_), Some(_)) => providers.push("Authelia"),
+        (None, None, None) => {}
+        _ => {
+            return Err(
+                "Authelia OAuth requires issuer URL, client ID, and client secret".into(),
+            );
+        }
     }
-    if config.mcp.auth.github_client_id.is_some() {
-        providers.push("GitHub");
+    match (
+        config.mcp.auth.github_client_id.as_deref(),
+        config.mcp.auth.github_client_secret.as_deref(),
+    ) {
+        (Some(_), Some(_)) => providers.push("GitHub"),
+        (Some(_), None) | (None, Some(_)) => {
+            return Err("GitHub OAuth requires both client ID and client secret".into());
+        }
+        (None, None) => {}
     }
     if providers.is_empty() {
-        "none configured".to_string()
-    } else {
-        providers.join(", ")
+        return Err("OAuth mode requires at least one fully configured provider".into());
     }
+    if let Some(default_provider) = config.mcp.auth.default_provider.as_deref() {
+        let is_configured = match default_provider {
+            "google" => providers.contains(&"Google"),
+            "authelia" => providers.contains(&"Authelia"),
+            "github" => providers.contains(&"GitHub"),
+            _ => false,
+        };
+        if !is_configured {
+            return Err(format!(
+                "OAuth default provider `{default_provider}` must name a configured provider"
+            ));
+        }
+    }
+    Ok(providers.join(", "))
 }
+```
+
+Use the helper from the `MountedOAuth` match arm and turn validation failures
+into a failed doctor check:
+
+```rust
+        Ok(AuthPolicyKind::MountedOAuth) => match configured_oauth_providers_label(config) {
+            Ok(providers) => {
+                DoctorCheck::pass("auth", "Auth mode", format!("OAuth ({providers})"))
+            }
+            Err(message) => DoctorCheck::fail("auth", "Auth mode", message),
+        },
 ```
 
 - [ ] **Step 2: Add a regression test**
@@ -767,18 +804,44 @@ Add the regression to the existing sibling `crates/soma/cli/src/doctor/checks_te
     #[test]
     fn auth_doctor_check_labels_multiple_configured_providers() {
         let mut config = Config::default();
+        config.mcp.host = "0.0.0.0".into();
         config.mcp.auth.mode = AuthMode::OAuth;
         config.mcp.auth.public_url = Some("https://example.com".into());
         config.mcp.auth.google_client_id = Some("g-id".into());
+        config.mcp.auth.google_client_secret = Some("g-secret".into());
         config.mcp.auth.github_client_id = Some("gh-id".into());
+        config.mcp.auth.github_client_secret = Some("gh-secret".into());
         let check = check_auth_config(&config);
-        assert!(check.detail.contains("Google"));
-        assert!(check.detail.contains("GitHub"));
-        assert!(!check.detail.contains("Authelia"));
+        let value = check.value.expect("passing check has a value");
+        assert!(value.contains("Google"));
+        assert!(value.contains("GitHub"));
+        assert!(!value.contains("Authelia"));
+    }
+
+    #[test]
+    fn auth_doctor_check_rejects_partial_provider_configuration() {
+        let mut config = Config::default();
+        config.mcp.host = "0.0.0.0".into();
+        config.mcp.auth.mode = AuthMode::OAuth;
+        config.mcp.auth.google_client_id = Some("g-id".into());
+        let check = check_auth_config(&config);
+        assert!(!check.ok);
+        assert!(check.hint.expect("failed check has a hint").contains("client secret"));
+    }
+
+    #[test]
+    fn auth_doctor_check_rejects_unconfigured_default_provider() {
+        let mut config = Config::default();
+        config.mcp.host = "0.0.0.0".into();
+        config.mcp.auth.mode = AuthMode::OAuth;
+        config.mcp.auth.google_client_id = Some("g-id".into());
+        config.mcp.auth.google_client_secret = Some("g-secret".into());
+        config.mcp.auth.default_provider = Some("github".into());
+        let check = check_auth_config(&config);
+        assert!(!check.ok);
+        assert!(check.hint.expect("failed check has a hint").contains("default provider"));
     }
 ```
-
-Check `DoctorCheck`'s actual field name for the message text (`detail` is a guess based on the existing `DoctorCheck::pass("auth", "Auth mode", "...")` 3-arg shape — read the `DoctorCheck` struct definition in this file or a sibling module first and use its real field name).
 
 - [ ] **Step 3: Run tests**
 
