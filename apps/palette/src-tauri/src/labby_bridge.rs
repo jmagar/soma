@@ -258,7 +258,45 @@ pub(crate) async fn fetch_launcher_schema(
     let response =
         crate::oauth::send_with_reauth(&app, client, &base_url, static_token, &oauth_state, make)
             .await?;
-    response_to_result(response).await
+    match response_to_result(response).await {
+        Ok(result) => Ok(result),
+        // Mirror fetch_launcher_catalog/execute_launcher_entry's discovery
+        // retry: when the saved server URL points at the web UI origin, the
+        // catalog and execute calls recover by discovering the real API
+        // base and retrying, but this schema fetch used to return the HTML
+        // error straight through. That left schema-driven params broken
+        // for any catalog entry even though the catalog itself had already
+        // loaded (via the same recovery on fetch_launcher_catalog).
+        Err(err) if err == WRONG_API_HOST_HINT => {
+            let discovered = discover_api_base_url(client, &base_url).await?;
+            let mut url = reqwest::Url::parse(&format!(
+                "{}{SCHEMA_PATH}",
+                discovered.trim_end_matches('/')
+            ))
+            .map_err(|err| err.to_string())?;
+            url.query_pairs_mut().append_pair("id", &id);
+            let make = |token: Option<&str>| {
+                let mut b = client
+                    .get(url.clone())
+                    .header(reqwest::header::ACCEPT, "application/json");
+                if let Some(t) = token {
+                    b = b.bearer_auth(t);
+                }
+                b
+            };
+            let response = crate::oauth::send_with_reauth(
+                &app,
+                client,
+                &discovered,
+                static_token,
+                &oauth_state,
+                make,
+            )
+            .await?;
+            response_to_result(response).await
+        }
+        Err(err) => Err(err),
+    }
 }
 
 #[tauri::command]
