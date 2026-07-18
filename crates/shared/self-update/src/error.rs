@@ -21,6 +21,16 @@ pub enum UpdateError {
     ArtifactTooLarge { limit: u64, actual: u64 },
     #[error("artifact digest mismatch: expected {expected}, got {actual}")]
     DigestMismatch { expected: String, actual: String },
+    #[error("validator timed out after {timeout:?}")]
+    ValidationTimedOut { timeout: std::time::Duration },
+    #[error("validator exited unsuccessfully (code {code:?}): {stderr}")]
+    ValidationFailed { code: Option<i32>, stderr: String },
+    #[error("validator output is not valid UTF-8")]
+    InvalidVersionOutput,
+    #[error("validator {stream} exceeded the {limit} byte output limit")]
+    ValidationOutputTooLarge { stream: &'static str, limit: usize },
+    #[error("validator output did not contain exact version {expected}: {output}")]
+    VersionMismatch { expected: String, output: String },
     #[error("I/O operation failed for {path}: {source}")]
     Io {
         path: PathBuf,

@@ -224,11 +224,11 @@
 
   ```rust
   impl Updater {
-      pub async fn validate(&self, staged: &StagedArtifact) -> Result<ValidatedArtifact>;
+      pub async fn validate(&self, staged: StagedArtifact) -> Result<ValidatedArtifact>;
   }
   ```
 
-  Spawn the staged path with `--version`, pipe stdout/stderr, set `kill_on_drop(true)`, enforce `policy.validation_timeout()` with `tokio::time::timeout`, and explicitly kill/wait on timeout. Read at most 16 KiB per output stream. Treat the advertised version as a whole ASCII-whitespace-delimited token after trimming surrounding ASCII punctuation, never as a substring. `ValidatedArtifact` privately retains the staged artifact so installation cannot accept unvalidated bytes.
+  Consume the staged artifact, spawn its path with `--version`, pipe stdout/stderr, set `kill_on_drop(true)`, enforce `policy.validation_timeout()` with `tokio::time::timeout`, and explicitly kill/wait on timeout. Drain each output stream while retaining at most 16 KiB. Treat the advertised version as a whole ASCII-whitespace-delimited token after trimming surrounding ASCII punctuation, never as a substring. `ValidatedArtifact` privately retains the staged artifact so installation cannot accept unvalidated bytes.
 
 - [ ] **Step 4: Run focused tests and commit**
 

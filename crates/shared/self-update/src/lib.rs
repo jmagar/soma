@@ -9,12 +9,14 @@
 mod error;
 mod directive;
 mod staging;
+mod validation;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub use error::{Result, UpdateError};
 pub use staging::StagedArtifact;
+pub use validation::ValidatedArtifact;
 
 /// Network transports permitted for an artifact URL.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
