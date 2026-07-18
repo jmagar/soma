@@ -89,6 +89,8 @@ pub struct AuthorizeQuery {
     pub resource: Option<String>,
     #[serde(default)]
     pub scope: String,
+    #[serde(default)]
+    pub provider: Option<String>,
     pub code_challenge: String,
     pub code_challenge_method: String,
 }
@@ -103,6 +105,8 @@ pub struct CallbackQuery {
 pub struct BrowserLoginQuery {
     #[serde(default)]
     pub return_to: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
