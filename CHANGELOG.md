@@ -33,8 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Tokio blocking workers. The compile-checked heartbeat example separates
   authentication from parsing and propagates health-report failures before
   confirmation. Marker temporaries and advisory locks are created mode `0600`;
-  marker reads reject group/other-writable state, and lock descriptors are
+  marker reads reject any group/other access, and lock descriptors are
   no-follow, owner/type checked, and repair owned legacy permissions before use.
+  Bare relative executable layouts normalize their empty parent to the current
+  directory. Successful validation explicitly terminates and drains its Unix
+  process group or Windows Job Object before accepting captured output, so
+  pipe-detached helpers cannot survive a successful candidate.
+  Transaction lock guards explicitly unlock before descriptor close, making
+  immediate back-to-back recovery calls deterministic.
   The crate has no internal workspace dependencies; this change
   does not enable self-update behavior in the Soma runtime or integrate Cortex.
 - Restructured `apps/soma` (plan section 3.1, PR 18) into a composition-only

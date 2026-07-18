@@ -141,6 +141,30 @@ async fn deadline_covers_pipe_inheriting_descendants_and_kills_the_group() {
 }
 
 #[tokio::test]
+async fn successful_validation_terminates_a_pipe_detached_helper() {
+    let script = b"#!/bin/sh\n(sleep 30 </dev/null >/dev/null 2>&1) &\necho $! > \"$0.child\"\necho 'example 1'\nexit 0\n";
+    let (_temp, updater, artifact) = staged(script, "1", Duration::from_secs(2)).await;
+    let child_file = artifact.path().with_extension("part.child");
+
+    let result = tokio::time::timeout(Duration::from_secs(3), updater.validate(artifact))
+        .await
+        .expect("successful validation did not complete");
+    assert!(result.is_ok(), "{result:?}");
+    let pid: u32 = std::fs::read_to_string(&child_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    for _ in 0..100 {
+        if !process_is_alive(pid) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("validator helper {pid} survived successful validation");
+}
+
+#[tokio::test]
 async fn aborting_validation_kills_the_validator_process_group() {
     let script = b"#!/bin/sh\nsleep 30 &\necho $! > \"$0.child\"\nwait\n";
     let (_temp, updater, artifact) = staged(script, "1", Duration::from_secs(30)).await;

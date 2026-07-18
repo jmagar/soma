@@ -3,6 +3,7 @@
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use soma_self_update::{RecoveryAction, UpdateLayout, UpdatePolicy, Updater};
+use std::os::unix::fs::PermissionsExt;
 use tempfile::tempdir;
 
 fn digest(bytes: &[u8]) -> String {
@@ -38,6 +39,7 @@ fn write_marker(
         .unwrap(),
     )
     .unwrap();
+    std::fs::set_permissions(state, std::fs::Permissions::from_mode(0o600)).unwrap();
 }
 
 #[tokio::test]

@@ -127,11 +127,11 @@ pub(super) fn read_marker(path: &Path, expected_executable: &Path) -> Result<Opt
         .map_err(|error| UpdateError::io(path, error))?;
     if !metadata.file_type().is_file()
         || metadata.uid() != nix::unistd::geteuid().as_raw()
-        || metadata.mode() & 0o022 != 0
+        || metadata.mode() & 0o077 != 0
     {
         return Err(UpdateError::InvalidMarker {
             path: path.to_path_buf(),
-            message: "marker must be a service-owned non-symlink regular file without group/other write access".into(),
+            message: "marker must be a service-owned mode-0600 non-symlink regular file".into(),
         });
     }
     if metadata.len() > MAX_MARKER_BYTES {
@@ -253,13 +253,13 @@ mod tests {
     }
 
     #[test]
-    fn marker_open_rejects_group_or_other_writable_state() {
+    fn marker_open_rejects_any_group_or_other_access() {
         use std::os::unix::fs::PermissionsExt;
 
         let temp = tempfile::tempdir().unwrap();
         let state = temp.path().join("update.json");
         std::fs::write(&state, b"{}").unwrap();
-        std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o666)).unwrap();
+        std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o644)).unwrap();
 
         assert!(matches!(
             read_marker(&state, &temp.path().join("agent")),
@@ -267,7 +267,7 @@ mod tests {
         ));
         assert_eq!(
             std::fs::metadata(&state).unwrap().permissions().mode() & 0o777,
-            0o666
+            0o644
         );
     }
 }

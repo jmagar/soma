@@ -93,13 +93,12 @@ impl Updater {
         R: AsyncRead + Unpin,
     {
         reject_executable_leaf_symlink(self.layout().executable())?;
-        let configured_directory =
-            self.layout()
-                .executable()
-                .parent()
-                .ok_or(UpdateError::InvalidPolicy(
-                    "executable must have a parent directory",
-                ))?;
+        let configured_directory = self
+            .layout()
+            .executable()
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
         let directory = tokio::fs::canonicalize(configured_directory)
             .await
             .map_err(|error| UpdateError::io(configured_directory, error))?;

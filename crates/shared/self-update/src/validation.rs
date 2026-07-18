@@ -74,7 +74,7 @@ impl Updater {
             .expect("piped stderr is configured");
         let completed = tokio::time::timeout_at(deadline, async {
             let (status, stdout, stderr) = tokio::join!(
-                child.child_mut().wait(),
+                child.leader_mut().wait(),
                 read_bounded(stdout),
                 read_bounded(stderr)
             );
@@ -93,7 +93,7 @@ impl Updater {
                 return Err(UpdateError::ValidationTimedOut { timeout });
             }
         };
-        child.disarm();
+        child.terminate_and_drain(&path).await?;
         if stdout.overflowed {
             return Err(UpdateError::ValidationOutputTooLarge {
                 stream: "stdout",
@@ -149,6 +149,25 @@ impl ValidationProcessGuard {
 
     fn child_mut(&mut self) -> &mut dyn ChildWrapper {
         self.child.as_mut()
+    }
+
+    fn leader_mut(&mut self) -> &mut dyn ChildWrapper {
+        self.child.inner_mut()
+    }
+
+    async fn terminate_and_drain(&mut self, path: &std::path::Path) -> Result<()> {
+        match self.child.start_kill() {
+            Ok(()) => {}
+            #[cfg(unix)]
+            Err(error) if error.raw_os_error() == Some(nix::libc::ESRCH) => {}
+            Err(error) => return Err(UpdateError::io(path, error)),
+        }
+        self.child
+            .wait()
+            .await
+            .map_err(|error| UpdateError::io(path, error))?;
+        self.disarm();
+        Ok(())
     }
 
     fn disarm(&mut self) {

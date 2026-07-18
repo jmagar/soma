@@ -1,4 +1,6 @@
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use soma_self_update::{ConfirmationOutcome, RecoveryAction};
 use soma_self_update::{UpdateDirective, UpdateError, UpdateLayout, UpdatePolicy, Updater};
 use tempfile::tempdir;
 #[cfg(unix)]
@@ -82,6 +84,69 @@ async fn staging_paths_are_unique() {
     let first = updater.stage(&b"x"[..], &directive).await.unwrap();
     let second = updater.stage(&b"x"[..], &directive).await.unwrap();
     assert_ne!(first.path(), second.path());
+}
+
+#[cfg(unix)]
+#[test]
+fn bare_relative_layout_completes_the_update_lifecycle_from_current_dir() {
+    use std::os::unix::fs::PermissionsExt;
+
+    const CHILD_ENV: &str = "SOMA_SELF_UPDATE_RELATIVE_LAYOUT_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let old = b"#!/bin/sh\necho 'agent 1'\n";
+        let new = b"#!/bin/sh\necho 'agent 2'\n";
+        std::fs::write("agent", old).unwrap();
+        std::fs::set_permissions("agent", std::fs::Permissions::from_mode(0o700)).unwrap();
+        let updater = Updater::new(
+            UpdateLayout::new("agent", "state.json"),
+            UpdatePolicy::default(),
+        );
+        let directive = UpdateDirective::new("2", "/agent", digest(new)).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let staged = updater.stage(&new[..], &directive).await.unwrap();
+            assert_eq!(
+                staged.path().parent().unwrap().canonicalize().unwrap(),
+                std::env::current_dir().unwrap().canonicalize().unwrap()
+            );
+            let validated = updater.validate(staged).await.unwrap();
+            updater.install(validated, "1").await.unwrap();
+            assert!(matches!(
+                updater.recover_on_startup("2").await.unwrap(),
+                RecoveryAction::PendingUpdate { .. }
+            ));
+            assert_eq!(
+                updater.confirm_success("2").await.unwrap(),
+                ConfirmationOutcome::Confirmed {
+                    version: "2".into()
+                }
+            );
+        });
+        assert_eq!(std::fs::read("agent").unwrap(), new);
+        assert!(!std::path::Path::new("state.json").exists());
+        return;
+    }
+
+    let temp = tempdir().unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "bare_relative_layout_completes_the_update_lifecycle_from_current_dir",
+            "--nocapture",
+        ])
+        .current_dir(temp.path())
+        .env(CHILD_ENV, "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "relative-layout child failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[cfg(unix)]

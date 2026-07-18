@@ -1,6 +1,7 @@
 #![cfg(unix)]
 
 use std::fs::OpenOptions;
+use std::os::unix::fs::PermissionsExt;
 
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
@@ -322,6 +323,7 @@ async fn oversized_markers_fail_bounded_and_remain_for_diagnosis() {
     let state = temp.path().join("update.json");
     std::fs::write(&executable, b"old").unwrap();
     std::fs::write(&state, vec![b'x'; 64 * 1024 + 1]).unwrap();
+    std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o600)).unwrap();
     let updater = Updater::new(
         UpdateLayout::new(&executable, &state),
         UpdatePolicy::default(),
@@ -481,6 +483,7 @@ async fn lock_and_corrupt_recovery_state_fail_closed() {
     lock.unlock().unwrap();
 
     std::fs::write(&state, b"not json").unwrap();
+    std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o600)).unwrap();
     assert!(matches!(
         updater.recover_on_startup("1").await,
         Err(UpdateError::InvalidMarker { .. })

@@ -7,7 +7,13 @@ use super::transaction_io::{path_identity, suffix_path};
 use crate::{Result, UpdateError, Updater, reject_executable_leaf_symlink};
 
 pub(super) struct TransactionLock {
-    _file: File,
+    file: File,
+}
+
+impl Drop for TransactionLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
 }
 
 pub(super) struct LayoutPaths {
@@ -62,7 +68,7 @@ impl Updater {
                 UpdateError::io(lock_path, error)
             }
         })?;
-        Ok(TransactionLock { _file: file })
+        Ok(TransactionLock { file })
     }
 
     pub(super) fn validated_layout(&self) -> Result<LayoutPaths> {
