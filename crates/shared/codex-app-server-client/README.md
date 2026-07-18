@@ -8,6 +8,17 @@ interface Codex uses to power rich clients like the VS Code extension.
 lives in.** Every dependency is a published crate from crates.io. It can be
 copied into another project wholesale and will keep working.
 
+- **MSRV:** Rust 1.96 | **Edition:** 2021 | **License:** MIT
+
+## Contents
+
+- [What it does](#what-it-does) | [What it deliberately doesn't do](#what-it-deliberately-doesnt-do)
+- [Quick start](#quick-start) | [Cargo features](#cargo-features)
+- [Batteries-included surface](#batteries-included-surface) — [`SessionOptions` builder](#sessionoptions-the-session-builder) | [Transports](#transports-stdio-unix-socket-arbitrary-streams) | [Approval handlers](#approval-handlers)
+- [Optional REST adapter](#optional-rest-adapter) — [binary](#run-it-as-a-binary) | [mount](#mount-it-in-your-own-app) | [routes](#routes) | [bearer auth](#bearer-auth) | [CORS](#browser-clients-need-cors--the-adapter-adds-none) | [operational knobs](#operational-knobs) | [error model](#rest-error-model) | [custom backend](#custom-backend-pooling-tenancy-your-own-process-lifecycle) | [OpenAPI](#openapi) | [examples](#examples)
+- [How the typed protocol layer is built](#how-the-typed-protocol-layer-is-built) | [Regenerating the schema](#regenerating-the-schema-after-upgrading-codex)
+- [Reliability behavior](#reliability-behavior) | [Compatibility & versioning](#compatibility--versioning) | [License](#license)
+
 ## What it does
 
 - Spawns `codex app-server` as a child process (or connects to an
@@ -97,6 +108,18 @@ See:
 - `tests/smoke.rs` for a live integration test against the real binary
   (skips gracefully if `codex` isn't on `PATH`).
 
+## Cargo features
+
+| Feature | Default | Pulls in | Enables |
+|---|---|---|---|
+| *(none)* | ✓ | — | the full typed JSON-RPC client, `CodexSession`, approval handlers, `EventCollector`, `CodexDaemon`, `CompatibilityReport` |
+| `rest` | | `axum`, `futures-core`, `tower-layer`, `tower-service`, and `tokio/rt-multi-thread` + `tokio/signal` | the [`rest`](#optional-rest-adapter) HTTP adapter, `rest::openapi_spec()`, and the `codex-app-server-rest` binary |
+
+The default (feature-less) build is a pure library with no HTTP surface. The
+`rest` feature is purely additive; the multi-threaded runtime and signal
+handling it pulls in are used only by the binary, so a library-only consumer
+never pays for them. No feature depends on anything outside crates.io.
+
 ## Batteries-included surface
 
 The generated low-level methods are still available directly through
@@ -145,6 +168,80 @@ The generated low-level methods are still available directly through
 - `CompatibilityReport::current()`: compare the installed `codex --version`
   with the vendored schema stamp and print method-count diagnostics.
 
+### `SessionOptions`: the session builder
+
+`SessionOptions::new(name, version)` is the minimum; everything else is an
+optional chained builder:
+
+| Method | Effect |
+|---|---|
+| `.with_title(title)` | sets the client's display title in `initialize` |
+| `.with_command(command)` | runs a different executable than `codex` (e.g. an absolute path or wrapper) |
+| `.with_extra_arg(arg)` | appends an argv entry to the spawned process (e.g. `--experimental`); call repeatedly |
+| `.with_config(key, value)` | passes a `-c key=value` config override to `codex` |
+| `.with_capabilities(caps)` | supplies explicit `InitializeCapabilities` instead of the defaults |
+| `.with_call_timeout(duration)` | overrides the per-call request/response timeout (`DEFAULT_CALL_TIMEOUT`, 120s) |
+| `.with_events_capacity(n)` | sizes the per-session event channel (`DEFAULT_EVENTS_CHANNEL_CAPACITY`, 1024); a slow consumer drops notifications past this, but never server *requests* — see [Reliability behavior](#reliability-behavior) |
+
+```rust,no_run
+use codex_app_server_client::{CodexSession, SessionOptions};
+use std::time::Duration;
+
+# async fn run() -> codex_app_server_client::Result<()> {
+let options = SessionOptions::new("my_integration", "0.1.0")
+    .with_extra_arg("--experimental")
+    .with_call_timeout(Duration::from_secs(180))
+    .with_events_capacity(4096);
+let mut session = CodexSession::spawn(options).await?;
+# let _ = &mut session;
+# Ok(())
+# }
+```
+
+### Transports: stdio, Unix socket, arbitrary streams
+
+The client speaks the same NDJSON JSON-RPC 2.0 wire format over three
+transports; pick whichever fits how you already run `codex app-server`:
+
+- **Spawned child (stdio, the default):** `CodexSession::spawn(options)` or
+  `CodexAppServerClient::spawn(command, extra_args)` fork `codex app-server`
+  and own its lifecycle.
+- **Existing Unix socket:** `CodexSession::connect_unix(path, options)` /
+  `CodexAppServerClient::connect_unix(path)` attach to a running
+  `codex app-server --listen unix://PATH` daemon (build those args with
+  `CodexDaemon`).
+- **Any `AsyncRead + AsyncWrite` pair:** `CodexSession::connect_streams(reader,
+  writer, options)` / `CodexAppServerClient::connect_streams(reader, writer)`
+  drive the protocol over a stream pair you already hold (a custom transport,
+  a test harness, a tunnel).
+
+Each `CodexAppServerClient` constructor has a `*_with_events_capacity` variant
+(`spawn_with_events_capacity`, `connect_streams_with_events_capacity`,
+`connect_unix_with_events_capacity`) for sizing the event channel directly when
+you build the low-level client rather than going through `SessionOptions`.
+
+There is deliberately no WebSocket transport — OpenAI marks it experimental and
+unsupported.
+
+### Approval handlers
+
+Server-originated requests (command/file-change/permission approvals,
+elicitation, tool-call input) are answered by an `ApprovalHandler`. Pick a
+preset or supply your own:
+
+| Handler | Behavior |
+|---|---|
+| `DenyAllApprovalHandler` | rejects every server request with a JSON-RPC error — safe for read-only/smoke prompts |
+| `ReadOnlyApprovalHandler` | answers `currentTime/read`, declines command/file-change prompts |
+| `AllowAllApprovalHandler` | approves command, file-change, legacy command/patch, and permission-profile requests |
+| `FnApprovalHandler` | routes each typed `ServerRequest` through your sync closure |
+| `AsyncFnApprovalHandler` | the same, but your closure returns an `ApprovalFuture` so UI/channel/service-backed policies can await a decision without blocking a Tokio worker |
+
+Presets intentionally return clear errors for requests they can't answer
+safely (dynamic tool calls, auth refreshes, other app-specific flows) rather
+than guessing. Reply plumbing for the raw path is `PendingServerRequest`'s
+`respond` / `respond_error` (see `ServerRequestReply`).
+
 ## Optional REST adapter
 
 Enable the `rest` feature when you want a portable HTTP bridge for the Codex
@@ -178,12 +275,24 @@ cargo install --path . --features rest
 codex-app-server-rest --host 127.0.0.1 --port 43210 --mode text-turn
 ```
 
+The flags (each with a `CODEX_APP_SERVER_REST_*` env fallback; the flag wins
+when both are set):
+
+| Flag | Env fallback | Default | Meaning |
+|---|---|---|---|
+| `--host <HOST>` | `…_HOST` (or `…_ADDR` for `host:port`) | `127.0.0.1` | bind host |
+| `--port <PORT>` | `…_PORT` (or `…_ADDR`) | `43210` | bind port |
+| `--mode <MODE>` | `…_MODE` | `text-turn` | router: `health-only`, `text-turn`, or `trusted-bridge` |
+| `--token <TOKEN>` | `…_TOKEN` | — | require `Authorization: Bearer <TOKEN>` (bearer auth on) |
+| `--allow-unsafe-client-options` | — | off | admin-only: let callers override `command`/`extraArgs`/`config`/`approvalPolicy` |
+| `--help`, `--version` | — | — | print usage / version and exit |
+
 `--mode` selects the router: `health-only` (health + compatibility only),
-`text-turn` (adds the one-shot text helper), or `trusted-bridge` (adds the
-raw session/call/event routes). `--token <secret>` turns on bearer auth;
-`--allow-unsafe-client-options` opts into the admin-only posture below. Every
-flag has a `CODEX_APP_SERVER_REST_*` env fallback, and the binary prints its
-effective configuration (never the token) on startup.
+`text-turn` (adds the one-shot text helper), or `trusted-bridge` (adds the raw
+session/call/event routes). Resource limits come from the
+[`CODEX_APP_SERVER_REST_*` env knobs](#operational-knobs). The binary prints
+its effective configuration (mode, bind, auth on/off, unsafe options, and all
+resolved limits — never the token) on startup.
 
 The binary refuses to start rather than let you deploy something dangerous by
 accident: a non-loopback bind in `--mode trusted-bridge` without `--token` is
@@ -207,7 +316,9 @@ axum::serve(listener, rest::text_turn_router()).await?;
 # }
 ```
 
-Routes:
+### Routes
+
+Always mounted (every router constructor):
 
 - `GET /health` and `GET /v1/health`: liveness probe.
 - `GET /v1/compatibility`: schema stamp, installed `codex --version`, and
@@ -285,7 +396,11 @@ A session has **at most one active event consumer**. `/events` and
 reader for the same session — of either kind — gets `409 Conflict` rather
 than silently splitting events between two readers. Pick one per session.
 
-One-shot text helper request:
+One-shot text helper request. `approvalPolicy` is one of `deny_all` (default),
+`read_only`, or `allow_all` — and `allow_all` is rejected with `403` unless the
+router was built with `with_unsafe_client_options(true)`. The `client` object
+is optional; its `command`/`extraArgs`/`config` fields are the "unsafe" options
+gated the same way.
 
 ```json
 {
@@ -548,6 +663,60 @@ caps how often an idle stream reports that nothing happened.
 A variable that is present but unparseable is a hard error, never a silent
 fallback to the default — that is how a 10x-wrong limit ships unnoticed.
 
+### REST error model
+
+Every error response is the same JSON envelope, `RestErrorResponse`:
+
+```json
+{ "error": "not_found", "message": "session `x` was not found", "code": null, "data": null }
+```
+
+`error` is a stable machine-readable kind; `message` is human-readable; `code`
+and `data` are populated only when the failure is a JSON-RPC error forwarded
+from the underlying `codex app-server` (they carry its numeric code and data).
+The status codes the adapter emits:
+
+| Status | `error` kind | When |
+|---|---|---|
+| `400` | `invalid_request` / `invalid_json` | malformed body or bad request shape |
+| `401` | `unauthorized` | bearer auth mounted and the token is missing/wrong |
+| `403` | `forbidden` | an unsafe client option was requested without opting in |
+| `404` | `not_found` | unknown session, method, or pending request |
+| `409` | `conflict` | a second event consumer for a session that already has one |
+| `410` | `gone` | a server request expired before it could be answered |
+| `413` | `payload_too_large` | request body over `MAX_REQUEST_BODY_BYTES`, or turn output over `MAX_TEXT_TURN_OUTPUT_BYTES` |
+| `429` | `rate_limited` | a concurrency/session limit is saturated |
+| `500` | `internal` | an adapter-internal failure (e.g. a check task panicked) |
+| `502` | `json_rpc_error` / `codex_app_server_error` | the app-server process failed, disconnected, or returned a JSON-RPC error |
+| `504` | `timeout` | a text turn exceeded `MAX_TEXT_TURN_DURATION_MS` |
+
+On the SSE route, a failure that would be `404`/`409`/`410`/`429` on the
+long-poll route instead ends the stream with a terminal `event: error` frame
+carrying the same envelope (minus the HTTP status, since headers are already
+committed) — see the [routes](#routes) section.
+
+### Custom backend (pooling, tenancy, your own process lifecycle)
+
+The routers default to `CodexRestBackend`, which spawns and pools real
+`codex app-server` children. To control process lifecycle, pooling, tenancy,
+or policy yourself, implement the `RestBackend` trait and mount it:
+
+```rust,ignore
+use codex_app_server_client::rest::{self, RestRouterOptions};
+
+let router = rest::router_with_backend_and_options(
+    my_backend, // impl RestBackend
+    RestRouterOptions::trusted_bridge(),
+);
+```
+
+`RestBackend` has one required method per capability (`compatibility_report`,
+`run_text_turn`, and the session/call/event/reply methods), each with a
+default that returns a `not_found` error — so a backend only implements the
+routes it actually serves. `router_with_backend(...)` and
+`router_with_backend_arc(...)` are shorthands for the default (non-executing)
+options.
+
 ### OpenAPI
 
 `rest::openapi_spec()` returns an OpenAPI 3.1.0 document for the whole `rest`
@@ -739,3 +908,24 @@ about even though they're not "limitations" per se:
   a higher-level wrapper that pools/multiplexes several
   `CodexAppServerClient` connections and keys state by the id namespace of
   whichever connection a message came from.
+
+## Compatibility & versioning
+
+- **Codex protocol.** The vendored schema targets a specific `codex` version,
+  stamped in `schema/CODEX_VERSION.txt` and reported by `CODEX_SCHEMA_VERSION`
+  / `CompatibilityReport`. The surface counts are exposed as constants
+  (`CLIENT_REQUEST_METHOD_COUNT`, `SERVER_REQUEST_METHOD_COUNT`,
+  `SERVER_NOTIFICATION_METHOD_COUNT`, `CLIENT_NOTIFICATION_METHOD_COUNT`) and
+  as `SurfaceSummary::current()`. When you upgrade `codex`, see
+  [Regenerating the schema](#regenerating-the-schema-after-upgrading-codex);
+  `cargo xtask codex-schema drift` reports whether the installed CLI has moved
+  ahead of the vendored schema.
+- **Rust.** MSRV is 1.96 (edition 2021). Raising it is a breaking change for
+  consumers pinned to an older toolchain.
+- **Crate API.** Pre-1.0 (`0.1.x`); the public API may change between minor
+  versions. The `rest` wire surface is captured in [`openapi.json`](openapi.json),
+  which is the contract downstream (non-Rust) clients should track.
+
+## License
+
+MIT.
