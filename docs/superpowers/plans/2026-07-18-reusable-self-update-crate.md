@@ -350,7 +350,7 @@
 
 - [ ] **Step 5: Run example/docs tests and commit**
 
-  Run: `cargo test -p soma-self-update --test unix --doc`
+  Run: `cargo test -p soma-self-update --test unix && cargo test -p soma-self-update --doc`
 
   Expected: PASS.
 
