@@ -45,6 +45,26 @@ struct GitHubTokenResponse {
     access_token: String,
 }
 
+/// GitHub's token endpoint documented behavior: on an invalid, expired, or
+/// already-used authorization code it returns **HTTP 200** with an error
+/// body (`{"error":"bad_verification_code",...}`) instead of a non-2xx
+/// status — so `provider_http::read_json_response`'s `error_for_status()`
+/// never triggers, and we must distinguish success from failure by shape
+/// after the fact via this untagged enum, rather than by status code.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum GitHubTokenResult {
+    Success(GitHubTokenResponse),
+    Error(GitHubTokenErrorResponse),
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubTokenErrorResponse {
+    error: String,
+    #[serde(default)]
+    error_description: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 struct GitHubUser {
     id: u64,
@@ -133,7 +153,7 @@ impl GitHubProvider {
             redirect_uri = %self.redirect_uri,
             "oauth upstream code exchange started"
         );
-        let payload: GitHubTokenResponse = read_json_response(
+        let payload: GitHubTokenResult = read_json_response(
             trace,
             self.http
                 .post(self.token_endpoint.clone())
@@ -154,6 +174,19 @@ impl GitHubProvider {
             ),
         )
         .await?;
+        let payload = match payload {
+            GitHubTokenResult::Success(payload) => payload,
+            GitHubTokenResult::Error(error) => {
+                return Err(AuthError::InvalidGrant(format!(
+                    "github token exchange failed: {} ({})",
+                    error.error,
+                    error
+                        .error_description
+                        .as_deref()
+                        .unwrap_or("no description")
+                )));
+            }
+        };
         self.fetch_exchange(payload).await
     }
 
@@ -297,6 +330,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::{AuthorizeUrlRequest, GitHubProvider};
+    use crate::error::AuthError;
 
     #[tokio::test]
     async fn github_exchange_uses_numeric_id_as_subject_and_primary_verified_email() {
@@ -343,6 +377,42 @@ mod tests {
         assert_eq!(exchange.email_verified, Some(true));
         assert!(exchange.id_token.is_none());
         assert!(exchange.refresh_token.is_none());
+    }
+
+    /// Regression test: GitHub's token endpoint returns HTTP 200 with an
+    /// error body (no non-2xx status) on an invalid/expired/reused
+    /// authorization code — `exchange_code` must classify this as
+    /// `AuthError::InvalidGrant`, not fall through to `AuthError::Decode`
+    /// from a failed `GitHubTokenResponse` deserialization.
+    #[tokio::test]
+    async fn github_exchange_classifies_200_ok_error_body_as_invalid_grant() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/login/oauth/access_token"))
+            .and(header("accept", "application/json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "error": "bad_verification_code",
+                "error_description": "The code passed is incorrect or expired.",
+            })))
+            .mount(&server)
+            .await;
+
+        let base = url::Url::parse(&server.uri()).unwrap();
+        let provider = test_github_provider().with_endpoints(
+            base.join("login/oauth/authorize").unwrap(),
+            base.join("login/oauth/access_token").unwrap(),
+            base.join("user").unwrap(),
+            base.join("user/emails").unwrap(),
+        );
+
+        let error = provider
+            .exchange_code("code", "verifier")
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(error, AuthError::InvalidGrant(_)),
+            "expected InvalidGrant, got {error:?}"
+        );
     }
 
     #[tokio::test]

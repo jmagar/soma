@@ -128,7 +128,10 @@ pub(crate) async fn read_json_response<T: DeserializeOwned>(
         .and_then(|value| value.parse::<u64>().ok())
         .map(|seconds| seconds.saturating_mul(1_000));
     let response = response.error_for_status().map_err(|error| {
-        let auth_error = if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        let auth_error = if retry_after_ms.is_some() {
+            // GitHub's secondary rate limit (abuse detection) responds with
+            // 403, not 429, but does carry `Retry-After` — trust the header's
+            // presence over the exact status code so we don't miss it.
             AuthError::RateLimited {
                 message: format!("{}: {}", errors.status_context, status),
                 retry_after_ms: retry_after_ms.unwrap_or(1_000),
