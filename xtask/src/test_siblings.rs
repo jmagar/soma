@@ -160,16 +160,10 @@ const CHECKED_SRC_ROOTS: &[&str] = &[
 /// bare allowlist could not express.
 const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
     (
-        "crates/integrations/unifi/src",
-        "newly vendored (crates/integrations/ layer) with inline #[cfg(test)] \
-         mod tests throughout - no siblings anywhere in the crate yet.",
-    ),
-    (
         "crates/integrations/gotify/src",
-        "newly vendored (crates/integrations/ layer) with inline #[cfg(test)] \
-         mod tests throughout, plus tests/client.rs exercising the HTTP \
-         layer through the public API. Same convention as \
-         crates/integrations/unifi/src - see crates/integrations/README.md.",
+        "inline #[cfg(test)] mod tests throughout, plus tests/client.rs \
+         exercising the HTTP layer through the public API. Same convention \
+         as crates/integrations/unifi/src - see crates/integrations/README.md.",
     ),
     (
         "crates/shared/auth/src",
@@ -253,6 +247,14 @@ const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
         "mixed by module: xtask/src/codex_schema/ uses siblings, most other \
          modules use inline tests. Split per-module rather than per-crate before \
          checking this tree.",
+    ),
+    (
+        "crates/integrations/unifi/src",
+        "inline #[cfg(test)] mod tests throughout (63 as of writing), plus \
+         tests/client.rs and tests/action_dispatch.rs exercising the HTTP \
+         and dynamic-dispatch layers through the public API. This is the \
+         crates/integrations/* reference template's convention - see \
+         crates/integrations/README.md.",
     ),
 ];
 

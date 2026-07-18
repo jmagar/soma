@@ -32,6 +32,7 @@ struct Tool {
 /// Panics if the bundled inventory JSON fails to parse, or if it contains an
 /// `auth_scope` other than `"read"`/`"admin"` — see [`super::all_capabilities`]
 /// for why that can only happen from a broken build, not at runtime.
+#[allow(clippy::expect_used)]
 pub fn capabilities() -> Vec<Capability> {
     let inventory: Inventory = serde_json::from_str(include_str!(
         "../../data/unifi_internal_endpoint_models.json"
@@ -101,6 +102,11 @@ fn hybrid(action: &str, title: &str) -> Capability {
     }
 }
 
+/// # Panics
+/// Panics on any `scope` other than `"read"`/`"admin"` — only ever called
+/// with a field from the bundled, crate-owned inventory JSON, never with
+/// caller input; see [`capabilities`]'s own `# Panics` section.
+#[allow(clippy::panic)]
 fn auth_scope(scope: &str) -> AuthScope {
     match scope {
         "read" => AuthScope::Read,
