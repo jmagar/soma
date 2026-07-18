@@ -133,6 +133,7 @@ fn filename(path: &Path) -> String {
 const CHECKED_SRC_ROOTS: &[&str] = &[
     "apps/soma/src",
     "crates/shared/codemode/src",
+    "crates/shared/incus-client/src",
     "crates/shared/mcp/client/src",
     "crates/shared/mcp/gateway/src",
     "crates/shared/mcp/proxy/src",
@@ -158,6 +159,11 @@ const CHECKED_SRC_ROOTS: &[&str] = &[
 /// entry here is a decision, not an oversight - which is exactly what the old
 /// bare allowlist could not express.
 const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
+    (
+        "crates/integrations/unifi/src",
+        "inline #[cfg(test)] mod tests throughout, plus black-box coverage in \
+         tests/ - no sibling _tests.rs files anywhere in the crate.",
+    ),
     (
         "crates/shared/auth/src",
         "inline #[cfg(test)] mod tests throughout (21 modules, 0 siblings)",
