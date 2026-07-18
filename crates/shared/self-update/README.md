@@ -71,6 +71,8 @@ files are untouched. Calling startup recovery before each service loop therefore
 bounds crash leftovers across process restarts. Marker input is capped at 64
 KiB. Failed staging explicitly reports both the operation and cleanup error;
 automatic `Drop` cleanup is reserved as a best-effort cancellation fallback.
+On Unix each partial begins mode `0600` even under a permissive umask; only
+after the digest matches does staging apply the intended executable mode.
 
 Installation derives its advisory lock from the canonical state identity. The
 executable directory and state directory must not be writable by untrusted
@@ -94,13 +96,17 @@ The advisory lock is also created mode `0600`, opened no-follow/nonblocking,
 and descriptor-validated as a current-effective-user-owned regular file. An
 owned legacy lock with broader permissions is repaired to `0600`, synced, and
 re-checked before its exclusive lock is acquired.
-The transaction retains a unique rollback backup, syncs the backup and its
-directory before the marker may reference it, then atomically renames the
-verified artifact. Unix
+The transaction retains a unique rollback backup, records its actual owner in
+the marker, syncs the backup and its directory before the marker may reference
+it, then atomically renames the verified artifact. Copy destinations begin with
+the source executable mode before any bytes are written. Unix
 staging preserves the existing executable mode (falling back to restrictive
-`0700` only when no target exists); copy-based rollback backups preserve that
-same mode. `BackupStrategy::Copy` is available when an adopter cannot use hard
-links or wants to exercise the copy path explicitly.
+`0700` only when no target exists). Installation restores that intended mode
+through the validated descriptor, syncs it, and rechecks identity and mode
+immediately before replacement, so validator-side permission changes cannot
+install a non-executable target. Copy-based rollback backups preserve the same
+mode. `BackupStrategy::Copy` is available when an adopter cannot use hard links
+or wants to exercise the copy path explicitly.
 A process crash at any marker, swap, or rollback boundary is completed or
 aborted idempotently by startup recovery. Each unconfirmed startup increments
 the marker only after hashing the installed executable against the verified

@@ -16,6 +16,8 @@ pub struct StagedArtifact {
     pub(crate) sha256: String,
     bytes_written: u64,
     cleanup_on_drop: bool,
+    #[cfg(unix)]
+    pub(crate) intended_mode: u32,
 }
 
 impl StagedArtifact {
@@ -118,9 +120,22 @@ impl Updater {
             path: path.clone(),
             armed: true,
         };
-        let mut file = tokio::fs::OpenOptions::new()
-            .create_new(true)
-            .write(true)
+        #[cfg(unix)]
+        let intended_mode = {
+            use std::os::unix::fs::PermissionsExt;
+            match tokio::fs::metadata(self.layout().executable()).await {
+                Ok(metadata) => metadata.permissions().mode() & 0o7777,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0o700,
+                Err(error) => return Err(UpdateError::io(self.layout().executable(), error)),
+            }
+        };
+        let mut open_options = tokio::fs::OpenOptions::new();
+        open_options.create_new(true).write(true);
+        #[cfg(unix)]
+        {
+            open_options.mode(0o600);
+        }
+        let mut file = open_options
             .open(&path)
             .await
             .map_err(|error| UpdateError::io(&path, error))?;
@@ -155,29 +170,22 @@ impl Updater {
             file.sync_all()
                 .await
                 .map_err(|error| UpdateError::io(&path, error))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let mode = match tokio::fs::metadata(self.layout().executable()).await {
-                    Ok(metadata) => metadata.permissions().mode(),
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0o700,
-                    Err(error) => {
-                        return Err(UpdateError::io(self.layout().executable(), error));
-                    }
-                };
-                tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
-                    .await
-                    .map_err(|error| UpdateError::io(&path, error))?;
-                file.sync_all()
-                    .await
-                    .map_err(|error| UpdateError::io(&path, error))?;
-            }
             let actual = encode_hex(&hasher.finalize());
             if actual != directive.sha256() {
                 return Err(UpdateError::DigestMismatch {
                     expected: directive.sha256().to_owned(),
                     actual,
                 });
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(intended_mode))
+                    .await
+                    .map_err(|error| UpdateError::io(&path, error))?;
+                file.sync_all()
+                    .await
+                    .map_err(|error| UpdateError::io(&path, error))?;
             }
             Ok((total, actual))
         }
@@ -196,6 +204,8 @@ impl Updater {
             sha256: actual,
             bytes_written: total,
             cleanup_on_drop: true,
+            #[cfg(unix)]
+            intended_mode,
         })
     }
 }

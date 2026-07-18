@@ -24,8 +24,9 @@ use marker::{
     Marker, MarkerPhase, cleanup_marker_temp, preflight_marker_lifecycle, read_marker, write_marker,
 };
 use transaction_io::{
-    absolute, create_backup, hash_file, hash_stable_validated_artifact, remove_and_sync,
-    remove_file, remove_if_present_and_sync, suffix_path, sync_parent, unique_backup,
+    absolute, create_backup, ensure_validated_artifact_mode, hash_file,
+    hash_stable_validated_artifact, remove_and_sync, remove_file, remove_if_present_and_sync,
+    restore_validated_artifact_mode, suffix_path, sync_parent, unique_backup,
 };
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -104,7 +105,7 @@ impl Updater {
             &backup,
         )?;
         let mut marker = Marker {
-            schema_version: 2,
+            schema_version: 3,
             phase: MarkerPhase::Prepared,
             target: target.clone(),
             previous: previous.clone(),
@@ -114,6 +115,7 @@ impl Updater {
             attempts: 0,
             sha256: validated.sha256().to_owned(),
             previous_sha256: hash_file(&executable)?,
+            backup_uid: u32::MAX,
         };
         preflight_marker_lifecycle(&state, &marker)?;
 
@@ -139,7 +141,7 @@ impl Updater {
                 actual: actual_digest,
             });
         }
-        create_backup(&executable, &backup, self.policy().backup_strategy())?;
+        marker.backup_uid = create_backup(&executable, &backup, self.policy().backup_strategy())?;
         let backup_digest = hash_file(&backup)?;
         if backup_digest != marker.previous_sha256 {
             remove_file(&backup)?;
@@ -153,6 +155,7 @@ impl Updater {
             return Err(error);
         }
         self.maybe_fail(TestFailpoint::AfterMarkerSync, &state)?;
+        restore_validated_artifact_mode(&validated, &validated_path)?;
         let final_digest = hash_stable_validated_artifact(&validated, &validated_path)?;
         if final_digest != validated.sha256() {
             return Err(UpdateError::DigestMismatch {
@@ -160,6 +163,7 @@ impl Updater {
                 actual: final_digest,
             });
         }
+        ensure_validated_artifact_mode(&validated, &validated_path)?;
         let forced_rename_failure = self
             .failpoint_active(TestFailpoint::FailedRenameAfterMarkerCleanup)
             || self.failpoint_active(TestFailpoint::FailedRenameAfterBackupCleanup);

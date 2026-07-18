@@ -77,16 +77,19 @@ pub(super) fn validate_marker_backup_metadata(state: &Path, marker: &Marker) -> 
         }
         Err(error) => return Err(UpdateError::io(&marker.backup, error)),
     };
-    let expected_uid = std::fs::metadata(&marker.executable)
-        .map_err(|error| UpdateError::io(&marker.executable, error))?
-        .uid();
-    if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
+    if !metadata.file_type().is_file()
+        || !backup_owner_matches_recorded(metadata.uid(), marker.backup_uid)
+    {
         return Err(UpdateError::InvalidMarker {
             path: state.to_path_buf(),
             message: "rollback backup must be an owned non-symlink regular file".into(),
         });
     }
     Ok(())
+}
+
+fn backup_owner_matches_recorded(actual_uid: u32, recorded_uid: u32) -> bool {
+    actual_uid == recorded_uid
 }
 
 pub(super) fn validate_marker_staged_metadata(state: &Path, marker: &Marker) -> Result<()> {
@@ -97,9 +100,7 @@ pub(super) fn validate_marker_staged_metadata(state: &Path, marker: &Marker) -> 
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(UpdateError::io(&marker.staged, error)),
     };
-    let expected_uid = std::fs::metadata(&marker.executable)
-        .map_err(|error| UpdateError::io(&marker.executable, error))?
-        .uid();
+    let expected_uid = nix::unistd::geteuid().as_raw();
     if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
         return Err(UpdateError::InvalidMarker {
             path: state.to_path_buf(),
@@ -202,5 +203,26 @@ fn process_is_alive(pid: u32) -> bool {
         Ok(()) | Err(Errno::EPERM) => true,
         Err(Errno::ESRCH) => false,
         Err(_) => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::backup_owner_matches_recorded;
+
+    #[test]
+    fn backup_owner_validation_uses_recorded_owner_not_installed_owner() {
+        let recorded_pre_update_owner = 0;
+        let newly_installed_owner = 1_000;
+
+        assert_ne!(recorded_pre_update_owner, newly_installed_owner);
+        assert!(backup_owner_matches_recorded(
+            recorded_pre_update_owner,
+            recorded_pre_update_owner
+        ));
+        assert!(!backup_owner_matches_recorded(
+            newly_installed_owner,
+            recorded_pre_update_owner
+        ));
     }
 }

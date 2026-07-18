@@ -32,6 +32,7 @@ pub(super) struct Marker {
     pub(super) attempts: u32,
     pub(super) sha256: String,
     pub(super) previous_sha256: String,
+    pub(super) backup_uid: u32,
 }
 
 pub(super) fn preflight_marker_lifecycle(path: &Path, marker: &Marker) -> Result<()> {
@@ -161,7 +162,7 @@ pub(super) fn read_marker(path: &Path, expected_executable: &Path) -> Result<Opt
     let valid_staged = marker.staged.is_absolute()
         && marker.staged.parent() == executable.parent()
         && exact_artifact_name(&executable, &marker.staged, "update", true).is_some();
-    if marker.schema_version != 2
+    if marker.schema_version != 3
         || marker.executable != executable
         || !valid_backup
         || !valid_staged
@@ -191,7 +192,7 @@ mod tests {
     fn lifecycle_preflight_rejects_marker_that_only_fits_prepared_phase() {
         let state = Path::new("/state/update.json");
         let mut marker = Marker {
-            schema_version: 2,
+            schema_version: 3,
             phase: MarkerPhase::Prepared,
             target: "2.0.0".into(),
             previous: String::new(),
@@ -201,6 +202,7 @@ mod tests {
             attempts: 0,
             sha256: "a".repeat(64),
             previous_sha256: "b".repeat(64),
+            backup_uid: u32::MAX,
         };
         let base = marker_bytes(state, &marker).unwrap().len();
         marker.previous = "v".repeat(MAX_MARKER_BYTES as usize - base);

@@ -33,10 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Tokio blocking workers. The compile-checked heartbeat example separates
   authentication from parsing and propagates health-report failures before
   confirmation. Marker temporaries and advisory locks are created mode `0600`;
-  marker reads require exact mode `0600` without special bits, and lock descriptors are
-  no-follow, owner/type checked, and repair owned legacy permissions before use.
-  Bare relative executable layouts normalize their empty parent to the current
-  directory. Successful validation explicitly terminates and drains its Unix
+  marker reads require exact mode `0600` without special bits, and lock
+  descriptors are no-follow, owner/type checked, and repair owned legacy
+  permissions before use. Relative layouts bind to their construction-time
+  directory. Staged downloads begin mode `0600`, rollback copy destinations
+  begin with the source mode, markers retain the actual backup owner, and the
+  intended executable mode is restored and synced immediately before swap.
+  Successful validation explicitly terminates and drains its Unix
   process group or Windows Job Object before accepting captured output, so
   pipe-detached helpers cannot survive a successful candidate.
   Transaction lock guards explicitly unlock before descriptor close, making

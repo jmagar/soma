@@ -22,10 +22,12 @@ fn write_marker(
     old: &[u8],
     new: &[u8],
 ) {
+    use std::os::unix::fs::MetadataExt;
+
     std::fs::write(
         state,
         serde_json::to_vec_pretty(&json!({
-            "schema_version": 2,
+            "schema_version": 3,
             "phase": phase,
             "target": "2.0.0",
             "previous": "1.0.0",
@@ -35,6 +37,10 @@ fn write_marker(
             "attempts": 0,
             "sha256": digest(new),
             "previous_sha256": digest(old),
+            "backup_uid": std::fs::symlink_metadata(backup)
+                .or_else(|_| std::fs::symlink_metadata(executable))
+                .unwrap()
+                .uid(),
         }))
         .unwrap(),
     )

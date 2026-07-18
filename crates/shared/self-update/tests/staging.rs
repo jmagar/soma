@@ -165,6 +165,87 @@ fn bare_relative_layout_stays_bound_to_construction_directory() {
 }
 
 #[cfg(unix)]
+#[test]
+fn staged_artifact_is_private_until_verified_under_permissive_umask() {
+    use std::os::unix::fs::PermissionsExt;
+    use tokio::io::AsyncWriteExt;
+
+    const CHILD_ENV: &str = "SOMA_SELF_UPDATE_PRIVATE_STAGE_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let _previous = nix::sys::stat::umask(nix::sys::stat::Mode::empty());
+        let payload = b"#!/bin/sh\necho 'agent 2'\n";
+        let executable = std::env::current_dir().unwrap().join("agent");
+        std::fs::write(&executable, b"#!/bin/sh\necho 'agent 1'\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o750)).unwrap();
+        let updater = Updater::new(
+            UpdateLayout::new(&executable, "state.json"),
+            UpdatePolicy::default(),
+        );
+        let directive = UpdateDirective::new("2", "/agent", digest(payload)).unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async move {
+            let (mut writer, reader) = tokio::io::duplex(64);
+            let stage = tokio::spawn(async move { updater.stage(reader, &directive).await });
+            writer.write_all(payload).await.unwrap();
+            writer.flush().await.unwrap();
+            let mut partial = None;
+            for _ in 0..1_000 {
+                if let Some(path) = std::fs::read_dir(executable.parent().unwrap())
+                    .unwrap()
+                    .filter_map(std::result::Result::ok)
+                    .map(|entry| entry.path())
+                    .find(|path| {
+                        path.file_name()
+                            .is_some_and(|name| name.to_string_lossy().contains(".update-"))
+                    })
+                {
+                    partial = Some(path);
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+            let partial = partial.expect("staging task never created its private partial file");
+            assert_eq!(
+                std::fs::metadata(&partial).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            drop(writer);
+            let staged = stage.await.unwrap().unwrap();
+            assert_eq!(
+                std::fs::metadata(staged.path())
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o750
+            );
+        });
+        return;
+    }
+
+    let temp = tempdir().unwrap();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "staged_artifact_is_private_until_verified_under_permissive_umask",
+            "--nocapture",
+        ])
+        .current_dir(temp.path())
+        .env(CHILD_ENV, "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "private-stage child failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[cfg(unix)]
 #[tokio::test]
 async fn staging_preserves_existing_executable_mode() {
     use std::os::unix::fs::PermissionsExt;

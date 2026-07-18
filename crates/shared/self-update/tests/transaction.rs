@@ -40,6 +40,37 @@ async fn install_rehashes_validated_bytes_before_mutating_live_state() {
     assert!(!state.exists());
 }
 
+#[tokio::test]
+async fn install_restores_intended_mode_after_validator_changes_it() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\nchmod 0644 \"$0\"\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o750)).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+    assert_eq!(
+        std::fs::metadata(artifact.path())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o644
+    );
+
+    updater.install(artifact, "1.0.0").await.unwrap();
+
+    assert_eq!(
+        std::fs::metadata(&executable).unwrap().permissions().mode() & 0o777,
+        0o750
+    );
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn install_yields_the_async_executor_while_transaction_work_blocks() {
     use std::sync::Arc;

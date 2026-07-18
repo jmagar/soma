@@ -47,6 +47,11 @@ impl ValidatedArtifact {
     pub fn sha256(&self) -> &str {
         self.staged.sha256()
     }
+
+    #[cfg(unix)]
+    pub(crate) fn intended_mode(&self) -> u32 {
+        self.staged.intended_mode
+    }
 }
 
 impl Updater {

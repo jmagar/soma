@@ -89,21 +89,19 @@ pub(super) fn create_backup(
     executable: &Path,
     backup: &Path,
     strategy: BackupStrategy,
-) -> Result<()> {
+) -> Result<u32> {
     let hard_linked = strategy == BackupStrategy::HardLinkOrCopy
         && std::fs::hard_link(executable, backup).is_ok();
     if !hard_linked {
+        use std::os::unix::fs::PermissionsExt;
+
         let mut source =
             File::open(executable).map_err(|error| UpdateError::io(executable, error))?;
         let source_permissions = source
             .metadata()
             .map_err(|error| UpdateError::io(executable, error))?
             .permissions();
-        let mut destination = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .open(backup)
-            .map_err(|error| UpdateError::io(backup, error))?;
+        let mut destination = open_backup_copy_destination(backup, source_permissions.mode())?;
         std::io::copy(&mut source, &mut destination)
             .map_err(|error| UpdateError::io(backup, error))?;
         destination
@@ -113,13 +111,100 @@ pub(super) fn create_backup(
             .sync_all()
             .map_err(|error| UpdateError::io(backup, error))?;
     }
-    let synced = File::open(backup)
-        .and_then(|file| file.sync_all())
+    let synced = (|| {
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+
+        let file = OpenOptions::new()
+            .read(true)
+            .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
+            .open(backup)
+            .map_err(|error| UpdateError::io(backup, error))?;
+        let metadata = file
+            .metadata()
+            .map_err(|error| UpdateError::io(backup, error))?;
+        if !metadata.file_type().is_file() {
+            return Err(UpdateError::InvalidMarker {
+                path: backup.to_path_buf(),
+                message: "rollback backup must be a non-symlink regular file".into(),
+            });
+        }
+        file.sync_all()
+            .map_err(|error| UpdateError::io(backup, error))?;
+        sync_parent(backup)?;
+        Ok(metadata.uid())
+    })();
+    match synced {
+        Ok(uid) => Ok(uid),
+        Err(error) => {
+            std::fs::remove_file(backup).map_err(|cleanup| UpdateError::io(backup, cleanup))?;
+            Err(error)
+        }
+    }
+}
+
+fn open_backup_copy_destination(backup: &Path, source_mode: u32) -> Result<File> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(source_mode & 0o7777)
+        .open(backup)
         .map_err(|error| UpdateError::io(backup, error))
-        .and_then(|()| sync_parent(backup));
-    if let Err(error) = synced {
-        std::fs::remove_file(backup).map_err(|cleanup| UpdateError::io(backup, cleanup))?;
-        return Err(error);
+}
+
+pub(super) fn restore_validated_artifact_mode(
+    validated: &ValidatedArtifact,
+    path: &Path,
+) -> Result<()> {
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|error| UpdateError::io(path, error))?;
+    let metadata = file
+        .metadata()
+        .map_err(|error| UpdateError::io(path, error))?;
+    if !metadata.file_type().is_file()
+        || ArtifactIdentity::from_metadata(&metadata) != validated.identity
+    {
+        return Err(UpdateError::ArtifactIdentityChanged {
+            path: path.to_path_buf(),
+        });
+    }
+    file.set_permissions(std::fs::Permissions::from_mode(validated.intended_mode()))
+        .map_err(|error| UpdateError::io(path, error))?;
+    let repaired = file
+        .metadata()
+        .map_err(|error| UpdateError::io(path, error))?;
+    if ArtifactIdentity::from_metadata(&repaired) != validated.identity
+        || repaired.permissions().mode() & 0o7777 != validated.intended_mode()
+    {
+        return Err(UpdateError::ArtifactIdentityChanged {
+            path: path.to_path_buf(),
+        });
+    }
+    file.sync_all()
+        .map_err(|error| UpdateError::io(path, error))?;
+    ensure_validated_artifact_mode(validated, path)
+}
+
+pub(super) fn ensure_validated_artifact_mode(
+    validated: &ValidatedArtifact,
+    path: &Path,
+) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let metadata = std::fs::symlink_metadata(path).map_err(|error| UpdateError::io(path, error))?;
+    if !metadata.file_type().is_file()
+        || ArtifactIdentity::from_metadata(&metadata) != validated.identity
+        || metadata.permissions().mode() & 0o7777 != validated.intended_mode()
+    {
+        return Err(UpdateError::ArtifactIdentityChanged {
+            path: path.to_path_buf(),
+        });
     }
     Ok(())
 }
@@ -216,4 +301,42 @@ pub(super) fn sync_parent(path: &Path) -> Result<()> {
     File::open(parent)
         .and_then(|directory| directory.sync_all())
         .map_err(|error| UpdateError::io(parent, error))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::open_backup_copy_destination;
+
+    #[test]
+    fn backup_copy_destination_starts_with_source_mode_under_permissive_umask() {
+        use std::os::unix::fs::PermissionsExt;
+
+        const CHILD_ENV: &str = "SOMA_SELF_UPDATE_COPY_MODE_CHILD";
+        if std::env::var_os(CHILD_ENV).is_some() {
+            let _previous = nix::sys::stat::umask(nix::sys::stat::Mode::empty());
+            let temp = tempfile::tempdir().unwrap();
+            for mode in [0o700, 0o750] {
+                let backup = temp.path().join(format!("backup-{mode:o}"));
+                let file = open_backup_copy_destination(&backup, mode).unwrap();
+                assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, mode);
+            }
+            return;
+        }
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "transaction::transaction_io::tests::backup_copy_destination_starts_with_source_mode_under_permissive_umask",
+                "--nocapture",
+            ])
+            .env(CHILD_ENV, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "copy-mode child failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }

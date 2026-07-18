@@ -15,8 +15,11 @@
 > async executor workers. Marker temporaries and lock descriptors are secured
 > to mode 0600 independently of umask, authoritative markers require exactly
 > mode 0600 without special bits, and owned legacy lock permissions are repaired.
-> Relative layouts bind to their construction-time current directory, and successful validators terminate and drain
-> their configured process tree before their captured result is accepted.
+> Relative layouts bind to their construction-time current directory, partial
+> downloads and rollback copies are private before byte writes, marker schema 3
+> records the actual backup owner, intended executable modes survive validator
+> changes, and successful validators terminate and drain their configured
+> process tree before their captured result is accepted.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -305,7 +308,7 @@
   }
   ```
 
-  Marker JSON contains `schema_version: 1`, target/previous versions, absolute executable/backup paths, attempts, and the verified digest. Write it to a same-directory temporary file, `sync_all`, rename it over the state file, and sync the parent directory on Unix. Acquire an advisory exclusive lock on `<state_file>.lock` for every install/recover/confirm operation. Back up by hard link with copy fallback, never overwrite an existing backup, and sync copied bytes. On any pre-swap failure, clean up only artifacts created by that call; after a successful swap, preserve marker and backup until explicit confirmation.
+  Marker JSON contains `schema_version: 3`, target/previous versions, absolute executable/backup paths, the recorded backup owner, attempts, and verified current/previous digests. Write it to a same-directory temporary file, `sync_all`, rename it over the state file, and sync the parent directory on Unix. Acquire an advisory exclusive lock on `<state_file>.lock` for every install/recover/confirm operation. Back up by hard link with copy fallback, never overwrite an existing backup, and sync copied bytes. On any pre-swap failure, clean up only artifacts created by that call; after a successful swap, preserve marker and backup until explicit confirmation.
 
 - [x] **Step 4: Add end-to-end state-machine tests**
 
