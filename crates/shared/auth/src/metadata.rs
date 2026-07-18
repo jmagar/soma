@@ -153,6 +153,7 @@ mod tests {
             },
             scopes_supported: vec!["syslog:read".to_string(), "syslog:admin".to_string()],
             resource_path: "/syslog/mcp".to_string(),
+            default_provider: "google".to_string(),
             ..AuthConfig::default()
         };
         let state = test_auth_state_with_config(config).await;

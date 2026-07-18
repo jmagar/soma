@@ -2685,19 +2685,28 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
 
         #[test]
         fn empty_allowlist_permits_any_email() {
-            assert!(check_email_allowlist("google", Some("anyone@example.com"), Some(true), &[]).is_ok());
+            assert!(
+                check_email_allowlist("google", Some("anyone@example.com"), Some(true), &[])
+                    .is_ok()
+            );
         }
 
         #[test]
         fn empty_allowlist_permits_even_unverified_email() {
             // When no allowlist is configured, email_verified is not enforced.
-            assert!(check_email_allowlist("google", Some("anyone@example.com"), Some(false), &[]).is_ok());
+            assert!(
+                check_email_allowlist("google", Some("anyone@example.com"), Some(false), &[])
+                    .is_ok()
+            );
         }
 
         #[test]
         fn matching_verified_email_is_permitted() {
             let list = vec!["alice@example.com".to_string()];
-            assert!(check_email_allowlist("google", Some("alice@example.com"), Some(true), &list).is_ok());
+            assert!(
+                check_email_allowlist("google", Some("alice@example.com"), Some(true), &list)
+                    .is_ok()
+            );
         }
 
         #[test]
@@ -2705,25 +2714,36 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
             // Allowlist is pre-normalized to lowercase at config load.
             // Incoming email from Google may have any case.
             let list = vec!["alice@example.com".to_string()];
-            assert!(check_email_allowlist("google", Some("Alice@Example.com"), Some(true), &list).is_ok());
+            assert!(
+                check_email_allowlist("google", Some("Alice@Example.com"), Some(true), &list)
+                    .is_ok()
+            );
         }
 
         #[test]
         fn non_matching_email_is_rejected() {
             let list = vec!["alice@example.com".to_string()];
-            assert!(check_email_allowlist("google", Some("eve@example.com"), Some(true), &list).is_err());
+            assert!(
+                check_email_allowlist("google", Some("eve@example.com"), Some(true), &list)
+                    .is_err()
+            );
         }
 
         #[test]
         fn unverified_email_is_rejected_even_when_in_allowlist() {
             let list = vec!["alice@example.com".to_string()];
-            assert!(check_email_allowlist("google", Some("alice@example.com"), Some(false), &list).is_err());
+            assert!(
+                check_email_allowlist("google", Some("alice@example.com"), Some(false), &list)
+                    .is_err()
+            );
         }
 
         #[test]
         fn missing_email_verified_claim_is_rejected_when_allowlist_is_set() {
             let list = vec!["alice@example.com".to_string()];
-            assert!(check_email_allowlist("google", Some("alice@example.com"), None, &list).is_err());
+            assert!(
+                check_email_allowlist("google", Some("alice@example.com"), None, &list).is_err()
+            );
         }
 
         #[test]
@@ -2928,9 +2948,21 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         .unwrap()
         .with_endpoints(
             google_server.uri().parse::<Url>().unwrap(),
-            google_server.uri().parse::<Url>().unwrap().join("/token").unwrap(),
+            google_server
+                .uri()
+                .parse::<Url>()
+                .unwrap()
+                .join("/token")
+                .unwrap(),
         )
-        .with_jwks_endpoint(google_server.uri().parse::<Url>().unwrap().join("/certs").unwrap());
+        .with_jwks_endpoint(
+            google_server
+                .uri()
+                .parse::<Url>()
+                .unwrap()
+                .join("/certs")
+                .unwrap(),
+        );
         let github = GitHubProvider::new(
             "gh-client".to_string(),
             "gh-secret".to_string(),
@@ -2938,13 +2970,35 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         )
         .unwrap()
         .with_endpoints(
-            github_server.uri().parse::<Url>().unwrap().join("login/oauth/authorize").unwrap(),
-            github_server.uri().parse::<Url>().unwrap().join("login/oauth/access_token").unwrap(),
-            github_server.uri().parse::<Url>().unwrap().join("user").unwrap(),
-            github_server.uri().parse::<Url>().unwrap().join("user/emails").unwrap(),
+            github_server
+                .uri()
+                .parse::<Url>()
+                .unwrap()
+                .join("login/oauth/authorize")
+                .unwrap(),
+            github_server
+                .uri()
+                .parse::<Url>()
+                .unwrap()
+                .join("login/oauth/access_token")
+                .unwrap(),
+            github_server
+                .uri()
+                .parse::<Url>()
+                .unwrap()
+                .join("user")
+                .unwrap(),
+            github_server
+                .uri()
+                .parse::<Url>()
+                .unwrap()
+                .join("user/emails")
+                .unwrap(),
         );
-        let mut providers: std::collections::BTreeMap<String, std::sync::Arc<dyn crate::oauth_provider::OAuthProvider>> =
-            std::collections::BTreeMap::new();
+        let mut providers: std::collections::BTreeMap<
+            String,
+            std::sync::Arc<dyn crate::oauth_provider::OAuthProvider>,
+        > = std::collections::BTreeMap::new();
         providers.insert("google".to_string(), std::sync::Arc::new(google));
         providers.insert("github".to_string(), std::sync::Arc::new(github));
         let state = AuthState::for_tests(
@@ -2986,13 +3040,15 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let callback_response = app
             .oneshot(
                 Request::builder()
-                    .uri(format!("/auth/github/callback?state={upstream_state}&code=upstream-code"))
+                    .uri(format!(
+                        "/auth/github/callback?state={upstream_state}&code=upstream-code"
+                    ))
                     .body(Body::empty())
                     .unwrap(),
             )
             .await
             .unwrap();
-        assert_eq!(callback_response.status(), StatusCode::FOUND);
+        assert_eq!(callback_response.status(), StatusCode::SEE_OTHER);
 
         let google_requests = google_server.received_requests().await.unwrap();
         let github_requests = github_server.received_requests().await.unwrap();
@@ -3001,7 +3057,9 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
             "selecting provider=github must never call Google's mock server: {google_requests:?}"
         );
         assert!(
-            github_requests.iter().any(|r| r.url.path() == "/login/oauth/access_token"),
+            github_requests
+                .iter()
+                .any(|r| r.url.path() == "/login/oauth/access_token"),
             "expected GitHub's token endpoint to be called: {github_requests:?}"
         );
     }

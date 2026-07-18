@@ -133,6 +133,7 @@ mod tests {
         config.google.client_id = "client-id".into();
         config.google.client_secret = "client-secret".into();
         config.admin_email = "admin@example.com".into();
+        config.default_provider = "google".to_string();
         let dir = tempfile::tempdir().expect("tempdir");
         config.sqlite_path = dir.path().join("auth.db");
         config.key_path = dir.path().join("auth.pem");
