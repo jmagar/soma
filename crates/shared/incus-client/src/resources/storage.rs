@@ -74,11 +74,18 @@ impl Client {
 
     /// Lists volumes within one pool. See the module doc comment for why
     /// there's no "list all volumes across all pools" convenience method.
+    ///
+    /// Per the Incus REST API, `recursion = false` returns an array of bare
+    /// URL strings (not typed volume objects), so - like every other
+    /// `list_*` method in this crate - this returns untyped
+    /// `serde_json::Value`s rather than `Vec<StorageVolume>`. Use
+    /// `recursion = true` to get full volume objects in one call, or
+    /// `get_storage_volume` to fetch one volume's full object by name.
     pub async fn list_storage_volumes(
         &self,
         pool_name: &str,
         recursion: bool,
-    ) -> Result<Vec<StorageVolume>> {
+    ) -> Result<Vec<serde_json::Value>> {
         let recursion_value = recursion.to_string();
         let query = [("recursion", recursion_value.as_str())];
         let path = format!("/1.0/storage-pools/{pool_name}/volumes");

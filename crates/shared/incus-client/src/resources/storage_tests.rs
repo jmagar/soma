@@ -1,4 +1,3 @@
-use super::*;
 use crate::config::ClientConfig;
 use crate::transport::{
     unix::tests::{json_response, spawn_fake_daemon},
@@ -11,7 +10,14 @@ fn pool_json(name: &str) -> String {
     )
 }
 
-fn volume_list_json() -> &'static str {
+/// `recursion=false` shape: Incus returns bare volume URL strings, not
+/// typed objects.
+fn volume_list_urls_json() -> &'static str {
+    r#"{"type":"sync","status":"Success","status_code":200,"metadata":["/1.0/storage-pools/default/volumes/custom/vol1"]}"#
+}
+
+/// `recursion=true` shape: Incus returns full volume objects.
+fn volume_list_objects_json() -> &'static str {
     r#"{"type":"sync","status":"Success","status_code":200,"metadata":[{"name":"vol1","type":"custom","content_type":"filesystem","config":{}}]}"#
 }
 
@@ -36,28 +42,79 @@ async fn get_storage_pool_deserializes_the_documented_shape() {
     assert_eq!(pool.driver, "zfs");
 }
 
+/// Mocks a fake daemon that returns the Incus-documented shape for each
+/// recursion level: a bare URL-string array for `recursion=false`, full
+/// volume objects for `recursion=true`. Real callers must be able to
+/// deserialize both, since `list_storage_volumes` returns untyped
+/// `serde_json::Value`s (see the P1 fix this test guards against: this
+/// method used to be typed `Vec<StorageVolume>`, which panics on the
+/// `recursion=false` wire shape).
+async fn spawn_recursion_aware_volume_daemon() -> (std::path::PathBuf, tempfile::TempDir) {
+    spawn_fake_daemon(move |req| {
+        let req_text = String::from_utf8_lossy(&req);
+        if req_text.contains("recursion=true") {
+            json_response("HTTP/1.1 200 OK", volume_list_objects_json())
+        } else {
+            json_response("HTTP/1.1 200 OK", volume_list_urls_json())
+        }
+    })
+    .await
+}
+
 #[tokio::test]
 async fn list_storage_volumes_is_scoped_to_a_specific_pool() {
     let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let seen = seen_request.clone();
     let (socket_path, _dir) = spawn_fake_daemon(move |req| {
         *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
-        json_response("HTTP/1.1 200 OK", volume_list_json())
+        json_response("HTTP/1.1 200 OK", volume_list_objects_json())
     })
     .await;
     let client = Client::new(ClientConfig::unix_socket(socket_path));
 
     let volumes = client
-        .list_storage_volumes("default", false)
+        .list_storage_volumes("default", true)
         .await
         .expect("list_storage_volumes should succeed");
 
     assert_eq!(volumes.len(), 1);
-    assert_eq!(volumes[0].name, "vol1");
+    assert_eq!(volumes[0]["name"], "vol1");
     assert!(seen_request
         .lock()
         .unwrap()
         .contains("/1.0/storage-pools/default/volumes"));
+}
+
+#[tokio::test]
+async fn list_storage_volumes_with_recursion_false_deserializes_bare_url_strings() {
+    let (socket_path, _dir) = spawn_recursion_aware_volume_daemon().await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let volumes = client
+        .list_storage_volumes("default", false)
+        .await
+        .expect("recursion=false must deserialize as bare URL strings, not typed objects");
+
+    assert_eq!(volumes.len(), 1);
+    assert_eq!(
+        volumes[0],
+        serde_json::json!("/1.0/storage-pools/default/volumes/custom/vol1")
+    );
+}
+
+#[tokio::test]
+async fn list_storage_volumes_with_recursion_true_deserializes_full_objects() {
+    let (socket_path, _dir) = spawn_recursion_aware_volume_daemon().await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let volumes = client
+        .list_storage_volumes("default", true)
+        .await
+        .expect("recursion=true must deserialize as full volume objects");
+
+    assert_eq!(volumes.len(), 1);
+    assert_eq!(volumes[0]["name"], "vol1");
+    assert_eq!(volumes[0]["type"], "custom");
 }
 
 #[tokio::test]

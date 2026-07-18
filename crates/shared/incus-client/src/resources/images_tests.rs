@@ -1,4 +1,3 @@
-use super::*;
 use crate::config::ClientConfig;
 use crate::transport::{
     unix::tests::{json_response, spawn_fake_daemon},
