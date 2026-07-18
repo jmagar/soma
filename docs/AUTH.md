@@ -61,6 +61,57 @@ OAuth and bearer token can coexist: set both `SOMA_MCP_TOKEN` and the OAuth vari
 
 ---
 
+## Multi-provider OAuth (crate capability)
+
+`soma-auth` (`crates/shared/auth`) supports more than one upstream OAuth/OIDC
+identity provider at once: Google, Authelia (a real OIDC Provider with a
+configurable issuer), and GitHub (plain OAuth2, no ID token). A consuming
+deployment enables any subset simultaneously via `AuthConfig.google` /
+`.authelia` / `.github` and `AuthConfig.default_provider`. When 2+ providers
+are configured, `GET /auth/login` renders a plain HTML picker unless the
+request already specifies `?provider=`, and `GET /authorize` accepts the same
+optional `?provider=` query parameter for headless MCP clients.
+
+The `soma` binary's own CLI/config/setup-wizard/doctor surface does not yet
+expose Authelia/GitHub configuration — that wiring is a separate, dependent
+change. This section documents the underlying crate capability so downstream
+consumers of `soma-auth` (any Rust MCP server in this family) can wire it in
+directly today.
+
+**Security trade-off — read before enabling 2+ providers.** The email
+allowlist (`admin_email` plus the `allowed_users` SQLite table) is a single
+flat list shared across *every* configured provider. Being on the allowlist
+grants full admin scope regardless of which provider authenticated the user
+— this is pre-existing, unchanged behavior. The consequence of enabling more
+than one provider is that the deployment's effective admin-gate strength
+becomes that of its *weakest* configured provider's identity-verification
+signal:
+
+- Google and Authelia both re-verify `email_verified` on every login, live,
+  via the signed ID token returned in that login's token exchange.
+- GitHub has no ID token. Its `email_verified` signal is derived from the
+  `primary && verified` flag on a `GET /user/emails` entry — a point-in-time
+  claim that GitHub does not re-check on every subsequent login.
+
+Full per-provider allowlist scoping (a schema change to `allowed_users`) was
+considered and rejected as disproportionate for this crate's actual
+deployment shape (single-operator homelab/small-fleet, not multi-tenant
+SaaS). Instead, `AuthState::new` logs a `tracing::warn!` at startup whenever
+2+ providers are configured with a non-empty allowlist — that log line is the
+visible signal operators should watch for, not a silent trade-off.
+
+Practical guidance: if you need strict per-identity isolation between
+providers, run separate deployments (separate `soma-auth` SQLite databases)
+per provider instead of enabling several providers with one shared allowlist
+in a single deployment.
+
+Subject identifiers are namespaced per provider (`{provider_id}:{raw_subject}`,
+e.g. `github:9182310`) to avoid collisions across providers sharing one
+database — except Google, whose subject format is left bare for backward
+compatibility with already-issued sessions and refresh tokens.
+
+---
+
 ## The startup guard
 
 **The HTTP server will refuse to start if it is binding to a non-loopback address with no authentication configured.**
