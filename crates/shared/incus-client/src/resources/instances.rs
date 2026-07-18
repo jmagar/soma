@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::operations::{operation_from_envelope, Operation};
-use crate::transport::{precondition_failed_or, Client, Method, WithEtag};
+use crate::transport::{
+    precondition_failed_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
+};
 
 /// A container or virtual machine. `config`/`devices` stay untyped
 /// (`serde_json::Value`) - Incus's instance config schema is large and
@@ -56,19 +58,17 @@ impl Client {
     /// hosts with many instances; `recursion = false` returns lightweight
     /// name/URL references only.
     pub async fn list_instances(&self, recursion: bool) -> Result<Vec<serde_json::Value>> {
-        let recursion_value = recursion.to_string();
-        let query = [("recursion", recursion_value.as_str())];
+        let recursion_query = RecursionQuery::new(recursion);
         let envelope = self
-            .request(Method::Get, "/1.0/instances", &query, None, None)
+            .request(
+                Method::Get,
+                "/1.0/instances",
+                &recursion_query.as_query(),
+                None,
+                None,
+            )
             .await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync list response, got {other:?}"
-            ))),
-        }
+        Ok(serde_json::from_value(sync_metadata(envelope, "list")?)?)
     }
 
     /// Fetches one instance by name, along with its ETag for use as a later
@@ -166,18 +166,12 @@ impl Client {
         instance_name: &str,
         recursion: bool,
     ) -> Result<Vec<serde_json::Value>> {
-        let recursion_value = recursion.to_string();
-        let query = [("recursion", recursion_value.as_str())];
+        let recursion_query = RecursionQuery::new(recursion);
         let path = format!("/1.0/instances/{instance_name}/snapshots");
-        let envelope = self.request(Method::Get, &path, &query, None, None).await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync list response, got {other:?}"
-            ))),
-        }
+        let envelope = self
+            .request(Method::Get, &path, &recursion_query.as_query(), None, None)
+            .await?;
+        Ok(serde_json::from_value(sync_metadata(envelope, "list")?)?)
     }
 
     pub async fn create_snapshot(

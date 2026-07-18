@@ -45,16 +45,6 @@ pub(crate) enum IncusEnvelope {
         etag: Option<String>,
     },
     Async {
-        /// The `Location`-style operation URL Incus returns (e.g.
-        /// `/1.0/operations/<uuid>`). Preserved for wire-protocol fidelity
-        /// with the documented envelope shape, but no code path in this
-        /// crate currently reads it - `operation_from_envelope` derives the
-        /// operation ID from `metadata.id` instead, so the two stay in sync
-        /// without this crate needing to parse the URL. Kept (rather than
-        /// dropped) so a future caller that wants the raw URL - e.g. for a
-        /// diagnostic log line - doesn't require a wire-parsing change.
-        #[allow(dead_code)]
-        operation_url: String,
         /// The raw operation JSON object - `crate::operations` deserializes
         /// this into a typed `Operation`. Kept untyped here so this module
         /// has no dependency on `crate::operations`.
@@ -84,6 +74,45 @@ pub(crate) fn precondition_failed_or(err: Error, resource: &str) -> Error {
             resource: resource.to_owned(),
         },
         other => other,
+    }
+}
+
+/// Unwraps an [`IncusEnvelope::Sync`]'s metadata, or a distinguishing
+/// `Error::InvalidResponse` if the envelope was some other shape. Shared by
+/// every resource module's `list_*` method and the bare (non-ETag) `get_*`
+/// methods (`get_storage_pool`, `get_storage_volume`) - the ETag-returning
+/// `get_*` methods (`get_instance`, `get_image`, `get_network`,
+/// `get_project`) match on `IncusEnvelope::Sync` directly instead, since they
+/// also need the `etag` field to build a [`WithEtag`].
+///
+/// `what` names the expected response for the error message (e.g. `"list"`,
+/// `"storage pool"`).
+pub(crate) fn sync_metadata(envelope: IncusEnvelope, what: &str) -> Result<serde_json::Value> {
+    match envelope {
+        IncusEnvelope::Sync { metadata, .. } => Ok(metadata),
+        other => Err(Error::InvalidResponse(format!(
+            "expected a sync {what} response, got {other:?}"
+        ))),
+    }
+}
+
+/// Owns the string form of a `recursion` bool so a `[("recursion", &str)]`
+/// query slice can be built without a dangling borrow - every `list_*`
+/// method in this crate takes an explicit `recursion` bool and sends it as
+/// this same query param.
+pub(crate) struct RecursionQuery {
+    value: String,
+}
+
+impl RecursionQuery {
+    pub(crate) fn new(recursion: bool) -> Self {
+        Self {
+            value: recursion.to_string(),
+        }
+    }
+
+    pub(crate) fn as_query(&self) -> [(&str, &str); 1] {
+        [("recursion", self.value.as_str())]
     }
 }
 
@@ -144,40 +173,52 @@ impl Client {
             });
         }
 
-        let parsed: serde_json::Value = serde_json::from_slice(&raw.body)?;
+        let mut parsed: serde_json::Value = serde_json::from_slice(&raw.body)?;
+        // Capture the envelope type as an owned String (one small clone) so
+        // the immutable borrow of `parsed` ends here, freeing us to take
+        // `metadata` out of `parsed` by value below via `.remove(...)`
+        // instead of `.cloned()`-ing the whole (potentially large) subtree.
         let envelope_type = parsed
             .get("type")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| {
                 Error::InvalidResponse(format!("response body had no \"type\" field: {parsed}"))
-            })?;
+            })?
+            .to_owned();
 
-        match envelope_type {
+        match envelope_type.as_str() {
             "sync" => {
                 let metadata = parsed
-                    .get("metadata")
-                    .cloned()
+                    .as_object_mut()
+                    .and_then(|obj| obj.remove("metadata"))
                     .unwrap_or(serde_json::Value::Null);
                 let etag = raw.header("etag").map(str::to_owned);
                 Ok(IncusEnvelope::Sync { metadata, etag })
             }
             "async" => {
-                let operation_url = parsed
+                // Validate envelope-shape strictness against the documented
+                // Incus response even though the URL itself isn't stored -
+                // `operation_from_envelope` derives the operation ID from
+                // `metadata.id` instead, so this crate never needs to parse
+                // it.
+                if parsed
                     .get("operation")
                     .and_then(serde_json::Value::as_str)
+                    .is_none()
+                {
+                    return Err(Error::InvalidResponse(
+                        "async response had no \"operation\" field".to_owned(),
+                    ));
+                }
+                let metadata = parsed
+                    .as_object_mut()
+                    .and_then(|obj| obj.remove("metadata"))
                     .ok_or_else(|| {
                         Error::InvalidResponse(
-                            "async response had no \"operation\" field".to_owned(),
+                            "async response had no \"metadata\" field".to_owned(),
                         )
-                    })?
-                    .to_owned();
-                let metadata = parsed.get("metadata").cloned().ok_or_else(|| {
-                    Error::InvalidResponse("async response had no \"metadata\" field".to_owned())
-                })?;
-                Ok(IncusEnvelope::Async {
-                    operation_url,
-                    metadata,
-                })
+                    })?;
+                Ok(IncusEnvelope::Async { metadata })
             }
             other => Err(Error::InvalidResponse(format!(
                 "unknown envelope type {other:?}"

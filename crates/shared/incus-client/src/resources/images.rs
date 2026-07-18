@@ -4,7 +4,9 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 use crate::operations::{operation_from_envelope, Operation};
-use crate::transport::{precondition_failed_or, Client, Method, WithEtag};
+use crate::transport::{
+    precondition_failed_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Image {
@@ -23,19 +25,17 @@ impl Client {
     /// `recursion = true` fetches every image's full object in one call;
     /// `recursion = false` returns lightweight fingerprint/URL references.
     pub async fn list_images(&self, recursion: bool) -> Result<Vec<serde_json::Value>> {
-        let recursion_value = recursion.to_string();
-        let query = [("recursion", recursion_value.as_str())];
+        let recursion_query = RecursionQuery::new(recursion);
         let envelope = self
-            .request(Method::Get, "/1.0/images", &query, None, None)
+            .request(
+                Method::Get,
+                "/1.0/images",
+                &recursion_query.as_query(),
+                None,
+                None,
+            )
             .await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync list response, got {other:?}"
-            ))),
-        }
+        Ok(serde_json::from_value(sync_metadata(envelope, "list")?)?)
     }
 
     /// Fetches one image by fingerprint, along with its ETag for use as a

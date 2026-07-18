@@ -6,9 +6,9 @@
 
 use serde::Deserialize;
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::operations::{operation_from_envelope, Operation};
-use crate::transport::{Client, Method};
+use crate::transport::{sync_metadata, Client, Method, RecursionQuery};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct StoragePool {
@@ -31,32 +31,26 @@ pub struct StorageVolume {
 
 impl Client {
     pub async fn list_storage_pools(&self, recursion: bool) -> Result<Vec<serde_json::Value>> {
-        let recursion_value = recursion.to_string();
-        let query = [("recursion", recursion_value.as_str())];
+        let recursion_query = RecursionQuery::new(recursion);
         let envelope = self
-            .request(Method::Get, "/1.0/storage-pools", &query, None, None)
+            .request(
+                Method::Get,
+                "/1.0/storage-pools",
+                &recursion_query.as_query(),
+                None,
+                None,
+            )
             .await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync list response, got {other:?}"
-            ))),
-        }
+        Ok(serde_json::from_value(sync_metadata(envelope, "list")?)?)
     }
 
     pub async fn get_storage_pool(&self, name: &str) -> Result<StoragePool> {
         let path = format!("/1.0/storage-pools/{name}");
         let envelope = self.request(Method::Get, &path, &[], None, None).await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync storage pool response, got {other:?}"
-            ))),
-        }
+        Ok(serde_json::from_value(sync_metadata(
+            envelope,
+            "storage pool",
+        )?)?)
     }
 
     pub async fn create_storage_pool(&self, params: &serde_json::Value) -> Result<Operation> {
@@ -98,18 +92,12 @@ impl Client {
         pool_name: &str,
         recursion: bool,
     ) -> Result<Vec<serde_json::Value>> {
-        let recursion_value = recursion.to_string();
-        let query = [("recursion", recursion_value.as_str())];
+        let recursion_query = RecursionQuery::new(recursion);
         let path = format!("/1.0/storage-pools/{pool_name}/volumes");
-        let envelope = self.request(Method::Get, &path, &query, None, None).await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync list response, got {other:?}"
-            ))),
-        }
+        let envelope = self
+            .request(Method::Get, &path, &recursion_query.as_query(), None, None)
+            .await?;
+        Ok(serde_json::from_value(sync_metadata(envelope, "list")?)?)
     }
 
     pub async fn create_storage_volume(
@@ -133,14 +121,10 @@ impl Client {
     ) -> Result<StorageVolume> {
         let path = format!("/1.0/storage-pools/{pool_name}/volumes/{volume_type}/{volume_name}");
         let envelope = self.request(Method::Get, &path, &[], None, None).await?;
-        match envelope {
-            crate::transport::IncusEnvelope::Sync { metadata, .. } => {
-                Ok(serde_json::from_value(metadata)?)
-            }
-            other => Err(Error::InvalidResponse(format!(
-                "expected a sync storage volume response, got {other:?}"
-            ))),
-        }
+        Ok(serde_json::from_value(sync_metadata(
+            envelope,
+            "storage volume",
+        )?)?)
     }
 
     pub async fn update_storage_volume(
