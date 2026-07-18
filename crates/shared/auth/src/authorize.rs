@@ -2758,6 +2758,10 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
+        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
+        // default_github_scopes() (only applied via #[serde(default = ...)]
+        // during deserialization) — validate() now requires `user:email`.
+        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
         let state = test_auth_state_with_config(config).await;
         let app = router(state);
         let response = app
@@ -2785,6 +2789,10 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
+        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
+        // default_github_scopes() (only applied via #[serde(default = ...)]
+        // during deserialization) — validate() now requires `user:email`.
+        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
         let state = test_auth_state_with_config(config).await;
         let app = router(state);
         let response = app
@@ -2832,6 +2840,10 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
+        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
+        // default_github_scopes() (only applied via #[serde(default = ...)]
+        // during deserialization) — validate() now requires `user:email`.
+        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
         let state = test_auth_state_with_config(config).await;
         state
             .store
@@ -2938,6 +2950,10 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
+        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
+        // default_github_scopes() (only applied via #[serde(default = ...)]
+        // during deserialization) — validate() now requires `user:email`.
+        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
         let base_state = test_auth_state_with_config(config).await;
 
         let google = GoogleProvider::new(

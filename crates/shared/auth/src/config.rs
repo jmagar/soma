@@ -360,6 +360,17 @@ impl AuthConfig {
                     "{prefix}_GITHUB_CLIENT_SECRET is required when {prefix}_GITHUB_CLIENT_ID is set"
                 )));
             }
+            // GitHubProvider::exchange_code's GET /user/emails call requires
+            // this scope; GitHub returns it in a hard failure (not a graceful
+            // `email: None`, unlike Google/Authelia's ID-token-derived email
+            // claim), and tokio::try_join! propagates that as a total login
+            // failure. Catch the misconfiguration here instead of at runtime.
+            if github_configured && !self.github.scopes.iter().any(|scope| scope == "user:email") {
+                return Err(AuthError::Config(format!(
+                    "{prefix}_GITHUB_SCOPES must include `user:email` (got `{:?}`)",
+                    self.github.scopes
+                )));
+            }
             // Two configured providers with the same (possibly operator-overridden)
             // callback_path would make routes.rs's per-provider route-mounting loop
             // (Task 10) hit axum's duplicate-route panic at startup instead of a
@@ -857,6 +868,20 @@ mod tests {
         ]))
         .unwrap();
         assert_eq!(cfg.default_provider, "github");
+    }
+
+    #[test]
+    fn oauth_mode_rejects_github_scopes_missing_user_email() {
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GITHUB_CLIENT_ID", "id"),
+            ("LAB_GITHUB_CLIENT_SECRET", "secret"),
+            ("LAB_GITHUB_SCOPES", "read:user"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap_err();
+        assert!(err.to_string().contains("user:email"));
     }
 
     #[test]
