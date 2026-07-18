@@ -185,13 +185,18 @@ fn auth_dispatch_action(path: &str) -> &'static str {
         "/register" => "oauth.register",
         "/authorize" => "oauth.authorize",
         "/auth/login" => "oauth.browser_login",
-        "/auth/google/callback" => "oauth.callback",
         "/native/callback" => "oauth.native_callback",
         "/native/poll" => "oauth.native_poll",
         "/token" => "oauth.token",
         _ if path.starts_with("/.well-known/oauth-authorization-server/") => {
             "oauth.metadata.authorization_server"
         }
+        // Structural match, not an exact-string one: this function is a pure
+        // fn(&str) -> &'static str with no access to AuthState/configured
+        // providers, so it can't enumerate the operator-configured callback
+        // paths for every provider (Google, Authelia, GitHub, or a custom
+        // override). Any `/auth/*/callback`-shaped path is an OAuth callback.
+        _ if path.starts_with("/auth/") && path.ends_with("/callback") => "oauth.callback",
         _ => "oauth.unknown",
     }
 }
@@ -218,6 +223,22 @@ mod tests {
         assert_eq!(auth_dispatch_action("/register"), "oauth.register");
         assert_eq!(auth_dispatch_action("/authorize"), "oauth.authorize");
         assert_eq!(auth_dispatch_action("/token"), "oauth.token");
+        // Every configured provider's callback path — including
+        // operator-overridden custom ones — must map to "oauth.callback" so
+        // log-based alerting/dashboarding keyed on this action isn't blind
+        // to 2 of the 3 providers this crate supports.
+        assert_eq!(
+            auth_dispatch_action("/auth/google/callback"),
+            "oauth.callback"
+        );
+        assert_eq!(
+            auth_dispatch_action("/auth/authelia/callback"),
+            "oauth.callback"
+        );
+        assert_eq!(
+            auth_dispatch_action("/auth/github/callback"),
+            "oauth.callback"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
