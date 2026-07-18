@@ -65,8 +65,25 @@ pub(super) fn size_limit(path: &Path) -> Option<usize> {
 }
 
 pub(super) fn is_size_exempt(path: &Path) -> bool {
-    path.to_string_lossy()
-        .starts_with("docs/references/mcp/schema/")
+    let path = path.to_string_lossy();
+    // Vendored upstream MCP schema mirrors.
+    if path.starts_with("docs/references/mcp/schema/") {
+        return true;
+    }
+    // Checked-in code generator output. `docs/PATTERNS.md` already states the
+    // policy ("must split unless generated/fixture/schema mirror"); this is
+    // the `generated` half of it. Splitting is not an option a maintainer has
+    // here - the file is rewritten wholesale by its generator on every run,
+    // and a parity test fails the build if it is hand-edited - so a size
+    // warning on one would be pure noise, never actionable.
+    //
+    // Deliberately narrow: only a `src/generated/` directory counts, not a
+    // file that merely says "generated" somewhere in its path, so this can't
+    // be used to launder a hand-written module past the limit.
+    if path.contains("/src/generated/") {
+        return true;
+    }
+    false
 }
 
 pub(super) fn is_test_file(path: &Path) -> bool {
@@ -213,6 +230,21 @@ mod tests {
             "docs/references/mcp/schema/2025-11-25/schema.ts"
         )));
         assert!(!is_size_exempt(Path::new("apps/web/src/app/page.tsx")));
+    }
+
+    #[test]
+    fn size_limits_skip_checked_in_generator_output() {
+        assert!(is_size_exempt(Path::new(
+            "crates/shared/codex-app-server-client/clients/typescript/src/generated/openapi-types.ts"
+        )));
+        // Only a real `src/generated/` directory is exempt - a hand-written
+        // module can't opt out by working the word into its name or docs.
+        assert!(!is_size_exempt(Path::new(
+            "crates/soma/mcp/src/generated_schemas.rs"
+        )));
+        assert!(!is_size_exempt(Path::new(
+            "xtask/src/generated_surfaces.rs"
+        )));
     }
 
     #[test]

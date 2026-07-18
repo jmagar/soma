@@ -52,7 +52,7 @@ pub use approvals::{
 };
 pub use client::{
     CodexAppServerClient, Event, EventStream, PendingServerRequest, DEFAULT_CALL_TIMEOUT,
-    SERVER_NOTIFICATION_METHODS,
+    DEFAULT_EVENTS_CHANNEL_CAPACITY, SERVER_NOTIFICATION_METHODS,
 };
 pub use compat::{
     CompatibilityReport, SurfaceSummary, CLIENT_NOTIFICATION_METHOD_COUNT,

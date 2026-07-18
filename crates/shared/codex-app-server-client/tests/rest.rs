@@ -1,9 +1,11 @@
 #![cfg(feature = "rest")]
 
 use std::{
+    collections::VecDeque,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use axum::{
@@ -12,12 +14,12 @@ use axum::{
 };
 use codex_app_server_client::{
     rest::{
-        router_with_backend, router_with_backend_and_options, RestApprovalPolicy, RestBackend,
-        RestCallRequest, RestCallResponse, RestClientOptions, RestError, RestErrorReplyRequest,
-        RestErrorResponse, RestEventResponse, RestHealthResponse, RestRequestReplyResponse,
-        RestRequestReplyResultRequest, RestResult, RestRouterOptions, RestSessionCreateRequest,
-        RestSessionCreateResponse, RestSessionSummary, RestStatusResponse, RestTextTurnRequest,
-        RestTextTurnResponse,
+        bearer_auth, router_with_backend, router_with_backend_and_options, RestApprovalPolicy,
+        RestBackend, RestCallRequest, RestCallResponse, RestClientOptions, RestError,
+        RestErrorReplyRequest, RestErrorResponse, RestEventResponse, RestHealthResponse,
+        RestLimits, RestRequestReplyResponse, RestRequestReplyResultRequest, RestResult,
+        RestRouterOptions, RestSessionCreateRequest, RestSessionCreateResponse, RestSessionSummary,
+        RestStatusResponse, RestTextTurnRequest, RestTextTurnResponse,
     },
     CompatibilityReport, Error, SurfaceSummary, CODEX_SCHEMA_VERSION,
 };
@@ -31,6 +33,11 @@ struct FakeBackend {
     call_response: Arc<Mutex<Option<RestResult<RestCallResponse>>>>,
     session_response: Arc<Mutex<Option<RestResult<RestSessionCreateResponse>>>>,
     event_response: Arc<Mutex<Option<RestResult<RestEventResponse>>>>,
+    /// Queue of canned `poll_event` responses consumed in order, one per
+    /// call, before falling back to `event_response` / the default
+    /// timeout. Lets tests script a sequence of events (e.g. for the SSE
+    /// stream route) without juggling a single-shot `Option`.
+    event_response_queue: Arc<Mutex<VecDeque<RestResult<RestEventResponse>>>>,
     observed_text: Arc<Mutex<Vec<RestTextTurnRequest>>>,
     observed_calls: Arc<Mutex<Vec<RestCallRequest>>>,
     observed_sessions: Arc<Mutex<Vec<RestSessionCreateRequest>>>,
@@ -56,6 +63,12 @@ impl FakeBackend {
             release: release_rx,
         });
         PollBlockHandle { started, release }
+    }
+
+    /// Queues a sequence of `poll_event` responses to be returned in order,
+    /// one per call.
+    fn queue_events(&self, responses: impl IntoIterator<Item = RestResult<RestEventResponse>>) {
+        self.event_response_queue.lock().unwrap().extend(responses);
     }
 }
 
@@ -175,12 +188,14 @@ impl RestBackend for FakeBackend {
     ) -> Pin<Box<dyn Future<Output = RestResult<RestEventResponse>> + Send + 'static>> {
         self.observed_polls.lock().unwrap().push(timeout_ms);
         let block = self.next_poll_block.lock().unwrap().take();
-        let response = self
-            .event_response
-            .lock()
-            .unwrap()
-            .take()
-            .unwrap_or_else(|| Ok(RestEventResponse::timeout()));
+        let queued = self.event_response_queue.lock().unwrap().pop_front();
+        let response = queued.unwrap_or_else(|| {
+            self.event_response
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or_else(|| Ok(RestEventResponse::timeout()))
+        });
         Box::pin(async move {
             if let Some(mut block) = block {
                 block.started.notify_waiters();
@@ -848,6 +863,353 @@ async fn rest_router_rejects_second_simultaneous_poll_and_releases_guard() {
     assert_eq!(*observed_polls.lock().unwrap(), vec![Some(5000), Some(1)]);
 }
 
+#[tokio::test]
+async fn sse_event_stream_is_absent_unless_bridge_routes_are_enabled() {
+    let app =
+        router_with_backend_and_options(FakeBackend::default(), RestRouterOptions::text_turn());
+
+    let (status, _body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events/stream",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn sse_event_stream_emits_events_in_order_and_terminates_on_closed() {
+    let backend = FakeBackend::default();
+    backend.queue_events([
+        Ok(RestEventResponse::notification(
+            json!({ "method": "turn/completed" }),
+        )),
+        Ok(RestEventResponse::request(
+            "pending-1",
+            json!(42),
+            "currentTime/read",
+            json!({
+                "id": 42,
+                "method": "currentTime/read",
+                "params": { "threadId": "thread-1" }
+            }),
+        )),
+        Ok(RestEventResponse::closed()),
+    ]);
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/sessions/session-1/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(5), app.oneshot(request))
+        .await
+        .expect("SSE handler should return the response promptly")
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        Some("text/event-stream")
+    );
+
+    // The stream only terminates once it forwards `Closed`, so this also
+    // proves `Closed` ends the stream rather than hanging forever - the
+    // outer `timeout` turns a regression there into a test failure instead
+    // of a hang.
+    let bytes = tokio::time::timeout(
+        Duration::from_secs(5),
+        to_bytes(response.into_body(), usize::MAX),
+    )
+    .await
+    .expect("SSE stream should terminate after the Closed frame")
+    .unwrap();
+    let body = String::from_utf8(bytes.to_vec()).expect("SSE body should be UTF-8");
+    let frames = parse_sse_frames(&body);
+
+    assert_eq!(
+        frames,
+        vec![
+            (
+                "notification".to_owned(),
+                json!({ "event": "notification", "notification": { "method": "turn/completed" } }),
+            ),
+            (
+                "request".to_owned(),
+                json!({
+                    "event": "request",
+                    "requestKey": "pending-1",
+                    "requestId": 42,
+                    "method": "currentTime/read",
+                    "request": {
+                        "id": 42,
+                        "method": "currentTime/read",
+                        "params": { "threadId": "thread-1" }
+                    }
+                }),
+            ),
+            ("closed".to_owned(), json!({ "event": "closed" })),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn sse_event_stream_rejects_concurrent_consumer_and_releases_guard_when_dropped() {
+    let backend = FakeBackend::default();
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let stream_request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/sessions/session-1/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let stream_response = app.clone().oneshot(stream_request).await.unwrap();
+    assert_eq!(stream_response.status(), StatusCode::OK);
+
+    // A plain long-poll for the same session is rejected while the SSE
+    // stream is still alive - they share one `ActivePollGuard` per session.
+    let (status, body) = request_json(
+        app.clone(),
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=1",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["error"], "conflict");
+
+    // Dropping the SSE response - simulating a client disconnect, since
+    // nothing here ever polled the stream body to a `Closed` frame -
+    // releases the guard.
+    drop(stream_response);
+
+    let (status, body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=1",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+}
+
+fn auth_test_app() -> axum::Router {
+    router_with_backend(FakeBackend::default()).layer(bearer_auth("secret-token"))
+}
+
+#[tokio::test]
+async fn bearer_auth_rejects_missing_authorization_header() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/compatibility")
+        .body(Body::empty())
+        .unwrap();
+    let response = auth_test_app().oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::WWW_AUTHENTICATE)
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer")
+    );
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: RestErrorResponse = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body.error, "unauthorized");
+}
+
+#[tokio::test]
+async fn bearer_auth_rejects_wrong_scheme() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/compatibility")
+        .header(header::AUTHORIZATION, "Basic secret-token")
+        .body(Body::empty())
+        .unwrap();
+    let response = auth_test_app().oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn bearer_auth_rejects_wrong_token() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/compatibility")
+        .header(header::AUTHORIZATION, "Bearer wrong-token")
+        .body(Body::empty())
+        .unwrap();
+    let response = auth_test_app().oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn bearer_auth_accepts_correct_token_with_case_insensitive_scheme() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/compatibility")
+        .header(header::AUTHORIZATION, "bEaReR secret-token")
+        .body(Body::empty())
+        .unwrap();
+    let response = auth_test_app().oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn bearer_auth_exempts_health_routes_by_default() {
+    let app = auth_test_app();
+    for path in ["/health", "/v1/health"] {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri(path)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "path {path} should be exempt from auth by default"
+        );
+    }
+}
+
+#[tokio::test]
+async fn bearer_auth_does_not_exempt_compatibility_route() {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/compatibility")
+        .body(Body::empty())
+        .unwrap();
+    let response = auth_test_app().oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn bearer_auth_can_require_auth_on_health_routes_when_configured() {
+    let app = router_with_backend(FakeBackend::default())
+        .layer(bearer_auth("secret-token").allow_unauthenticated_health(false));
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/health")
+        .body(Body::empty())
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// `std::env` is process-global; serializes the tests in this file that
+/// mutate `CODEX_APP_SERVER_REST_*` variables against each other. Unit
+/// tests in `src/rest/types.rs` use their own, separate lock - they run in
+/// a different test binary/process, so there is no cross-binary race to
+/// coordinate.
+fn env_test_lock() -> &'static Mutex<()> {
+    use std::sync::OnceLock;
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(previous) => std::env::set_var(self.key, previous),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
+#[tokio::test]
+async fn rest_router_clamps_poll_timeout_using_env_derived_limits() {
+    // The lock and the env var guard only need to be held while reading the
+    // environment - once `limits` is built it's an owned, independent
+    // value, so both are dropped before the `.await` below rather than held
+    // across it (a `std::sync::MutexGuard` held across an await point is a
+    // clippy lint, and there is nothing left for either guard to protect by
+    // that point anyway).
+    let limits = {
+        let _lock = env_test_lock()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _guard = EnvVarGuard::set("CODEX_APP_SERVER_REST_MAX_POLL_TIMEOUT_MS", "75");
+        RestLimits::try_from_env().expect("a well-formed env override should parse cleanly")
+    };
+    assert_eq!(limits.max_poll_timeout, Duration::from_millis(75));
+
+    let backend = FakeBackend::default();
+    let observed_polls = backend.observed_polls.clone();
+    let options = RestRouterOptions::trusted_bridge().with_limits(limits);
+    let app = router_with_backend_and_options(backend, options);
+
+    let (status, body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=5000",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+    // The env-derived limit (75ms), not the requested 5000ms, reached the backend.
+    assert_eq!(observed_polls.lock().unwrap()[0], Some(75));
+}
+
+/// Parses a raw SSE response body into `(event name, parsed JSON data)`
+/// pairs, one per frame (frames are separated by a blank line). Only reads
+/// the `event:` and `data:` fields - this crate's SSE frames never use
+/// `id:`/`retry:`, and a bare keep-alive comment frame (`:...`) has no
+/// `event:`/`data:` fields and would show up as a frame with neither, which
+/// every assertion here intentionally does not expect to see (the fake
+/// backend used in these tests always resolves well within the default
+/// keep-alive interval).
+fn parse_sse_frames(body: &str) -> Vec<(String, Value)> {
+    body.split("\n\n")
+        .map(str::trim)
+        .filter(|frame| !frame.is_empty())
+        .map(|frame| {
+            let mut event_name = None;
+            let mut data = None;
+            for line in frame.lines() {
+                if let Some(rest) = line.strip_prefix("event: ") {
+                    event_name = Some(rest.to_owned());
+                } else if let Some(rest) = line.strip_prefix("data: ") {
+                    data = Some(
+                        serde_json::from_str(rest).expect("SSE data field should be valid JSON"),
+                    );
+                }
+            }
+            (
+                event_name.expect("frame should have an `event:` field"),
+                data.expect("frame should have a `data:` field"),
+            )
+        })
+        .collect()
+}
+
 async fn request_json(
     app: axum::Router,
     method: Method,
@@ -866,4 +1228,147 @@ async fn request_json(
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
     (status, body)
+}
+
+/// `?timeoutMs=0` on the streaming route must be clamped up to
+/// [`RestLimits::min_stream_poll_timeout`], not passed through to the backend.
+///
+/// Without the floor, one request drives an unbounded run of back-to-back
+/// `poll_event` calls (measured at ~935k frames/sec over a real socket), each
+/// paying a session lock, an idle-session scan, an allocation, and a
+/// serialized `timeout` frame to report that nothing happened.
+#[tokio::test]
+async fn sse_event_stream_clamps_a_zero_timeout_up_to_the_stream_floor() {
+    let backend = FakeBackend::default();
+    backend.queue_events([Ok(RestEventResponse::closed())]);
+    let observed_polls = backend.observed_polls.clone();
+    let options = RestRouterOptions::trusted_bridge();
+    let floor_ms = options.limits.min_stream_poll_timeout.as_millis() as u64;
+    let app = router_with_backend_and_options(backend, options);
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/sessions/session-1/events/stream?timeoutMs=0")
+        .body(Body::empty())
+        .unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(5), app.oneshot(request))
+        .await
+        .expect("SSE handler should return the response promptly")
+        .unwrap();
+    let _ = tokio::time::timeout(
+        Duration::from_secs(5),
+        to_bytes(response.into_body(), usize::MAX),
+    )
+    .await
+    .expect("SSE stream should terminate after the Closed frame")
+    .unwrap();
+
+    assert_eq!(*observed_polls.lock().unwrap(), vec![Some(floor_ms)]);
+}
+
+/// The long-poll route must keep accepting `?timeoutMs=0` verbatim.
+///
+/// Pinned separately from the streaming floor above because the two routes
+/// share `RestLimits` but not their clamping rules: `timeoutMs=0` is a
+/// legitimate non-blocking "is anything waiting?" poll here, paced by one HTTP
+/// round trip per call, and applying the stream's floor to it would silently
+/// turn every such call into a 250ms block.
+#[tokio::test]
+async fn long_poll_route_still_accepts_a_zero_timeout_verbatim() {
+    let backend = FakeBackend::default();
+    let observed_polls = backend.observed_polls.clone();
+    let app = router_with_backend_and_options(backend, RestRouterOptions::trusted_bridge());
+
+    let (status, body) = request_json(
+        app,
+        Method::GET,
+        "/v1/sessions/session-1/events?timeoutMs=0",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["event"], "timeout");
+    assert_eq!(*observed_polls.lock().unwrap(), vec![Some(0)]);
+}
+
+/// A backend whose `poll_event` future resolves synchronously must not starve
+/// the executor.
+///
+/// `RestBackend` is a public trait host applications implement, and resolving
+/// on the first poll is legal and natural for a backend that already has an
+/// event buffered - `FakeBackend` here does exactly that. Before
+/// `EventPollStream` yielded on its own, such a backend meant `poll_next`
+/// never returned `Poll::Pending`, so the task never handed control back to
+/// the runtime and the stream looped forever with no upper bound.
+///
+/// This test would hang rather than fail without that fix: `#[tokio::test]`
+/// runs a current-thread runtime, so a stream that never yields also prevents
+/// the timer below from ever firing. The outer `timeout` is what converts a
+/// regression into a failed assertion.
+#[tokio::test]
+async fn sse_event_stream_yields_to_the_executor_with_a_synchronous_backend() {
+    // Default FakeBackend answers every poll with an immediate `timeout` and
+    // never queues a terminal event, so this stream is infinite by design.
+    let app = router_with_backend_and_options(
+        FakeBackend::default(),
+        RestRouterOptions::trusted_bridge(),
+    );
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/sessions/session-1/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let response = tokio::time::timeout(Duration::from_secs(5), app.oneshot(request))
+        .await
+        .expect("SSE handler should return the response promptly")
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Reading an infinite stream must time out, not hang: the timer firing at
+    // all is the proof that the stream handed the runtime control back.
+    let drained = tokio::time::timeout(
+        Duration::from_millis(250),
+        to_bytes(response.into_body(), usize::MAX),
+    )
+    .await;
+    assert!(
+        drained.is_err(),
+        "an infinite SSE stream should still be pending when the timer fires; \
+         if this resolved, the fake backend stopped being infinite"
+    );
+}
+
+/// A request body over `RestLimits::max_request_body_bytes` is rejected with
+/// `413` before the handler runs - and distinguishably from malformed JSON,
+/// which is `400`. Guards the `DefaultBodyLimit` wiring plus `invalid_json`'s
+/// status-passthrough for the too-large case.
+#[tokio::test]
+async fn oversized_request_body_is_rejected_with_413_not_400() {
+    let options = RestRouterOptions::text_turn().with_limits(RestLimits {
+        max_request_body_bytes: 64,
+        ..RestLimits::default()
+    });
+    let app = router_with_backend_and_options(FakeBackend::default(), options);
+
+    // Well over the 64-byte cap: 413, and the crate's payload_too_large shape.
+    let big = json!({ "prompt": "x".repeat(500) });
+    let (status, body) = request_json(app.clone(), Method::POST, "/v1/text-turn", Some(big)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(body["error"], "payload_too_large");
+
+    // Small but malformed body stays a 400 invalid_json - the cap must not
+    // swallow the distinction between "too big" and "not JSON".
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/v1/text-turn")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("{not json"))
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["error"], "invalid_json");
 }
