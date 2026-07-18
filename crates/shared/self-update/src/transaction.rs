@@ -15,8 +15,8 @@ use crate::{
 #[path = "transaction_artifacts.rs"]
 mod artifacts;
 use artifacts::{
-    cleanup_owned_artifacts, exact_artifact_name, validate_marker_backup_metadata,
-    validate_marker_staged_metadata, validate_rollback_backup,
+    cleanup_owned_artifacts, exact_artifact_name, validate_backup_candidate,
+    validate_marker_backup_metadata, validate_marker_staged_metadata, validate_rollback_backup,
 };
 
 static TRANSACTION_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -118,8 +118,34 @@ impl Updater {
         let _lock = self.transaction_lock(&paths.lock)?;
         let executable = paths.executable;
         let state = paths.state;
-        cleanup_marker_temp(&state)?;
         let validated_path = absolute(validated.path())?;
+        let previous = previous_version.into();
+        let target = validated.target_version().to_owned();
+        let backup = unique_backup(&executable);
+        let marker_temp = suffix_path(&state, ".tmp");
+        validate_backup_candidate(
+            &executable,
+            &state,
+            &paths.lock,
+            &marker_temp,
+            &validated_path,
+            &backup,
+        )?;
+        let mut marker = Marker {
+            schema_version: 2,
+            phase: MarkerPhase::Prepared,
+            target: target.clone(),
+            previous: previous.clone(),
+            executable: executable.clone(),
+            backup: backup.clone(),
+            staged: validated_path.clone(),
+            attempts: 0,
+            sha256: validated.sha256().to_owned(),
+            previous_sha256: hash_file(&executable)?,
+        };
+        marker_bytes(&state, &marker)?;
+
+        cleanup_marker_temp(&state)?;
         let staged_metadata = std::fs::symlink_metadata(&validated_path)
             .map_err(|error| UpdateError::io(&validated_path, error))?;
         if !staged_metadata.file_type().is_file() {
@@ -141,23 +167,15 @@ impl Updater {
                 actual: actual_digest,
             });
         }
-        let previous = previous_version.into();
-        let target = validated.target_version().to_owned();
-        let backup = unique_backup(&executable);
         create_backup(&executable, &backup, self.policy().backup_strategy())?;
-        let previous_sha256 = hash_file(&backup)?;
-        let mut marker = Marker {
-            schema_version: 2,
-            phase: MarkerPhase::Prepared,
-            target: target.clone(),
-            previous: previous.clone(),
-            executable: executable.clone(),
-            backup: backup.clone(),
-            staged: validated_path.clone(),
-            attempts: 0,
-            sha256: validated.sha256().to_owned(),
-            previous_sha256,
-        };
+        let backup_digest = hash_file(&backup)?;
+        if backup_digest != marker.previous_sha256 {
+            remove_file(&backup)?;
+            return Err(UpdateError::DigestMismatch {
+                expected: marker.previous_sha256,
+                actual: backup_digest,
+            });
+        }
         if let Err(error) = write_marker(self, &state, &marker) {
             remove_file(&backup)?;
             return Err(error);
@@ -516,12 +534,7 @@ fn hash_reader(file: &mut File, path: &Path) -> Result<String> {
 }
 
 fn write_marker(updater: &Updater, path: &Path, marker: &Marker) -> Result<()> {
-    let bytes = serde_json::to_vec_pretty(marker).map_err(|error| UpdateError::InvalidMarker {
-        path: path.to_path_buf(),
-        message: error.to_string(),
-    })?;
-    // Every marker write holds the state lock, so one deterministic sibling is
-    // sufficient and can be recovered without trusting a recycled PID.
+    let bytes = marker_bytes(path, marker)?;
     let temporary = suffix_path(path, ".tmp");
     let result = (|| {
         let mut file = OpenOptions::new()
@@ -545,6 +558,20 @@ fn write_marker(updater: &Updater, path: &Path, marker: &Marker) -> Result<()> {
         std::fs::remove_file(&temporary).map_err(|error| UpdateError::io(&temporary, error))?;
     }
     result
+}
+
+fn marker_bytes(path: &Path, marker: &Marker) -> Result<Vec<u8>> {
+    let bytes = serde_json::to_vec_pretty(marker).map_err(|error| UpdateError::InvalidMarker {
+        path: path.to_path_buf(),
+        message: error.to_string(),
+    })?;
+    if bytes.len() as u64 > MAX_MARKER_BYTES {
+        return Err(UpdateError::InvalidMarker {
+            path: path.to_path_buf(),
+            message: format!("marker exceeds {MAX_MARKER_BYTES} byte limit"),
+        });
+    }
+    Ok(bytes)
 }
 
 fn cleanup_marker_temp(state: &Path) -> Result<()> {

@@ -149,3 +149,20 @@ fn marker_temp_owner_matches_service_even_when_directory_owner_differs() {
         service_effective_uid
     ));
 }
+
+#[test]
+fn generated_backup_must_not_collide_with_transaction_paths() {
+    let root = std::path::Path::new("/trusted/bin");
+    let executable = root.join("agent");
+    let state = root.join("state.json");
+    let lock = root.join("state.json.lock");
+    let marker_temp = root.join("state.json.tmp");
+    let staged = root.join(".agent.update-1-1.part");
+
+    for collision in [&state, &lock, &marker_temp, &staged] {
+        assert!(matches!(
+            validate_backup_candidate(&executable, &state, &lock, &marker_temp, &staged, collision),
+            Err(UpdateError::InvalidLayout { .. })
+        ));
+    }
+}

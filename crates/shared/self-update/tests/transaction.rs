@@ -40,6 +40,34 @@ async fn install_rehashes_validated_bytes_before_mutating_live_state() {
 }
 
 #[tokio::test]
+async fn oversized_previous_version_is_rejected_before_backup_or_swap() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+
+    assert!(matches!(
+        updater.install(artifact, "1".repeat(70 * 1024)).await,
+        Err(UpdateError::InvalidMarker { .. })
+    ));
+    assert_eq!(std::fs::read(&executable).unwrap(), old);
+    assert!(!state.exists());
+    assert!(
+        std::fs::read_dir(temp.path())
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .all(|entry| !entry.file_name().to_string_lossy().contains(".rollback-"))
+    );
+}
+
+#[tokio::test]
 async fn install_rejects_a_validated_path_replaced_by_a_symlink() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");

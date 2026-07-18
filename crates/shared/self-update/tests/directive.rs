@@ -53,3 +53,29 @@ fn enforces_same_origin_and_transport_policy() {
         Err(UpdateError::InsecureTransport(_))
     ));
 }
+
+#[test]
+fn validates_every_redirect_hop_and_final_response_url() {
+    let directive = UpdateDirective::new("2", "/binary", EMPTY_SHA256).unwrap();
+    let endpoint = Url::parse("https://updates.example.test/v1/check").unwrap();
+    let same_origin_hop = Url::parse("https://updates.example.test/releases/2").unwrap();
+    let cross_origin_hop = Url::parse("https://cdn.example.test/releases/2").unwrap();
+
+    assert!(
+        directive
+            .validate_artifact_response_url(
+                &endpoint,
+                &same_origin_hop,
+                ArtifactTransportPolicy::HttpsOnly
+            )
+            .is_ok()
+    );
+    assert!(matches!(
+        directive.validate_artifact_response_url(
+            &endpoint,
+            &cross_origin_hop,
+            ArtifactTransportPolicy::HttpsOnly
+        ),
+        Err(UpdateError::CrossOriginArtifact { .. })
+    ));
+}

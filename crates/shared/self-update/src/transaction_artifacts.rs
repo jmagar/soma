@@ -3,6 +3,33 @@ use std::path::Path;
 use super::{Marker, MarkerPhase, hash_file, sync_parent};
 use crate::{Result, UpdateError};
 
+pub(super) fn validate_backup_candidate(
+    executable: &Path,
+    state: &Path,
+    lock: &Path,
+    marker_temp: &Path,
+    staged: &Path,
+    backup: &Path,
+) -> Result<()> {
+    for protected in [executable, state, lock, marker_temp, staged] {
+        let collides = backup == protected
+            || match (
+                std::fs::canonicalize(backup),
+                std::fs::canonicalize(protected),
+            ) {
+                (Ok(backup), Ok(protected)) => backup == protected,
+                _ => false,
+            };
+        if collides {
+            return Err(UpdateError::InvalidLayout {
+                first: backup.to_path_buf(),
+                second: protected.to_path_buf(),
+            });
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn exact_artifact_name(
     executable: &Path,
     candidate: &Path,

@@ -57,15 +57,27 @@ impl Updater {
         let identity = validated_path_identity(&path)?;
         let timeout = self.policy().validation_timeout();
         let deadline = tokio::time::Instant::now() + timeout;
-        let mut child = match tokio::time::timeout_at(deadline, spawn_validator(&path)).await {
+        let child = match tokio::time::timeout_at(deadline, spawn_validator(&path)).await {
             Ok(result) => result?,
             Err(_) => return Err(UpdateError::ValidationTimedOut { timeout }),
         };
-        let stdout = child.stdout().take().expect("piped stdout is configured");
-        let stderr = child.stderr().take().expect("piped stderr is configured");
+        let mut child = ValidationProcessGuard::new(child);
+        let stdout = child
+            .child_mut()
+            .stdout()
+            .take()
+            .expect("piped stdout is configured");
+        let stderr = child
+            .child_mut()
+            .stderr()
+            .take()
+            .expect("piped stderr is configured");
         let completed = tokio::time::timeout_at(deadline, async {
-            let (status, stdout, stderr) =
-                tokio::join!(child.wait(), read_bounded(stdout), read_bounded(stderr));
+            let (status, stdout, stderr) = tokio::join!(
+                child.child_mut().wait(),
+                read_bounded(stdout),
+                read_bounded(stderr)
+            );
             (status, stdout, stderr)
         })
         .await;
@@ -76,10 +88,12 @@ impl Updater {
                 stderr.map_err(|error| UpdateError::io(&path, error))?,
             ),
             Err(_) => {
-                let _ = Box::into_pin(child.kill()).await;
+                let _ = Box::into_pin(child.child_mut().kill()).await;
+                child.disarm();
                 return Err(UpdateError::ValidationTimedOut { timeout });
             }
         };
+        child.disarm();
         if stdout.overflowed {
             return Err(UpdateError::ValidationOutputTooLarge {
                 stream: "stdout",
@@ -120,6 +134,33 @@ impl Updater {
             #[cfg(unix)]
             identity,
         })
+    }
+}
+
+struct ValidationProcessGuard {
+    child: Box<dyn ChildWrapper>,
+    armed: bool,
+}
+
+impl ValidationProcessGuard {
+    fn new(child: Box<dyn ChildWrapper>) -> Self {
+        Self { child, armed: true }
+    }
+
+    fn child_mut(&mut self) -> &mut dyn ChildWrapper {
+        self.child.as_mut()
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for ValidationProcessGuard {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.child.start_kill();
+        }
     }
 }
 

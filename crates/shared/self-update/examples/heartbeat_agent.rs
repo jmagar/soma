@@ -24,9 +24,11 @@ fn authenticate_directive(json: &str) -> soma_self_update::Result<UpdateDirectiv
     UpdateDirective::new(value.version, value.artifact_url, value.sha256)
 }
 
-async fn fetch_artifact(_url: &Url) -> impl tokio::io::AsyncRead + Unpin {
-    // A real adopter returns its reqwest response stream adapter here.
-    tokio::io::empty()
+async fn fetch_artifact(url: &Url) -> (Url, impl tokio::io::AsyncRead + Unpin) {
+    // A real adopter disables automatic redirects, validates every redirect
+    // target with `validate_artifact_response_url`, and returns the final URL
+    // together with its response stream.
+    (url.clone(), tokio::io::empty())
 }
 
 async fn lifecycle() -> soma_self_update::Result<()> {
@@ -44,7 +46,12 @@ async fn lifecycle() -> soma_self_update::Result<()> {
     let directive = authenticate_directive(json)?;
     let endpoint = Url::parse("https://host/v1/heartbeats").expect("static endpoint is valid");
     let artifact_url = directive.resolve_artifact_url(&endpoint, updater.policy().transport())?;
-    let reader = fetch_artifact(&artifact_url).await;
+    let (response_url, reader) = fetch_artifact(&artifact_url).await;
+    directive.validate_artifact_response_url(
+        &endpoint,
+        &response_url,
+        updater.policy().transport(),
+    )?;
     let staged = updater.stage(reader, &directive).await?;
     let validated = updater.validate(staged).await?;
     let outcome = updater.install(validated, "1.0.0").await?;
