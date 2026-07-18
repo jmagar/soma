@@ -29,30 +29,43 @@ impl Updater {
     /// Executes `--version` and consumes the staged artifact on success.
     pub async fn validate(&self, staged: StagedArtifact) -> Result<ValidatedArtifact> {
         let path = staged.path().to_path_buf();
-        let mut child = spawn_validator(&path).await?;
+        let timeout = self.policy().validation_timeout();
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut child = match tokio::time::timeout_at(deadline, spawn_validator(&path)).await {
+            Ok(result) => result?,
+            Err(_) => return Err(UpdateError::ValidationTimedOut { timeout }),
+        };
+        #[cfg(unix)]
+        let process_group = child.id().map(|id| id as i32);
         let stdout = child.stdout.take().expect("piped stdout is configured");
         let stderr = child.stderr.take().expect("piped stderr is configured");
-        let stdout_task = tokio::spawn(read_bounded(stdout));
-        let stderr_task = tokio::spawn(read_bounded(stderr));
-        let timeout = self.policy().validation_timeout();
-        let status = match tokio::time::timeout(timeout, child.wait()).await {
-            Ok(result) => result.map_err(|error| UpdateError::io(&path, error))?,
+        let completed = tokio::time::timeout_at(deadline, async {
+            let (status, stdout, stderr) = tokio::join!(
+                child.wait(),
+                read_bounded(stdout),
+                read_bounded(stderr)
+            );
+            (status, stdout, stderr)
+        })
+        .await;
+        let (status, stdout, stderr) = match completed {
+            Ok((status, stdout, stderr)) => (
+                status.map_err(|error| UpdateError::io(&path, error))?,
+                stdout.map_err(|error| UpdateError::io(&path, error))?,
+                stderr.map_err(|error| UpdateError::io(&path, error))?,
+            ),
             Err(_) => {
+                #[cfg(unix)]
+                if let Some(process_group) = process_group {
+                    use nix::sys::signal::{Signal, killpg};
+                    use nix::unistd::Pid;
+                    let _ = killpg(Pid::from_raw(process_group), Signal::SIGKILL);
+                }
                 let _ = child.kill().await;
                 let _ = child.wait().await;
-                stdout_task.abort();
-                stderr_task.abort();
                 return Err(UpdateError::ValidationTimedOut { timeout });
             }
         };
-        let stdout = stdout_task
-            .await
-            .map_err(|error| UpdateError::io(&path, std::io::Error::other(error)))?
-            .map_err(|error| UpdateError::io(&path, error))?;
-        let stderr = stderr_task
-            .await
-            .map_err(|error| UpdateError::io(&path, std::io::Error::other(error)))?
-            .map_err(|error| UpdateError::io(&path, error))?;
         if stdout.overflowed {
             return Err(UpdateError::ValidationOutputTooLarge {
                 stream: "stdout",
@@ -94,13 +107,7 @@ async fn spawn_validator(path: &std::path::Path) -> Result<tokio::process::Child
     // converted back to a closed std file. Retry only that transient kernel
     // condition; every other spawn error remains immediate and typed.
     for _ in 0..10 {
-        let result = Command::new(path)
-            .arg("--version")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn();
+        let result = validator_command(path).spawn();
         match result {
             Ok(child) => return Ok(child),
             Err(error) if error.raw_os_error() == Some(26) => {
@@ -109,14 +116,22 @@ async fn spawn_validator(path: &std::path::Path) -> Result<tokio::process::Child
             Err(error) => return Err(UpdateError::io(path, error)),
         }
     }
-    Command::new(path)
+    validator_command(path)
+        .spawn()
+        .map_err(|error| UpdateError::io(path, error))
+}
+
+fn validator_command(path: &std::path::Path) -> Command {
+    let mut command = Command::new(path);
+    command
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|error| UpdateError::io(path, error))
+        .kill_on_drop(true);
+    #[cfg(unix)]
+    command.process_group(0);
+    command
 }
 
 struct BoundedOutput {

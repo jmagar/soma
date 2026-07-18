@@ -101,3 +101,29 @@ async fn times_out_and_kills_the_validator() {
         Err(UpdateError::ValidationTimedOut { .. })
     ));
 }
+
+#[tokio::test]
+async fn deadline_covers_pipe_inheriting_descendants_and_kills_the_group() {
+    let script = b"#!/bin/sh\nsleep 30 &\necho $! > \"$0.child\"\necho 'example 1'\nexit 0\n";
+    let (_temp, updater, artifact) = staged(script, "1", Duration::from_millis(150)).await;
+    let child_file = artifact.path().with_extension("part.child");
+    let result = tokio::time::timeout(Duration::from_secs(2), updater.validate(artifact))
+        .await
+        .unwrap();
+    assert!(matches!(
+        result,
+        Err(UpdateError::ValidationTimedOut { .. })
+    ));
+    let pid: u32 = std::fs::read_to_string(&child_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    for _ in 0..100 {
+        if !std::path::Path::new(&format!("/proc/{pid}")).exists() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("validator descendant {pid} survived process-group termination");
+}

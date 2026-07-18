@@ -20,6 +20,9 @@ thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "process", "rt", "time"] }
 url = "2"
 
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["process", "signal"] }
+
 [dev-dependencies]
 tempfile = "3"
 tokio = { version = "1", features = ["full"] }
