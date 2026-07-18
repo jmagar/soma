@@ -9,7 +9,7 @@ use codex_app_server_client::{
     AllowAllApprovalHandler, ApprovalFuture, ApprovalHandler, AsyncFnApprovalHandler,
     CodexAppServerClient, CodexDaemon, CodexSession, CompatibilityReport, DenyAllApprovalHandler,
     Error, EventCollector, ReadOnlyApprovalHandler, ServerRequestReply, SessionOptions,
-    SurfaceSummary, CODEX_SCHEMA_VERSION,
+    SurfaceSummary, CODEX_SCHEMA_VERSION, DEFAULT_EVENTS_CHANNEL_CAPACITY,
 };
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 
@@ -223,6 +223,90 @@ async fn session_connect_streams_handshakes_before_returning() {
 
     assert_eq!(session.initialize_response().platform_os, "linux");
     server.await.unwrap();
+}
+
+#[test]
+fn session_options_with_events_capacity_round_trips() {
+    let default_options = SessionOptions::new("test-client", "0.1.0");
+    assert_eq!(default_options.events_capacity, None);
+
+    let options = SessionOptions::new("test-client", "0.1.0").with_events_capacity(42);
+    assert_eq!(options.events_capacity, Some(42));
+}
+
+/// Regression test: `SessionOptions::with_events_capacity` must actually
+/// reach `CodexSession::connect_streams`'s underlying event channel, not
+/// just set a field nothing reads. Uses a capacity far smaller than
+/// `DEFAULT_EVENTS_CHANNEL_CAPACITY` and floods more notifications than that
+/// capacity can hold before draining starts; if the override were ignored in
+/// favor of the (much larger) default, every flooded notification would
+/// still be delivered.
+#[tokio::test]
+async fn session_connect_streams_honors_a_custom_events_capacity() {
+    const CUSTOM_CAPACITY: usize = 3;
+    const NOTIFICATIONS_SENT: usize = CUSTOM_CAPACITY + 20;
+    const _: () = assert!(NOTIFICATIONS_SENT < DEFAULT_EVENTS_CHANNEL_CAPACITY);
+
+    let (client_io, server_io) = tokio::io::duplex(1024 * 1024);
+    let (client_read, client_write) = tokio::io::split(client_io);
+    let (server_read, mut server_write) = tokio::io::split(server_io);
+
+    let server = tokio::spawn(async move {
+        let mut reader = BufReader::new(server_read);
+        respond_to_initialize(&mut reader, &mut server_write).await;
+
+        for index in 0..NOTIFICATIONS_SENT {
+            write_notification(
+                &mut server_write,
+                serde_json::json!({
+                    "method": "item/agentMessage/delta",
+                    "params": {
+                        "threadId": "thread-1",
+                        "turnId": "turn-1",
+                        "itemId": format!("item-{index}"),
+                        "delta": "x"
+                    }
+                }),
+            )
+            .await;
+        }
+    });
+
+    let mut session = CodexSession::connect_streams(
+        BufReader::new(client_read),
+        client_write,
+        SessionOptions::new("test-client", "0.1.0").with_events_capacity(CUSTOM_CAPACITY),
+    )
+    .await
+    .unwrap();
+    server.await.unwrap();
+
+    // Give the reader task time to parse and `try_send` every notification
+    // before this test starts draining, mirroring the same technique used in
+    // `client.rs`'s capacity tests: the point is to observe how many survive
+    // a channel that's already full, not to race the reader task.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let mut delivered = 0usize;
+    while tokio::time::timeout(Duration::from_millis(50), session.next_event())
+        .await
+        .ok()
+        .flatten()
+        .is_some()
+    {
+        delivered += 1;
+    }
+
+    assert!(
+        delivered <= CUSTOM_CAPACITY,
+        "a capacity-{CUSTOM_CAPACITY} channel should have dropped most of the \
+         {NOTIFICATIONS_SENT} flooded notifications, but {delivered} were delivered - \
+         SessionOptions::with_events_capacity does not appear to be honored"
+    );
+    assert!(
+        delivered > 0,
+        "at least some notifications should get through"
+    );
 }
 
 #[tokio::test]

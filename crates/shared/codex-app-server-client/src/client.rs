@@ -50,16 +50,29 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 /// while.
 const PENDING_SERVER_REQUEST_TIMEOUT: Duration = Duration::from_secs(600);
 
-/// Capacity of the internal channel from the reader task to [`EventStream`].
-/// Bounded (rather than unbounded) so a stalled or absent consumer grows
-/// memory by a fixed amount, not without bound, if events keep arriving
-/// faster than [`EventStream::recv`] is called - see that type's doc comment
-/// for the drop policy once this fills up.
-const EVENTS_CHANNEL_CAPACITY: usize = 1024;
+/// Default capacity of the internal channel from the reader task to
+/// [`EventStream`], used by [`CodexAppServerClient::spawn`],
+/// [`CodexAppServerClient::connect_streams`], and
+/// [`CodexAppServerClient::connect_unix`]. Bounded (rather than unbounded)
+/// so a stalled or absent consumer grows memory by a fixed amount, not
+/// without bound, if events keep arriving faster than [`EventStream::recv`]
+/// is called - see that type's doc comment for the drop policy once this
+/// fills up.
+///
+/// Override per-connection with
+/// [`CodexAppServerClient::spawn_with_events_capacity`],
+/// [`CodexAppServerClient::connect_streams_with_events_capacity`], or
+/// [`CodexAppServerClient::connect_unix_with_events_capacity`] - REST/SSE
+/// consumers reading events over a network are exactly the "slow consumer"
+/// case this bound protects against, so `crate::rest::RestLimits` threads
+/// its own per-session override through
+/// [`crate::SessionOptions::with_events_capacity`] instead of hardcoding
+/// this default for every session it spawns.
+pub const DEFAULT_EVENTS_CHANNEL_CAPACITY: usize = 1024;
 
 /// Capacity of the internal channel from callers (and the reader task's own
 /// reply-forwarding) to the writer task. Bounded for the same reason as
-/// [`EVENTS_CHANNEL_CAPACITY`]: without a cap, a caller issuing many
+/// [`DEFAULT_EVENTS_CHANNEL_CAPACITY`]: without a cap, a caller issuing many
 /// concurrent requests while the peer write is slow (anywhere up to
 /// [`WRITE_TIMEOUT`] before the connection gets torn down) could grow this
 /// queue by an unbounded number of serialized-but-unwritten lines. A full
@@ -108,8 +121,10 @@ pub enum Event {
 ///
 /// Own exactly one `EventStream` per connection and keep draining it (even if
 /// you only care about requests, not notifications). The channel between the
-/// reader task and this stream is bounded (see `EVENTS_CHANNEL_CAPACITY`):
-/// a slow consumer just grows a fixed-size backlog, but a consumer that stops
+/// reader task and this stream is bounded (see
+/// `DEFAULT_EVENTS_CHANNEL_CAPACITY`, overridable per-connection via
+/// [`CodexAppServerClient::spawn_with_events_capacity`] and friends): a slow
+/// consumer just grows a fixed-size backlog, but a consumer that stops
 /// draining entirely will eventually cause the reader task to drop events
 /// once that backlog fills. Drop policy when full:
 /// - [`Event::Notification`]: dropped and logged - fire-and-forget by design.
@@ -313,8 +328,29 @@ impl CodexAppServerClient {
     /// stall timeout - none of these require the caller to drop the client or
     /// issue another call first.
     pub fn spawn(command: &str, extra_args: &[String]) -> Result<(Self, EventStream)> {
+        Self::spawn_with_events_capacity(command, extra_args, DEFAULT_EVENTS_CHANNEL_CAPACITY)
+    }
+
+    /// Same as [`Self::spawn`], but with an explicit capacity for the
+    /// internal event channel instead of [`DEFAULT_EVENTS_CHANNEL_CAPACITY`].
+    /// See [`EventStream`]'s doc comment for what this bounds and the drop
+    /// policy once it fills up.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Io`] if `events_capacity` is `0` -
+    /// `tokio::sync::mpsc::channel` panics on a zero capacity, and that
+    /// panic's message doesn't mention which knob caused it (useful context
+    /// this crate has and a bare `unwrap` deep inside tokio wouldn't
+    /// surface), so it's rejected here instead with a message that does.
+    pub fn spawn_with_events_capacity(
+        command: &str,
+        extra_args: &[String],
+        events_capacity: usize,
+    ) -> Result<(Self, EventStream)> {
+        Self::validate_events_capacity(events_capacity)?;
         let (stdin, reader, child) = transport::spawn_app_server(command, extra_args)?;
-        Ok(Self::connect(reader, stdin, Some(child)))
+        Ok(Self::connect(reader, stdin, Some(child), events_capacity))
     }
 
     /// Connects to an already-open duplex stream (e.g. any
@@ -326,16 +362,64 @@ impl CodexAppServerClient {
         R: AsyncBufRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
     {
-        Self::connect(reader, writer, None)
+        Self::connect(reader, writer, None, DEFAULT_EVENTS_CHANNEL_CAPACITY)
+    }
+
+    /// Same as [`Self::connect_streams`], but with an explicit capacity for
+    /// the internal event channel instead of
+    /// [`DEFAULT_EVENTS_CHANNEL_CAPACITY`]. See
+    /// [`Self::spawn_with_events_capacity`] for the zero-capacity error case
+    /// (identical here).
+    pub fn connect_streams_with_events_capacity<R, W>(
+        reader: R,
+        writer: W,
+        events_capacity: usize,
+    ) -> Result<(Self, EventStream)>
+    where
+        R: AsyncBufRead + Unpin + Send + 'static,
+        W: AsyncWrite + Unpin + Send + 'static,
+    {
+        Self::validate_events_capacity(events_capacity)?;
+        Ok(Self::connect(reader, writer, None, events_capacity))
     }
 
     /// Connects to a `codex app-server` (or `codex app-server daemon`)
     /// listening on a Unix domain socket (`--listen unix://PATH`).
     #[cfg(unix)]
     pub async fn connect_unix(path: impl AsRef<std::path::Path>) -> Result<(Self, EventStream)> {
+        Self::connect_unix_with_events_capacity(path, DEFAULT_EVENTS_CHANNEL_CAPACITY).await
+    }
+
+    /// Same as [`Self::connect_unix`], but with an explicit capacity for the
+    /// internal event channel instead of [`DEFAULT_EVENTS_CHANNEL_CAPACITY`].
+    /// See [`Self::spawn_with_events_capacity`] for the zero-capacity error
+    /// case (identical here).
+    #[cfg(unix)]
+    pub async fn connect_unix_with_events_capacity(
+        path: impl AsRef<std::path::Path>,
+        events_capacity: usize,
+    ) -> Result<(Self, EventStream)> {
+        Self::validate_events_capacity(events_capacity)?;
         let stream = tokio::net::UnixStream::connect(path).await?;
         let (writer, reader) = transport::split_unix_stream(stream);
-        Ok(Self::connect(reader, writer, None))
+        Ok(Self::connect(reader, writer, None, events_capacity))
+    }
+
+    /// Rejects a zero `events_capacity` before it can reach
+    /// `tokio::sync::mpsc::channel` (which panics on capacity `0` with a
+    /// message that has no idea it's about an event channel, let alone which
+    /// constructor or env var supplied the bad value). Called by every
+    /// `*_with_events_capacity` constructor; the capacity-less constructors
+    /// never call this because [`DEFAULT_EVENTS_CHANNEL_CAPACITY`] is a
+    /// compile-time constant that is never zero.
+    fn validate_events_capacity(events_capacity: usize) -> Result<()> {
+        if events_capacity == 0 {
+            return Err(Error::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "events_capacity must be greater than zero",
+            )));
+        }
+        Ok(())
     }
 
     /// Returns a client that applies `timeout` to every request/response call
@@ -348,13 +432,27 @@ impl CodexAppServerClient {
         self
     }
 
-    fn connect<R, W>(mut reader: R, mut writer: W, child: Option<Child>) -> (Self, EventStream)
+    /// `events_capacity` must be non-zero - every caller reaching this is a
+    /// `*_with_events_capacity` constructor (see [`Self::validate_events_capacity`])
+    /// or one of the capacity-less constructors passing the never-zero
+    /// [`DEFAULT_EVENTS_CHANNEL_CAPACITY`], so this does not re-validate.
+    fn connect<R, W>(
+        mut reader: R,
+        mut writer: W,
+        child: Option<Child>,
+        events_capacity: usize,
+    ) -> (Self, EventStream)
     where
         R: AsyncBufRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
     {
+        debug_assert!(
+            events_capacity > 0,
+            "events_capacity must be validated (see Self::validate_events_capacity) before \
+             reaching `connect` - tokio::sync::mpsc::channel panics on a capacity of 0"
+        );
         let (write_tx, mut write_rx) = mpsc::channel::<String>(WRITE_CHANNEL_CAPACITY);
-        let (events_tx, events_rx) = mpsc::channel::<Event>(EVENTS_CHANNEL_CAPACITY);
+        let (events_tx, events_rx) = mpsc::channel::<Event>(events_capacity);
         let pending: PendingMap = Arc::new(Mutex::new(HashMap::new()));
         let cancel = CancellationToken::new();
 
@@ -887,7 +985,7 @@ mod tests {
         let (_client, mut events) =
             CodexAppServerClient::connect_streams(BufReader::new(client_read), client_write);
 
-        for index in 0..EVENTS_CHANNEL_CAPACITY {
+        for index in 0..DEFAULT_EVENTS_CHANNEL_CAPACITY {
             let delta = serde_json::json!({
                 "method": "item/agentMessage/delta",
                 "params": {
@@ -921,7 +1019,7 @@ mod tests {
             .await
             .unwrap();
 
-        for _ in 0..=EVENTS_CHANNEL_CAPACITY {
+        for _ in 0..=DEFAULT_EVENTS_CHANNEL_CAPACITY {
             let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
                 .await
                 .expect("event stream should not stall")
@@ -935,6 +1033,100 @@ mod tests {
         }
 
         panic!("turn/completed was not delivered after draining the full event channel");
+    }
+
+    /// Regression test: a zero `events_capacity` must be rejected with a
+    /// crate-owned error - not left to panic inside
+    /// `tokio::sync::mpsc::channel`, whose message ("mpsc bounded channel
+    /// requires buffer > 0") says nothing about which knob or env var caused
+    /// it. Exercised through `connect_streams_with_events_capacity` since it
+    /// needs no real process or socket.
+    #[tokio::test]
+    async fn connect_streams_with_events_capacity_rejects_a_zero_capacity_cleanly() {
+        let (client_io, _server_io) = tokio::io::duplex(4096);
+        let (client_read, client_write) = tokio::io::split(client_io);
+
+        let result = CodexAppServerClient::connect_streams_with_events_capacity(
+            BufReader::new(client_read),
+            client_write,
+            0,
+        );
+        let error = match result {
+            Ok(_) => panic!("a zero capacity must be rejected rather than panicking inside tokio"),
+            Err(error) => error,
+        };
+
+        assert!(
+            matches!(error, Error::Io(ref io_err) if io_err.kind() == std::io::ErrorKind::InvalidInput),
+            "unexpected error variant for a rejected zero capacity: {error:?}"
+        );
+    }
+
+    /// Regression test: `*_with_events_capacity` must actually bound the
+    /// channel to the requested size, not silently keep using
+    /// `DEFAULT_EVENTS_CHANNEL_CAPACITY` - otherwise the REST layer's
+    /// `events_channel_capacity` limit (see `crate::rest::RestLimits`) would
+    /// be a knob nothing reads. Floods a small-capacity channel with far more
+    /// notifications than it can hold *before* this test starts draining, so
+    /// only notifications that fit within the requested capacity can survive;
+    /// if the capacity argument were ignored in favor of the (much larger)
+    /// default, every flooded notification would arrive.
+    #[tokio::test]
+    async fn connect_streams_with_events_capacity_bounds_the_channel_to_the_requested_size() {
+        const CUSTOM_CAPACITY: usize = 4;
+        const NOTIFICATIONS_SENT: usize = CUSTOM_CAPACITY + 20;
+
+        let (client_io, mut server_io) = tokio::io::duplex(1024 * 1024);
+        let (client_read, client_write) = tokio::io::split(client_io);
+        let (_client, mut events) = CodexAppServerClient::connect_streams_with_events_capacity(
+            BufReader::new(client_read),
+            client_write,
+            CUSTOM_CAPACITY,
+        )
+        .expect("a nonzero capacity must be accepted");
+
+        for index in 0..NOTIFICATIONS_SENT {
+            let delta = serde_json::json!({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "itemId": format!("item-{index}"),
+                    "delta": "x"
+                }
+            });
+            server_io
+                .write_all(format!("{delta}\n").as_bytes())
+                .await
+                .unwrap();
+        }
+
+        // Give the reader task time to parse and `try_send` every line before
+        // this test starts draining - the point is to observe how many
+        // survive a channel that's still full, not to race the reader task.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let mut delivered = 0usize;
+        while tokio::time::timeout(Duration::from_millis(50), events.recv())
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            delivered += 1;
+        }
+
+        assert!(
+            delivered <= CUSTOM_CAPACITY,
+            "a capacity-{CUSTOM_CAPACITY} channel should have dropped most of the \
+             {NOTIFICATIONS_SENT} notifications flooded in before draining started, but \
+             {delivered} were delivered - the requested capacity is not actually bounding \
+             the channel (it looks like DEFAULT_EVENTS_CHANNEL_CAPACITY is still in effect)"
+        );
+        assert!(
+            delivered > 0,
+            "at least some notifications should get through"
+        );
     }
 
     /// Regression test: the reader task detecting a dead connection (EOF from

@@ -21,6 +21,7 @@ pub struct SessionOptions {
     pub command: String,
     pub extra_args: Vec<String>,
     pub call_timeout: Option<Duration>,
+    pub events_capacity: Option<usize>,
 }
 
 impl SessionOptions {
@@ -32,6 +33,7 @@ impl SessionOptions {
             command: "codex".to_owned(),
             extra_args: Vec::new(),
             call_timeout: None,
+            events_capacity: None,
         }
     }
 
@@ -70,6 +72,17 @@ impl SessionOptions {
     /// Overrides the request/response timeout used by generated client calls.
     pub fn with_call_timeout(mut self, timeout: Duration) -> Self {
         self.call_timeout = Some(timeout);
+        self
+    }
+
+    /// Overrides the capacity of the session's internal event channel
+    /// instead of [`crate::DEFAULT_EVENTS_CHANNEL_CAPACITY`]. See
+    /// [`crate::CodexAppServerClient::spawn_with_events_capacity`] for what
+    /// this bounds and the drop policy once it fills up. A `0` capacity is
+    /// rejected (not silently clamped) by the underlying client constructor
+    /// when the session is created.
+    pub fn with_events_capacity(mut self, events_capacity: usize) -> Self {
+        self.events_capacity = Some(events_capacity);
         self
     }
 }
@@ -117,7 +130,14 @@ impl TextTurnResult {
 impl CodexSession {
     /// Spawns `codex app-server`, performs the handshake, and returns a session.
     pub async fn spawn(options: SessionOptions) -> Result<Self> {
-        let (client, events) = CodexAppServerClient::spawn(&options.command, &options.extra_args)?;
+        let (client, events) = match options.events_capacity {
+            Some(capacity) => CodexAppServerClient::spawn_with_events_capacity(
+                &options.command,
+                &options.extra_args,
+                capacity,
+            )?,
+            None => CodexAppServerClient::spawn(&options.command, &options.extra_args)?,
+        };
         Self::handshake(client, events, options).await
     }
 
@@ -133,7 +153,12 @@ impl CodexSession {
         R: AsyncBufRead + Unpin + Send + 'static,
         W: AsyncWrite + Unpin + Send + 'static,
     {
-        let (client, events) = CodexAppServerClient::connect_streams(reader, writer);
+        let (client, events) = match options.events_capacity {
+            Some(capacity) => CodexAppServerClient::connect_streams_with_events_capacity(
+                reader, writer, capacity,
+            )?,
+            None => CodexAppServerClient::connect_streams(reader, writer),
+        };
         Self::handshake(client, events, options).await
     }
 
@@ -143,7 +168,12 @@ impl CodexSession {
         path: impl AsRef<std::path::Path>,
         options: SessionOptions,
     ) -> Result<Self> {
-        let (client, events) = CodexAppServerClient::connect_unix(path).await?;
+        let (client, events) = match options.events_capacity {
+            Some(capacity) => {
+                CodexAppServerClient::connect_unix_with_events_capacity(path, capacity).await?
+            }
+            None => CodexAppServerClient::connect_unix(path).await?,
+        };
         Self::handshake(client, events, options).await
     }
 
