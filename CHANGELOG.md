@@ -18,7 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version validation, Unix atomic replacement, and durable health confirmation
   and rollback. Explicit crash phases make restart recovery idempotent, validator
   timeouts terminate Unix process groups and Windows Job Objects, and rollback
-  state is identity-, owner-, and digest-checked. The crate has no internal
+  state is identity-, owner-, and digest-checked. Executable leaf symlinks are
+  rejected consistently, test failpoints are updater-scoped, and a deterministic
+  lock-protected marker temporary is reclaimed after crashes. The crate has no internal
   workspace dependencies; this change
   does not enable self-update behavior in the Soma runtime or integrate Cortex.
 - Restructured `apps/soma` (plan section 3.1, PR 18) into a composition-only

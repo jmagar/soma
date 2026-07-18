@@ -4,7 +4,9 @@
 > `prepared`/`installed`/`rolling_back`/`rolled_back` phases; canonical state
 > locks; exact, owner-checked, digest-verified rollback artifacts; dead-PID-only
 > orphan reclamation; repeated staged identity checks; authoritative-first
-> failed-install cleanup; and process-group/Windows-Job validator termination.
+> failed-install cleanup; process-group/Windows-Job validator termination;
+> explicit executable-leaf symlink rejection; updater-scoped crash failpoints;
+> and deterministic lock-protected marker-temporary recovery.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

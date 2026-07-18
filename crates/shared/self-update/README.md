@@ -47,6 +47,11 @@ Construct an `UpdateDirective`, stage and validate its artifact, install it,
 restart, recover pending state on startup, and confirm only after the new
 service reports healthy.
 
+The configured executable leaf must be a regular path, not a symlink. The
+crate rejects leaf symlinks before staging or recovery so the staging grammar,
+marker identity, backup identity, and installed target cannot diverge. Symlinked
+parent directories are canonicalized consistently.
+
 `recover_on_startup` also reclaims prior-process staging and orphan rollback
 files only when their exact target-derived grammar, regular-file type,
 directory, Unix owner, and dead creator PID prove they are stale crate-owned
@@ -62,7 +67,9 @@ executable directory and state directory must not be writable by untrusted
 principals; no pathname-based installer can close the final metadata-to-rename
 race against an attacker who controls that directory. Installation writes and
 syncs a durable marker with explicit `prepared`, `installed`, `rolling_back`,
-and `rolled_back` phases,
+and `rolled_back` phases. Marker replacement uses one deterministic
+lock-protected `<state>.tmp` sibling; startup recovery validates and reclaims an
+owned regular-file leftover before reading transaction state.
 retains a unique rollback backup, syncs the backup and its directory before the
 marker may reference it, then atomically renames the verified artifact. Unix
 staging preserves the existing executable mode (falling back to restrictive
