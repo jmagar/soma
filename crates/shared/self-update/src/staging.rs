@@ -111,6 +111,9 @@ impl Updater {
                 .await
                 .map_err(|error| UpdateError::io(&path, error))?;
         }
+        // Close the writable descriptor before callers attempt to execute the
+        // staged path. Linux rejects executing a file still open for writing.
+        drop(file);
         let actual = encode_hex(&hasher.finalize());
         if actual != directive.sha256() {
             return Err(UpdateError::DigestMismatch {

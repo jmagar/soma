@@ -10,6 +10,7 @@ mod error;
 mod directive;
 mod staging;
 mod validation;
+mod transaction;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -17,6 +18,7 @@ use std::time::Duration;
 pub use error::{Result, UpdateError};
 pub use staging::StagedArtifact;
 pub use validation::ValidatedArtifact;
+pub use transaction::{ConfirmationOutcome, InstallOutcome};
 
 /// Network transports permitted for an artifact URL.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

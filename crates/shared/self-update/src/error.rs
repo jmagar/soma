@@ -31,6 +31,16 @@ pub enum UpdateError {
     ValidationOutputTooLarge { stream: &'static str, limit: usize },
     #[error("validator output did not contain exact version {expected}: {output}")]
     VersionMismatch { expected: String, output: String },
+    #[error("another update transaction holds lock {path}")]
+    UpdateInProgress { path: PathBuf },
+    #[error("invalid update marker {path}: {message}")]
+    InvalidMarker { path: PathBuf, message: String },
+    #[error("rollback backup is missing: {path}")]
+    MissingRollback { path: PathBuf },
+    #[error("running version {running} does not match pending target {target}")]
+    RunningVersionMismatch { running: String, target: String },
+    #[error("the provided installer is unsupported on this platform")]
+    UnsupportedPlatform,
     #[error("I/O operation failed for {path}: {source}")]
     Io {
         path: PathBuf,
