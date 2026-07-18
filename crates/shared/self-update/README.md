@@ -71,18 +71,23 @@ executable directory and state directory must not be writable by untrusted
 principals; no pathname-based installer can close the final metadata-to-rename
 race against an attacker who controls that directory. Installation writes and
 syncs a durable marker with explicit `prepared`, `installed`, `rolling_back`,
-and `rolled_back` phases. Marker replacement uses one deterministic
+and `rolled_back` phases. Marker replacement uses one deterministic mode-`0600`,
 lock-protected `<state>.tmp` sibling; startup recovery validates and reclaims an
 effective-user-owned regular-file leftover before reading transaction state.
 The authoritative marker itself is opened with Unix no-follow and nonblocking
 flags, then its descriptor must be a current-effective-user-owned regular file
-before any bounded read, preventing symlink traversal and FIFO stalls.
+without group/other write access before any bounded read, preventing symlink
+traversal, FIFO stalls, and writable-state injection.
 Serialized state is capped at the same 64 KiB limit on both writes and reads.
 Before backup creation or executable replacement, installation preflights the
 largest reachable phase and attempt-count representation so later recovery
 writes cannot outgrow that cap. Generated rollback paths are
 checked against executable, state, lock, marker-temporary, and staged identities
 before the backup is created.
+The advisory lock is also created mode `0600`, opened no-follow/nonblocking,
+and descriptor-validated as a current-effective-user-owned regular file. An
+owned legacy lock with broader permissions is repaired to `0600`, synced, and
+re-checked before its exclusive lock is acquired.
 The transaction retains a unique rollback backup, syncs the backup and its
 directory before the marker may reference it, then atomically renames the
 verified artifact. Unix

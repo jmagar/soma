@@ -32,7 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transaction methods offload hashing, copying, locking, and durability work to
   Tokio blocking workers. The compile-checked heartbeat example separates
   authentication from parsing and propagates health-report failures before
-  confirmation. The crate has no internal workspace dependencies; this change
+  confirmation. Marker temporaries and advisory locks are created mode `0600`;
+  marker reads reject group/other-writable state, and lock descriptors are
+  no-follow, owner/type checked, and repair owned legacy permissions before use.
+  The crate has no internal workspace dependencies; this change
   does not enable self-update behavior in the Soma runtime or integrate Cortex.
 - Restructured `apps/soma` (plan section 3.1, PR 18) into a composition-only
   layout: `bootstrap.rs` builds the concrete dependency graph (config, the

@@ -166,3 +166,48 @@ fn generated_backup_must_not_collide_with_transaction_paths() {
         ));
     }
 }
+
+#[test]
+fn created_marker_and_lock_ignore_permissive_umask() {
+    use std::os::unix::fs::PermissionsExt;
+
+    const CHILD_ENV: &str = "SOMA_SELF_UPDATE_UMASK_CHILD";
+    if std::env::var_os(CHILD_ENV).is_some() {
+        nix::sys::stat::umask(nix::sys::stat::Mode::empty());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (_temp, updater, artifact, _old, _new) = runtime.block_on(updater_and_artifact(1));
+        runtime
+            .block_on(updater.install(artifact, "1.0.0"))
+            .unwrap();
+        let state = updater.layout().state_file();
+        let lock = suffix_path(state, ".lock");
+        assert_eq!(
+            std::fs::metadata(state).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            std::fs::metadata(lock).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        return;
+    }
+
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "transaction::tests::created_marker_and_lock_ignore_permissive_umask",
+            "--nocapture",
+        ])
+        .env(CHILD_ENV, "1")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "umask child failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

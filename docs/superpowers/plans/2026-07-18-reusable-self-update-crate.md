@@ -12,7 +12,9 @@
 > requires redirect/final-response URL validation by transport adapters,
 > verifies installed bytes before recovery/confirmation state changes, opens
 > markers no-follow and nonblocking, and offloads synchronous transactions from
-> async executor workers.
+> async executor workers. Marker temporaries and lock descriptors are secured
+> to mode 0600 independently of umask, with writable marker rejection and
+> owned legacy lock permission repair.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

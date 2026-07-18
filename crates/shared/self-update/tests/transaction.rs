@@ -489,6 +489,60 @@ async fn lock_and_corrupt_recovery_state_fail_closed() {
 }
 
 #[tokio::test]
+async fn owned_legacy_lock_permissions_are_repaired_before_use() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    let lock = temp.path().join("update.json.lock");
+    std::fs::write(&executable, b"old").unwrap();
+    std::fs::write(&lock, b"").unwrap();
+    std::fs::set_permissions(&lock, std::fs::Permissions::from_mode(0o666)).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+
+    assert_eq!(
+        updater.recover_on_startup("1.0.0").await.unwrap(),
+        RecoveryAction::NoPendingUpdate
+    );
+    assert_eq!(
+        std::fs::metadata(&lock).unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+}
+
+#[tokio::test]
+async fn transaction_lock_rejects_symlinks_and_non_regular_files() {
+    use nix::sys::stat::Mode;
+
+    for attack in ["symlink", "fifo"] {
+        let temp = tempdir().unwrap();
+        let executable = temp.path().join("example");
+        let state = temp.path().join("update.json");
+        let lock = temp.path().join("update.json.lock");
+        std::fs::write(&executable, b"old").unwrap();
+        if attack == "symlink" {
+            let foreign = temp.path().join("foreign");
+            std::fs::write(&foreign, b"foreign bytes").unwrap();
+            std::os::unix::fs::symlink(&foreign, &lock).unwrap();
+        } else {
+            nix::unistd::mkfifo(&lock, Mode::S_IRUSR | Mode::S_IWUSR).unwrap();
+        }
+        let updater = Updater::new(
+            UpdateLayout::new(&executable, &state),
+            UpdatePolicy::default(),
+        );
+
+        assert!(updater.recover_on_startup("1.0.0").await.is_err());
+        assert_eq!(std::fs::read(&executable).unwrap(), b"old");
+        assert!(!state.exists());
+    }
+}
+
+#[tokio::test]
 async fn symlink_state_aliases_share_the_canonical_transaction_lock() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");

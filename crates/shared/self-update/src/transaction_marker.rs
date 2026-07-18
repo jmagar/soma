@@ -42,12 +42,15 @@ pub(super) fn preflight_marker_lifecycle(path: &Path, marker: &Marker) -> Result
 }
 
 pub(super) fn write_marker(updater: &Updater, path: &Path, marker: &Marker) -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+
     let bytes = marker_bytes(path, marker)?;
     let temporary = suffix_path(path, ".tmp");
     let result = (|| {
         let mut file = OpenOptions::new()
             .create_new(true)
             .write(true)
+            .mode(0o600)
             .open(&temporary)
             .map_err(|error| UpdateError::io(&temporary, error))?;
         use std::io::Write;
@@ -122,10 +125,13 @@ pub(super) fn read_marker(path: &Path, expected_executable: &Path) -> Result<Opt
     let metadata = file
         .metadata()
         .map_err(|error| UpdateError::io(path, error))?;
-    if !metadata.file_type().is_file() || metadata.uid() != nix::unistd::geteuid().as_raw() {
+    if !metadata.file_type().is_file()
+        || metadata.uid() != nix::unistd::geteuid().as_raw()
+        || metadata.mode() & 0o022 != 0
+    {
         return Err(UpdateError::InvalidMarker {
             path: path.to_path_buf(),
-            message: "marker must be a service-owned non-symlink regular file".into(),
+            message: "marker must be a service-owned non-symlink regular file without group/other write access".into(),
         });
     }
     if metadata.len() > MAX_MARKER_BYTES {
@@ -243,6 +249,25 @@ mod tests {
         assert!(
             elapsed < Duration::from_millis(150),
             "FIFO marker open blocked for {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn marker_open_rejects_group_or_other_writable_state() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let state = temp.path().join("update.json");
+        std::fs::write(&state, b"{}").unwrap();
+        std::fs::set_permissions(&state, std::fs::Permissions::from_mode(0o666)).unwrap();
+
+        assert!(matches!(
+            read_marker(&state, &temp.path().join("agent")),
+            Err(UpdateError::InvalidMarker { .. })
+        ));
+        assert_eq!(
+            std::fs::metadata(&state).unwrap().permissions().mode() & 0o777,
+            0o666
         );
     }
 }
