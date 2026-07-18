@@ -15,12 +15,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `incus-client` (crates/shared/incus-client) is now feature-complete for v1:
   Unix-socket transport (with a configurable per-request timeout, defaulting
-  to 30s), operation wait/cancel (including WebSocket events behind the
-  `events` feature), and CRUD for instances (with lifecycle and snapshots),
-  images, networks, storage pools/volumes, and projects, with ETag/`If-Match`
-  optimistic-concurrency support on instances, images, networks, and projects
-  (not yet on storage pools/volumes). Remote mTLS transport and certificates
+  to 30s, correctly excluded from `wait_for_operation`'s long-poll), operation
+  wait/cancel (including WebSocket events behind the `events` feature, with
+  abnormal-close-code detection), and CRUD for instances (with lifecycle and
+  snapshots), images, networks, storage pools/volumes, and projects, with
+  ETag/`If-Match` optimistic-concurrency support - including guarded
+  convenience methods - across every resource type. Sync-vs-async return
+  types (`Result<()>` vs `Result<Operation>` vs `Result<Option<Operation>>`)
+  were corrected per-endpoint against the real `lxc/incus` daemon source
+  rather than assumed: network/project/storage-pool create/update/delete are
+  synchronous, storage-volume creation is conditionally sync-or-async
+  depending on the request payload, and only instance/image creation and
+  instance lifecycle actions are genuinely async. 404 responses now map to a
+  distinguishable `Error::NotFound`. Remote mTLS transport and certificates
   CRUD are tracked separately for whenever a real remote consumer exists.
+  See `crates/shared/incus-client/README.md` for the full API reference.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.

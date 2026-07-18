@@ -148,18 +148,23 @@ covered - always include a wildcard arm when matching.
 | `Serialization(serde_json::Error)` | A request or response body failed to (de)serialize. |
 | `InvalidResponse(String)` | The response didn't match any known Incus envelope shape, or a WebSocket frame couldn't be parsed as an event. |
 | `ResponseTooLarge { limit }` | A response body, its cumulative headers, or a chunked-transfer chunk exceeded the 64 MiB cap (`transport::unix::MAX_RESPONSE_BYTES`). |
+| `NotFound { resource }` | A `get_*`/`update_*`/`patch_*`/`delete_*` call got back HTTP 404. |
 | `NotCancellable` | `cancel_operation` was called on an operation whose `may_cancel` is `false` - short-circuits with no network call. |
 | `OperationFailed { id, status_code, err }` | `wait_for_operation` observed a terminal status in the 400-599 range. |
 | `PreconditionFailed { resource }` | An `update_*`/`patch_*` call with an `etag` got back HTTP 412 - the ETag was stale. Re-fetch and retry. |
-| `InvalidRequest(String)` | A caller-supplied path segment or `If-Match` value contained a control character (`\r`, `\n`, or other bytes below 0x20/0x7F) and was rejected **before** anything was written to the socket - see [CRLF-injection protection](#reliability--hardening-behavior). |
-| `Timeout { after }` | The per-request timeout elapsed (see `ClientConfig::with_request_timeout`). |
+| `InvalidRequest(String)` | A caller-supplied path segment or `If-Match` value contained a control character (`\r`, `\n`, `?`, or `#`) and was rejected **before** anything was written to the socket - see [CRLF-injection protection](#reliability--hardening-behavior). |
+| `Timeout { after, request_fully_sent }` | The per-request timeout elapsed (see `ClientConfig::with_request_timeout`). `request_fully_sent` tells you whether the request had already been fully written when the timeout fired - `true` means a mutating call may have already been received and acted on server-side even though you only see this error, so retrying could duplicate the operation; `false` means nothing was sent and a retry is safe. |
+| `WebSocketProtocol(String)` (feature `events`) | A WebSocket-layer protocol violation from `/1.0/events` (oversized frame, malformed data, ...) - distinct from `Transport`, which is reserved for genuine socket I/O failures on that same stream. |
 
 ### Operations
 
 Every mutation Incus documents as long-running returns an `Operation`
 (`id: Uuid`, `class: OperationClass`, `status: String`, `status_code: u16`,
 `resources`, `metadata`, `may_cancel: bool`, `err: Option<String>`) rather
-than assuming synchronous completion.
+than assuming synchronous completion. `OperationClass` has a
+forward-compatible `Other(String)` variant for any value besides the three
+Incus documents (`Task`, `Websocket`, `Token`) - deserializing an
+unrecognized `class` doesn't fail the whole `Operation`.
 
 - `Client::wait_for_operation(id, timeout: Option<Duration>) -> Result<Operation>`
   waits for operation `id` to reach a terminal status, using Incus's
@@ -215,10 +220,28 @@ Every resource module follows the same shape: `list_*(recursion: bool)`,
 `Client`. `list_*` methods return `Vec<serde_json::Value>` (not a typed
 `Vec<Resource>`) because Incus's `recursion = false` mode returns bare
 URL/name strings, not objects - only `recursion = true` returns full
-objects, and the untyped return type tolerates both. `create_*`/`update_*`/
-`patch_*`/`delete_*` all return `Operation`; wait on it with
-`wait_for_operation` if you need the mutation to have actually finished
-before proceeding.
+objects, and the untyped return type tolerates both.
+
+**Sync vs async is per-endpoint, not a blanket rule.** Every method's return
+type reflects what the real Incus daemon actually does, verified against
+`lxc/incus`'s `cmd/incusd/*.go` source (`main` branch) rather than assumed:
+instance and image creation are genuinely long-running and return
+`Operation` (wait on it with `wait_for_operation`); network, project, and
+storage-pool create/update/delete are all synchronous in the real daemon
+and return `Result<()>` directly, with nothing to wait for; storage volume
+creation is the one *conditionally* sync-or-async endpoint in the API
+(depends on whether the request copies another volume), so it returns
+`Result<Option<Operation>>` - `None` means it already finished. An earlier
+version of this crate assumed every mutation was async, which fails outright
+against a real daemon for the sync endpoints (their response body has no
+operation to parse) - see [Known limitations](#known-limitations--follow-up-work)
+for how that was found and fixed.
+
+**404 and 412 get typed errors.** Every `get_*`/`update_*`/`patch_*`/
+`delete_*` method maps a 404 response to `Error::NotFound { resource }` and
+(where `If-Match` applies) a 412 to `Error::PreconditionFailed { resource }`,
+instead of the generic `Error::Api` a caller would otherwise have to inspect
+`status_code` on.
 
 **Instances** (`src/resources/instances.rs`) - containers and VMs:
 
@@ -226,14 +249,16 @@ before proceeding.
 |---|---|
 | `list_instances(recursion)` | |
 | `get_instance(name)` | Returns `WithEtag<Instance>`. |
-| `create_instance(&CreateInstanceParams)` | Always async per Incus's documented behavior. `CreateInstanceParams { name, instance_type, source }` - `source` is raw JSON (`{"type": "image", "fingerprint": "..."}`, `"copy"`, `"migration"`, `"none"`). |
-| `update_instance(name, &new_definition, etag)` | Full replacement (PUT). |
-| `patch_instance(name, &patch, etag)` | Partial update (PATCH) - prefer this over `update_instance` for small config changes, to avoid a GET-then-PUT round trip. |
-| `delete_instance(name)` | |
-| `start_instance` / `stop_instance` / `restart_instance` / `pause_instance` | Lifecycle actions via `PUT .../state`. |
+| `create_instance(&CreateInstanceParams)` | Returns `Operation` - genuinely async per Incus's documented behavior. `CreateInstanceParams { name, instance_type, source }` - `source` is raw JSON (`{"type": "image", "fingerprint": "..."}`, `"copy"`, `"migration"`, `"none"`). |
+| `update_instance(name, &new_definition, etag)` | Returns `Operation`. Full replacement (PUT). |
+| `update_instance_guarded(&WithEtag<Instance>, &new_definition)` | Same, but derives `name`/`etag` from a `get_instance` result directly - see [ETag / optimistic concurrency](#etag--optimistic-concurrency). |
+| `patch_instance(name, &patch, etag)` | Returns `Operation`. Partial update (PATCH) - prefer this over `update_instance` for small config changes, to avoid a GET-then-PUT round trip. |
+| `patch_instance_guarded(&WithEtag<Instance>, &patch)` | Guarded version of `patch_instance`. |
+| `delete_instance(name)` | Returns `Operation`. |
+| `start_instance` / `stop_instance` / `restart_instance` / `pause_instance` | Lifecycle actions via `PUT .../state`. Return `Operation`. |
 | `list_snapshots(instance_name, recursion)` | |
-| `create_snapshot(instance_name, snapshot_name)` | |
-| `delete_snapshot(instance_name, snapshot_name)` | |
+| `create_snapshot(instance_name, snapshot_name)` | Returns `Operation`. |
+| `delete_snapshot(instance_name, snapshot_name)` | Returns `Operation`. |
 
 `Instance` fields: `name`, `status`, `status_code`, `instance_type`,
 `architecture`, `created_at`, `last_used_at`, `location`, `project`,
@@ -246,9 +271,10 @@ free-form key-value pairs), `devices` (untyped), `profiles`.
 |---|---|
 | `list_images(recursion)` | |
 | `get_image(fingerprint)` | Returns `WithEtag<Image>`. |
-| `create_image(&params)` | Always async (fetching/unpacking a source, possibly a remote URL or a large upload). |
-| `update_image(fingerprint, &new_definition, etag)` | |
-| `delete_image(fingerprint)` | |
+| `create_image(&params)` | Returns `Operation` - genuinely async (fetching/unpacking a source, possibly a remote URL or a large upload). |
+| `update_image(fingerprint, &new_definition, etag)` | Returns `Operation`. |
+| `update_image_guarded(&WithEtag<Image>, &new_definition)` | Guarded version - see [ETag / optimistic concurrency](#etag--optimistic-concurrency). |
+| `delete_image(fingerprint)` | Returns `Operation`. |
 
 `Image` fields: `fingerprint`, `public`, `filename`, `size`,
 `architecture`, `created_at`, `uploaded_at`, `properties` (untyped).
@@ -259,9 +285,10 @@ free-form key-value pairs), `devices` (untyped), `profiles`.
 |---|---|
 | `list_networks(recursion)` | |
 | `get_network(name)` | Returns `WithEtag<Network>`. |
-| `create_network(&params)` | Always async, per the crate-wide mutation-return convention (some backends, e.g. OVN, provision asynchronously). |
-| `update_network(name, &new_definition, etag)` | |
-| `delete_network(name)` | |
+| `create_network(&params)` | Returns `Result<()>` - synchronous, verified against `networksPost` in the real daemon source. |
+| `update_network(name, &new_definition, etag)` | Returns `Result<()>` - synchronous. |
+| `update_network_guarded(&WithEtag<Network>, &new_definition)` | Guarded version - see [ETag / optimistic concurrency](#etag--optimistic-concurrency). |
+| `delete_network(name)` | Returns `Result<()>` - synchronous. |
 
 `Network` fields: `name`, `network_type`, `managed`, `status`, `config`
 (untyped).
@@ -272,9 +299,10 @@ free-form key-value pairs), `devices` (untyped), `profiles`.
 |---|---|
 | `list_projects(recursion)` | |
 | `get_project(name)` | Returns `WithEtag<Project>`. |
-| `create_project(&params)` | Always async, per the crate-wide mutation-return convention. |
-| `update_project(name, &new_definition, etag)` | |
-| `delete_project(name)` | |
+| `create_project(&params)` | Returns `Result<()>` - synchronous, verified against `projectsPost` in the real daemon source. |
+| `update_project(name, &new_definition, etag)` | Returns `Result<()>` - synchronous. |
+| `update_project_guarded(&WithEtag<Project>, &new_definition)` | Guarded version - see [ETag / optimistic concurrency](#etag--optimistic-concurrency). |
+| `delete_project(name)` | Returns `Result<()>` - synchronous. |
 
 `Project` fields: `name`, `description`, `config` (untyped).
 
@@ -284,15 +312,17 @@ scoped under a pool; there is no global cross-pool volumes endpoint:
 | Method | Notes |
 |---|---|
 | `list_storage_pools(recursion)` | |
-| `get_storage_pool(name)` | Returns bare `StoragePool` - **no ETag support** (see [Known limitations](#known-limitations--follow-up-work)). |
-| `create_storage_pool(&params)` | |
-| `update_storage_pool(name, &new_definition)` | No `etag` parameter - see above. |
-| `delete_storage_pool(name)` | |
+| `get_storage_pool(name)` | Returns `WithEtag<StoragePool>`. |
+| `create_storage_pool(&params)` | Returns `Result<()>` - synchronous, verified against `storagePoolsPost` in the real daemon source. |
+| `update_storage_pool(name, &new_definition, etag)` | Returns `Result<()>` - synchronous. |
+| `update_storage_pool_guarded(&WithEtag<StoragePool>, &new_definition)` | Guarded version - see [ETag / optimistic concurrency](#etag--optimistic-concurrency). |
+| `delete_storage_pool(name)` | Returns `Result<()>` - synchronous. |
 | `list_storage_volumes(pool_name, recursion)` | Scoped to one pool. |
-| `create_storage_volume(pool_name, &params)` | |
-| `get_storage_volume(pool_name, volume_type, volume_name)` | Returns bare `StorageVolume`. |
-| `update_storage_volume(pool_name, volume_type, volume_name, &new_definition)` | |
-| `delete_storage_volume(pool_name, volume_type, volume_name)` | |
+| `create_storage_volume(pool_name, &params)` | Returns `Result<Option<Operation>>` - the one *conditionally* sync-or-async endpoint in this crate: `None` for a blank-volume create (no `source.name` in `params`), `Some(operation)` for a copy (`source.name` set), verified against `doVolumeCreateOrCopy` in the real daemon source. |
+| `get_storage_volume(pool_name, volume_type, volume_name)` | Returns `WithEtag<StorageVolume>`. |
+| `update_storage_volume(pool_name, volume_type, volume_name, &new_definition, etag)` | Returns `Result<()>` - synchronous. |
+| `update_storage_volume_guarded(pool_name, &WithEtag<StorageVolume>, &new_definition)` | Guarded version - derives `volume_type` and the volume's own `name` from the fetched value; `pool_name` stays explicit since a volume's pool isn't part of its own returned object. |
+| `delete_storage_volume(pool_name, volume_type, volume_name)` | Returns `Result<()>` - synchronous. |
 
 `StoragePool` fields: `name`, `driver`, `status`, `config` (untyped).
 `StorageVolume` fields: `name`, `volume_type`, `content_type`, `config`
@@ -300,20 +330,35 @@ scoped under a pool; there is no global cross-pool volumes endpoint:
 
 ### ETag / optimistic concurrency
 
-`get_instance`, `get_image`, `get_network`, and `get_project` all return
-`WithEtag<T> { value: T, etag: Option<String> }` instead of a bare `T`.
-Thread that ETag through to the matching `update_*`/`patch_*` call's
-`etag` parameter as `Some(etag.as_deref())` to get optimistic-concurrency
-protection: if another caller changed the resource between your GET and
+Every resource type's `get_*` method - `get_instance`, `get_image`,
+`get_network`, `get_project`, `get_storage_pool`, `get_storage_volume` -
+returns `WithEtag<T>` instead of a bare `T`. Its fields are `pub(crate)`,
+not `pub` - you can't construct one yourself, only receive one from a real
+`get_*` call, which is what makes the ETag it carries trustworthy as
+"this really was fetched" rather than typed in by hand. Read it back out
+with `WithEtag::value()`, `WithEtag::etag()`, or `WithEtag::into_parts()`.
+
+Two ways to use it:
+
+- **Guarded (recommended):** pass the `WithEtag<T>` straight to the
+  matching `update_*_guarded`/`patch_instance_guarded` method
+  (`update_instance_guarded`, `patch_instance_guarded`,
+  `update_image_guarded`, `update_network_guarded`,
+  `update_project_guarded`, `update_storage_pool_guarded`,
+  `update_storage_volume_guarded`) - it derives the resource identifier(s)
+  and the `If-Match` value from the fetch for you.
+- **Manual:** call `.etag()` yourself and pass it as the matching
+  `update_*`/`patch_*` method's `etag: Option<&str>` parameter. This
+  escape hatch stays available for a legitimate reason to supply your own
+  ETag (e.g. one persisted from a previous process) - just note it's
+  *not* type-checked against `WithEtag`, so nothing stops you from typing
+  in a value that was never actually fetched.
+
+Either way: if another caller changed the resource between your GET and
 your PUT/PATCH, Incus returns HTTP 412 and this crate maps it to
 `Err(Error::PreconditionFailed { resource })` - a distinct, matchable
 variant, not a generic `Error::Api` you'd have to inspect `status_code` on.
 Re-fetch and retry on that error.
-
-Storage pools/volumes don't have this yet - `get_storage_pool`/
-`get_storage_volume` return bare structs and `update_storage_pool`/
-`update_storage_volume` take no `etag` parameter at all, so concurrent
-modifications to storage resources are currently unguarded.
 
 ## Reliability & hardening behavior
 
@@ -366,14 +411,17 @@ introduced). These are worth knowing about even though they're not
 
 ## Testing
 
-72 tests with `--all-features`, 67 with default features (the delta is the
+92 tests with `--all-features`, 86 with default features (the delta is the
 `events` module's tests, feature-gated out by default). All are unit/
 contract-level tests against a hand-rolled fake-daemon `UnixListener`
 responder (`transport::unix::tests::spawn_fake_daemon`) - no live Incus
 daemon is required or exercised anywhere in this suite. That's a real
-limitation, not just a caveat: timing/TLS/concurrency quirks specific to a
-real daemon (there are none, since this crate has no TLS - but real-daemon
-response shapes, timing, and edge cases in general) aren't covered by CI.
+limitation, not just a caveat: timing/concurrency quirks specific to a real
+daemon aren't covered by CI. Where behavior couldn't be exercised against a
+live daemon, it was instead verified by reading the actual `lxc/incus`
+daemon source (`cmd/incusd/*.go` on `main`) - see
+[Known limitations](#known-limitations--follow-up-work) for where that
+mattered.
 
 ```bash
 cargo test -p incus-client --all-features
@@ -391,23 +439,34 @@ already.
 
 ## Known limitations / follow-up work
 
-Tracked as beads under epic `rmcp-template-hwu2` (`bd list --labels
-review,rmcp-template-hwu2`):
+Beads epic `rmcp-template-hwu2` and all 30 of its child beads (the original
+implementation tasks plus every finding from two full rounds of
+multi-agent review, a targeted P3/P4 sweep, and the sync/async
+verification below) are closed. What's actually still out of scope:
 
-- Storage pools/volumes have no ETag/`If-Match` support, unlike every
-  other resource type (P2, `rmcp-template-hwu2.10` - originally filed
-  against images/networks/projects/storage together; the first three are
-  now fixed, storage remains open). Separately, `WithEtag<T>` isn't
-  type-enforced anywhere - a caller can pass a fabricated `etag` without
-  ever calling the matching `get_*` (P3, `rmcp-template-hwu2.31`).
-- Whether `create_network`, `create_project`, and `create_storage_pool`
-  are genuinely synchronous or asynchronous against a real Incus daemon
-  hasn't been empirically verified - this crate currently assumes async
-  for all three, per the plan's "if unsure, treat as async" convention,
-  but hasn't been checked against a live daemon (P2, `rmcp-template-hwu2.30`).
-- Remote mTLS/TOFU transport and certificates CRUD: tracked separately as
-  beads epic `rmcp-template-21b7`, pending a real remote consumer.
-- A handful of P3/P4 polish items (a missing `Error::NotFound` variant,
-  `OperationClass` not being `#[non_exhaustive]`, minor doc-comment
-  accuracy fixes, and similar) remain filed for later triage and are
-  intentionally out of scope for the current surface.
+- **Remote mTLS/TOFU transport and certificates CRUD.** This crate is
+  Unix-socket-only by design (see
+  [What it deliberately doesn't do](#what-it-deliberately-doesnt-do)).
+  Tracked separately as beads epic `rmcp-template-21b7`, pending a real
+  remote consumer.
+- **Sync-vs-async correctness has been verified against the real daemon
+  source for every endpoint this crate calls, but not against a running
+  daemon.** Every `create`/`update`/`delete` method's return type
+  (`Result<()>`, `Result<Operation>`, or `Result<Option<Operation>>`) was
+  checked against the actual response type each `cmd/incusd/*.go` handler
+  returns on the `lxc/incus` `main` branch (see each method's doc comment
+  for the exact function cited) - this caught a real bug: an earlier
+  version of this crate assumed every mutation was async, which fails
+  outright against a real daemon for the network/project/storage-pool
+  endpoints (their sync response body has no operation to parse). Reading
+  the source is strong evidence, but it isn't the same as exercising a
+  live daemon end to end, which this crate's test suite doesn't do (see
+  [Testing](#testing)).
+- **`docs/superpowers/plans/2026-07-17-incus-client-crate.md`** (the
+  original implementation plan, kept in the repo as a historical record)
+  describes an earlier as-built snapshot of the transport layer that has
+  since been rewritten (single buffered write instead of 3-4, buffered
+  `read_until` instead of byte-by-byte, the request-timeout and
+  `request_fully_sent` signal, sync/async corrections above, and more) -
+  treat this README and the crate's own doc comments as authoritative,
+  not that file.
