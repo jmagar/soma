@@ -1,20 +1,27 @@
 use super::store::ArtifactStore;
+use serial_test::serial;
 
 #[tokio::test]
+#[serial(code_mode_soma_home)]
 async fn artifact_store_writes_receipt() {
     let temp = tempfile::tempdir().unwrap();
+    let previous = std::env::var_os("SOMA_HOME");
     std::env::set_var("SOMA_HOME", temp.path());
     let receipt = ArtifactStore::new("run")
         .unwrap()
         .write_text("out.txt", "hello", None)
         .await
         .unwrap();
-    std::env::remove_var("SOMA_HOME");
+    match previous {
+        Some(value) => std::env::set_var("SOMA_HOME", value),
+        None => std::env::remove_var("SOMA_HOME"),
+    }
     assert_eq!(receipt.bytes, 5);
     assert_eq!(receipt.content_type, "text/plain");
 }
 
 #[test]
+#[serial(code_mode_soma_home)]
 fn artifact_store_rejects_unsafe_run_ids() {
     assert!(ArtifactStore::new("../escape").is_err());
     assert!(ArtifactStore::new("/tmp/escape").is_err());
@@ -22,14 +29,19 @@ fn artifact_store_rejects_unsafe_run_ids() {
 }
 
 #[tokio::test]
+#[serial(code_mode_soma_home)]
 async fn artifact_store_enforces_run_quota() {
     let temp = tempfile::tempdir().unwrap();
+    let previous = std::env::var_os("SOMA_HOME");
     std::env::set_var("SOMA_HOME", temp.path());
     let store = ArtifactStore::new("run").unwrap().with_run_limits(5, 1);
 
     store.write_text("a.txt", "hello", None).await.unwrap();
     let err = store.write_text("b.txt", "x", None).await.unwrap_err();
 
-    std::env::remove_var("SOMA_HOME");
+    match previous {
+        Some(value) => std::env::set_var("SOMA_HOME", value),
+        None => std::env::remove_var("SOMA_HOME"),
+    }
     assert_eq!(err.kind(), "invalid_param");
 }
