@@ -509,13 +509,15 @@ pub async fn callback(
 }
 
 /// Direct-hit fallback for the registered native `redirect_uri`. In the real
-/// flow this path is never dereferenced by an actual browser redirect —
-/// Google's redirect target is always `/auth/google/callback`, which detects
-/// a native-flow authorization request and short-circuits into stashing the
-/// code for `/native/poll` instead of redirecting here. This handler only
-/// answers a stray direct visit (e.g. a stale bookmark or a misconfigured
-/// client), so `state` is validated for URL-shape consistency but
-/// deliberately not looked up — there's nothing to correlate it against.
+/// flow this path is never dereferenced by an actual browser redirect — the
+/// upstream provider's redirect target is always its own
+/// `/auth/<provider>/callback` (e.g. `/auth/google/callback`,
+/// `/auth/github/callback`), which detects a native-flow authorization
+/// request and short-circuits into stashing the code for `/native/poll`
+/// instead of redirecting here. This handler only answers a stray direct
+/// visit (e.g. a stale bookmark or a misconfigured client), so `state` is
+/// validated for URL-shape consistency but deliberately not looked up —
+/// there's nothing to correlate it against.
 pub async fn native_callback(Query(query): Query<NativePollQuery>) -> Result<Response, AuthError> {
     let state_param = query.state.trim();
     if state_param.is_empty() {
@@ -3065,6 +3067,33 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
             .await
             .unwrap();
         assert_eq!(callback_response.status(), StatusCode::SEE_OTHER);
+
+        // Proves routing AND correct namespacing: the persisted session
+        // subject must be `"github:<id>"`, not a bare `"<id>"` that could
+        // collide with a Google subject sharing the same DB.
+        let set_cookie = callback_response
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|value| value.to_str().ok())
+            .expect("callback must set a browser session cookie")
+            .to_string();
+        let session_id = set_cookie
+            .split(';')
+            .next()
+            .and_then(|kv| kv.split_once('='))
+            .map(|(_, value)| value.to_string())
+            .expect("session cookie must have a `name=value` pair");
+        let session = base_state
+            .store
+            .find_browser_session(&session_id)
+            .await
+            .unwrap()
+            .expect("browser session must be persisted for the issued cookie");
+        assert!(
+            session.subject.starts_with("github:"),
+            "expected a github-namespaced subject, got `{}`",
+            session.subject
+        );
 
         let google_requests = google_server.received_requests().await.unwrap();
         let github_requests = github_server.received_requests().await.unwrap();
