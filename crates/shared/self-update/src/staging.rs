@@ -127,7 +127,12 @@ impl Updater {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            let mode = match tokio::fs::metadata(self.layout().executable()).await {
+                Ok(metadata) => metadata.permissions().mode(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0o700,
+                Err(error) => return Err(UpdateError::io(self.layout().executable(), error)),
+            };
+            tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
                 .await
                 .map_err(|error| UpdateError::io(&path, error))?;
             file.sync_all()

@@ -4,8 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-use crate::{RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
+use crate::{BackupStrategy, RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
 
 static TRANSACTION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -62,10 +63,17 @@ impl Updater {
                 target: marker.target,
             });
         }
+        let actual_digest = hash_file(validated.path())?;
+        if actual_digest != validated.sha256() {
+            return Err(UpdateError::DigestMismatch {
+                expected: validated.sha256().to_owned(),
+                actual: actual_digest,
+            });
+        }
         let previous = previous_version.into();
         let target = validated.target_version().to_owned();
         let backup = unique_backup(&executable);
-        create_backup(&executable, &backup)?;
+        create_backup(&executable, &backup, self.policy().backup_strategy())?;
         let marker = Marker {
             schema_version: 1,
             target: target.clone(),
@@ -206,11 +214,7 @@ impl Updater {
         let executable = path_identity(self.layout().executable())?;
         let state = path_identity(self.layout().state_file())?;
         let lock = path_identity(&suffix_path(self.layout().state_file(), ".lock"))?;
-        for (first, second) in [
-            (&executable, &state),
-            (&executable, &lock),
-            (&state, &lock),
-        ] {
+        for (first, second) in [(&executable, &state), (&executable, &lock), (&state, &lock)] {
             if first == second {
                 return Err(UpdateError::InvalidLayout {
                     first: first.clone(),
@@ -262,27 +266,60 @@ fn unique_backup(executable: &Path) -> PathBuf {
     ))
 }
 
-fn create_backup(executable: &Path, backup: &Path) -> Result<()> {
-    match std::fs::hard_link(executable, backup) {
-        Ok(()) => {}
-        Err(_) => {
-            let mut source =
-                File::open(executable).map_err(|error| UpdateError::io(executable, error))?;
-            let mut destination = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(backup)
-                .map_err(|error| UpdateError::io(backup, error))?;
-            std::io::copy(&mut source, &mut destination)
-                .map_err(|error| UpdateError::io(backup, error))?;
-            destination
-                .sync_all()
-                .map_err(|error| UpdateError::io(backup, error))?;
-        }
+fn create_backup(executable: &Path, backup: &Path, strategy: BackupStrategy) -> Result<()> {
+    let hard_linked = strategy == BackupStrategy::HardLinkOrCopy
+        && std::fs::hard_link(executable, backup).is_ok();
+    if !hard_linked {
+        let mut source =
+            File::open(executable).map_err(|error| UpdateError::io(executable, error))?;
+        let source_permissions = source
+            .metadata()
+            .map_err(|error| UpdateError::io(executable, error))?
+            .permissions();
+        let mut destination = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(backup)
+            .map_err(|error| UpdateError::io(backup, error))?;
+        std::io::copy(&mut source, &mut destination)
+            .map_err(|error| UpdateError::io(backup, error))?;
+        destination
+            .set_permissions(source_permissions)
+            .map_err(|error| UpdateError::io(backup, error))?;
+        destination
+            .sync_all()
+            .map_err(|error| UpdateError::io(backup, error))?;
     }
-    File::open(backup)
+    let synced = File::open(backup)
         .and_then(|file| file.sync_all())
         .map_err(|error| UpdateError::io(backup, error))
+        .and_then(|()| sync_parent(backup));
+    if let Err(error) = synced {
+        std::fs::remove_file(backup).map_err(|cleanup| UpdateError::io(backup, cleanup))?;
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn hash_file(path: &Path) -> Result<String> {
+    let mut file = File::open(path).map_err(|error| UpdateError::io(path, error))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        use std::io::Read;
+        let read = file
+            .read(&mut buffer)
+            .map_err(|error| UpdateError::io(path, error))?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
 }
 
 fn write_marker(path: &Path, marker: &Marker) -> Result<()> {

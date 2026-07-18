@@ -33,6 +33,15 @@ pub enum ArtifactTransportPolicy {
     HttpsOrLoopbackHttp,
 }
 
+/// Strategy used to retain the last-confirmed executable for rollback.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BackupStrategy {
+    /// Prefer a hard link and copy bytes when the filesystem rejects links.
+    HardLinkOrCopy,
+    /// Always copy bytes and preserve the executable permission mode.
+    Copy,
+}
+
 /// An authenticated update instruction supplied by the adopting service.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateDirective {
@@ -119,6 +128,7 @@ pub struct UpdatePolicy {
     max_artifact_bytes: u64,
     validation_timeout: Duration,
     max_unconfirmed_restarts: u32,
+    backup_strategy: BackupStrategy,
 }
 
 impl Default for UpdatePolicy {
@@ -128,6 +138,7 @@ impl Default for UpdatePolicy {
             max_artifact_bytes: 128 * 1024 * 1024,
             validation_timeout: Duration::from_secs(10),
             max_unconfirmed_restarts: 3,
+            backup_strategy: BackupStrategy::HardLinkOrCopy,
         }
     }
 }
@@ -172,6 +183,11 @@ impl UpdatePolicy {
         Ok(self)
     }
 
+    pub fn with_backup_strategy(mut self, strategy: BackupStrategy) -> Self {
+        self.backup_strategy = strategy;
+        self
+    }
+
     pub fn transport(&self) -> ArtifactTransportPolicy {
         self.transport
     }
@@ -186,6 +202,10 @@ impl UpdatePolicy {
 
     pub fn max_unconfirmed_restarts(&self) -> u32 {
         self.max_unconfirmed_restarts
+    }
+
+    pub fn backup_strategy(&self) -> BackupStrategy {
+        self.backup_strategy
     }
 }
 

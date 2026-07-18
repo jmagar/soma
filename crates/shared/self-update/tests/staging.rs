@@ -78,3 +78,30 @@ async fn staging_paths_are_unique() {
     let second = updater.stage(&b"x"[..], &directive).await.unwrap();
     assert_ne!(first.path(), second.path());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn staging_preserves_existing_executable_mode() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for mode in [0o700, 0o750] {
+        let temp = tempdir().unwrap();
+        let executable = temp.path().join("example");
+        std::fs::write(&executable, b"old").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(mode)).unwrap();
+        let updater = Updater::new(
+            UpdateLayout::new(&executable, temp.path().join("state.json")),
+            UpdatePolicy::default(),
+        );
+        let directive = UpdateDirective::new("2", "/binary", digest(b"new")).unwrap();
+        let staged = updater.stage(&b"new"[..], &directive).await.unwrap();
+        assert_eq!(
+            std::fs::metadata(staged.path())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            mode
+        );
+    }
+}

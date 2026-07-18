@@ -5,8 +5,8 @@ use std::fs::OpenOptions;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use soma_self_update::{
-    ConfirmationOutcome, InstallOutcome, RecoveryAction, UpdateDirective, UpdateError,
-    UpdateLayout, UpdatePolicy, Updater,
+    BackupStrategy, ConfirmationOutcome, InstallOutcome, RecoveryAction, UpdateDirective,
+    UpdateError, UpdateLayout, UpdatePolicy, Updater,
 };
 use tempfile::tempdir;
 
@@ -17,11 +17,120 @@ fn digest(bytes: &[u8]) -> String {
         .collect()
 }
 
+#[tokio::test]
+async fn install_rehashes_validated_bytes_before_mutating_live_state() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+    std::fs::write(artifact.path(), b"mutated after validation").unwrap();
+    assert!(matches!(
+        updater.install(artifact, "1.0.0").await,
+        Err(UpdateError::DigestMismatch { .. })
+    ));
+    assert_eq!(std::fs::read(&executable).unwrap(), old);
+    assert!(!state.exists());
+}
+
+#[tokio::test]
+async fn copy_backup_and_rollback_preserve_restrictive_unix_modes() {
+    use std::os::unix::fs::PermissionsExt;
+
+    for mode in [0o700, 0o750] {
+        let temp = tempdir().unwrap();
+        let executable = temp.path().join("example");
+        let state = temp.path().join("update.json");
+        let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+        let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+        std::fs::write(&executable, old).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(mode)).unwrap();
+        let policy = UpdatePolicy::default()
+            .with_backup_strategy(BackupStrategy::Copy)
+            .with_max_unconfirmed_restarts(1)
+            .unwrap();
+        let updater = Updater::new(UpdateLayout::new(&executable, &state), policy);
+        updater
+            .install(validated(&updater, new, "2.0.0").await, "1.0.0")
+            .await
+            .unwrap();
+        let marker: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
+        let backup = std::path::Path::new(marker["backup"].as_str().unwrap());
+        assert_eq!(
+            std::fs::metadata(backup).unwrap().permissions().mode() & 0o777,
+            mode
+        );
+        updater.recover_on_startup("2.0.0").await.unwrap();
+        updater.recover_on_startup("2.0.0").await.unwrap();
+        assert_eq!(
+            std::fs::metadata(&executable).unwrap().permissions().mode() & 0o777,
+            mode
+        );
+    }
+}
+
+#[tokio::test]
+async fn backup_directory_must_sync_before_marker_is_persisted() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempdir().unwrap();
+    let binary_dir = temp.path().join("bin");
+    let state_dir = temp.path().join("state");
+    std::fs::create_dir(&binary_dir).unwrap();
+    std::fs::create_dir(&state_dir).unwrap();
+    let executable = binary_dir.join("example");
+    let state = state_dir.join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+    std::fs::set_permissions(&binary_dir, std::fs::Permissions::from_mode(0o300)).unwrap();
+    let result = updater.install(artifact, "1.0.0").await;
+    std::fs::set_permissions(&binary_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(result.is_err());
+    assert!(
+        !state.exists(),
+        "marker must not outlive a failed backup fsync"
+    );
+    assert_eq!(std::fs::read(&executable).unwrap(), old);
+    assert_eq!(
+        std::fs::read_dir(&binary_dir)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().contains("rollback"))
+            .count(),
+        0
+    );
+}
+
 async fn validated(
     updater: &Updater,
     script: &[u8],
     version: &str,
 ) -> soma_self_update::ValidatedArtifact {
+    use std::os::unix::fs::PermissionsExt;
+    if let Ok(metadata) = std::fs::metadata(updater.layout().executable()) {
+        let mode = metadata.permissions().mode();
+        if mode & 0o111 == 0 {
+            std::fs::set_permissions(
+                updater.layout().executable(),
+                std::fs::Permissions::from_mode(mode | 0o700),
+            )
+            .unwrap();
+        }
+    }
     let directive = UpdateDirective::new(version, "/binary", digest(script)).unwrap();
     let staged = updater.stage(script, &directive).await.unwrap();
     updater.validate(staged).await.unwrap()
@@ -149,7 +258,8 @@ async fn running_version_mismatch_retains_recovery_state() {
         Err(UpdateError::RunningVersionMismatch { .. })
     ));
     assert!(state.exists());
-    let marker: serde_json::Value = serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
+    let marker: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
     let backup = std::path::PathBuf::from(marker["backup"].as_str().unwrap());
     assert!(matches!(
         updater.recover_on_startup("1.5.0").await,

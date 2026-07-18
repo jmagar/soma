@@ -9,7 +9,8 @@ atomic Unix installation, durable confirmation state, and rollback.
 
 The default policy streams at most 128 MiB and gives a staged executable 10
 seconds to answer `--version`. Validation requires the advertised version as an
-exact output token rather than a substring.
+exact output token rather than a substring. Install re-hashes the validated path
+under the transaction lock immediately before any live state is mutated.
 
 ## Non-goals
 
@@ -44,7 +45,12 @@ restart, recover pending state on startup, and confirm only after the new
 service reports healthy.
 
 Installation takes an advisory state lock, writes and syncs a durable marker,
-retains a unique rollback backup, then atomically renames the verified artifact.
+retains a unique rollback backup, syncs the backup and its directory before the
+marker may reference it, then atomically renames the verified artifact. Unix
+staging preserves the existing executable mode (falling back to restrictive
+`0700` only when no target exists); copy-based rollback backups preserve that
+same mode. `BackupStrategy::Copy` is available when an adopter cannot use hard
+links or wants to exercise the copy path explicitly.
 A process crash before confirmation leaves the marker and backup for startup
 recovery. Each unconfirmed startup increments the marker; after the configured
 threshold the backup is restored and the adopter must restart again. Successful

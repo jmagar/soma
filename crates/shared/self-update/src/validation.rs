@@ -40,11 +40,8 @@ impl Updater {
         let stdout = child.stdout.take().expect("piped stdout is configured");
         let stderr = child.stderr.take().expect("piped stderr is configured");
         let completed = tokio::time::timeout_at(deadline, async {
-            let (status, stdout, stderr) = tokio::join!(
-                child.wait(),
-                read_bounded(stdout),
-                read_bounded(stderr)
-            );
+            let (status, stdout, stderr) =
+                tokio::join!(child.wait(), read_bounded(stdout), read_bounded(stderr));
             (status, stdout, stderr)
         })
         .await;
