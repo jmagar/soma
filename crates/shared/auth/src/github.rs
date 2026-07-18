@@ -85,7 +85,7 @@ impl GitHubProvider {
         client_secret: String,
         redirect_uri: Url,
     ) -> Result<Self, AuthError> {
-        drop(rustls::crypto::ring::default_provider().install_default());
+        crate::provider_http::install_rustls_default_once();
         let http = reqwest::Client::builder()
             .timeout(GITHUB_HTTP_TIMEOUT)
             .user_agent(GITHUB_USER_AGENT)
@@ -93,18 +93,26 @@ impl GitHubProvider {
             .map_err(|error| {
                 AuthError::Storage(format!("build github oauth http client: {error}"))
             })?;
+        let authorize_endpoint = Url::parse(GITHUB_AUTHORIZE_ENDPOINT).map_err(|error| {
+            AuthError::Config(format!("parse github authorize endpoint: {error}"))
+        })?;
+        let token_endpoint = Url::parse(GITHUB_TOKEN_ENDPOINT)
+            .map_err(|error| AuthError::Config(format!("parse github token endpoint: {error}")))?;
+        let user_endpoint = Url::parse(GITHUB_USER_ENDPOINT)
+            .map_err(|error| AuthError::Config(format!("parse github user endpoint: {error}")))?;
+        let user_emails_endpoint = Url::parse(GITHUB_USER_EMAILS_ENDPOINT).map_err(|error| {
+            AuthError::Config(format!("parse github user emails endpoint: {error}"))
+        })?;
         Ok(Self {
             client_id,
             client_secret,
             redirect_uri,
             scopes: vec!["read:user".to_string(), "user:email".to_string()],
             http,
-            authorize_endpoint: Url::parse(GITHUB_AUTHORIZE_ENDPOINT)
-                .expect("valid github authorize url"),
-            token_endpoint: Url::parse(GITHUB_TOKEN_ENDPOINT).expect("valid github token url"),
-            user_endpoint: Url::parse(GITHUB_USER_ENDPOINT).expect("valid github user url"),
-            user_emails_endpoint: Url::parse(GITHUB_USER_EMAILS_ENDPOINT)
-                .expect("valid github user emails url"),
+            authorize_endpoint,
+            token_endpoint,
+            user_endpoint,
+            user_emails_endpoint,
         })
     }
 
@@ -152,7 +160,16 @@ impl GitHubProvider {
             "oauth upstream code exchange succeeded"
         );
 
-        let exchange = ProviderExchange {
+        // GitHubProvider::exchange_code must never set refresh_token — GitHub
+        // OAuth Apps don't issue one. The real, always-on guard against a
+        // `refresh_tokens` row naming `provider = "github"` reaching
+        // `GitHubProvider::refresh` (which unconditionally errors) lives in
+        // `token::refresh_token_grant`, right before it calls
+        // `provider.refresh(...)` — not here, and not as a `debug_assert!`
+        // (which compiles out of release builds and, being right next to
+        // this hardcoded `None` literal, could only ever catch someone
+        // editing both lines inconsistently in the same change).
+        Ok(ProviderExchange {
             subject: user.id.to_string(),
             email,
             email_verified,
@@ -160,16 +177,7 @@ impl GitHubProvider {
             refresh_token: None,
             expires_in: None,
             id_token: None,
-        };
-        debug_assert!(
-            exchange.refresh_token.is_none(),
-            "GitHubProvider::exchange_code must never set refresh_token — GitHub OAuth Apps \
-             don't issue one, and refresh_token_grant's routing to GitHubProvider::refresh \
-             (which unconditionally errors) is only unreachable in practice because this \
-             invariant holds. If this ever fires, GitHubProvider::refresh needs a real \
-             implementation, not just an error."
-        );
-        Ok(exchange)
+        })
     }
 
     async fn fetch_user(&self, access_token: &str) -> Result<GitHubUser, AuthError> {
@@ -362,6 +370,55 @@ mod tests {
         assert_eq!(exchange.email_verified, Some(true));
         assert!(exchange.id_token.is_none());
         assert!(exchange.refresh_token.is_none());
+    }
+
+    /// Coverage for the fallback branch in `fetch_exchange`: when
+    /// `/user/emails` has no primary+verified entry (here, none of the
+    /// returned addresses are verified), `email_verified` must be `None`
+    /// and `email` must fall back to `/user`'s inline `email` field.
+    #[tokio::test]
+    async fn github_exchange_falls_back_to_inline_user_email_when_no_primary_verified_entry() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/login/oauth/access_token"))
+            .and(header("accept", "application/json"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "gho_test-token",
+                "scope": "read:user,user:email",
+                "token_type": "bearer",
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/user"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": 9182310,
+                "login": "octocat",
+                "email": "inline@example.com",
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/user/emails"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+                {"email": "unverified@example.com", "primary": true, "verified": false},
+                {"email": "secondary@example.com", "primary": false, "verified": true},
+            ])))
+            .mount(&server)
+            .await;
+
+        let base = url::Url::parse(&server.uri()).unwrap();
+        let provider = test_github_provider().with_endpoints(
+            base.join("login/oauth/authorize").unwrap(),
+            base.join("login/oauth/access_token").unwrap(),
+            base.join("user").unwrap(),
+            base.join("user/emails").unwrap(),
+        );
+
+        let exchange = provider.exchange_code("code", "verifier").await.unwrap();
+        assert_eq!(exchange.subject, "9182310");
+        assert_eq!(exchange.email.as_deref(), Some("inline@example.com"));
+        assert_eq!(exchange.email_verified, None);
     }
 
     /// Regression test: GitHub's token endpoint returns HTTP 200 with an

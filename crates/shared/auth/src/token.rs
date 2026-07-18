@@ -347,6 +347,23 @@ async fn refresh_token_grant(
     // id-token verification fails, the client can retry the same local
     // refresh token instead of being stranded with an unreturned replacement.
     let provider = state.provider(&stored.provider)?;
+    // Defense-in-depth: GitHubProvider::exchange_code never sets
+    // provider_refresh_token, so a `refresh_tokens` row naming
+    // `provider = "github"` with a non-null `provider_refresh_token` should
+    // be unreachable through normal flows — but the DB layer doesn't enforce
+    // that invariant, and a hand-inserted or corrupted row would otherwise
+    // silently reach `GitHubProvider::refresh`'s unconditional error. Fail
+    // loudly and clearly here instead, at the actual choke point, in both
+    // debug and release builds.
+    if provider.provider_id() == "github" {
+        return Err(AuthError::Server(
+            "refresh token names provider `github`, which never issues upstream refresh \
+             tokens and does not support token refresh — this refresh token row should be \
+             unreachable; the underlying GitHub OAuth App requires the user to \
+             re-authenticate once their local soma-issued refresh token expires"
+                .to_string(),
+        ));
+    }
     let exchange = provider.refresh(&provider_refresh_token).await?;
 
     let refreshed_expires_at = expires_at(
@@ -532,7 +549,8 @@ mod tests {
     use crate::state::AuthState;
 
     use super::super::authorize::tests::{
-        test_auth_state_with_mock_google, test_auth_state_with_registered_client,
+        test_auth_config, test_auth_state_with_config, test_auth_state_with_mock_google,
+        test_auth_state_with_registered_client,
     };
 
     async fn test_auth_state_with_failing_google_refresh() -> AuthState {
@@ -1395,5 +1413,66 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "invalid_request");
+    }
+
+    /// Defense-in-depth regression test: `GitHubProvider::exchange_code`
+    /// never sets `provider_refresh_token`, so a `refresh_tokens` row naming
+    /// `provider = "github"` with a non-null `provider_refresh_token` is
+    /// unreachable through normal flows — but the DB layer doesn't enforce
+    /// that invariant. Hand-insert exactly that row and confirm
+    /// `refresh_token_grant` fails loudly with a clear server error instead
+    /// of reaching `GitHubProvider::refresh`'s unconditional error.
+    #[tokio::test]
+    async fn refresh_token_grant_rejects_a_hand_inserted_github_row_with_a_provider_refresh_token()
+    {
+        let mut config = test_auth_config();
+        config.github.client_id = "gh-client".to_string();
+        config.github.client_secret = "gh-secret".to_string();
+        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
+        let state = test_auth_state_with_config(config).await;
+        state
+            .store
+            .register_client(crate::types::RegisteredClient {
+                client_id: "client".to_string(),
+                redirect_uris: vec!["http://127.0.0.1:7777/callback".to_string()],
+                created_at: crate::util::now_unix(),
+            })
+            .await
+            .unwrap();
+        state
+            .store
+            .upsert_refresh_token(crate::types::RefreshTokenRow {
+                refresh_token: "github-refresh".to_string(),
+                client_id: "client".to_string(),
+                subject: "github:9182310".to_string(),
+                resource: "https://lab.example.com/mcp".to_string(),
+                scope: "lab".to_string(),
+                provider: "github".to_string(),
+                provider_refresh_token: Some("hand-inserted-upstream-value".to_string()),
+                created_at: crate::util::now_unix(),
+                expires_at: crate::util::now_unix() + 3600,
+            })
+            .await
+            .unwrap();
+        let app = router(state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/token")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(
+                        "grant_type=refresh_token&client_id=client&refresh_token=github-refresh",
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["error"], "server_error");
     }
 }
