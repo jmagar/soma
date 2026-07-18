@@ -3,6 +3,7 @@
 pub mod at_rest;
 #[cfg(feature = "http-axum")]
 pub mod auth_context;
+pub mod authelia;
 #[cfg(feature = "http-axum")]
 pub mod authorize;
 #[cfg(feature = "http-axum")]
@@ -11,13 +12,13 @@ pub mod config;
 pub mod error;
 pub mod google;
 pub mod jwt;
-pub mod oauth_provider;
-pub(crate) mod oidc;
-pub(crate) mod provider_http;
 #[cfg(feature = "http-axum")]
 pub mod metadata;
 #[cfg(feature = "http-axum")]
 pub mod middleware;
+pub mod oauth_provider;
+pub(crate) mod oidc;
+pub(crate) mod provider_http;
 #[cfg(feature = "http-axum")]
 pub mod redirect_uri;
 #[cfg(feature = "http-axum")]
