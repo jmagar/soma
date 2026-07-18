@@ -82,6 +82,26 @@ Work through this in order; `unifi` demonstrates every item.
   manual `impl Debug` that shows only a length/placeholder for the secret
   field. An incidental `tracing::debug!(?config)` or `{:?}` in a log
   statement should never leak a credential.
+- [ ] **Instrument the one shared HTTP call site, not each named method.**
+  If the crate has both fixed named methods and a dynamic dispatcher (most
+  of these will, once they grow past their first few endpoints), put
+  `tracing` span/log wrapping in the low-level function *both* paths
+  actually call (`unifi`'s `http::request_json`), not in a wrapper only the
+  named methods go through. Otherwise everything reachable only via dynamic
+  dispatch — likely most of the crate's real action count — is invisible to
+  `tracing`.
+- [ ] **A curated, non-test-scoped clippy lint tier**, not blanket
+  `pedantic`. `#![cfg_attr(not(test), deny(clippy::unwrap_used,
+  clippy::expect_used, clippy::panic))]` at the crate root — scoped to
+  non-test builds specifically, since `.unwrap()`/`.expect()` in test code
+  is normal and this would otherwise force an `#[allow]` on every test
+  function. Every legitimate non-test site (a bundled, crate-owned data
+  file failing to parse — never caller input) gets a narrow, commented
+  `#[allow(clippy::expect_used)]`/`#[allow(clippy::panic)]` at that exact
+  function, so a *new* one has to be a deliberate, reviewed choice. Skip
+  full `clippy::pedantic` — it drags in noisy, unrelated lints (naming,
+  doc-markdown nits) that create churn without protecting callers from
+  anything a library crate actually owes them.
 - [ ] **Tests.**
   - Inline `#[cfg(test)] mod tests` next to any pure logic (path/URL
     building, request normalization, name mapping, response filtering).
@@ -110,15 +130,26 @@ Work through this in order; `unifi` demonstrates every item.
     `no_dispatchable_mutating_action_shares_a_get_path_with_a_read_only_action`)
     catches the whole class instead of one hardcoded regression test per
     incident.
-- [ ] **Docs.** Crate-level `//!` docs in `lib.rs` with a quick-start
-  example (checked by `cargo test` as a doctest) and a module-layout table.
-  `#![deny(missing_docs)]` at the crate root (not `warn` — this is the file
-  every future crate copies verbatim, so the "fully documented public API"
-  bar should be enforced locally, not borrowed incidentally from CI's
-  `-D warnings` flag), with every public item documented. Add `# Errors`
-  sections to public `Result`-returning functions.
+- [ ] **Docs.** `#![doc = include_str!("../README.md")]` at the crate root
+  instead of a separate `//!` summary — the README becomes the crate's
+  entire rustdoc landing page (what docs.rs renders) and every one of its
+  code fences becomes a real doctest under `cargo test --doc`, instead of a
+  second, hand-maintained quick-start that can silently drift from the
+  README's. `#![deny(missing_docs)]` at the crate root (not `warn` — this is
+  the file every future crate copies verbatim, so the "fully documented
+  public API" bar should be enforced locally, not borrowed incidentally
+  from CI's `-D warnings` flag), with every public item documented. Add
+  `# Errors` sections to public `Result`-returning functions. Run
+  `cargo doc -p <crate> --no-deps` after any README edit — it warns on any
+  `` [`Foo`] `` intra-doc link that doesn't resolve, now that the README's
+  links are live rustdoc, not decorative code-spans. `#![forbid(unsafe_code)]`
+  too, if the crate has none (it shouldn't).
 - [ ] **README.md.** Quick start, module layout, error-handling note,
   testing instructions, publish status. `unifi/README.md` is the template.
+- [ ] **CHANGELOG.md**, per crate — independent of the root `CHANGELOG.md`,
+  which tracks the `soma` product release, not these vendor crates. Keep a
+  Changelog format, everything under `[Unreleased]` until the crate's first
+  real `cargo publish`. `unifi/CHANGELOG.md` is the template.
 - [ ] **Bundled fixture/data files go in the crate's own `data/`
   directory**, not a repo-root path reached via `../../..`. This makes the
   crate self-contained (works if it's ever split into its own repo) and

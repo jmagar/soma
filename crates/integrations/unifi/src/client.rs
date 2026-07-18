@@ -100,10 +100,14 @@ impl UnifiClient {
     /// ([`crate::ActionDispatcher`]) builds on; the named methods below
     /// (`clients`, `devices`, ...) are thin, discoverable wrappers around it.
     ///
+    /// `action` is a friendly name (e.g. `"clients"`, `"official_list_sites"`)
+    /// used only for `tracing` — see [`http::request_json`].
+    ///
     /// # Errors
     /// See [`UnifiError`] for the failure cases this can return.
     pub async fn request_json(
         &self,
+        action: &str,
         method: Method,
         path: &str,
         query: Option<&Value>,
@@ -113,6 +117,7 @@ impl UnifiClient {
             &self.http,
             &self.url,
             &self.api_key,
+            action,
             method,
             path,
             query,
@@ -134,23 +139,9 @@ impl UnifiClient {
         }
     }
 
-    async fn get(&self, path: &str, action: &'static str) -> Result<Value> {
-        let span = tracing::info_span!("upstream", %action, site = %self.site);
-        let _guard = span.enter();
-        tracing::debug!(url = %self.url, "calling UniFi API");
-        let result = self.request_json(Method::GET, path, None, None).await;
-        match &result {
-            Ok(v) => {
-                let count = v
-                    .get("data")
-                    .and_then(|d| d.as_array())
-                    .map(|a| a.len())
-                    .unwrap_or(0);
-                tracing::debug!(action, count, "upstream call ok");
-            }
-            Err(e) => tracing::warn!(action, error = %e, "upstream call failed"),
-        }
-        result
+    async fn get(&self, path: &str, action: &str) -> Result<Value> {
+        self.request_json(action, Method::GET, path, None, None)
+            .await
     }
 
     /// Connected clients (wireless and wired).
