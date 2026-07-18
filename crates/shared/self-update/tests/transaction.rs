@@ -129,7 +129,7 @@ async fn lock_and_corrupt_recovery_state_fail_closed() {
 }
 
 #[tokio::test]
-async fn stale_and_mismatched_versions_do_not_replace_bytes() {
+async fn running_version_mismatch_retains_recovery_state() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");
     let state = temp.path().join("update.json");
@@ -149,12 +149,46 @@ async fn stale_and_mismatched_versions_do_not_replace_bytes() {
         Err(UpdateError::RunningVersionMismatch { .. })
     ));
     assert!(state.exists());
+    let marker: serde_json::Value = serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
+    let backup = std::path::PathBuf::from(marker["backup"].as_str().unwrap());
     assert!(matches!(
-        updater.recover_on_startup("1.5.0").await.unwrap(),
-        RecoveryAction::StaleMarkerRemoved { .. }
+        updater.recover_on_startup("1.5.0").await,
+        Err(UpdateError::RunningVersionMismatch { .. })
     ));
     assert_eq!(std::fs::read(&executable).unwrap(), new);
-    assert!(!state.exists());
+    assert!(state.exists());
+    assert_eq!(std::fs::read(backup).unwrap(), old);
+}
+
+#[tokio::test]
+async fn confirmation_clears_authoritative_marker_before_backup_cleanup() {
+    let temp = tempdir().unwrap();
+    let binary_dir = temp.path().join("bin");
+    let state_dir = temp.path().join("state");
+    std::fs::create_dir(&binary_dir).unwrap();
+    std::fs::create_dir(&state_dir).unwrap();
+    let executable = binary_dir.join("example");
+    let state = state_dir.join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    updater
+        .install(validated(&updater, new, "2.0.0").await, "1.0.0")
+        .await
+        .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&binary_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    assert!(updater.confirm_success("2.0.0").await.is_err());
+    std::fs::set_permissions(&binary_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(!state.exists(), "confirmation marker must be cleared first");
+    assert_eq!(
+        updater.recover_on_startup("2.0.0").await.unwrap(),
+        RecoveryAction::NoPendingUpdate
+    );
 }
 
 #[tokio::test]

@@ -278,7 +278,6 @@
   pub enum RecoveryAction {
       NoPendingUpdate,
       PendingUpdate { target: String, attempts: u32, max_attempts: u32 },
-      StaleMarkerRemoved { target: String, running: String },
       RollbackInstalled { executable: PathBuf, restored_version: String },
   }
 

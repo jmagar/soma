@@ -48,7 +48,11 @@ retains a unique rollback backup, then atomically renames the verified artifact.
 A process crash before confirmation leaves the marker and backup for startup
 recovery. Each unconfirmed startup increments the marker; after the configured
 threshold the backup is restored and the adopter must restart again. Successful
-health confirmation removes both marker and backup. Corrupt markers, missing
+health confirmation durably removes the authoritative marker before cleaning
+the backup, so a cleanup interruption can leave only a harmless orphan backup.
+A running-version mismatch retains both marker and backup and returns a typed
+error; an operator must inspect that identity mismatch before explicitly
+removing recovery state. Corrupt markers, missing
 backups, and cleanup failures are typed errors and retain diagnostic state where
 possible. Operators should stop competing updater processes before repairing a
 reported marker or backup path.

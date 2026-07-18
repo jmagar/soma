@@ -36,9 +36,7 @@ async fn lifecycle() -> soma_self_update::Result<()> {
 
     match updater.recover_on_startup("1.0.0").await? {
         RecoveryAction::RollbackInstalled { .. } => return Ok(()), // ask supervisor to restart
-        RecoveryAction::NoPendingUpdate
-        | RecoveryAction::PendingUpdate { .. }
-        | RecoveryAction::StaleMarkerRemoved { .. } => {}
+        RecoveryAction::NoPendingUpdate | RecoveryAction::PendingUpdate { .. } => {}
     }
 
     let json = r#"{"version":"2.0.0","artifact_url":"/v1/agent/binary","sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}"#;

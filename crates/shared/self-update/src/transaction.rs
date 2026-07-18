@@ -116,14 +116,9 @@ impl Updater {
                 return Ok(RecoveryAction::NoPendingUpdate);
             };
             if marker.target != running_version {
-                if marker.backup.exists() {
-                    remove_file(&marker.backup)?;
-                }
-                remove_file(&state)?;
-                sync_parent(&state)?;
-                return Ok(RecoveryAction::StaleMarkerRemoved {
-                    target: marker.target,
+                return Err(UpdateError::RunningVersionMismatch {
                     running: running_version.to_owned(),
+                    target: marker.target,
                 });
             }
             marker.attempts = marker.attempts.saturating_add(1);
@@ -177,9 +172,10 @@ impl Updater {
                     path: marker.backup,
                 });
             }
-            remove_file(&marker.backup)?;
             remove_file(&state)?;
             sync_parent(&state)?;
+            remove_file(&marker.backup)?;
+            sync_parent(&marker.backup)?;
             Ok(ConfirmationOutcome::Confirmed {
                 version: running_version.to_owned(),
             })
