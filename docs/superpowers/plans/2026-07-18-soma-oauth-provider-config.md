@@ -4,16 +4,16 @@
 
 **Goal:** Make the `soma` binary's own pre-flight validation (`soma setup`), `.env` persistence, plugin-option/env-var registry, and `soma doctor` output aware of the Authelia/GitHub providers added to `soma-auth` in `docs/superpowers/plans/2026-07-18-oauth-provider-trait.md`, instead of hardcoding "Google is the only OAuth provider."
 
-**Architecture:** `apps/soma/src/runtime.rs`'s `build_auth_policy` already resolves OAuth config by calling `soma_auth::config::AuthConfigBuilder::build_from_sources(std::env::vars())` directly against the raw process environment — it does **not** go through `soma`'s own typed `Config`/`AuthConfig` struct at all. That means once the prerequisite plan lands, an operator can already set `SOMA_MCP_AUTHELIA_CLIENT_ID` etc. and it works end-to-end at runtime with **zero changes to `apps/soma` or `crates/soma/runtime`**. What's NOT yet aware of the new providers is the secondary surface that duplicates a typed view of the same env vars for pre-flight checks and docs: `crates/soma/contracts/src/config.rs` (`AuthConfig.google_client_id`/`google_client_secret` typed fields, populated by `Config::load()`), `crates/soma/contracts/src/env_registry.rs` (the canonical env-var/plugin-option table), `crates/soma/cli/src/setup.rs` (`check_auth`'s blocking-requirement logic + `write_env`'s `.env` persistence), and `crates/soma/cli/src/doctor/checks.rs` (`soma doctor`'s printed auth-mode label, currently hardcoded `"OAuth (Google)"`). This plan brings those four in line with the new multi-provider reality — same "at least one provider configured" requirement soma-auth's own `AuthConfig::validate` enforces (Plan 1, Task 7).
+**Architecture:** `apps/soma/src/lib.rs`'s `build_auth_policy` already resolves OAuth config by calling `soma_auth::config::AuthConfigBuilder::build_from_sources(std::env::vars())` directly against the raw process environment — it does **not** go through `soma`'s own typed `soma_config::Config`/`AuthConfig` struct at all. That means an operator can already set `SOMA_MCP_AUTHELIA_CLIENT_ID` etc. and use the providers end-to-end at runtime with **zero changes to `apps/soma` or `crates/soma/runtime`**. What's not yet aware of the new providers is the product-support view used by pre-flight checks and generated docs: `crates/soma/config/src/config.rs` (typed config and env loading), `crates/soma/config/src/env_registry.rs` (canonical env-var/plugin-option metadata), `crates/soma/cli/src/setup.rs` (validation and `.env` persistence), and `crates/soma/cli/src/doctor/checks.rs` (the doctor auth label). `crates/soma/domain` owns action/error/scope contracts and is intentionally unchanged; OAuth configuration belongs in `soma-config` after the contracts-crate split.
 
 **Tech Stack:** Rust 2024, same as the rest of `soma`. No new dependencies.
 
 ## Global Constraints
 
 - Depends entirely on `docs/superpowers/plans/2026-07-18-oauth-provider-trait.md` being merged first — do not start this plan until that one's Task 13 verification pass is green.
-- `crates/soma/contracts/src/config.rs`'s existing flat-field style for `AuthConfig` (no nested per-provider structs, unlike `soma_auth::config::AuthConfig`) is intentional and must be preserved — this file is a thin typed mirror of env vars for pre-flight/doc purposes, not the actual OAuth runtime config.
+- `crates/soma/config/src/config.rs`'s existing flat-field style for `AuthConfig` (no nested per-provider structs, unlike `soma_auth::config::AuthConfig`) is intentional and must be preserved — this file is a thin typed mirror of env vars for pre-flight/doc purposes, not the actual OAuth runtime config.
 - Every new env var name must exactly match the corresponding `soma_auth` `env_key(&prefix, "...")` suffix from Plan 1 Task 7 (prefix is always `SOMA_MCP` in this app), so `soma doctor`/`soma setup` validate the SAME variables `AuthConfigBuilder::build_from_sources` actually reads at runtime. Mismatches here are silent, not compile-time — double check spelling against Plan 1's `key_a_*`/`key_gh_*`/`key_default_provider` variable list.
-- `cargo test -p soma-contracts` and `cargo test -p soma-cli` (adjust crate names to whatever `cargo metadata` reports if they differ) plus `cargo clippy --workspace -- -D warnings` must pass at the end of every task.
+- `cargo test -p soma-config` and `cargo test -p soma-cli` plus `cargo clippy --workspace --all-targets -- -D warnings` must pass before the plan is complete.
 
 ---
 
@@ -21,25 +21,30 @@
 
 | File | Status | Responsibility |
 |---|---|---|
-| `crates/soma/contracts/src/config.rs` | Modify | Add `authelia_issuer_url`/`authelia_client_id`/`authelia_client_secret`/`github_client_id`/`github_client_secret`/`default_provider` typed fields + `SOMA_MCP_*` env loading |
-| `crates/soma/contracts/src/env_registry.rs` | Modify | Register the 6 new env-var specs (canonical docs/plugin-option table) |
-| `crates/soma/contracts/src/env_registry_tests.rs` | Modify | Cover the new specs |
+| `crates/soma/config/src/config.rs` | Modify | Add `authelia_issuer_url`/`authelia_client_id`/`authelia_client_secret`/`github_client_id`/`github_client_secret`/`default_provider` typed fields + `SOMA_MCP_*` env loading |
+| `crates/soma/config/src/config_tests.rs` | Modify | Cover typed config loading with the existing serialized env-test harness |
+| `crates/soma/config/src/env_registry.rs` | Modify | Register all 10 new env-var specs (canonical docs/plugin-option table) |
+| `crates/soma/config/src/env_registry_tests.rs` | Modify | Cover the new specs |
+| `crates/soma/cli/Cargo.toml` | Modify | Add `soma-auth` as a dev dependency for validator-parity coverage |
 | `crates/soma/cli/src/setup.rs` | Modify | `check_auth`: "at least one provider" instead of "Google required"; `write_env`: persist the new fields |
 | `crates/soma/cli/src/doctor/checks.rs` | Modify | `check_auth_config`: print which provider(s) are actually configured instead of a hardcoded `"(Google)"` |
+| `crates/soma/cli/src/doctor/checks_tests.rs` | Modify | Cover provider labels in the existing sibling test module |
+| `docs/ENV.md`, `.env.example`, `docs/generated/plugin-settings.md`, plugin metadata | Regenerate | Refresh generated env/config surfaces with `cargo xtask generate-docs` |
 
 ---
 
-### Task 1: `contracts/config.rs` — typed fields + env loading
+### Task 1: `soma-config/config.rs` — typed fields + env loading
 
 **Files:**
-- Modify: `crates/soma/contracts/src/config.rs`
+- Modify: `crates/soma/config/src/config.rs`
+- Modify: `crates/soma/config/src/config_tests.rs`
 
 **Interfaces:**
 - Produces: `AuthConfig.authelia_issuer_url: Option<String>`, `AuthConfig.authelia_client_id: Option<String>`, `AuthConfig.authelia_client_secret: Option<String>`, `AuthConfig.github_client_id: Option<String>`, `AuthConfig.github_client_secret: Option<String>`, `AuthConfig.default_provider: Option<String>`. Consumed by Task 3 (`setup.rs`) and Task 4 (`doctor/checks.rs`).
 
 - [ ] **Step 1: Add the 6 fields to the `AuthConfig` struct**
 
-Right after `pub google_client_secret: Option<String>,` in `crates/soma/contracts/src/config.rs`, add:
+Right after `pub google_client_secret: Option<String>,` in `crates/soma/config/src/config.rs`, add:
 
 ```rust
     pub authelia_issuer_url: Option<String>,
@@ -105,7 +110,7 @@ add:
 
 - [ ] **Step 4: Add a config-loading regression test**
 
-Find `crates/soma/contracts/src/config.rs`'s existing `#[cfg(test)] mod tests` (if none exists in this file, check whether config-loading tests live in a sibling `config_tests.rs` — mirror whichever pattern `env_registry.rs`/`env_registry_tests.rs` established) and add:
+Add the test to the existing sibling `crates/soma/config/src/config_tests.rs`. Reuse its `#[serial]` convention and `EnvRestore` cleanup helper; do not introduce a second process-environment locking mechanism. Exercise `Config::load()` itself so the test covers the real override path rather than calling `env_opt_str` directly.
 
 ```rust
     #[test]
@@ -159,13 +164,13 @@ Before finalizing this step, read how the file's OTHER env-mutating tests (e.g. 
 
 - [ ] **Step 5: Run tests**
 
-Run: `cargo test -p soma-contracts config`
-Expected: PASS (adjust the crate name/test path to match whatever `cargo metadata --format-version=1 | jq '.packages[].name'` actually reports for this directory — the CLAUDE.md module map doesn't give the exact package name for `crates/soma/contracts`; check `crates/soma/contracts/Cargo.toml`'s `[package] name` field first).
+Run: `cargo test -p soma-config config`
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add crates/soma/contracts/src/config.rs
+git add crates/soma/config/src/config.rs crates/soma/config/src/config_tests.rs
 git commit -m "feat(soma): load Authelia/GitHub OAuth env vars into typed AuthConfig"
 ```
 
@@ -174,8 +179,8 @@ git commit -m "feat(soma): load Authelia/GitHub OAuth env vars into typed AuthCo
 ### Task 2: `env_registry.rs` — register all 10 new specs
 
 **Files:**
-- Modify: `crates/soma/contracts/src/env_registry.rs`
-- Modify: `crates/soma/contracts/src/env_registry_tests.rs`
+- Modify: `crates/soma/config/src/env_registry.rs`
+- Modify: `crates/soma/config/src/env_registry_tests.rs`
 
 **Interfaces:**
 - Produces: 10 new entries in `ENV_KEY_SPECS` — the 6 in Step 2 below plus 4 more (`SOMA_MCP_AUTHELIA_CALLBACK_PATH`, `SOMA_MCP_AUTHELIA_SCOPES`, `SOMA_MCP_GITHUB_CALLBACK_PATH`, `SOMA_MCP_GITHUB_SCOPES`) added in Step 2A. Engineering review caught that the original version of this task only registered 6 of the 10 env vars `soma-auth`'s `AuthConfigBuilder::build_from_sources` actually reads (Plan 1 Task 7 Step 4 reads `key_a_callback`/`key_a_scopes`/`key_gh_callback`/`key_gh_scopes` too) — those 4 are fully functional at runtime without this task (Plan 2's own Architecture note: `build_auth_policy` reads raw env directly), but were invisible to `soma doctor`, the canonical docs registry, and any plugin-option UI derived from `ENV_KEY_SPECS`. Consumed by anything that iterates `ENV_KEY_SPECS`/`all_specs()`/`plugin_option_mappings()` for docs generation or plugin manifest option wiring (grep `ENV_KEY_SPECS` workspace-wide before starting, to confirm nothing outside this crate hardcodes the array's length or exact ordering — `const` slices consumed elsewhere by index would be a red flag; expected to be consumed only by key/value lookup, not position).
@@ -264,7 +269,7 @@ add:
 
 - [ ] **Step 2A: Add the 4 remaining specs (callback-path/scopes overrides)**
 
-`crates/soma/contracts/src/config.rs` (Task 1) does NOT gain typed fields for these 4 — that matches the existing convention exactly (`google_callback_path`/`google_scopes` have no typed field in `contracts::AuthConfig` either; these are power-user env-only knobs). `toml_destination: None` mirrors how this file already represents that shape (see `SOMA_SERVER_URL`'s spec earlier in `ENV_KEY_SPECS`, which also has `toml_destination: None`).
+`crates/soma/config/src/config.rs` (Task 1) does NOT gain typed fields for these 4 — that matches the existing convention exactly (`google_callback_path`/`google_scopes` have no typed field in `soma_config::AuthConfig` either; these are power-user env-only knobs). `toml_destination: None` mirrors how this file already represents that shape (see `SOMA_SERVER_URL`'s spec earlier in `ENV_KEY_SPECS`, which also has `toml_destination: None`).
 
 ```rust
     spec(
@@ -357,13 +362,13 @@ fn new_provider_plugin_option_mappings_are_derived_from_specs() {
 
 - [ ] **Step 4: Run tests**
 
-Run: `cargo test -p soma-contracts env_registry`
+Run: `cargo test -p soma-config env_registry`
 Expected: all `env_registry` tests PASS, including the 3 new ones.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/soma/contracts/src/env_registry.rs crates/soma/contracts/src/env_registry_tests.rs
+git add crates/soma/config/src/env_registry.rs crates/soma/config/src/env_registry_tests.rs
 git commit -m "feat(soma): register Authelia/GitHub OAuth env vars in the canonical registry"
 ```
 
@@ -372,6 +377,7 @@ git commit -m "feat(soma): register Authelia/GitHub OAuth env vars in the canoni
 ### Task 3: `cli/setup.rs` — unblock Google-only requirement, persist new fields
 
 **Files:**
+- Modify: `crates/soma/cli/Cargo.toml`
 - Modify: `crates/soma/cli/src/setup.rs`
 
 **Interfaces:**
@@ -504,7 +510,7 @@ Engineering review's simplicity pass flagged that this file, `soma_auth::config:
         // Every combination below must produce the same pass/fail verdict
         // from this file's `check_auth` and from `soma_auth::config::
         // AuthConfig::validate()` (via `AuthConfigBuilder::build_from_sources`
-        // against the same env vars, mirroring what `apps/soma/src/runtime.rs`
+        // against the same env vars, mirroring what `apps/soma/src/lib.rs`
         // actually does at runtime). If this test ever needs updating because
         // the two disagree, that disagreement IS the bug — fix whichever
         // validator is wrong, don't just update the test to match.
@@ -574,7 +580,7 @@ Engineering review's simplicity pass flagged that this file, `soma_auth::config:
     }
 ```
 
-The middle section of this test (populating `config.mcp.auth.*` from the same `vars` slice `check_auth` and `soma_auth` both consume) is left as a TODO-shaped comment rather than fully specified code because it depends on whether `Config::load()` can be driven by an explicit var map or only `std::env` — resolve that during implementation by reading `Config::load()`'s actual signature (Task 1), not by guessing here; do not skip finishing this test, since it's the whole point of Step 1B.
+`Config::load()` reads the process environment. Follow `soma-config`'s existing serialized env-test pattern (`#[serial]` plus scoped restoration) if the parity test drives it directly. Add `soma-auth = { workspace = true }` under `crates/soma/cli/Cargo.toml`'s `[dev-dependencies]` so production dependency boundaries remain unchanged.
 
 - [ ] **Step 2: Persist the new fields in `write_env`**
 
@@ -691,7 +697,7 @@ Run: `cargo clippy --workspace -- -D warnings`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/soma/cli/src/setup.rs
+git add crates/soma/cli/Cargo.toml crates/soma/cli/src/setup.rs
 git commit -m "feat(soma): accept Authelia/GitHub-only OAuth config in setup pre-flight checks"
 ```
 
@@ -701,6 +707,7 @@ git commit -m "feat(soma): accept Authelia/GitHub-only OAuth config in setup pre
 
 **Files:**
 - Modify: `crates/soma/cli/src/doctor/checks.rs`
+- Modify: `crates/soma/cli/src/doctor/checks_tests.rs`
 
 **Interfaces:**
 - Consumes: `AuthConfig.google_client_id`/`authelia_client_id`/`github_client_id` (Task 1).
@@ -754,7 +761,7 @@ fn configured_oauth_providers_label(config: &Config) -> String {
 
 - [ ] **Step 2: Add a regression test**
 
-Find this file's existing tests for `check_auth_config` (or the module's `#[cfg(test)]` block) and add:
+Add the regression to the existing sibling `crates/soma/cli/src/doctor/checks_tests.rs` module:
 
 ```rust
     #[test]
@@ -783,7 +790,7 @@ Run: `cargo clippy --workspace -- -D warnings`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add crates/soma/cli/src/doctor/checks.rs
+git add crates/soma/cli/src/doctor/checks.rs crates/soma/cli/src/doctor/checks_tests.rs
 git commit -m "feat(soma): report which OAuth provider(s) are configured in soma doctor"
 ```
 
@@ -792,8 +799,9 @@ git commit -m "feat(soma): report which OAuth provider(s) are configured in soma
 ### Task 5: Verification + docs
 
 **Files:**
-- Modify: `/home/jmagar/workspace/soma/.claude/worktrees/oauth-provider-support-f427c9/CLAUDE.md` (Environment variables table)
-- Modify: `/home/jmagar/workspace/soma/.claude/worktrees/oauth-provider-support-f427c9/CHANGELOG.md`
+- Modify: `CLAUDE.md` (Environment variables table)
+- Modify: `CHANGELOG.md`
+- Regenerate: `.env.example`, `config.soma.toml`, `docs/ENV.md`, `docs/generated/plugin-settings.md`, and plugin metadata selected by `scripts/generate-docs.py`
 
 **Interfaces:**
 - None (docs + verification only).
@@ -815,13 +823,19 @@ In the root `CLAUDE.md`'s `## Environment variables` table, right after the `SOM
 
 Verify whether the parity table needs a note about `?provider=` on `/authorize`/`/auth/login` — these are HTTP OAuth endpoints, not MCP actions or CLI subcommands, so they fall outside the parity table's scope (same reasoning as `/register`, `/jwks`, `/.well-known/*` already being excluded). No edit needed here; confirm by re-reading the "CLI ↔ MCP action parity" section's framing before skipping this step.
 
-- [ ] **Step 3: Add the CHANGELOG entry**
+- [ ] **Step 3: Regenerate derived docs and plugin metadata**
+
+Run: `cargo xtask generate-docs`
+
+Review every generated diff. The generator reads `crates/soma/config/src/config.rs` and `crates/soma/config/src/env_registry.rs`; do not hand-edit generated files.
+
+- [ ] **Step 4: Add the CHANGELOG entry**
 
 Add under the SAME `## [Unreleased]` → `### Added` section used by Plan 1's Task 13 Step 5 (append right after that entry, don't create a duplicate `## [Unreleased]` heading):
 
 ```markdown
 - `soma setup`/`soma doctor` and the canonical env-var registry
-  (`crates/soma/contracts/src/env_registry.rs`) now recognize
+  (`crates/soma/config/src/env_registry.rs`) now recognize
   `SOMA_MCP_AUTHELIA_ISSUER_URL`/`_CLIENT_ID`/`_CLIENT_SECRET`,
   `SOMA_MCP_GITHUB_CLIENT_ID`/`_CLIENT_SECRET`, and
   `SOMA_MCP_AUTH_DEFAULT_PROVIDER` — OAuth mode now accepts any one of
@@ -829,7 +843,7 @@ Add under the SAME `## [Unreleased]` → `### Added` section used by Plan 1's Ta
   Google specifically.
 ```
 
-- [ ] **Step 4: Full workspace verification**
+- [ ] **Step 5: Full workspace verification**
 
 Run: `cargo test --workspace`
 Expected: PASS.
@@ -840,9 +854,12 @@ Expected: zero warnings.
 Run: `cargo fmt --check`
 Expected: no diff.
 
-- [ ] **Step 5: Commit**
+Run: `cargo xtask generate-docs --check`
+Expected: generated docs are current.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add CLAUDE.md CHANGELOG.md
+git add CLAUDE.md CHANGELOG.md .env.example config.soma.toml docs/ENV.md docs/generated/plugin-settings.md plugins/soma
 git commit -m "docs: document Authelia/GitHub OAuth env vars"
 ```
