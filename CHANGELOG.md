@@ -41,7 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   intended executable mode is restored and synced immediately before swap.
   Successful validation explicitly terminates and drains its Unix
   process group or Windows Job Object before accepting captured output, so
-  pipe-detached helpers cannot survive a successful candidate.
+  pipe-inheriting or pipe-detached helpers cannot survive a successful
+  candidate or hold validation output open until timeout.
   Transaction lock guards explicitly unlock before descriptor close, making
   immediate back-to-back recovery calls deterministic.
   The crate has no internal workspace dependencies; this change

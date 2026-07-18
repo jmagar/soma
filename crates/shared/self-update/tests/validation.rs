@@ -103,9 +103,9 @@ async fn times_out_and_kills_the_validator() {
 }
 
 #[tokio::test]
-async fn deadline_covers_pipe_inheriting_descendants_and_kills_the_group() {
+async fn successful_validation_terminates_a_pipe_inheriting_helper() {
     let script = b"#!/bin/sh\nsleep 30 &\necho $! > \"$0.child\"\necho 'example 1'\nexit 0\n";
-    let (_temp, updater, artifact) = staged(script, "1", Duration::from_millis(150)).await;
+    let (_temp, updater, artifact) = staged(script, "1", Duration::from_secs(2)).await;
     let child_file = artifact.path().with_extension("part.child");
     let validation = tokio::spawn(async move { updater.validate(artifact).await });
     for _ in 0..100 {
@@ -119,18 +119,11 @@ async fn deadline_covers_pipe_inheriting_descendants_and_kills_the_group() {
         .trim()
         .parse()
         .unwrap();
-    assert!(
-        process_is_alive(pid),
-        "validator child was never observed alive"
-    );
     let result = tokio::time::timeout(Duration::from_secs(2), validation)
         .await
         .unwrap()
         .unwrap();
-    assert!(matches!(
-        result,
-        Err(UpdateError::ValidationTimedOut { .. })
-    ));
+    assert!(result.is_ok(), "{result:?}");
     for _ in 0..100 {
         if !process_is_alive(pid) {
             return;

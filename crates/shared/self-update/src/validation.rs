@@ -78,17 +78,26 @@ impl Updater {
             .take()
             .expect("piped stderr is configured");
         let completed = tokio::time::timeout_at(deadline, async {
-            let (status, stdout, stderr) = tokio::join!(
-                child.leader_mut().wait(),
-                read_bounded(stdout),
-                read_bounded(stderr)
-            );
+            // Descendants may inherit the validator's output handles. Tear down
+            // the whole group as soon as the leader exits so the readers can
+            // observe EOF without turning a successful validation into a timeout.
+            let status = async {
+                let status = child.leader_mut().wait().await;
+                let terminated = child.terminate_and_drain(&path).await;
+                match (status, terminated) {
+                    (Ok(status), Ok(())) => Ok(status),
+                    (Err(error), _) => Err(UpdateError::io(&path, error)),
+                    (Ok(_), Err(error)) => Err(error),
+                }
+            };
+            let (status, stdout, stderr) =
+                tokio::join!(status, read_bounded(stdout), read_bounded(stderr));
             (status, stdout, stderr)
         })
         .await;
         let (status, stdout, stderr) = match completed {
             Ok((status, stdout, stderr)) => (
-                status.map_err(|error| UpdateError::io(&path, error))?,
+                status?,
                 stdout.map_err(|error| UpdateError::io(&path, error))?,
                 stderr.map_err(|error| UpdateError::io(&path, error))?,
             ),
@@ -98,7 +107,6 @@ impl Updater {
                 return Err(UpdateError::ValidationTimedOut { timeout });
             }
         };
-        child.terminate_and_drain(&path).await?;
         if stdout.overflowed {
             return Err(UpdateError::ValidationOutputTooLarge {
                 stream: "stdout",

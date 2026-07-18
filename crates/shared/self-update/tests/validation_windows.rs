@@ -181,7 +181,7 @@ async fn aborting_validation_kills_a_windows_validator_job() {
 }
 
 #[tokio::test]
-async fn successful_validation_terminates_a_pipe_detached_windows_helper() {
+async fn successful_validation_terminates_a_pipe_inheriting_windows_helper() {
     let temp = tempdir().unwrap();
     let source = temp.path().join("successful-validator.rs");
     let fixture = temp.path().join("successful-validator.exe");
@@ -193,8 +193,8 @@ fn main() {
     let child = Command::new("cmd.exe")
         .args(["/C", "ping -n 30 127.0.0.1 >NUL"])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
         .spawn()
         .unwrap();
     fs::write(executable.with_extension("part.child"), child.id().to_string()).unwrap();
