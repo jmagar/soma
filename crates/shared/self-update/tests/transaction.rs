@@ -428,6 +428,42 @@ async fn symlink_state_aliases_share_the_canonical_transaction_lock() {
 }
 
 #[tokio::test]
+async fn executable_leaf_symlink_is_rejected_before_staging_or_recovery() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let executable_alias = temp.path().join("example-alias");
+    let state = temp.path().join("update.json");
+    std::fs::write(&executable, b"old").unwrap();
+    std::os::unix::fs::symlink(&executable, &executable_alias).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable_alias, &state),
+        UpdatePolicy::default(),
+    );
+    let body = b"new";
+    let directive = UpdateDirective::new("2", "/binary", digest(body)).unwrap();
+
+    assert!(matches!(
+        updater.stage(&body[..], &directive).await,
+        Err(UpdateError::InvalidPolicy(
+            "executable path must not be a symlink"
+        ))
+    ));
+    assert!(matches!(
+        updater.recover_on_startup("1").await,
+        Err(UpdateError::InvalidPolicy(
+            "executable path must not be a symlink"
+        ))
+    ));
+    assert!(
+        std::fs::read_dir(temp.path())
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .all(|entry| !entry.file_name().to_string_lossy().contains(".update-"))
+    );
+    assert_eq!(std::fs::read(executable).unwrap(), b"old");
+}
+
+#[tokio::test]
 async fn running_version_mismatch_retains_recovery_state() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");

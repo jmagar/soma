@@ -210,8 +210,9 @@ const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
     ),
     (
         "crates/shared/self-update/src",
-        "tests exclusively through the public API from tests/ so portability and \
-         dependency boundaries are exercised exactly as an adopter sees them.",
+        "behavior, portability, and dependency boundaries are exercised through \
+         the public API from tests/. Private crash failpoints have one focused \
+         transaction_tests.rs sibling because they cannot be exposed publicly.",
     ),
     (
         "crates/shared/tauri-shell/src",

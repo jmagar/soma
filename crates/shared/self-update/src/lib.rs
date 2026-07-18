@@ -218,11 +218,18 @@ impl UpdatePolicy {
 pub struct Updater {
     layout: UpdateLayout,
     policy: UpdatePolicy,
+    #[cfg(all(test, unix))]
+    test_failpoint: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }
 
 impl Updater {
     pub fn new(layout: UpdateLayout, policy: UpdatePolicy) -> Self {
-        Self { layout, policy }
+        Self {
+            layout,
+            policy,
+            #[cfg(all(test, unix))]
+            test_failpoint: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
+        }
     }
 
     pub fn layout(&self) -> &UpdateLayout {
@@ -231,6 +238,17 @@ impl Updater {
 
     pub fn policy(&self) -> &UpdatePolicy {
         &self.policy
+    }
+}
+
+pub(crate) fn reject_executable_leaf_symlink(path: &Path) -> Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(UpdateError::InvalidPolicy(
+            "executable path must not be a symlink",
+        )),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(UpdateError::io(path, error)),
     }
 }
 

@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
-use crate::{Result, UpdateDirective, UpdateError, Updater};
+use crate::{Result, UpdateDirective, UpdateError, Updater, reject_executable_leaf_symlink};
 
 static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -92,6 +92,7 @@ impl Updater {
     where
         R: AsyncRead + Unpin,
     {
+        reject_executable_leaf_symlink(self.layout().executable())?;
         let configured_directory =
             self.layout()
                 .executable()

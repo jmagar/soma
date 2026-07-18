@@ -7,7 +7,17 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::validation::ArtifactIdentity;
-use crate::{BackupStrategy, RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
+use crate::{
+    BackupStrategy, RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact,
+    reject_executable_leaf_symlink,
+};
+
+#[path = "transaction_artifacts.rs"]
+mod artifacts;
+use artifacts::{
+    cleanup_owned_artifacts, exact_artifact_name, validate_marker_backup_metadata,
+    validate_marker_staged_metadata, validate_rollback_backup,
+};
 
 static TRANSACTION_COUNTER: AtomicU64 = AtomicU64::new(0);
 const MAX_MARKER_BYTES: u64 = 64 * 1024;
@@ -17,40 +27,12 @@ const MAX_MARKER_BYTES: u64 = 64 * 1024;
 #[repr(u8)]
 enum TestFailpoint {
     None,
+    AfterMarkerTempSync,
     AfterMarkerSync,
     AfterSwap,
     AfterRollbackRename,
     FailedRenameAfterMarkerCleanup,
     FailedRenameAfterBackupCleanup,
-}
-
-#[cfg(test)]
-static TEST_FAILPOINT: std::sync::atomic::AtomicU8 =
-    std::sync::atomic::AtomicU8::new(TestFailpoint::None as u8);
-
-#[cfg(test)]
-fn set_test_failpoint(failpoint: TestFailpoint) {
-    TEST_FAILPOINT.store(failpoint as u8, Ordering::SeqCst);
-}
-
-#[cfg(test)]
-fn failpoint_active(failpoint: TestFailpoint) -> bool {
-    TEST_FAILPOINT.load(Ordering::SeqCst) == failpoint as u8
-}
-
-#[cfg(not(test))]
-fn failpoint_active(_failpoint: TestFailpoint) -> bool {
-    false
-}
-
-fn maybe_fail(failpoint: TestFailpoint, path: &Path) -> Result<()> {
-    if failpoint_active(failpoint) {
-        return Err(UpdateError::io(
-            path,
-            std::io::Error::other("injected transaction crash boundary"),
-        ));
-    }
-    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -102,6 +84,31 @@ struct LayoutPaths {
 }
 
 impl Updater {
+    #[cfg(test)]
+    fn set_test_failpoint(&self, failpoint: TestFailpoint) {
+        self.test_failpoint.store(failpoint as u8, Ordering::SeqCst);
+    }
+
+    #[cfg(test)]
+    fn failpoint_active(&self, failpoint: TestFailpoint) -> bool {
+        self.test_failpoint.load(Ordering::SeqCst) == failpoint as u8
+    }
+
+    #[cfg(not(test))]
+    fn failpoint_active(&self, _failpoint: TestFailpoint) -> bool {
+        false
+    }
+
+    fn maybe_fail(&self, failpoint: TestFailpoint, path: &Path) -> Result<()> {
+        if self.failpoint_active(failpoint) {
+            return Err(UpdateError::io(
+                path,
+                std::io::Error::other("injected transaction crash boundary"),
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn install(
         &self,
         validated: ValidatedArtifact,
@@ -111,6 +118,7 @@ impl Updater {
         let _lock = self.transaction_lock(&paths.lock)?;
         let executable = paths.executable;
         let state = paths.state;
+        cleanup_marker_temp(&state)?;
         let validated_path = absolute(validated.path())?;
         let staged_metadata = std::fs::symlink_metadata(&validated_path)
             .map_err(|error| UpdateError::io(&validated_path, error))?;
@@ -150,11 +158,11 @@ impl Updater {
             sha256: validated.sha256().to_owned(),
             previous_sha256,
         };
-        if let Err(error) = write_marker(&state, &marker) {
+        if let Err(error) = write_marker(self, &state, &marker) {
             remove_file(&backup)?;
             return Err(error);
         }
-        maybe_fail(TestFailpoint::AfterMarkerSync, &state)?;
+        self.maybe_fail(TestFailpoint::AfterMarkerSync, &state)?;
         let final_digest = hash_stable_validated_artifact(&validated, &validated_path)?;
         if final_digest != validated.sha256() {
             return Err(UpdateError::DigestMismatch {
@@ -162,8 +170,9 @@ impl Updater {
                 actual: final_digest,
             });
         }
-        let forced_rename_failure = failpoint_active(TestFailpoint::FailedRenameAfterMarkerCleanup)
-            || failpoint_active(TestFailpoint::FailedRenameAfterBackupCleanup);
+        let forced_rename_failure = self
+            .failpoint_active(TestFailpoint::FailedRenameAfterMarkerCleanup)
+            || self.failpoint_active(TestFailpoint::FailedRenameAfterBackupCleanup);
         let rename_result = if forced_rename_failure {
             Err(std::io::Error::other("injected final rename failure"))
         } else {
@@ -171,15 +180,15 @@ impl Updater {
         };
         if let Err(source) = rename_result {
             remove_and_sync(&state)?;
-            maybe_fail(TestFailpoint::FailedRenameAfterMarkerCleanup, &state)?;
+            self.maybe_fail(TestFailpoint::FailedRenameAfterMarkerCleanup, &state)?;
             remove_and_sync(&backup)?;
-            maybe_fail(TestFailpoint::FailedRenameAfterBackupCleanup, &backup)?;
+            self.maybe_fail(TestFailpoint::FailedRenameAfterBackupCleanup, &backup)?;
             return Err(UpdateError::io(&executable, source));
         }
         sync_parent(&executable)?;
-        maybe_fail(TestFailpoint::AfterSwap, &executable)?;
+        self.maybe_fail(TestFailpoint::AfterSwap, &executable)?;
         marker.phase = MarkerPhase::Installed;
-        write_marker(&state, &marker)?;
+        write_marker(self, &state, &marker)?;
         Ok(InstallOutcome::RestartRequired {
             executable,
             from: previous,
@@ -191,6 +200,7 @@ impl Updater {
         let paths = self.validated_layout()?;
         let _lock = self.transaction_lock(&paths.lock)?;
         let state = paths.state;
+        cleanup_marker_temp(&state)?;
         let marker = read_marker(&state, &paths.executable)?;
         cleanup_owned_artifacts(
             &paths.executable,
@@ -210,7 +220,7 @@ impl Updater {
                 }
                 if running_version == marker.target && executable_digest == marker.sha256 {
                     marker.phase = MarkerPhase::Installed;
-                    write_marker(&state, &marker)?;
+                    write_marker(self, &state, &marker)?;
                 } else {
                     return Err(version_mismatch(running_version, &marker));
                 }
@@ -221,7 +231,7 @@ impl Updater {
                 }
             }
             MarkerPhase::RollingBack => {
-                return resume_rollback(&state, marker, running_version);
+                return resume_rollback(self, &state, marker, running_version);
             }
             MarkerPhase::RolledBack => {
                 return finish_rollback(&state, marker, running_version);
@@ -229,7 +239,7 @@ impl Updater {
         }
         marker.attempts = marker.attempts.saturating_add(1);
         if marker.attempts <= self.policy().max_unconfirmed_restarts() {
-            write_marker(&state, &marker)?;
+            write_marker(self, &state, &marker)?;
             return Ok(RecoveryAction::PendingUpdate {
                 target: marker.target,
                 attempts: marker.attempts,
@@ -238,13 +248,13 @@ impl Updater {
         }
         validate_rollback_backup(&state, &marker)?;
         marker.phase = MarkerPhase::RollingBack;
-        write_marker(&state, &marker)?;
+        write_marker(self, &state, &marker)?;
         std::fs::rename(&marker.backup, &marker.executable)
             .map_err(|error| UpdateError::io(&marker.executable, error))?;
         sync_parent(&marker.executable)?;
-        maybe_fail(TestFailpoint::AfterRollbackRename, &marker.executable)?;
+        self.maybe_fail(TestFailpoint::AfterRollbackRename, &marker.executable)?;
         marker.phase = MarkerPhase::RolledBack;
-        write_marker(&state, &marker)?;
+        write_marker(self, &state, &marker)?;
         finalize_rollback(&state, marker)
     }
 
@@ -252,6 +262,7 @@ impl Updater {
         let paths = self.validated_layout()?;
         let _lock = self.transaction_lock(&paths.lock)?;
         let state = paths.state;
+        cleanup_marker_temp(&state)?;
         let marker = read_marker(&state, &paths.executable)?;
         cleanup_owned_artifacts(
             &paths.executable,
@@ -266,7 +277,7 @@ impl Updater {
             && hash_file(&marker.executable)? == marker.sha256
         {
             marker.phase = MarkerPhase::Installed;
-            write_marker(&state, &marker)?;
+            write_marker(self, &state, &marker)?;
         }
         if marker.phase != MarkerPhase::Installed {
             return Err(version_mismatch(running_version, &marker));
@@ -308,6 +319,7 @@ impl Updater {
     }
 
     fn validated_layout(&self) -> Result<LayoutPaths> {
+        reject_executable_leaf_symlink(self.layout().executable())?;
         let executable = path_identity(self.layout().executable())?;
         let state = path_identity(self.layout().state_file())?;
         let lock = suffix_path(&state, ".lock");
@@ -503,19 +515,14 @@ fn hash_reader(file: &mut File, path: &Path) -> Result<String> {
         .collect())
 }
 
-fn write_marker(path: &Path, marker: &Marker) -> Result<()> {
+fn write_marker(updater: &Updater, path: &Path, marker: &Marker) -> Result<()> {
     let bytes = serde_json::to_vec_pretty(marker).map_err(|error| UpdateError::InvalidMarker {
         path: path.to_path_buf(),
         message: error.to_string(),
     })?;
-    let temporary = suffix_path(
-        path,
-        &format!(
-            ".tmp-{}-{}",
-            std::process::id(),
-            TRANSACTION_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ),
-    );
+    // Every marker write holds the state lock, so one deterministic sibling is
+    // sufficient and can be recovered without trusting a recycled PID.
+    let temporary = suffix_path(path, ".tmp");
     let result = (|| {
         let mut file = OpenOptions::new()
             .create_new(true)
@@ -527,13 +534,42 @@ fn write_marker(path: &Path, marker: &Marker) -> Result<()> {
             .map_err(|error| UpdateError::io(&temporary, error))?;
         file.sync_all()
             .map_err(|error| UpdateError::io(&temporary, error))?;
+        updater.maybe_fail(TestFailpoint::AfterMarkerTempSync, &temporary)?;
         std::fs::rename(&temporary, path).map_err(|error| UpdateError::io(path, error))?;
         sync_parent(path)
     })();
-    if result.is_err() && temporary.exists() {
+    if result.is_err()
+        && temporary.exists()
+        && !updater.failpoint_active(TestFailpoint::AfterMarkerTempSync)
+    {
         std::fs::remove_file(&temporary).map_err(|error| UpdateError::io(&temporary, error))?;
     }
     result
+}
+
+fn cleanup_marker_temp(state: &Path) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let temporary = suffix_path(state, ".tmp");
+    let metadata = match std::fs::symlink_metadata(&temporary) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(UpdateError::io(&temporary, error)),
+    };
+    let parent = state.parent().ok_or(UpdateError::InvalidPolicy(
+        "state path must have a parent directory",
+    ))?;
+    let expected_uid = std::fs::metadata(parent)
+        .map_err(|error| UpdateError::io(parent, error))?
+        .uid();
+    if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
+        return Err(UpdateError::InvalidMarker {
+            path: state.to_path_buf(),
+            message: "marker temporary must be an owned non-symlink regular file".into(),
+        });
+    }
+    std::fs::remove_file(&temporary).map_err(|error| UpdateError::io(&temporary, error))?;
+    sync_parent(&temporary)
 }
 
 fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>> {
@@ -591,97 +627,6 @@ fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>
     Ok(Some(marker))
 }
 
-fn exact_artifact_name(
-    executable: &Path,
-    candidate: &Path,
-    kind: &str,
-    part_suffix: bool,
-) -> Option<u32> {
-    let executable_name = executable.file_name()?.to_str()?;
-    let candidate_name = candidate.file_name()?.to_str()?;
-    let prefix = format!(".{executable_name}.{kind}-");
-    let remainder = candidate_name.strip_prefix(&prefix)?;
-    let remainder = if part_suffix {
-        remainder.strip_suffix(".part")?
-    } else {
-        remainder
-    };
-    let (pid, counter) = remainder.split_once('-')?;
-    if pid.is_empty()
-        || counter.is_empty()
-        || !pid.bytes().all(|byte| byte.is_ascii_digit())
-        || !counter.bytes().all(|byte| byte.is_ascii_digit())
-    {
-        return None;
-    }
-    pid.parse().ok()
-}
-
-fn validate_marker_backup_metadata(state: &Path, marker: &Marker) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-
-    let metadata = match std::fs::symlink_metadata(&marker.backup) {
-        Ok(metadata) => metadata,
-        Err(error)
-            if error.kind() == std::io::ErrorKind::NotFound
-                && matches!(
-                    marker.phase,
-                    MarkerPhase::RollingBack | MarkerPhase::RolledBack
-                ) =>
-        {
-            return Ok(());
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(UpdateError::MissingRollback {
-                path: marker.backup.clone(),
-            });
-        }
-        Err(error) => return Err(UpdateError::io(&marker.backup, error)),
-    };
-    let expected_uid = std::fs::metadata(&marker.executable)
-        .map_err(|error| UpdateError::io(&marker.executable, error))?
-        .uid();
-    if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
-        return Err(UpdateError::InvalidMarker {
-            path: state.to_path_buf(),
-            message: "rollback backup must be an owned non-symlink regular file".into(),
-        });
-    }
-    Ok(())
-}
-
-fn validate_marker_staged_metadata(state: &Path, marker: &Marker) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-
-    let metadata = match std::fs::symlink_metadata(&marker.staged) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(UpdateError::io(&marker.staged, error)),
-    };
-    let expected_uid = std::fs::metadata(&marker.executable)
-        .map_err(|error| UpdateError::io(&marker.executable, error))?
-        .uid();
-    if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
-        return Err(UpdateError::InvalidMarker {
-            path: state.to_path_buf(),
-            message: "staged artifact must be an owned non-symlink regular file".into(),
-        });
-    }
-    Ok(())
-}
-
-fn validate_rollback_backup(state: &Path, marker: &Marker) -> Result<()> {
-    validate_marker_backup_metadata(state, marker)?;
-    let actual = hash_file(&marker.backup)?;
-    if actual != marker.previous_sha256 {
-        return Err(UpdateError::InvalidMarker {
-            path: state.to_path_buf(),
-            message: "rollback backup digest does not match previous executable".into(),
-        });
-    }
-    Ok(())
-}
-
 fn version_mismatch(running_version: &str, marker: &Marker) -> UpdateError {
     UpdateError::RunningVersionMismatch {
         running: running_version.to_owned(),
@@ -696,6 +641,7 @@ fn abort_prepared(state: &Path, marker: &Marker) -> Result<()> {
 }
 
 fn resume_rollback(
+    updater: &Updater,
     state: &Path,
     mut marker: Marker,
     running_version: &str,
@@ -703,7 +649,7 @@ fn resume_rollback(
     let executable_digest = hash_file(&marker.executable)?;
     if running_version == marker.previous && executable_digest == marker.previous_sha256 {
         marker.phase = MarkerPhase::RolledBack;
-        write_marker(state, &marker)?;
+        write_marker(updater, state, &marker)?;
         return finalize_rollback(state, marker);
     }
     if running_version != marker.target || executable_digest != marker.sha256 {
@@ -713,9 +659,9 @@ fn resume_rollback(
     std::fs::rename(&marker.backup, &marker.executable)
         .map_err(|error| UpdateError::io(&marker.executable, error))?;
     sync_parent(&marker.executable)?;
-    maybe_fail(TestFailpoint::AfterRollbackRename, &marker.executable)?;
+    updater.maybe_fail(TestFailpoint::AfterRollbackRename, &marker.executable)?;
     marker.phase = MarkerPhase::RolledBack;
-    write_marker(state, &marker)?;
+    write_marker(updater, state, &marker)?;
     finalize_rollback(state, marker)
 }
 
@@ -749,90 +695,6 @@ fn remove_and_sync(path: &Path) -> Result<()> {
     sync_parent(path)
 }
 
-fn cleanup_owned_artifacts(
-    executable: &Path,
-    protected_backup: Option<&Path>,
-    protected_staging: Option<&Path>,
-) -> Result<()> {
-    use std::os::unix::fs::MetadataExt;
-
-    let directory = executable.parent().ok_or(UpdateError::InvalidPolicy(
-        "executable must have a parent directory",
-    ))?;
-    let expected_uid = std::fs::metadata(executable)
-        .or_else(|_| std::fs::metadata(directory))
-        .map_err(|error| UpdateError::io(directory, error))?
-        .uid();
-    let executable_name = executable
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or(UpdateError::InvalidPolicy(
-            "executable name must be valid UTF-8",
-        ))?;
-    let staging_prefix = format!(".{executable_name}.update-");
-    let backup_prefix = format!(".{executable_name}.rollback-");
-    let mut removed = false;
-    for entry in std::fs::read_dir(directory).map_err(|error| UpdateError::io(directory, error))? {
-        let entry = entry.map_err(|error| UpdateError::io(directory, error))?;
-        let path = entry.path();
-        if protected_backup.is_some_and(|protected| same_existing_identity(protected, &path))
-            || protected_staging.is_some_and(|protected| same_existing_identity(protected, &path))
-        {
-            continue;
-        }
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else {
-            continue;
-        };
-        let owner_pid = if name.starts_with(&staging_prefix) {
-            exact_artifact_name(executable, &path, "update", true)
-        } else if name.starts_with(&backup_prefix) {
-            exact_artifact_name(executable, &path, "rollback", false)
-        } else {
-            None
-        };
-        let Some(owner_pid) = owner_pid else {
-            continue;
-        };
-        if process_is_alive(owner_pid) {
-            continue;
-        }
-        let metadata =
-            std::fs::symlink_metadata(&path).map_err(|error| UpdateError::io(&path, error))?;
-        if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
-            continue;
-        }
-        std::fs::remove_file(&path).map_err(|error| UpdateError::io(&path, error))?;
-        removed = true;
-    }
-    if removed {
-        sync_parent(executable)?;
-    }
-    Ok(())
-}
-
-fn same_existing_identity(first: &Path, second: &Path) -> bool {
-    match (std::fs::canonicalize(first), std::fs::canonicalize(second)) {
-        (Ok(first), Ok(second)) => first == second,
-        _ => first == second,
-    }
-}
-
-fn process_is_alive(pid: u32) -> bool {
-    use nix::errno::Errno;
-    use nix::sys::signal::kill;
-    use nix::unistd::Pid;
-
-    let Ok(pid) = i32::try_from(pid) else {
-        return false;
-    };
-    match kill(Pid::from_raw(pid), None) {
-        Ok(()) | Err(Errno::EPERM) => true,
-        Err(Errno::ESRCH) => false,
-        Err(_) => true,
-    }
-}
-
 fn remove_file(path: &Path) -> Result<()> {
     std::fs::remove_file(path).map_err(|error| UpdateError::io(path, error))
 }
@@ -847,122 +709,5 @@ fn sync_parent(path: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{UpdateDirective, UpdateLayout, UpdatePolicy};
-    use tempfile::tempdir;
-
-    struct ClearFailpoint;
-
-    impl Drop for ClearFailpoint {
-        fn drop(&mut self) {
-            set_test_failpoint(TestFailpoint::None);
-        }
-    }
-
-    async fn updater_and_artifact(
-        max_restarts: u32,
-    ) -> (
-        tempfile::TempDir,
-        Updater,
-        ValidatedArtifact,
-        Vec<u8>,
-        Vec<u8>,
-    ) {
-        use std::os::unix::fs::PermissionsExt;
-
-        let temp = tempdir().unwrap();
-        let executable = temp.path().join("agent");
-        let state = temp.path().join("update.json");
-        let old = b"#!/bin/sh\necho 'agent 1.0.0'\n".to_vec();
-        let new = b"#!/bin/sh\necho 'agent 2.0.0'\n".to_vec();
-        std::fs::write(&executable, &old).unwrap();
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let updater = Updater::new(
-            UpdateLayout::new(&executable, &state),
-            UpdatePolicy::default()
-                .with_max_unconfirmed_restarts(max_restarts)
-                .unwrap(),
-        );
-        let directive = UpdateDirective::new("2.0.0", "/agent", hash_bytes(&new)).unwrap();
-        let staged = updater.stage(&new[..], &directive).await.unwrap();
-        let validated = updater.validate(staged).await.unwrap();
-        (temp, updater, validated, old, new)
-    }
-
-    fn hash_bytes(bytes: &[u8]) -> String {
-        Sha256::digest(bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect()
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn failpoints_after_marker_and_swap_recover_idempotently() {
-        let _clear = ClearFailpoint;
-        for (failpoint, running, expected) in [
-            (
-                TestFailpoint::AfterMarkerSync,
-                "1.0.0",
-                RecoveryAction::NoPendingUpdate,
-            ),
-            (
-                TestFailpoint::AfterSwap,
-                "2.0.0",
-                RecoveryAction::PendingUpdate {
-                    target: "2.0.0".into(),
-                    attempts: 1,
-                    max_attempts: 1,
-                },
-            ),
-        ] {
-            let (_temp, updater, artifact, _old, _new) = updater_and_artifact(1).await;
-            set_test_failpoint(failpoint);
-            assert!(updater.install(artifact, "1.0.0").await.is_err());
-            set_test_failpoint(TestFailpoint::None);
-            assert_eq!(updater.recover_on_startup(running).await.unwrap(), expected);
-        }
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn failpoint_after_rollback_rename_recovers_idempotently() {
-        let _clear = ClearFailpoint;
-        let (_temp, updater, artifact, old, _new) = updater_and_artifact(1).await;
-        updater.install(artifact, "1.0.0").await.unwrap();
-        updater.recover_on_startup("2.0.0").await.unwrap();
-        set_test_failpoint(TestFailpoint::AfterRollbackRename);
-        assert!(updater.recover_on_startup("2.0.0").await.is_err());
-        set_test_failpoint(TestFailpoint::None);
-        assert!(matches!(
-            updater.recover_on_startup("1.0.0").await.unwrap(),
-            RecoveryAction::RollbackInstalled { .. }
-        ));
-        assert_eq!(std::fs::read(updater.layout().executable()).unwrap(), old);
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn failed_rename_cleanup_is_authoritative_state_first() {
-        let _clear = ClearFailpoint;
-        for (failpoint, expected_backups) in [
-            (TestFailpoint::FailedRenameAfterMarkerCleanup, 1),
-            (TestFailpoint::FailedRenameAfterBackupCleanup, 0),
-        ] {
-            let (_temp, updater, artifact, old, _new) = updater_and_artifact(1).await;
-            set_test_failpoint(failpoint);
-            assert!(updater.install(artifact, "1.0.0").await.is_err());
-            set_test_failpoint(TestFailpoint::None);
-            assert!(!updater.layout().state_file().exists());
-            assert_eq!(std::fs::read(updater.layout().executable()).unwrap(), old);
-            let backup_count = std::fs::read_dir(updater.layout().executable().parent().unwrap())
-                .unwrap()
-                .filter_map(std::result::Result::ok)
-                .filter(|entry| entry.file_name().to_string_lossy().contains(".rollback-"))
-                .count();
-            assert_eq!(backup_count, expected_backups);
-            assert_eq!(
-                updater.recover_on_startup("1.0.0").await.unwrap(),
-                RecoveryAction::NoPendingUpdate
-            );
-        }
-    }
-}
+#[path = "transaction_tests.rs"]
+mod tests;
