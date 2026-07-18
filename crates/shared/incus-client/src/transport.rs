@@ -45,6 +45,15 @@ pub(crate) enum IncusEnvelope {
         etag: Option<String>,
     },
     Async {
+        /// The `Location`-style operation URL Incus returns (e.g.
+        /// `/1.0/operations/<uuid>`). Preserved for wire-protocol fidelity
+        /// with the documented envelope shape, but no code path in this
+        /// crate currently reads it - `operation_from_envelope` derives the
+        /// operation ID from `metadata.id` instead, so the two stay in sync
+        /// without this crate needing to parse the URL. Kept (rather than
+        /// dropped) so a future caller that wants the raw URL - e.g. for a
+        /// diagnostic log line - doesn't require a wire-parsing change.
+        #[allow(dead_code)]
         operation_url: String,
         /// The raw operation JSON object - `crate::operations` deserializes
         /// this into a typed `Operation`. Kept untyped here so this module
