@@ -359,6 +359,12 @@ jobs:
           "RUSTC_WRAPPER=" >> $env:GITHUB_ENV
           "CARGO_BUILD_RUSTC_WRAPPER=" >> $env:GITHUB_ENV
 
+      - name: Check portable self-update library surface
+        shell: pwsh
+        env:
+          RUSTFLAGS: ${{ env.WINDOWS_PORTABLE_RUSTFLAGS }} -D warnings
+        run: cargo check -p soma-self-update --lib --locked
+
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:

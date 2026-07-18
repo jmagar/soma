@@ -9,6 +9,10 @@
 mod directive;
 mod error;
 mod staging;
+#[cfg(unix)]
+mod transaction;
+#[cfg(not(unix))]
+#[path = "transaction_non_unix.rs"]
 mod transaction;
 mod unix;
 mod validation;

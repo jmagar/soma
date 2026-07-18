@@ -48,7 +48,6 @@ struct LayoutPaths {
 }
 
 impl Updater {
-    #[cfg(unix)]
     pub async fn install(
         &self,
         validated: ValidatedArtifact,
@@ -102,106 +101,81 @@ impl Updater {
         })
     }
 
-    #[cfg(not(unix))]
-    pub async fn install(
-        &self,
-        _validated: ValidatedArtifact,
-        _previous_version: impl Into<String>,
-    ) -> Result<InstallOutcome> {
-        Err(UpdateError::UnsupportedPlatform)
-    }
-
     pub async fn recover_on_startup(&self, running_version: &str) -> Result<RecoveryAction> {
-        #[cfg(not(unix))]
-        {
-            let _ = running_version;
-            return Err(UpdateError::UnsupportedPlatform);
+        let paths = self.validated_layout()?;
+        let _lock = self.transaction_lock(&paths.lock)?;
+        let state = paths.state;
+        let marker = read_marker(&state, &paths.executable)?;
+        cleanup_owned_artifacts(
+            &paths.executable,
+            marker.as_ref().map(|marker| marker.backup.as_path()),
+            None,
+        )?;
+        let Some(mut marker) = marker else {
+            return Ok(RecoveryAction::NoPendingUpdate);
+        };
+        if marker.target != running_version {
+            return Err(UpdateError::RunningVersionMismatch {
+                running: running_version.to_owned(),
+                target: marker.target,
+            });
         }
-        #[cfg(unix)]
-        {
-            let paths = self.validated_layout()?;
-            let _lock = self.transaction_lock(&paths.lock)?;
-            let state = paths.state;
-            let marker = read_marker(&state, &paths.executable)?;
-            cleanup_owned_artifacts(
-                &paths.executable,
-                marker.as_ref().map(|marker| marker.backup.as_path()),
-                None,
-            )?;
-            let Some(mut marker) = marker else {
-                return Ok(RecoveryAction::NoPendingUpdate);
-            };
-            if marker.target != running_version {
-                return Err(UpdateError::RunningVersionMismatch {
-                    running: running_version.to_owned(),
-                    target: marker.target,
-                });
-            }
-            marker.attempts = marker.attempts.saturating_add(1);
-            if marker.attempts <= self.policy().max_unconfirmed_restarts() {
-                write_marker(&state, &marker)?;
-                return Ok(RecoveryAction::PendingUpdate {
-                    target: marker.target,
-                    attempts: marker.attempts,
-                    max_attempts: self.policy().max_unconfirmed_restarts(),
-                });
-            }
-            if !marker.backup.is_file() {
-                return Err(UpdateError::MissingRollback {
-                    path: marker.backup,
-                });
-            }
-            std::fs::rename(&marker.backup, &marker.executable)
-                .map_err(|error| UpdateError::io(&marker.executable, error))?;
-            sync_parent(&marker.executable)?;
-            remove_file(&state)?;
-            sync_parent(&state)?;
-            Ok(RecoveryAction::RollbackInstalled {
-                executable: marker.executable,
-                restored_version: marker.previous,
-            })
+        marker.attempts = marker.attempts.saturating_add(1);
+        if marker.attempts <= self.policy().max_unconfirmed_restarts() {
+            write_marker(&state, &marker)?;
+            return Ok(RecoveryAction::PendingUpdate {
+                target: marker.target,
+                attempts: marker.attempts,
+                max_attempts: self.policy().max_unconfirmed_restarts(),
+            });
         }
+        if !marker.backup.is_file() {
+            return Err(UpdateError::MissingRollback {
+                path: marker.backup,
+            });
+        }
+        std::fs::rename(&marker.backup, &marker.executable)
+            .map_err(|error| UpdateError::io(&marker.executable, error))?;
+        sync_parent(&marker.executable)?;
+        remove_file(&state)?;
+        sync_parent(&state)?;
+        Ok(RecoveryAction::RollbackInstalled {
+            executable: marker.executable,
+            restored_version: marker.previous,
+        })
     }
 
     pub async fn confirm_success(&self, running_version: &str) -> Result<ConfirmationOutcome> {
-        #[cfg(not(unix))]
-        {
-            let _ = running_version;
-            return Err(UpdateError::UnsupportedPlatform);
+        let paths = self.validated_layout()?;
+        let _lock = self.transaction_lock(&paths.lock)?;
+        let state = paths.state;
+        let marker = read_marker(&state, &paths.executable)?;
+        cleanup_owned_artifacts(
+            &paths.executable,
+            marker.as_ref().map(|marker| marker.backup.as_path()),
+            None,
+        )?;
+        let Some(marker) = marker else {
+            return Ok(ConfirmationOutcome::NoPendingUpdate);
+        };
+        if marker.target != running_version {
+            return Err(UpdateError::RunningVersionMismatch {
+                running: running_version.to_owned(),
+                target: marker.target,
+            });
         }
-        #[cfg(unix)]
-        {
-            let paths = self.validated_layout()?;
-            let _lock = self.transaction_lock(&paths.lock)?;
-            let state = paths.state;
-            let marker = read_marker(&state, &paths.executable)?;
-            cleanup_owned_artifacts(
-                &paths.executable,
-                marker.as_ref().map(|marker| marker.backup.as_path()),
-                None,
-            )?;
-            let Some(marker) = marker else {
-                return Ok(ConfirmationOutcome::NoPendingUpdate);
-            };
-            if marker.target != running_version {
-                return Err(UpdateError::RunningVersionMismatch {
-                    running: running_version.to_owned(),
-                    target: marker.target,
-                });
-            }
-            if !marker.backup.is_file() {
-                return Err(UpdateError::MissingRollback {
-                    path: marker.backup,
-                });
-            }
-            remove_file(&state)?;
-            sync_parent(&state)?;
-            remove_file(&marker.backup)?;
-            sync_parent(&marker.backup)?;
-            Ok(ConfirmationOutcome::Confirmed {
-                version: running_version.to_owned(),
-            })
+        if !marker.backup.is_file() {
+            return Err(UpdateError::MissingRollback {
+                path: marker.backup,
+            });
         }
+        remove_file(&state)?;
+        sync_parent(&state)?;
+        remove_file(&marker.backup)?;
+        sync_parent(&marker.backup)?;
+        Ok(ConfirmationOutcome::Confirmed {
+            version: running_version.to_owned(),
+        })
     }
 
     fn transaction_lock(&self, lock_path: &Path) -> Result<TransactionLock> {
@@ -419,7 +393,6 @@ fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>
     Ok(Some(marker))
 }
 
-#[cfg(unix)]
 fn cleanup_owned_artifacts(
     executable: &Path,
     protected_backup: Option<&Path>,
