@@ -86,6 +86,16 @@ pub(crate) async fn execute_capped(
     if_match: Option<&str>,
     max_response_bytes: usize,
 ) -> Result<RawResponse> {
+    // Validate everything that gets interpolated into raw request-line/header
+    // text *before* any I/O happens - a caller-supplied string containing
+    // `\r\n` here could otherwise terminate the request early and smuggle a
+    // second, fully attacker-controlled HTTP request onto this connection to
+    // Incus's root-equivalent daemon. See `reject_control_chars`.
+    let request_line = build_request_line(method, path, query)?;
+    if let Some(etag) = if_match {
+        reject_control_chars(etag, "If-Match header value")?;
+    }
+
     check_is_socket(socket_path)?;
     let stream = UnixStream::connect(socket_path)
         .await
@@ -93,7 +103,6 @@ pub(crate) async fn execute_capped(
     let (read_half, mut write_half) = stream.into_split();
     let mut reader = BufReader::new(read_half);
 
-    let request_line = build_request_line(method, path, query);
     write_half
         .write_all(request_line.as_bytes())
         .await
@@ -134,14 +143,44 @@ pub(crate) async fn execute_capped(
     read_response(&mut reader, max_response_bytes).await
 }
 
-fn build_request_line(method: Method, path: &str, query: &[(&str, &str)]) -> String {
+/// Rejects `value` if it contains a CR, LF, or other C0/DEL control
+/// character before it's interpolated into a raw HTTP request line or
+/// header value.
+///
+/// Every resource module builds request paths via `format!("/1.0/.../{name}")`
+/// from caller-supplied identifiers (instance names, image fingerprints,
+/// network/project/pool/volume/snapshot names) with zero encoding, and
+/// `If-Match` is written via `format!("If-Match: {etag}\r\n")` the same way.
+/// Without this check, a caller-supplied string containing `\r\n` could
+/// terminate the request early and smuggle a second, fully
+/// attacker-controlled HTTP request onto the same connection to Incus's
+/// root-equivalent daemon - contrast with the query-string building in this
+/// same module, which already percent-encodes via
+/// `url::form_urlencoded::Serializer` and so isn't vulnerable to this.
+fn reject_control_chars(value: &str, what: &str) -> Result<()> {
+    if value.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return Err(Error::InvalidRequest(format!(
+            "{what} contains a control character (e.g. CR or LF) and cannot be sent as raw \
+             HTTP request text: {value:?}"
+        )));
+    }
+    Ok(())
+}
+
+fn build_request_line(method: Method, path: &str, query: &[(&str, &str)]) -> Result<String> {
+    reject_control_chars(path, "request path")?;
     if query.is_empty() {
-        format!("{} {} HTTP/1.1\r\n", method.as_str(), path)
+        Ok(format!("{} {} HTTP/1.1\r\n", method.as_str(), path))
     } else {
         let query_string = url::form_urlencoded::Serializer::new(String::new())
             .extend_pairs(query)
             .finish();
-        format!("{} {}?{} HTTP/1.1\r\n", method.as_str(), path, query_string)
+        Ok(format!(
+            "{} {}?{} HTTP/1.1\r\n",
+            method.as_str(),
+            path,
+            query_string
+        ))
     }
 }
 

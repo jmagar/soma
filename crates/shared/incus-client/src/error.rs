@@ -35,6 +35,9 @@ pub enum Error {
 
     #[error("precondition failed updating {resource} (stale ETag - re-fetch and retry)")]
     PreconditionFailed { resource: String },
+
+    #[error("invalid request: {0}")]
+    InvalidRequest(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

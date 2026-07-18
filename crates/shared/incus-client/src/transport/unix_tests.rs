@@ -135,6 +135,74 @@ async fn mid_response_disconnect_returns_transport_error_not_a_hang() {
 }
 
 #[tokio::test]
+async fn execute_rejects_crlf_injection_in_path_before_sending_anything() {
+    let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen = seen_request.clone();
+    let (socket_path, _dir) = spawn_fake_daemon(move |req| {
+        *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
+        json_response(
+            "HTTP/1.1 200 OK",
+            r#"{"type":"sync","status":"Success","status_code":200,"metadata":{}}"#,
+        )
+    })
+    .await;
+
+    // An instance name (or any other caller-supplied path segment) carrying
+    // an embedded CRLF sequence could smuggle a second, fully
+    // attacker-controlled request onto the wire if it weren't rejected.
+    let malicious_path =
+        "/1.0/instances/c1\r\n\r\nDELETE /1.0/instances/other HTTP/1.1\r\nHost: localhost\r\n\r\n";
+
+    let result = execute(&socket_path, Method::Get, malicious_path, &[], None, None).await;
+
+    assert!(
+        matches!(result, Err(crate::Error::InvalidRequest(_))),
+        "expected InvalidRequest for a CRLF-injecting path, got {result:?}"
+    );
+    assert!(
+        seen_request.lock().unwrap().is_empty(),
+        "the malicious request must never reach the wire - the daemon should never even see a \
+         connection"
+    );
+}
+
+#[tokio::test]
+async fn execute_rejects_crlf_injection_in_if_match_before_sending_anything() {
+    let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen = seen_request.clone();
+    let (socket_path, _dir) = spawn_fake_daemon(move |req| {
+        *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
+        json_response(
+            "HTTP/1.1 200 OK",
+            r#"{"type":"sync","status":"Success","status_code":200,"metadata":{}}"#,
+        )
+    })
+    .await;
+
+    let malicious_etag =
+        "\"abc\"\r\n\r\nDELETE /1.0/instances/c1 HTTP/1.1\r\nHost: localhost\r\n\r\n";
+
+    let result = execute(
+        &socket_path,
+        Method::Get,
+        "/1.0/instances/c1",
+        &[],
+        None,
+        Some(malicious_etag),
+    )
+    .await;
+
+    assert!(
+        matches!(result, Err(crate::Error::InvalidRequest(_))),
+        "expected InvalidRequest for a CRLF-injecting If-Match value, got {result:?}"
+    );
+    assert!(
+        seen_request.lock().unwrap().is_empty(),
+        "the malicious request must never reach the wire"
+    );
+}
+
+#[tokio::test]
 async fn constructing_client_with_a_non_socket_path_fails_fast() {
     let dir = tempfile::tempdir().expect("create temp dir");
     let regular_file = dir.path().join("not-a-socket.txt");
