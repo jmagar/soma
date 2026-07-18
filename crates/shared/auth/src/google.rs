@@ -15,6 +15,10 @@ const GOOGLE_AUTHORIZE_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2
 const GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const GOOGLE_JWKS_ENDPOINT: &str = "https://www.googleapis.com/oauth2/v3/certs";
 const GOOGLE_ISSUER: &str = "https://accounts.google.com";
+/// Google ID tokens can also carry this bare-form issuer (no scheme) —
+/// accepted alongside [`GOOGLE_ISSUER`] to preserve pre-extraction behavior
+/// (`google.rs`'s `verify_id_token` used to check both forms directly).
+const GOOGLE_ISSUER_ALT: &str = "accounts.google.com";
 const GOOGLE_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
@@ -55,13 +59,7 @@ impl GoogleProvider {
         client_secret: String,
         redirect_uri: Url,
     ) -> Result<Self, AuthError> {
-        // rmcp's HTTP transport (and, transitively, reqwest) requires a rustls
-        // crypto provider to be installed before the first TLS-capable client
-        // is built. The real binary installs one at startup; test binaries
-        // never go through that path, so this call is also needed here.
-        // Idempotent — an `Err` just means a provider is already installed,
-        // safe to ignore.
-        drop(rustls::crypto::ring::default_provider().install_default());
+        crate::provider_http::install_rustls_default_once();
         let http = reqwest::Client::builder()
             .timeout(GOOGLE_HTTP_TIMEOUT)
             .build()
@@ -80,7 +78,8 @@ impl GoogleProvider {
             GOOGLE_ISSUER.to_string(),
             jwks_endpoint,
             http.clone(),
-        );
+        )
+        .with_alt_issuer(GOOGLE_ISSUER_ALT);
 
         Ok(Self {
             client_id,
@@ -352,6 +351,26 @@ mod tests {
         );
     }
 
+    /// Regression test for the alt-issuer fix: pre-extraction `google.rs`
+    /// accepted ID tokens carrying either the `https://accounts.google.com`
+    /// form OR the bare `accounts.google.com` form. Prove the bare form is
+    /// still accepted after the `OidcVerifier` extraction, not just that it
+    /// isn't rejected.
+    #[tokio::test]
+    async fn google_exchange_accepts_bare_form_issuer_in_id_token() {
+        let provider = mocked_google_provider_with_id_token(signed_test_id_token_with_issuer(
+            "client-id",
+            "accounts.google.com",
+        ))
+        .await;
+        let exchange = provider.exchange_code("code", "verifier").await;
+        assert!(
+            exchange.is_ok(),
+            "bare-form issuer must be accepted: {exchange:?}"
+        );
+        assert_eq!(exchange.unwrap().subject, "google-subject-123");
+    }
+
     #[tokio::test]
     async fn google_exchange_reuses_cached_jwks() {
         let server = MockServer::start().await;
@@ -504,8 +523,25 @@ mod tests {
     }
 
     fn signed_test_id_token(client_id: &str, expired: bool, valid_issuer: bool) -> String {
+        let issuer = if valid_issuer {
+            "https://accounts.google.com"
+        } else {
+            "https://evil.example.com"
+        };
+        signed_test_id_token_with_issuer_and_expiry(client_id, issuer, expired)
+    }
+
+    fn signed_test_id_token_with_issuer(client_id: &str, issuer: &str) -> String {
+        signed_test_id_token_with_issuer_and_expiry(client_id, issuer, false)
+    }
+
+    fn signed_test_id_token_with_issuer_and_expiry(
+        client_id: &str,
+        issuer: &str,
+        expired: bool,
+    ) -> String {
         let claims = json!({
-            "iss": if valid_issuer { "https://accounts.google.com" } else { "https://evil.example.com" },
+            "iss": issuer,
             "aud": client_id,
             "sub": "google-subject-123",
             "email": "user@example.com",
