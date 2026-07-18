@@ -1,14 +1,14 @@
-//! Generic manifest -> concrete-provider dispatch, factored out of
-//! soma-service's drop-in provider directory loader
-//! (`crates/soma/service/src/providers/filesystem.rs`'s `provider_for_catalog`
-//! function). Given an already-parsed, already-validated `ProviderManifest`
-//! and the file it came from, builds the matching adapter for its declared
-//! `ProviderKind`.
+//! Generic manifest -> concrete-provider dispatch, factored out of Soma's
+//! drop-in provider directory loader
+//! (`FileProviderSource::provider_for_catalog`, now in
+//! `crates/soma/application/src/providers/filesystem.rs`). Given an
+//! already-parsed, already-validated `ProviderManifest` and the file it came
+//! from, builds the matching adapter for its declared `ProviderKind`.
 //!
 //! The directory scan, fingerprinting, and Soma-specific manifest policy
 //! (reserved CLI command names, `SOMA_`/`LAB_` env-prefix denial) stay in
-//! soma-service — see the PR10 deviation notes for why that orchestration
-//! did not move here.
+//! `crates/soma/application` — see the PR10 deviation notes for why that
+//! orchestration did not move here.
 
 use std::path::PathBuf;
 

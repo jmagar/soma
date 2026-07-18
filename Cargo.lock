@@ -150,9 +150,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.17.1"
+version = "1.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4342d8937fc7e5dd9b1c60292261c0670c882a2cd1719cfc11b1af41731e32ad"
+checksum = "00bdb5da18dac48ca2cc7cd4a98e533e8635a58e2361d13a1a4ee3888e0d72f1"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -160,9 +160,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.42.0"
+version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d9ceb1da931507a12f4fccea479dccd00da1943e1b4ae72d8e502d707361444"
+checksum = "43103168cc76fe62678a375e722fc9cb3a0146159ac5828bc4f0dfd755c2224c"
 dependencies = [
  "cc",
  "cmake",
@@ -496,9 +496,9 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cfg_aliases"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "chacha20"
@@ -3757,9 +3757,9 @@ dependencies = [
 
 [[package]]
 name = "portable-atomic"
-version = "1.13.1"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
+checksum = "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3"
 
 [[package]]
 name = "postcard"
@@ -5214,7 +5214,6 @@ dependencies = [
  "soma-provider-adapters",
  "soma-provider-core",
  "soma-runtime",
- "soma-service",
  "soma-test-support",
  "soma-web",
  "tempfile",
@@ -5247,14 +5246,21 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
+ "jsonschema",
+ "metrics",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "soma-client",
  "soma-config",
  "soma-domain",
+ "soma-provider-adapters",
  "soma-provider-core",
- "soma-service",
+ "tempfile",
  "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -5305,7 +5311,6 @@ dependencies = [
  "soma-domain",
  "soma-provider-core",
  "soma-runtime",
- "soma-service",
  "soma-test-support",
  "tempfile",
  "tokio",
@@ -5369,16 +5374,6 @@ dependencies = [
  "serde_json",
  "serial_test",
  "toml 1.1.3+spec-1.1.0",
-]
-
-[[package]]
-name = "soma-contracts"
-version = "0.4.1"
-dependencies = [
- "serde_json",
- "soma-config",
- "soma-domain",
- "soma-provider-core",
 ]
 
 [[package]]
@@ -5452,24 +5447,15 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum",
  "futures",
- "reqwest 0.13.4",
  "serde_json",
  "soma-application",
  "soma-auth",
- "soma-client",
  "soma-codemode",
- "soma-config",
  "soma-domain",
  "soma-gateway",
- "soma-mcp",
  "soma-mcp-client",
- "soma-runtime",
- "soma-service",
- "tempfile",
  "tokio",
- "tower",
  "tracing",
 ]
 
@@ -5636,39 +5622,21 @@ name = "soma-runtime"
 version = "0.4.1"
 dependencies = [
  "anyhow",
+ "axum",
+ "reqwest 0.13.4",
+ "serde_json",
  "soma-application",
  "soma-auth",
- "soma-config",
- "soma-domain",
- "soma-gateway",
- "soma-mcp-server",
- "tempfile",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "soma-service"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum",
- "base64 0.22.1",
- "jsonschema",
- "metrics",
- "serde",
- "serde_json",
- "sha2 0.11.0",
  "soma-client",
  "soma-config",
  "soma-domain",
- "soma-observability",
- "soma-provider-adapters",
- "soma-provider-core",
+ "soma-gateway",
+ "soma-integrations",
+ "soma-mcp",
+ "soma-mcp-server",
  "tempfile",
  "tokio",
+ "tower",
  "tracing",
  "url",
 ]
@@ -5698,7 +5666,6 @@ dependencies = [
  "soma-client",
  "soma-config",
  "soma-provider-core",
- "soma-service",
  "tracing",
  "tracing-subscriber",
 ]
@@ -6351,9 +6318,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.52.3"
+version = "1.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
+checksum = "d988bcd52dbe076d3d46903332f58c912b87a2c49b1428419a5845154762ffee"
 dependencies = [
  "bytes",
  "libc",
@@ -6368,9 +6335,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.7.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+checksum = "6328af13490e73a9b4694030fafd93f8c8c6a9dede33e821c3fc63eddf8042ba"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8052,11 +8019,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "soma-application",
  "soma-client",
  "soma-config",
  "soma-domain",
  "soma-provider-core",
- "soma-service",
  "tempfile",
  "toml 1.1.3+spec-1.1.0",
  "typify",

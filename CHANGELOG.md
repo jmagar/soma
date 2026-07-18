@@ -322,8 +322,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `soma-auth`'s default auth-database directory is now `~/.soma` instead of
   the inherited `~/.lab`.
 
+### Removed
+
+- Deleted `crates/soma/service` and `crates/soma/contracts` (plan PR 19,
+  "Delete legacy facades and update ecosystem artifacts"), the two legacy
+  strangler-pattern crates every prior slice (PR 4-13) migrated surfaces off
+  of. `crates/soma/contracts` was already a pure deprecated re-export facade
+  (PR 13 had moved its real content to `soma-domain`, `soma-config`, and
+  `soma-provider-core`), so deleting it needed no consumer changes.
+  `crates/soma/service` still owned unmigrated business logic — `SomaService`,
+  the product-policy `ProviderRegistry`, `CapabilityBroker`, and the
+  filesystem/remote/static-Rust drop-in providers — left over from an
+  unfinished PR 12; that code moved into `soma-application`
+  (`crates/soma/application/src/{service,provider_registry,capabilities,provider_errors,providers}.rs`)
+  before the crate was deleted. `apps/soma`'s public `app` module keeps
+  re-exporting `SomaService` from `soma-application` so the documented
+  `soma::app::SomaService` path is unaffected.
+- Removed both entries from `xtask/src/architecture.rs`'s
+  `TEMPORARY_EXCEPTIONS` (the `soma-application -> soma-service` strangler
+  edge and the `soma-runtime -> crates/shared/mcp/gateway` edge, both
+  self-documented as removable once their underlying crates/composition
+  settled). `cargo xtask check-architecture` now runs with zero exceptions —
+  the architecture checker's rules were updated alongside the deletion:
+  `soma-application` may depend on `soma-client` (a `product-support` crate;
+  previously blanket-forbidden, but this is PR 12's intended permanent
+  destination for the remote Soma HTTP client, not a migration artifact), and
+  `soma-runtime` (`product-runtime`) joins `app` and `product-integration` as
+  a legitimate application-port/concrete-engine bridge layer, since it
+  intentionally bundles the initialized `SomaApplication` handle with
+  `GatewayProductState` for every surface's `AppState`.
+
 ### Fixed
 
+- PR19 review fix (second pass): fixed a stale sidecar-test comment in
+  `crates/soma/application/src/service.rs` that still pointed at the deleted
+  `app_tests.rs` name instead of `service_tests.rs`; corrected an
+  `apps/soma/src/lib.rs` doc comment that attributed `SomaService`'s move
+  into `soma-application` to PR 12 (PR 12 only extracted provider-catalog
+  contracts into `soma-provider-core`; `SomaService`/`ProviderRegistry`
+  itself moved in PR 19, per the plan's own execution ledger); corrected the
+  plan's PR 12 ledger row to match; synced `docs/ARCHITECTURE.md` and
+  `docs/PATTERNS.md`'s module-layout trees (missing `soma-provider-core` in
+  `xtask`'s dependency list, missing `palette`/`cli-core`/`http-api`/
+  `http-server`/`provider-adapters`/`provider-core`/`tauri-shell` rows,
+  misaligned arrows, stale `last_reviewed` date). Also regenerated
+  `apps/palette/src-tauri/Cargo.lock` (a separate Cargo workspace this PR's
+  ecosystem-artifact sweep missed): it still resolved `soma-service` as a
+  dependency of `soma-application` from before the crate was deleted.
+- PR19 review fix: `protected_routes.rs` and `protected_routes_proxy.rs`
+  (moved to `crates/soma/integrations` as a PR 18 review fix behind a
+  `protected-http` feature) made `soma-integrations` optionally depend on
+  `soma-runtime` and `soma-mcp`, inverting plan section 3.20's target
+  dependency shape (`soma-integrations` depends on application ports and
+  concrete shared engines only — auth, observability, client,
+  provider-adapters, gateway, codemode, openapi — never the runtime or
+  surface layers built on top of it) and contradicting this crate's own
+  `gateway.rs`, whose comment explicitly limits the crate's dependency
+  shape to `soma-application`, `soma-domain`, and `soma-gateway` for exactly
+  this reason. Moved both modules again, this time to `crates/soma/runtime`
+  behind that crate's existing `protected-routes` feature (previously used
+  only to forward `soma-gateway/protected-routes`; `AppState` already
+  exposed `resolve_protected_route`/`resolve_protected_route_metadata`/
+  `protected_route_list` under it, and `soma-runtime` already owned
+  `AuthPolicy`/`build_auth_layer`). `soma-runtime` now additionally depends
+  on `soma-mcp` (a `product-surface` crate) under `protected-routes` alone,
+  for `McpState` and the Streamable HTTP router the gateway-subset dispatch
+  path nests. `soma-integrations`'s `protected-http` feature and its
+  exclusive `axum`/`reqwest`/`soma-mcp`/`soma-runtime`/`tower` dependencies
+  are removed entirely. `apps/soma/src/http.rs` now wires
+  `soma_runtime::protected_routes::*` instead of `soma_integrations::
+  protected_routes::*`; no behavior change (bodies are unmodified, only
+  import paths). Also hardened `xtask/src/architecture.rs`'s
+  `check_layer_edge` to fail any `product-integration -> product-runtime`
+  or `product-integration -> product-surface` edge, since neither
+  `check_layer_edge` nor `check_mixed_application_and_engine_edges`
+  previously caught this class of inversion; added
+  `product_integration_cannot_depend_on_runtime_or_surface_crates` to
+  `xtask/src/architecture_tests.rs` covering both target layers.
 - PR18 review fix (second pass): `apps/soma/src/invocation.rs`'s `Mode` enum
   split into `Mode::Exit(ExitAction)` / `Mode::Dispatch(DispatchMode)` so
   `lib.rs::run()` no longer needs an `unreachable!()` backstop for the

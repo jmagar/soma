@@ -1,10 +1,12 @@
 //! Structured tool/service error DTO shared by REST and MCP error rendering.
 //!
-//! Lives beside `actions.rs` in `soma-domain` for the same cycle-avoidance
-//! reason: `ToolError` is constructed from `soma-service` (via
-//! `classify_service_error`) and consumed directly by `soma-mcp` — which is
-//! forbidden from depending on `soma-service` at all — so it must sit at or
-//! below both in the dependency graph.
+//! Lives beside `actions.rs` in `soma-domain`: `ToolError`/`ServiceErrorKind`
+//! are produced in `soma-application` (via `classify_service_error`) but the
+//! *shape* is consumed directly by `soma-mcp` (`protocol_errors.rs`) and
+//! `soma-cli` for rendering, independent of whichever layer classified the
+//! error. `soma-domain` is the lowest common ancestor every consumer
+//! (application, api, cli, mcp, integrations, runtime, apps/soma) can depend
+//! on without cycles.
 
 use serde::Serialize;
 use serde_json::{json, Value};

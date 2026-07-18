@@ -163,6 +163,14 @@ pub(crate) enum Layer {
     ProductRuntime,
     ProductSurface,
     ProductSupport,
+    // PR 19 deleted `crates/soma/contracts` and `crates/soma/service`, the
+    // last two product crates that lived in this bucket (plan section "PR 19:
+    // Delete legacy facades"). `xtask` is the sole remaining member: it is
+    // build tooling, not a shipped product/shared crate, so it does not fit
+    // any layer in the product taxonomy above and keeps its own bucket. Any
+    // future `crates/soma/*` path that is not yet added to the match arms
+    // above also falls back here as a safety net (see the wildcard arm
+    // below) until it is classified.
     Legacy,
 }
 
@@ -182,7 +190,7 @@ impl Layer {
             "crates/soma/test-support" | "crates/soma/client" | "crates/soma/config" => {
                 Some(Self::ProductSupport)
             }
-            "crates/soma/contracts" | "crates/soma/service" | "xtask" => Some(Self::Legacy),
+            "xtask" => Some(Self::Legacy),
             path if path.starts_with("crates/shared/") => Some(Self::Shared),
             path if path.starts_with("crates/soma/") => Some(Self::Legacy),
             _ => None,

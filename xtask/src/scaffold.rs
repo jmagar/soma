@@ -334,7 +334,7 @@ impl ActionManifest {
         output.push_str(&self.render_tools_snippet());
         output.push_str("```\n\n### crates/soma/cli/src/lib.rs\n\n```rust\n");
         output.push_str(&self.render_cli_snippet());
-        output.push_str("```\n\n### crates/soma/service/src/app.rs\n\n```rust\n");
+        output.push_str("```\n\n### crates/soma/application/src/service.rs\n\n```rust\n");
         output.push_str(&self.render_service_snippet(service_type));
         output.push_str("```\n\n### tests\n\n");
         output.push_str(&self.render_tests_guide());
@@ -439,7 +439,7 @@ impl ActionManifest {
             .push_str("- `apps/soma/tests/tool_dispatch.rs`: MCP success and validation paths.\n");
         output.push_str("- `apps/soma/tests/cli_parse.rs`: CLI command/flag parsing.\n");
         output.push_str(
-            "- Service-layer tests near `crates/soma/service/src/app.rs` or focused modules.\n",
+            "- Service-layer tests near `crates/soma/application/src/service.rs` or focused modules.\n",
         );
         output.push_str(&format!(
             "- Actions: {}\n",
@@ -1142,7 +1142,7 @@ fn render_adapt_plan(root: &Path) -> Result<String> {
 
     output.push_str("\n## 1. Domain and config\n\n");
     output.push_str("- Replace the stub client in `crates/soma/client/src/client.rs`.\n");
-    output.push_str("- Put validation, defaults, retries, caching, and domain rules in `crates/soma/service/src/app.rs` or focused modules under `crates/soma/service/src/`.\n");
+    output.push_str("- Put validation, defaults, retries, caching, and domain rules in `crates/soma/application/src/service.rs` or focused modules under `crates/soma/application/src/`.\n");
     output.push_str(
         "- Update config structs and env prefixes in `crates/soma/config/src/config.rs`.\n",
     );

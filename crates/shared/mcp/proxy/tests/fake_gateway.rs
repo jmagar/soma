@@ -4,8 +4,8 @@
 //! on, or even knowing about, any Soma product crate.
 //!
 //! This file only pulls in `soma_mcp_client`, `soma_mcp_proxy`, and
-//! `serde_json` — no `soma-domain`, `soma-application`, `soma-contracts`,
-//! `soma-mcp`, or `soma-gateway` symbol appears anywhere below.
+//! `serde_json` — no `soma-domain`, `soma-application`, `soma-mcp`, or
+//! `soma-gateway` symbol appears anywhere below.
 
 use soma_mcp_client::{
     config::UpstreamConfig,

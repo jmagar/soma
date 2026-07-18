@@ -139,7 +139,7 @@ $ soma thing 42 --json
 When adding an action, update:
 
 - `crates/soma/domain/src/actions.rs` for metadata, validation, and native dispatch
-- `crates/soma/service/src/app.rs` for business behavior
+- `crates/soma/application/src/service.rs` for business behavior
 - Generated MCP schema docs and OpenAPI after the registry changes
 - `apps/soma/tests/tool_dispatch.rs`, CLI tests, and REST route tests
 - `docs/MCP_SCHEMA.md`

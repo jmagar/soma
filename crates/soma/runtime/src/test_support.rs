@@ -3,25 +3,25 @@
 //! `AppState` wired to a single protected MCP route, and a real
 //! `ProtectedMcpState` for driving `protected_mcp_intercept` end to end.
 //!
-//! `soma-service`/`soma-client`/`soma-config`/`tempfile` are dev-dependencies
-//! only (see `Cargo.toml`) — `cargo xtask check-architecture` only walks
+//! `soma-client`/`soma-integrations`/`tempfile` are dev-dependencies only
+//! (see `Cargo.toml`) — `cargo xtask check-architecture` only walks
 //! `normal`-kind dependency edges, so this does not create a
-//! product-integration -> legacy/product-support layer edge for real builds.
+//! product-runtime -> product-integration layer edge for real builds.
 #![cfg(test)]
 
 use std::sync::Arc;
 
-use soma_application::{ApplicationPorts, SomaApplication};
+use soma_application::{ApplicationPorts, SomaApplication, SomaService};
 use soma_auth::jwt::AccessClaims;
 use soma_auth::state::AuthState;
 use soma_client::SomaClient;
 use soma_config::{McpConfig, SomaConfig};
 use soma_gateway::config::{GatewayConfig, ProtectedMcpRouteConfig};
 use soma_mcp::McpState;
-use soma_runtime::server::{
+
+use crate::server::{
     gateway_product_state_from_config, AppState, AuthPolicy, GatewayProductState, SomaRuntime,
 };
-use soma_service::SomaService;
 
 /// Issuer used by every test token/route pair — matches `route().public_host`.
 pub(crate) const ISSUER: &str = "https://mcp.example.com";
@@ -83,7 +83,7 @@ pub(crate) async fn auth_state(data_dir: &std::path::Path) -> Arc<AuthState> {
             data_dir.join("auth-jwt.pem").display().to_string(),
         ),
     ];
-    let auth_config = crate::auth::soma_auth_config_builder()
+    let auth_config = soma_integrations::auth::soma_auth_config_builder()
         .build_from_sources(vars)
         .expect("test auth config should build");
     Arc::new(
@@ -102,12 +102,14 @@ pub(crate) fn mounted_app_state(
 ) -> AppState {
     let service = stub_service();
     let provider_registry =
-        soma_service::static_provider_registry(service.clone()).expect("static registry");
+        soma_application::static_provider_registry(service.clone()).expect("static registry");
     let ports = ApplicationPorts::unavailable()
-        .with_gateway(Arc::new(crate::GatewayApplicationPort::new(
+        .with_gateway(Arc::new(soma_integrations::GatewayApplicationPort::new(
             gateway.clone(),
         )))
-        .with_codemode(Arc::new(crate::CodeModeApplicationPort::default()));
+        .with_codemode(Arc::new(
+            soma_integrations::CodeModeApplicationPort::default(),
+        ));
     let application = Arc::new(SomaApplication::new(
         Arc::new(service),
         Arc::new(provider_registry),

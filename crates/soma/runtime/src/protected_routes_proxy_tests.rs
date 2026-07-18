@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use soma_gateway::config::{GatewayConfig, ProtectedMcpRouteConfig, UpstreamConfig};
-use soma_runtime::server::gateway_product_state_from_config;
 
+use crate::server::{gateway_product_state_from_config, AppState};
 use crate::test_support;
 
 use super::{append_proxy_suffix, configured_bearer_token, protected_route_upstream_target};
@@ -44,7 +44,7 @@ fn route_with(backend_url: &str, upstream: Option<&str>) -> ProtectedMcpRouteCon
     }
 }
 
-fn app_state_with_upstreams(upstreams: Vec<UpstreamConfig>) -> soma_runtime::server::AppState {
+fn app_state_with_upstreams(upstreams: Vec<UpstreamConfig>) -> AppState {
     let gateway = gateway_product_state_from_config(GatewayConfig {
         upstream: upstreams,
         protected_mcp_routes: vec![test_support::route()],

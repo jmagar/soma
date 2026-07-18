@@ -1,18 +1,17 @@
 use std::{fs, path::Path};
 
 use serde_json::json;
-use soma_domain::provider_validation::validate_provider_manifest_value;
-use soma_provider_adapters::openapi::OpenApiProvider;
-use soma_provider_core::{
-    CapabilityGrant, Provider as CoreProvider, ProviderCall as CoreProviderCall,
-};
-use soma_service::{
+use soma_application::{
     capabilities::CapabilityBroker,
     provider_registry::{
         ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry, ProviderRequestLimits,
         ProviderSurface, SharedAdapter,
     },
 };
+use soma_domain::provider_validation::validate_provider_manifest_value;
+use soma_provider_adapters::openapi::OpenApiProvider;
+use soma_provider_core::CapabilityGrant;
+use soma_provider_core::{Provider as CoreProvider, ProviderCall as CoreProviderCall};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,

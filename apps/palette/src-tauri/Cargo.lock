@@ -4225,11 +4225,17 @@ version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
+ "jsonschema",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
+ "soma-client",
  "soma-domain",
+ "soma-provider-adapters",
  "soma-provider-core",
- "soma-service",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -4398,27 +4404,6 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "soma-service"
-version = "0.4.1"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.22.1",
- "jsonschema",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "soma-client",
- "soma-domain",
- "soma-provider-adapters",
- "soma-provider-core",
- "tempfile",
- "tokio",
- "tracing",
- "url",
 ]
 
 [[package]]
@@ -4885,19 +4870,6 @@ dependencies = [
  "dunce",
  "embed-resource",
  "toml 1.1.2+spec-1.1.0",
-]
-
-[[package]]
-name = "tempfile"
-version = "3.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
-dependencies = [
- "fastrand",
- "getrandom 0.4.2",
- "once_cell",
- "rustix",
- "windows-sys 0.61.2",
 ]
 
 [[package]]

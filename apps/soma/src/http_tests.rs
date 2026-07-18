@@ -409,8 +409,7 @@ async fn unmatched_route_returns_the_not_found_envelope() {
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should read");
-        let body: serde_json::Value =
-            serde_json::from_slice(&bytes).expect("body should be json");
+        let body: serde_json::Value = serde_json::from_slice(&bytes).expect("body should be json");
         assert_eq!(body["error"], "not_found");
     }
 }

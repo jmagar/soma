@@ -5,16 +5,16 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::json;
-use soma_provider_core::{
-    McpOverlay, ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderPrompt,
-    ProviderTool,
-};
-use soma_service::{
+use soma_application::{
     provider_registry::{
         Provider, ProviderAuthMode, ProviderCall, ProviderOutput, ProviderPrincipal,
         ProviderRegistry, ProviderRequestLimits, ProviderSurface,
     },
     ProviderError,
+};
+use soma_provider_core::{
+    McpOverlay, ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderPrompt,
+    ProviderTool,
 };
 
 struct PreExtractionProvider;

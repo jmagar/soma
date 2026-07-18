@@ -31,7 +31,8 @@ use soma_gateway::gateway::{
 
 /// `soma-gateway`'s `GatewayProductState` is `Arc<GatewayManager>` — this
 /// adapter takes the manager directly rather than depending on `soma-runtime`
-/// just for that type alias.
+/// for the type alias, keeping this crate's dependency shape limited to
+/// `soma-application`, `soma-domain`, and `soma-gateway`.
 pub struct GatewayApplicationPort {
     gateway: Arc<GatewayManager>,
 }

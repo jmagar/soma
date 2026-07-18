@@ -1,9 +1,9 @@
-//! Unit tests for SomaService — sidecar file for src/app.rs
+//! Unit tests for SomaService — sidecar file for src/service.rs
 //!
-//! Declared in app.rs as:
+//! Declared in service.rs as:
 //! ```rust
 //! #[cfg(test)]
-//! #[path = "app_tests.rs"]
+//! #[path = "service_tests.rs"]
 //! mod tests;
 //! ```
 //!

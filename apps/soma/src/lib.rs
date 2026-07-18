@@ -33,9 +33,16 @@ pub use soma_mcp as mcp;
 pub use soma_observability::binary_status;
 #[cfg(feature = "observability")]
 pub use soma_observability::logging;
-pub use soma_service::app;
 #[cfg(feature = "web")]
 pub use soma_web as web;
+
+/// Business-logic facade. `SomaService` now lives in `soma-application`
+/// (plan section PR 19, which finished moving it out of the deleted
+/// `crates/soma/service`); this module preserves the `soma::app::SomaService`
+/// path for callers that have not migrated their import yet.
+pub mod app {
+    pub use soma_application::SomaService;
+}
 
 #[cfg(any(
     feature = "cli",
@@ -131,10 +138,10 @@ pub mod testing {
         server::{AppState, AuthPolicy, GatewayProductState},
         soma::SomaClient,
     };
+    use soma_application::ProviderRegistry;
     use soma_runtime::server::empty_gateway_product_state;
     #[cfg(feature = "auth")]
     use soma_runtime::server::gateway_product_state_from_config;
-    use soma_service::ProviderRegistry;
 
     fn stub_service() -> SomaService {
         let client = SomaClient::new(&SomaConfig {
@@ -162,7 +169,7 @@ pub mod testing {
     pub fn loopback_state() -> AppState {
         let service = stub_service();
         let provider_registry =
-            soma_service::static_provider_registry(service.clone()).expect("static registry");
+            soma_application::static_provider_registry(service.clone()).expect("static registry");
         state(
             McpConfig::default(),
             AuthPolicy::LoopbackDev,
@@ -187,7 +194,7 @@ pub mod testing {
     pub fn bearer_state(token: &str) -> AppState {
         let service = stub_service();
         let provider_registry =
-            soma_service::static_provider_registry(service.clone()).expect("static registry");
+            soma_application::static_provider_registry(service.clone()).expect("static registry");
         state(
             McpConfig {
                 api_token: Some(token.to_string()),
@@ -230,7 +237,7 @@ pub mod testing {
         let auth_state = build_auth_state(data_dir).await;
         let service = stub_service();
         let provider_registry =
-            soma_service::static_provider_registry(service.clone()).expect("static registry");
+            soma_application::static_provider_registry(service.clone()).expect("static registry");
         state(
             McpConfig {
                 auth: soma_config::AuthConfig {

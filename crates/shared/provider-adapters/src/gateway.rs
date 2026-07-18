@@ -611,12 +611,15 @@ fn expand_env_templates(value: &str) -> Result<String, String> {
 /// through the same drop-in-provider-shaped surface as every other adapter
 /// in this crate.
 ///
-/// This is a pure catalog *projection*, not a wired dispatcher: no
-/// `soma-service` deployment currently constructs a live `soma_gateway`
-/// manager instance, so there is nothing for a `call()` implementation to
-/// dispatch through yet. Wiring a live dispatcher is deferred to whichever
-/// product integration crate first constructs a running gateway (tracked as
-/// a PR10 follow-up) — see the module-level deviation notes.
+/// This is a pure catalog *projection*, not a wired dispatcher: this crate
+/// has no `call()` implementation that dispatches through a live
+/// `soma_gateway` manager instance — `crates/soma/runtime` constructs the
+/// live `GatewayProductState`/`GatewayManager` and `crates/soma/integrations`
+/// wires it to `SomaApplication`'s gateway port, but neither routes back
+/// through this projection. Wiring this catalog to a live dispatcher is
+/// deferred to whichever product integration crate needs a drop-in-provider
+/// view of gateway administration (tracked as a PR10 follow-up) — see the
+/// module-level deviation notes.
 ///
 /// Returns `Err` if `provider_id` is not a valid `ProviderId` (lowercase,
 /// `[a-z0-9-_]`, no leading/trailing/doubled separators) rather than

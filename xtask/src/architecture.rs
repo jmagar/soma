@@ -6,53 +6,23 @@ use std::process::Command;
 
 pub(crate) use crate::architecture_graph::{Edge, Graph, Layer, Package};
 
-const APPLICATION_PORT_PATHS: &[&str] = &["crates/soma/application", "crates/soma/service"];
+const APPLICATION_PORT_PATHS: &[&str] = &["crates/soma/application"];
 const CONCRETE_SHARED_ENGINE_PATHS: &[&str] = &[
     "crates/shared/codemode",
     "crates/shared/mcp/gateway",
     "crates/shared/openapi",
 ];
 const MCP_SURFACE_PATH: &str = "crates/soma/mcp";
-const MCP_FORBIDDEN_DIRECT_DEPENDENCIES: &[&str] = &[
-    "crates/soma/service",
-    "crates/soma/runtime",
-    "crates/shared/mcp/gateway",
-];
+const MCP_FORBIDDEN_DIRECT_DEPENDENCIES: &[&str] =
+    &["crates/soma/runtime", "crates/shared/mcp/gateway"];
 
-// `crates/soma/contracts` is a deprecated compatibility facade (plan section
-// 6.2, PR 13): it re-exports soma-domain/soma-config/soma-provider-core for
-// one migration window and PR 19 deletes it. It shares the broad `Legacy`
-// layer with `crates/soma/service` (still a legitimate strangler-pattern
-// dependency for several surfaces), so the general layer-edge checks below
-// cannot forbid `Legacy` outright without also forbidding soma-service.
-// Name the facade explicitly instead: no package may depend on it going
-// forward. See soma-architecture-refactor-plan-v3.md PR 13 acceptance:
-// "No production crate depends on soma-contracts."
-const DEPRECATED_CONTRACTS_FACADE_PATH: &str = "crates/soma/contracts";
-
-const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[
-    ArchitectureException {
-        from_path: "crates/soma/application",
-        to_path: "crates/soma/service",
-        owner: "architecture-refactor",
-        reason: "the application facade delegates to the legacy service during strangler migration",
-        removal_pr: "PR 12",
-        expiration_milestone: "legacy service decomposition",
-    },
-    // The "application -> contracts" exception (legacy provider catalog
-    // values) is removed as of PR 13: soma-application now depends directly
-    // on soma-provider-core and soma-domain instead of routing through the
-    // soma-contracts facade, so soma-contracts has no incoming edge from
-    // soma-application to except.
-    ArchitectureException {
-        from_path: "crates/soma/runtime",
-        to_path: "crates/shared/mcp/gateway",
-        owner: "architecture-refactor",
-        reason: "runtime still composes the legacy service and shared gateway during migration",
-        removal_pr: "PR 8",
-        expiration_milestone: "runtime migration to SomaApplication",
-    },
-];
+// PR 19 deleted `crates/soma/service` and `crates/soma/contracts` (plan
+// section "PR 19: Delete legacy facades"): the legacy strangler-pattern
+// dependency and deprecated compatibility facade both no longer exist, so
+// there is nothing left to name here. `TEMPORARY_EXCEPTIONS` is empty —
+// `cargo xtask check-architecture` runs with zero exceptions (plan section
+// 13, "Legacy removal: architecture checker has no temporary exceptions").
+const TEMPORARY_EXCEPTIONS: &[ArchitectureException] = &[];
 
 #[derive(Debug)]
 pub(crate) struct ArchitectureException {
@@ -159,14 +129,6 @@ fn check_direct_edges(graph: &Graph, exceptions: &[ArchitectureException]) -> Ve
                 graph.edge_label(edge)
             ));
         }
-        if to.rel_path == DEPRECATED_CONTRACTS_FACADE_PATH {
-            failures.push(format!(
-                "{} ({}) depends on the deprecated soma-contracts facade; depend on soma-domain/soma-config/soma-provider-core directly (plan section 6.2, PR 13 acceptance)\n  edge: {}",
-                from.name,
-                from.rel_path,
-                graph.edge_label(edge)
-            ));
-        }
         if from.layer == Layer::Shared && to.layer != Layer::Shared {
             failures.push(format!(
                 "shared package {} ({}) depends on non-shared package {} ({})\n  edge: {}",
@@ -203,11 +165,10 @@ fn check_layer_edge(graph: &Graph, edge: &Edge, from: &Package, to: &Package) ->
                 | Layer::ProductIntegration
                 | Layer::ProductRuntime
                 | Layer::ProductSurface
-                | Layer::ProductSupport
         ) || is_concrete_shared_engine(to))
     {
         failures.push(format!(
-            "product-application packages must not depend on app/legacy/integration/runtime/surface/support/concrete engines without a live exception\n  edge: {}",
+            "product-application packages must not depend on app/legacy/integration/runtime/surface/concrete engines without a live exception\n  edge: {}",
             graph.edge_label(edge)
         ));
     }
@@ -215,6 +176,24 @@ fn check_layer_edge(graph: &Graph, edge: &Edge, from: &Package, to: &Package) ->
     if from.layer == Layer::ProductSurface && to.layer == Layer::ProductSurface {
         failures.push(format!(
             "product-surface packages must not depend on one another\n  edge: {}",
+            graph.edge_label(edge)
+        ));
+    }
+
+    // Plan section 3.20's target dependency shape for soma-integrations lists
+    // application ports and concrete shared engines only (auth,
+    // observability, client, provider-adapters, gateway, codemode, openapi)
+    // — never the runtime or surface layers built on top of it. A
+    // PR 18 review fix once routed protected-route HTTP middleware through
+    // soma-integrations because it needed both soma-runtime's `AppState` and
+    // soma-mcp's `McpState`, silently inverting this rule; that middleware
+    // now lives in soma-runtime instead (PR 19 review fix). Keep the rule
+    // enforced so a future change can't reintroduce the same inversion.
+    if from.layer == Layer::ProductIntegration
+        && matches!(to.layer, Layer::ProductRuntime | Layer::ProductSurface)
+    {
+        failures.push(format!(
+            "product-integration packages must not depend on product-runtime or product-surface crates (plan section 3.20's target dependency shape excludes soma-runtime/soma-mcp)\n  edge: {}",
             graph.edge_label(edge)
         ));
     }
@@ -232,12 +211,23 @@ fn check_mixed_application_and_engine_edges(
             let deps = graph.direct_dependencies_except(&package.id, exceptions);
             let has_application_port = deps.iter().any(|package| is_application_port(package));
             let has_concrete_engine = deps.iter().any(|package| is_concrete_shared_engine(package));
+            // `ProductRuntime` (crates/soma/runtime) is the third legitimate
+            // bridge layer alongside `App` and `ProductIntegration`: it is
+            // where the initialized `SomaApplication` handle and concrete
+            // engine state (e.g. `GatewayProductState`, a thin wrapper over
+            // `soma-gateway`'s `GatewayManager`) are bundled into the runtime
+            // handle every surface's `AppState` is built from (plan section
+            // 15, "initialized tasks/readiness"). This is the permanent
+            // architecture, not a migration artifact.
             (has_application_port
                 && has_concrete_engine
-                && !matches!(package.layer, Layer::App | Layer::ProductIntegration))
+                && !matches!(
+                    package.layer,
+                    Layer::App | Layer::ProductIntegration | Layer::ProductRuntime
+                ))
             .then(|| {
                 format!(
-                    "{} ({}) depends on both product application ports and concrete shared engines; move that bridge to apps/soma or crates/soma/integrations",
+                    "{} ({}) depends on both product application ports and concrete shared engines; move that bridge to apps/soma, crates/soma/integrations, or crates/soma/runtime",
                     package.name, package.rel_path
                 )
             })

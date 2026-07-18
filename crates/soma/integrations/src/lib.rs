@@ -12,7 +12,16 @@
 //!   [`gateway_auth`]      — bridges `soma-auth`'s upstream OAuth runtime into `soma-gateway`'s generic OAuth traits (`oauth` feature).
 //!   [`auth`]              — Soma's product auth default mapping (env prefix, scopes, cookie name) (`auth` feature).
 //!   [`codemode`]          — [`CodeModePort`](soma_application::CodeModePort) implementation over `soma-codemode`.
-//!   [`protected_routes`]  — bearer-token auth, scope authorization, and gateway-subset dispatch for protected MCP routes (`protected-http` feature).
+//!
+//! `protected_routes`/`protected_routes_proxy` (bearer-token auth, scope
+//! authorization, and gateway-subset dispatch for protected MCP routes)
+//! lived here briefly behind a `protected-http` feature but were moved to
+//! `soma-runtime` as a PR 19 review fix: they need both `AppState`
+//! (`soma-runtime`) and `soma-mcp`'s `McpState`, and depending on either
+//! from this crate inverted plan section 3.20's target dependency shape
+//! (below) and contradicted this crate's own `gateway.rs`, which documents
+//! taking the gateway manager directly rather than depending on
+//! `soma-runtime` for that reason.
 //!
 //! Not yet implemented here (see `soma-architecture-refactor-plan-v3.md` PR 11
 //! notes on the bead for this slice): `OpenApiPort` has no product adapter —
@@ -27,12 +36,6 @@ pub mod gateway;
 pub mod auth;
 #[cfg(feature = "oauth")]
 pub mod gateway_auth;
-#[cfg(feature = "protected-http")]
-pub mod protected_routes;
-#[cfg(feature = "protected-http")]
-mod protected_routes_proxy;
-#[cfg(all(test, feature = "protected-http"))]
-mod test_support;
 
 pub mod codemode;
 

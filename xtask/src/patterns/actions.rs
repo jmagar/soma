@@ -7,8 +7,7 @@ const ACTION_TEST_COVERAGE_EXCEPTIONS: &[&str] = &[
 
 // ACTION_SPECS moved from crates/soma/contracts/src/actions.rs to
 // crates/soma/domain/src/actions.rs (plan section 6.2 "From soma-contracts";
-// PR 13). soma-contracts/src/actions.rs is now a deprecated re-export with
-// no `ACTION_SPECS` literal to parse.
+// PR 13). crates/soma/contracts was deleted in PR 19.
 const ACTION_SPECS_PATH: &str = "crates/soma/domain/src/actions.rs";
 
 pub(super) fn action_surfaces(reporter: &mut PatternReporter) {

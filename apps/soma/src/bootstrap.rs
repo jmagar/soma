@@ -11,12 +11,21 @@ use std::sync::Arc;
 
 use anyhow::Result;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
+use soma_application::SomaService;
+#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_client::SomaClient;
 #[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_config::Config;
-#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
-use soma_service::SomaService;
 
+#[cfg(any(
+    feature = "mcp-stdio",
+    feature = "mcp-http",
+    all(
+        any(test, feature = "test-support"),
+        any(feature = "cli", feature = "mcp", feature = "api")
+    )
+))]
+use soma_application::ProviderRegistry;
 use soma_application::{ApplicationPorts, SomaApplication};
 #[cfg(any(feature = "mcp-stdio", feature = "mcp-http"))]
 use soma_runtime::server::gateway_product_state_from_env;
@@ -35,15 +44,6 @@ use soma_runtime::server::{resolve_auth_policy_kind, AuthPolicyKind};
     )
 ))]
 use soma_runtime::server::{GatewayProductState, SomaRuntime};
-#[cfg(any(
-    feature = "mcp-stdio",
-    feature = "mcp-http",
-    all(
-        any(test, feature = "test-support"),
-        any(feature = "cli", feature = "mcp", feature = "api")
-    )
-))]
-use soma_service::ProviderRegistry;
 #[cfg(all(feature = "cli", feature = "mcp-stdio"))]
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -138,13 +138,13 @@ pub(crate) async fn cli_application_with_provider_dir(
 ) -> Result<Arc<SomaApplication>> {
     let service = SomaService::new(SomaClient::new(&config.soma)?);
     let registry = if config.soma.is_remote_adapter() {
-        soma_service::remote_provider_registry(service.clone()).await?
+        soma_application::remote_provider_registry(service.clone()).await?
     } else {
         let registry = match provider_dir {
             Some(provider_dir) => {
-                soma_service::dynamic_provider_registry_from_dir(service.clone(), provider_dir)?
+                soma_application::dynamic_provider_registry_from_dir(service.clone(), provider_dir)?
             }
-            None => soma_service::dynamic_provider_registry(service.clone())?,
+            None => soma_application::dynamic_provider_registry(service.clone())?,
         };
         registry
             .refresh_file_providers()
@@ -167,9 +167,9 @@ pub(crate) async fn stdio_state() -> Result<AppState> {
     let service = SomaService::new(SomaClient::new(&config.soma)?);
     let remote_adapter = config.soma.is_remote_adapter();
     let provider_registry = if remote_adapter {
-        soma_service::remote_provider_registry(service.clone()).await?
+        soma_application::remote_provider_registry(service.clone()).await?
     } else {
-        soma_service::dynamic_provider_registry(service.clone())?
+        soma_application::dynamic_provider_registry(service.clone())?
     };
     let gateway = gateway_product_state_from_env()?;
     #[cfg(feature = "oauth")]
@@ -189,7 +189,7 @@ pub(crate) async fn http_state() -> Result<AppState> {
     let config = Config::load()?;
     let auth_policy = http_auth_policy(&config).await?;
     let service = SomaService::new(SomaClient::new(&config.soma)?);
-    let provider_registry = soma_service::dynamic_provider_registry(service.clone())?;
+    let provider_registry = soma_application::dynamic_provider_registry(service.clone())?;
     let gateway = gateway_product_state_from_env()?;
     #[cfg(feature = "oauth")]
     configure_gateway_upstream_oauth_for_policy(&gateway, &auth_policy).await?;

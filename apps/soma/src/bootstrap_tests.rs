@@ -1,5 +1,5 @@
 #[cfg(feature = "mcp")]
-use soma_application::{CodeModeExecuteRequest, ExecutionContext};
+use soma_application::{CodeModeExecuteRequest, ExecutionContext, SomaService};
 #[cfg(feature = "mcp")]
 use soma_client::SomaClient;
 #[cfg(feature = "mcp")]
@@ -8,8 +8,6 @@ use soma_config::{McpConfig, SomaConfig};
 use soma_domain::{AuthorizationMode, RequestId, Surface};
 #[cfg(feature = "mcp")]
 use soma_runtime::server::{empty_gateway_product_state, AppState, AuthPolicy};
-#[cfg(feature = "mcp")]
-use soma_service::SomaService;
 
 #[cfg(feature = "mcp")]
 use super::{authorization_mode, runtime_for_components};
@@ -24,7 +22,7 @@ fn state(auth_policy: AuthPolicy) -> AppState {
         })
         .expect("stub client should always build"),
     );
-    let registry = soma_service::static_provider_registry(service.clone())
+    let registry = soma_application::static_provider_registry(service.clone())
         .expect("static provider registry should always build");
     let runtime = runtime_for_components(service, registry, empty_gateway_product_state());
     AppState::new(

@@ -7,17 +7,15 @@ use soma_domain::{
     AuthorizationMode, Principal, Surface,
 };
 use soma_provider_core::{ProviderPrompt, ProviderResource};
-use soma_service::{
-    ElicitedNameOutcome, ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry,
-    ProviderRequestLimits, ProviderSurface, ResourceReadOutput, ScaffoldIntent, SomaService,
-};
 
 use crate::{
     ApplicationError, ApplicationPorts, CatalogSnapshot, CodeModeExecuteRequest, DoctorReport,
-    ElicitedName, ExecuteActionRequest, ExecuteActionResponse, ExecutionContext,
-    GatewayExecuteRequest, GatewayPromptRoute, GatewayReloadRequest, GatewayResourceRoute,
-    GatewayRouteScope, GatewayToolRoute, OpenApiExecuteRequest, OperationResponse,
-    ReadResourceRequest, ResourceContent, ResourceTemplateSpec, ScaffoldIntentRequest,
+    ElicitedName, ElicitedNameOutcome, ExecuteActionRequest, ExecuteActionResponse,
+    ExecutionContext, GatewayExecuteRequest, GatewayPromptRoute, GatewayReloadRequest,
+    GatewayResourceRoute, GatewayRouteScope, GatewayToolRoute, OpenApiExecuteRequest,
+    OperationResponse, ProviderAuthMode, ProviderCall, ProviderPrincipal, ProviderRegistry,
+    ProviderRequestLimits, ProviderSurface, ReadResourceRequest, ResourceContent,
+    ResourceReadOutput, ResourceTemplateSpec, ScaffoldIntent, ScaffoldIntentRequest, SomaService,
 };
 
 #[cfg(test)]
@@ -181,7 +179,7 @@ impl SomaApplication {
             .refresh_file_providers()
             .map(|_| ())
             .map_err(|error| {
-                let diagnostic = soma_service::provider_errors::redact_public(&error.to_string());
+                let diagnostic = crate::provider_errors::redact_public(&error.to_string());
                 ApplicationError::new(
                     "provider_refresh_failed",
                     format!("provider refresh failed: {diagnostic}"),
@@ -430,7 +428,7 @@ impl SomaApplication {
     }
 }
 
-fn catalog_snapshot(snapshot: &soma_service::RegistrySnapshot) -> CatalogSnapshot {
+fn catalog_snapshot(snapshot: &crate::RegistrySnapshot) -> CatalogSnapshot {
     CatalogSnapshot {
         id: snapshot.id.clone(),
         fingerprint: snapshot.fingerprint.clone(),

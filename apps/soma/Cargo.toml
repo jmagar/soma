@@ -54,7 +54,6 @@ mcp-client = { workspace = true, optional = true, features = ["oauth"] }
 soma-mcp = { workspace = true, optional = true }
 soma-observability = { workspace = true, optional = true }
 soma-palette = { workspace = true, optional = true }
-soma-service = { workspace = true }
 soma-web = { workspace = true, optional = true }
 rmcp = { workspace = true, optional = true }
 reqwest = { version = "0.13.2", default-features = false, features = ["rustls-no-provider", "stream"], optional = true }
@@ -67,7 +66,6 @@ cli = [
   "dep:serde_json",
   "dep:soma-cli",
   "soma-application/client",
-  "soma-service/client",
 ]
 mcp = ["dep:soma-mcp"]
 mcp-stdio = [
@@ -79,7 +77,6 @@ mcp-stdio = [
   "soma-gateway/protected-routes",
   "soma-application/client",
   "soma-mcp/stdio",
-  "soma-service/client",
 ]
 api = ["auth", "dep:serde_json", "dep:soma-api"]
 auth = [
@@ -104,7 +101,6 @@ oauth = [
 observability = [
   "dep:soma-observability",
   "soma-application/observability",
-  "soma-service/observability",
 ]
 plugin = ["cli"]
 mcp-http = [
@@ -119,10 +115,8 @@ mcp-http = [
   "dep:tower",
   "soma-gateway/protected-routes",
   "soma-application/client",
-  "soma-integrations/protected-http",
   "soma-mcp/http",
   "soma-runtime/protected-routes",
-  "soma-service/client",
 ]
 web = ["api", "dep:soma-web"]
 local-adapter = ["cli", "mcp-stdio"]
@@ -142,7 +136,6 @@ soma-provider-adapters = { workspace = true, features = [
   "wasm",
 ] }
 soma-provider-core = { workspace = true }
-soma-service = { workspace = true }
 soma-test-support = { workspace = true }
 serde_json = "1"
 tempfile = "3"

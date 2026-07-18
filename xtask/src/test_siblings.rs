@@ -103,17 +103,26 @@ fn filename(path: &Path) -> String {
         .to_owned()
 }
 
+// NOTE: this list is deliberately narrower than "every crate under
+// crates/". Adding a root here makes `check-test-siblings` enforce the
+// sidecar-test convention retroactively across that entire crate; several
+// existing shared crates (auth, cli-core, codex-app-server-client, http-api,
+// http-server, provider-adapters, provider-core, tauri-shell, traces) and a
+// few soma crates (application's context/error/ports/types, domain's
+// execution/principal, palette's auth/dto, test-support's tracing_capture)
+// predate the convention and do not yet have `_tests.rs` siblings for every
+// source file. Widening this list to cover them is a real but separate
+// backfill effort, not a mechanical rename — do not add a root here without
+// first adding the missing sidecars for that crate.
 fn crate_src_roots() -> Vec<PathBuf> {
     [
         "apps/soma/src",
         "crates/soma/api/src",
         "crates/soma/cli/src",
-        "crates/soma/contracts/src",
         "crates/shared/mcp/gateway/src",
         "crates/soma/mcp/src",
         "crates/shared/observability/src",
         "crates/soma/runtime/src",
-        "crates/soma/service/src",
         "crates/soma/web/src",
     ]
     .into_iter()

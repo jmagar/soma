@@ -476,16 +476,16 @@ impl std::error::Error for FileProviderLoadError {}
 /// Builds the concrete provider for `catalog`'s declared kind. Every kind's
 /// actual implementation lives in the product-neutral `soma-provider-adapters`
 /// crate (feature-gated per kind); this just dispatches to it and wraps the
-/// result to satisfy soma-service's own `Provider` trait — see
+/// result to satisfy this crate's own `Provider` trait — see
 /// `provider_registry::SharedAdapter` and the PR10 deviation notes on why
 /// this dispatch step, and the directory-scanning/Soma-policy orchestration
-/// around it, stayed in soma-service rather than moving wholesale.
+/// around it, stayed in this crate rather than moving wholesale.
 ///
-/// `soma-service` currently enables every `soma-provider-adapters` kind
-/// feature (see its `Cargo.toml`), so `manifest_file::build_provider`
-/// returning `None` — meaning this binary was built without the feature that
-/// owns `catalog`'s kind — should never happen today. It is nonetheless
-/// treated as an ordinary, per-manifest `FileProviderLoadError` rather than a
+/// This crate currently enables every `soma-provider-adapters` kind feature
+/// (see its `Cargo.toml`), so `manifest_file::build_provider` returning
+/// `None` — meaning this binary was built without the feature that owns
+/// `catalog`'s kind — should never happen today. It is nonetheless treated
+/// as an ordinary, per-manifest `FileProviderLoadError` rather than a
 /// process-crashing `unreachable!()`: that invariant depends on two files (a
 /// `Cargo.toml` feature list and this crate's `ProviderKind` coverage)
 /// staying in sync by convention, with nothing enforcing it at compile time.

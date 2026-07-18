@@ -19,11 +19,10 @@ use std::process::Command;
 const GATEWAY_FORBIDDEN_DIRECT: &[&str] = &[
     "soma",
     "soma-api",
+    "soma-application",
     "soma-cli",
-    "soma-contracts",
     "soma-mcp",
     "soma-runtime",
-    "soma-service",
 ];
 
 const GATEWAY_OPTIONAL_LEAF_SOMA_DEPS: &[&str] = &[
@@ -88,7 +87,7 @@ fn cli_shim_does_not_perform_transport_work() {
     ] {
         assert!(
             !src.contains(forbidden),
-            "cli/lib.rs must not own provider report domain logic ({forbidden}); use soma-service"
+            "cli/lib.rs must not own provider report domain logic ({forbidden}); use soma-application"
         );
     }
 }
