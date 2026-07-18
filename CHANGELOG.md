@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reachable marker phase and attempt count are size-capped before mutation,
   generated backup identities cannot collide with
   transaction state, validation cancellation kills the full process tree, and
-  transport adapters can validate every redirect and final response URL. The
-  crate has no internal workspace dependencies; this change
+  transport adapters can validate every redirect and final response URL.
+  Successful confirmation rehashes the installed executable before deleting
+  recovery state. The crate has no internal workspace dependencies; this change
   does not enable self-update behavior in the Soma runtime or integrate Cortex.
 - Restructured `apps/soma` (plan section 3.1, PR 18) into a composition-only
   layout: `bootstrap.rs` builds the concrete dependency graph (config, the

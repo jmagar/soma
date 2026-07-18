@@ -277,6 +277,13 @@ impl Updater {
                 target: marker.target,
             });
         }
+        let installed_digest = hash_file(&marker.executable)?;
+        if installed_digest != marker.sha256 {
+            return Err(UpdateError::DigestMismatch {
+                expected: marker.sha256,
+                actual: installed_digest,
+            });
+        }
         validate_rollback_backup(&state, &marker)?;
         remove_file(&state)?;
         sync_parent(&state)?;

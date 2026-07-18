@@ -363,6 +363,39 @@ async fn complete_install_and_confirmation_transaction() {
 }
 
 #[tokio::test]
+async fn confirmation_rejects_same_version_replacement_and_preserves_rollback() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let replacement = temp.path().join("replacement");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    let changed = b"#!/bin/sh\necho 'changed example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    updater
+        .install(validated(&updater, new, "2.0.0").await, "1.0.0")
+        .await
+        .unwrap();
+    let marker: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
+    let backup = std::path::PathBuf::from(marker["backup"].as_str().unwrap());
+    std::fs::write(&replacement, changed).unwrap();
+    std::fs::rename(&replacement, &executable).unwrap();
+
+    assert!(matches!(
+        updater.confirm_success("2.0.0").await,
+        Err(UpdateError::DigestMismatch { .. })
+    ));
+    assert_eq!(std::fs::read(&executable).unwrap(), changed);
+    assert_eq!(std::fs::read(&backup).unwrap(), old);
+    assert!(state.exists());
+}
+
+#[tokio::test]
 async fn rolls_back_after_unconfirmed_restart_limit() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");

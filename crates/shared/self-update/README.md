@@ -90,9 +90,11 @@ links or wants to exercise the copy path explicitly.
 A process crash at any marker, swap, or rollback boundary is completed or
 aborted idempotently by startup recovery. Each unconfirmed startup increments
 the marker; after the configured threshold the digest-verified backup is
-restored and the adopter must restart again. Successful
-health confirmation durably removes the authoritative marker before cleaning
-the backup, so a cleanup interruption can leave only a harmless orphan backup.
+restored and the adopter must restart again. Successful health confirmation
+rehashes the installed executable against the verified target digest before
+durably removing the authoritative marker and cleaning the backup. Changed
+bytes retain both marker and backup; a cleanup interruption after confirmation
+can leave only a harmless orphan backup.
 A running-version mismatch retains both marker and backup and returns a typed
 error; an operator must inspect that identity mismatch before explicitly
 removing recovery state. Corrupt markers, missing
