@@ -105,3 +105,22 @@ async fn staging_preserves_existing_executable_mode() {
         );
     }
 }
+
+#[tokio::test]
+async fn explicit_staged_cleanup_reports_the_affected_path() {
+    let temp = tempdir().unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(temp.path().join("example"), temp.path().join("state.json")),
+        UpdatePolicy::default(),
+    );
+    let directive = UpdateDirective::new("2", "/binary", digest(b"new")).unwrap();
+    let staged = updater.stage(&b"new"[..], &directive).await.unwrap();
+    let path = staged.path().to_path_buf();
+    std::fs::remove_file(&path).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    std::fs::write(path.join("child"), b"keep directory non-empty").unwrap();
+    match staged.cleanup().unwrap_err() {
+        UpdateError::Io { path: failed, .. } => assert_eq!(failed, path),
+        error => panic!("unexpected cleanup error: {error}"),
+    }
+}

@@ -15,6 +15,7 @@ pub struct StagedArtifact {
     pub(crate) target_version: String,
     pub(crate) sha256: String,
     bytes_written: u64,
+    cleanup_on_drop: bool,
 }
 
 impl StagedArtifact {
@@ -30,11 +31,23 @@ impl StagedArtifact {
     pub fn bytes_written(&self) -> u64 {
         self.bytes_written
     }
+
+    /// Explicitly removes the staged file and reports cleanup failures.
+    ///
+    /// Dropping an artifact remains a best-effort fallback because `Drop`
+    /// cannot return an error.
+    pub fn cleanup(mut self) -> Result<()> {
+        std::fs::remove_file(&self.path).map_err(|error| UpdateError::io(&self.path, error))?;
+        self.cleanup_on_drop = false;
+        Ok(())
+    }
 }
 
 impl Drop for StagedArtifact {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if self.cleanup_on_drop {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -156,6 +169,7 @@ impl Updater {
             target_version: directive.version().to_owned(),
             sha256: actual,
             bytes_written: total,
+            cleanup_on_drop: true,
         })
     }
 }

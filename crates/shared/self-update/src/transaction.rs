@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::{BackupStrategy, RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
 
 static TRANSACTION_COUNTER: AtomicU64 = AtomicU64::new(0);
+const MAX_MARKER_BYTES: u64 = 64 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InstallOutcome {
@@ -63,6 +64,7 @@ impl Updater {
                 target: marker.target,
             });
         }
+        cleanup_owned_artifacts(&executable, None, Some(validated.path()))?;
         let actual_digest = hash_file(validated.path())?;
         if actual_digest != validated.sha256() {
             return Err(UpdateError::DigestMismatch {
@@ -120,7 +122,13 @@ impl Updater {
             let paths = self.validated_layout()?;
             let _lock = self.transaction_lock(&paths.lock)?;
             let state = paths.state;
-            let Some(mut marker) = read_marker(&state, &paths.executable)? else {
+            let marker = read_marker(&state, &paths.executable)?;
+            cleanup_owned_artifacts(
+                &paths.executable,
+                marker.as_ref().map(|marker| marker.backup.as_path()),
+                None,
+            )?;
+            let Some(mut marker) = marker else {
                 return Ok(RecoveryAction::NoPendingUpdate);
             };
             if marker.target != running_version {
@@ -166,7 +174,13 @@ impl Updater {
             let paths = self.validated_layout()?;
             let _lock = self.transaction_lock(&paths.lock)?;
             let state = paths.state;
-            let Some(marker) = read_marker(&state, &paths.executable)? else {
+            let marker = read_marker(&state, &paths.executable)?;
+            cleanup_owned_artifacts(
+                &paths.executable,
+                marker.as_ref().map(|marker| marker.backup.as_path()),
+                None,
+            )?;
+            let Some(marker) = marker else {
                 return Ok(ConfirmationOutcome::NoPendingUpdate);
             };
             if marker.target != running_version {
@@ -356,11 +370,33 @@ fn write_marker(path: &Path, marker: &Marker) -> Result<()> {
 }
 
 fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>> {
-    let bytes = match std::fs::read(path) {
-        Ok(bytes) => bytes,
+    let file = match File::open(path) {
+        Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(UpdateError::io(path, error)),
     };
+    if file
+        .metadata()
+        .map_err(|error| UpdateError::io(path, error))?
+        .len()
+        > MAX_MARKER_BYTES
+    {
+        return Err(UpdateError::InvalidMarker {
+            path: path.to_path_buf(),
+            message: format!("marker exceeds {MAX_MARKER_BYTES} byte limit"),
+        });
+    }
+    use std::io::Read;
+    let mut bytes = Vec::with_capacity(MAX_MARKER_BYTES as usize);
+    file.take(MAX_MARKER_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| UpdateError::io(path, error))?;
+    if bytes.len() as u64 > MAX_MARKER_BYTES {
+        return Err(UpdateError::InvalidMarker {
+            path: path.to_path_buf(),
+            message: format!("marker exceeds {MAX_MARKER_BYTES} byte limit"),
+        });
+    }
     let marker: Marker =
         serde_json::from_slice(&bytes).map_err(|error| UpdateError::InvalidMarker {
             path: path.to_path_buf(),
@@ -381,6 +417,61 @@ fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>
         });
     }
     Ok(Some(marker))
+}
+
+#[cfg(unix)]
+fn cleanup_owned_artifacts(
+    executable: &Path,
+    protected_backup: Option<&Path>,
+    protected_staging: Option<&Path>,
+) -> Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let directory = executable.parent().ok_or(UpdateError::InvalidPolicy(
+        "executable must have a parent directory",
+    ))?;
+    let expected_uid = std::fs::metadata(executable)
+        .or_else(|_| std::fs::metadata(directory))
+        .map_err(|error| UpdateError::io(directory, error))?
+        .uid();
+    let executable_name = executable
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or(UpdateError::InvalidPolicy(
+            "executable name must be valid UTF-8",
+        ))?;
+    let staging_prefix = format!(".{executable_name}.update-");
+    let backup_prefix = format!(".{executable_name}.rollback-");
+    let mut removed = false;
+    for entry in std::fs::read_dir(directory).map_err(|error| UpdateError::io(directory, error))? {
+        let entry = entry.map_err(|error| UpdateError::io(directory, error))?;
+        let path = entry.path();
+        if protected_backup.is_some_and(|protected| protected == path)
+            || protected_staging.is_some_and(|protected| protected == path)
+        {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let owned_name = (name.starts_with(&staging_prefix) && name.ends_with(".part"))
+            || name.starts_with(&backup_prefix);
+        if !owned_name {
+            continue;
+        }
+        let metadata =
+            std::fs::symlink_metadata(&path).map_err(|error| UpdateError::io(&path, error))?;
+        if !metadata.file_type().is_file() || metadata.uid() != expected_uid {
+            continue;
+        }
+        std::fs::remove_file(&path).map_err(|error| UpdateError::io(&path, error))?;
+        removed = true;
+    }
+    if removed {
+        sync_parent(executable)?;
+    }
+    Ok(())
 }
 
 fn remove_file(path: &Path) -> Result<()> {

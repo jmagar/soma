@@ -44,6 +44,15 @@ Construct an `UpdateDirective`, stage and validate its artifact, install it,
 restart, recover pending state on startup, and confirm only after the new
 service reports healthy.
 
+`recover_on_startup` also reclaims prior-process staging and orphan rollback
+files whose exact target-derived names, regular-file type, directory, and Unix
+owner identify them as crate-owned. It never follows matching symlinks or
+touches another executable's files, and it preserves the backup referenced by
+a valid marker. Calling startup recovery before each service loop therefore
+bounds crash leftovers across repeated restarts. Marker input is capped at 64
+KiB. Call `StagedArtifact::cleanup` when an adopter needs cleanup failures
+reported explicitly; automatic `Drop` cleanup is necessarily best effort.
+
 Installation takes an advisory state lock, writes and syncs a durable marker,
 retains a unique rollback backup, syncs the backup and its directory before the
 marker may reference it, then atomically renames the verified artifact. Unix

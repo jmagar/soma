@@ -115,6 +115,52 @@ async fn backup_directory_must_sync_before_marker_is_persisted() {
     );
 }
 
+#[tokio::test]
+async fn startup_reclaims_only_owned_crash_leftovers() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    std::fs::write(&executable, b"old").unwrap();
+    let owned_stage = temp.path().join(".example.update-123-1.part");
+    let owned_backup = temp.path().join(".example.rollback-123-1");
+    let unrelated = temp.path().join(".other.update-123-1.part");
+    let matching_directory = temp.path().join(".example.rollback-directory");
+    std::fs::write(&owned_stage, b"leftover").unwrap();
+    std::fs::write(&owned_backup, b"leftover").unwrap();
+    std::fs::write(&unrelated, b"keep").unwrap();
+    std::fs::create_dir(&matching_directory).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    assert_eq!(
+        updater.recover_on_startup("1").await.unwrap(),
+        RecoveryAction::NoPendingUpdate
+    );
+    assert!(!owned_stage.exists());
+    assert!(!owned_backup.exists());
+    assert!(unrelated.exists());
+    assert!(matching_directory.exists());
+}
+
+#[tokio::test]
+async fn oversized_markers_fail_bounded_and_remain_for_diagnosis() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    std::fs::write(&executable, b"old").unwrap();
+    std::fs::write(&state, vec![b'x'; 64 * 1024 + 1]).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    assert!(matches!(
+        updater.recover_on_startup("1").await,
+        Err(UpdateError::InvalidMarker { .. })
+    ));
+    assert_eq!(std::fs::metadata(&state).unwrap().len(), 64 * 1024 + 1);
+}
+
 async fn validated(
     updater: &Updater,
     script: &[u8],
