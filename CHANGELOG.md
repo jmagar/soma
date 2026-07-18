@@ -258,6 +258,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.
 - Add an `rmcp-traces` platform crate targeting `rmcp 2.2.0` with bounded request trace metadata parsing and redacted Soma MCP trace summaries.
+- Add `SOMA_MCP_TRACE_HEADERS` (`off` default, `trusted`, or
+  `trusted-with-baggage`) typed config for trusted inbound HTTP
+  `traceparent`, `tracestate`, and `baggage` extraction. Non-`off` modes
+  require loopback or a trusted gateway; bearer and OAuth authentication are
+  rejected as trace-header trust boundaries. RMCP `_meta` remains
+  authoritative, browser CORS uses the same static mode-gated allow-list, and
+  outbound trace propagation remains disabled. See `docs/TRACE_CONTEXT.md`
+  and `cargo xtask test-trace-headers`.
 - `soma-auth` gained an `upstream/` module (behind the new `upstream-oauth-rmcp`
   feature) implementing the outbound `authorization_code` + PKCE flow for
   connecting to OAuth-protected upstream MCP servers: per-`(upstream, subject)`
