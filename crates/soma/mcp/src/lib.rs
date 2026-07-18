@@ -11,6 +11,7 @@ pub mod rmcp_server;
 mod schemas;
 mod state;
 mod tools;
+mod trace_resolution;
 #[cfg(feature = "http")]
 mod transport;
 
