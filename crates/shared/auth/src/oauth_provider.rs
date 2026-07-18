@@ -50,7 +50,13 @@ pub struct AuthorizeUrlRequest {
 /// silently — nothing in this crate's existing secret-handling discipline
 /// (`fingerprint()`-before-log everywhere else) relies on "don't accidentally
 /// serialize the whole struct" being enforced only by convention.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Debug` is hand-rolled (not derived) to match: it redacts `access_token`,
+/// `refresh_token`, and `id_token` the same way `{:?}` printing must not leak
+/// secrets — see `GoogleConfig`/`AutheliaConfig`/`GitHubConfig` and the
+/// per-provider `OAuthProvider` impls for the established pattern in this
+/// crate.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderExchange {
     pub subject: String,
     pub email: Option<String>,
@@ -62,6 +68,23 @@ pub struct ProviderExchange {
     pub expires_in: Option<u64>,
     #[serde(skip_serializing)]
     pub id_token: Option<String>,
+}
+
+impl std::fmt::Debug for ProviderExchange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProviderExchange")
+            .field("subject", &self.subject)
+            .field("email", &self.email)
+            .field("email_verified", &self.email_verified)
+            .field("access_token", &"<redacted>")
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("expires_in", &self.expires_in)
+            .field("id_token", &self.id_token.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 /// An upstream identity provider soma-auth can redirect a user to for login.
