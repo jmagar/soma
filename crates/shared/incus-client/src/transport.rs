@@ -158,6 +158,10 @@ impl Client {
             ))),
         }
     }
+
+    pub(crate) fn socket_path(&self) -> &std::path::Path {
+        &self.0.socket_path
+    }
 }
 
 #[cfg(test)]
