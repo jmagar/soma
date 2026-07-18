@@ -218,15 +218,18 @@ impl UpdatePolicy {
 pub struct Updater {
     layout: UpdateLayout,
     policy: UpdatePolicy,
+    layout_resolution_error: Option<std::io::ErrorKind>,
     #[cfg(all(test, unix))]
     test_failpoint: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }
 
 impl Updater {
     pub fn new(layout: UpdateLayout, policy: UpdatePolicy) -> Self {
+        let (layout, layout_resolution_error) = bind_layout_to_current_dir(layout);
         Self {
             layout,
             policy,
+            layout_resolution_error,
             #[cfg(all(test, unix))]
             test_failpoint: std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0)),
         }
@@ -239,6 +242,46 @@ impl Updater {
     pub fn policy(&self) -> &UpdatePolicy {
         &self.policy
     }
+
+    pub(crate) fn ensure_layout_bound(&self) -> Result<()> {
+        match self.layout_resolution_error {
+            Some(kind) => Err(UpdateError::io(
+                Path::new("."),
+                std::io::Error::new(
+                    kind,
+                    "failed to resolve relative update layout against the construction-time current directory",
+                ),
+            )),
+            None => Ok(()),
+        }
+    }
+}
+
+fn bind_layout_to_current_dir(layout: UpdateLayout) -> (UpdateLayout, Option<std::io::ErrorKind>) {
+    if layout.executable.is_absolute() && layout.state_file.is_absolute() {
+        return (layout, None);
+    }
+    let base = match std::env::current_dir() {
+        Ok(base) => base,
+        Err(error) => return (layout, Some(error.kind())),
+    };
+    let executable = if layout.executable.is_absolute() {
+        layout.executable
+    } else {
+        base.join(layout.executable)
+    };
+    let state_file = if layout.state_file.is_absolute() {
+        layout.state_file
+    } else {
+        base.join(layout.state_file)
+    };
+    (
+        UpdateLayout {
+            executable,
+            state_file,
+        },
+        None,
+    )
 }
 
 pub(crate) fn reject_executable_leaf_symlink(path: &Path) -> Result<()> {

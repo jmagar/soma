@@ -72,6 +72,7 @@ impl Updater {
     }
 
     pub(super) fn validated_layout(&self) -> Result<LayoutPaths> {
+        self.ensure_layout_bound()?;
         reject_executable_leaf_symlink(self.layout().executable())?;
         let executable = path_identity(self.layout().executable())?;
         let state = path_identity(self.layout().state_file())?;

@@ -110,6 +110,10 @@ pub(super) fn marker_temp_owner_is_valid(owner_uid: u32, effective_uid: u32) -> 
     owner_uid == effective_uid
 }
 
+fn marker_mode_is_guarded(mode: u32) -> bool {
+    mode & 0o7777 == 0o600
+}
+
 pub(super) fn read_marker(path: &Path, expected_executable: &Path) -> Result<Option<Marker>> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 
@@ -127,7 +131,7 @@ pub(super) fn read_marker(path: &Path, expected_executable: &Path) -> Result<Opt
         .map_err(|error| UpdateError::io(path, error))?;
     if !metadata.file_type().is_file()
         || metadata.uid() != nix::unistd::geteuid().as_raw()
-        || metadata.mode() & 0o077 != 0
+        || !marker_mode_is_guarded(metadata.mode())
     {
         return Err(UpdateError::InvalidMarker {
             path: path.to_path_buf(),
@@ -253,7 +257,15 @@ mod tests {
     }
 
     #[test]
-    fn marker_open_rejects_any_group_or_other_access() {
+    fn marker_mode_requires_exactly_0600_without_special_bits() {
+        assert!(marker_mode_is_guarded(0o600));
+        for mode in [0o400, 0o500, 0o700, 0o640, 0o4600] {
+            assert!(!marker_mode_is_guarded(mode), "accepted mode {mode:o}");
+        }
+    }
+
+    #[test]
+    fn marker_open_rejects_non_exact_mode_without_repairing_it() {
         use std::os::unix::fs::PermissionsExt;
 
         let temp = tempfile::tempdir().unwrap();

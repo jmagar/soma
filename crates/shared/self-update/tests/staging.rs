@@ -88,19 +88,28 @@ async fn staging_paths_are_unique() {
 
 #[cfg(unix)]
 #[test]
-fn bare_relative_layout_completes_the_update_lifecycle_from_current_dir() {
+fn bare_relative_layout_stays_bound_to_construction_directory() {
     use std::os::unix::fs::PermissionsExt;
 
     const CHILD_ENV: &str = "SOMA_SELF_UPDATE_RELATIVE_LAYOUT_CHILD";
     if std::env::var_os(CHILD_ENV).is_some() {
         let old = b"#!/bin/sh\necho 'agent 1'\n";
         let new = b"#!/bin/sh\necho 'agent 2'\n";
+        let root = std::env::current_dir().unwrap();
+        let first = root.join("first");
+        let second = root.join("second");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::write(second.join("agent"), b"second directory sentinel").unwrap();
+        std::env::set_current_dir(&first).unwrap();
         std::fs::write("agent", old).unwrap();
         std::fs::set_permissions("agent", std::fs::Permissions::from_mode(0o700)).unwrap();
         let updater = Updater::new(
             UpdateLayout::new("agent", "state.json"),
             UpdatePolicy::default(),
         );
+        assert_eq!(updater.layout().executable(), first.join("agent"));
+        assert_eq!(updater.layout().state_file(), first.join("state.json"));
         let directive = UpdateDirective::new("2", "/agent", digest(new)).unwrap();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -110,9 +119,10 @@ fn bare_relative_layout_completes_the_update_lifecycle_from_current_dir() {
             let staged = updater.stage(&new[..], &directive).await.unwrap();
             assert_eq!(
                 staged.path().parent().unwrap().canonicalize().unwrap(),
-                std::env::current_dir().unwrap().canonicalize().unwrap()
+                first.canonicalize().unwrap()
             );
             let validated = updater.validate(staged).await.unwrap();
+            std::env::set_current_dir(&second).unwrap();
             updater.install(validated, "1").await.unwrap();
             assert!(matches!(
                 updater.recover_on_startup("2").await.unwrap(),
@@ -125,8 +135,13 @@ fn bare_relative_layout_completes_the_update_lifecycle_from_current_dir() {
                 }
             );
         });
-        assert_eq!(std::fs::read("agent").unwrap(), new);
-        assert!(!std::path::Path::new("state.json").exists());
+        assert_eq!(std::fs::read(first.join("agent")).unwrap(), new);
+        assert!(!first.join("state.json").exists());
+        assert_eq!(
+            std::fs::read(second.join("agent")).unwrap(),
+            b"second directory sentinel"
+        );
+        assert!(!second.join("state.json").exists());
         return;
     }
 
@@ -134,7 +149,7 @@ fn bare_relative_layout_completes_the_update_lifecycle_from_current_dir() {
     let output = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
-            "bare_relative_layout_completes_the_update_lifecycle_from_current_dir",
+            "bare_relative_layout_stays_bound_to_construction_directory",
             "--nocapture",
         ])
         .current_dir(temp.path())

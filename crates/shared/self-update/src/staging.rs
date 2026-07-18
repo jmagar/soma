@@ -92,6 +92,7 @@ impl Updater {
     where
         R: AsyncRead + Unpin,
     {
+        self.ensure_layout_bound()?;
         reject_executable_leaf_symlink(self.layout().executable())?;
         let configured_directory = self
             .layout()

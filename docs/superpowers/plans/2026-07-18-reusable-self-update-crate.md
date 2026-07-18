@@ -13,9 +13,9 @@
 > verifies installed bytes before recovery/confirmation state changes, opens
 > markers no-follow and nonblocking, and offloads synchronous transactions from
 > async executor workers. Marker temporaries and lock descriptors are secured
-> to mode 0600 independently of umask, with over-broad marker rejection and
-> owned legacy lock permission repair. Bare relative executable layouts resolve
-> through the current directory, and successful validators terminate and drain
+> to mode 0600 independently of umask, authoritative markers require exactly
+> mode 0600 without special bits, and owned legacy lock permissions are repaired.
+> Relative layouts bind to their construction-time current directory, and successful validators terminate and drain
 > their configured process tree before their captured result is accepted.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

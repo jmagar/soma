@@ -57,9 +57,10 @@ service reports healthy.
 The configured executable leaf must be a regular path, not a symlink. The
 crate rejects leaf symlinks before staging or recovery so the staging grammar,
 marker identity, backup identity, and installed target cannot diverge. Symlinked
-parent directories are canonicalized consistently. A bare relative executable
-such as `agent` is treated as `./agent`, so staging and the transaction lifecycle
-share the same current-directory identity.
+parent directories are canonicalized consistently. Relative executable and
+state paths are bound to the construction-time current directory, so later
+process current-directory changes cannot redirect staging, installation,
+recovery, or confirmation to another target.
 
 `recover_on_startup` also reclaims prior-process staging and orphan rollback
 files only when their exact target-derived grammar, regular-file type,
@@ -80,9 +81,9 @@ and `rolled_back` phases. Marker replacement uses one deterministic mode-`0600`,
 lock-protected `<state>.tmp` sibling; startup recovery validates and reclaims an
 effective-user-owned regular-file leftover before reading transaction state.
 The authoritative marker itself is opened with Unix no-follow and nonblocking
-flags, then its descriptor must be a current-effective-user-owned mode-`0600`
-regular file before any bounded read, preventing symlink traversal, FIFO stalls,
-and access through over-broad state permissions.
+flags, then its descriptor must be a current-effective-user-owned regular file
+with exactly mode `0600` and no special bits before any bounded read, preventing
+symlink traversal, FIFO stalls, and access through unexpected state permissions.
 Serialized state is capped at the same 64 KiB limit on both writes and reads.
 Before backup creation or executable replacement, installation preflights the
 largest reachable phase and attempt-count representation so later recovery
