@@ -1,4 +1,5 @@
 use std::fmt;
+use std::time::Duration;
 
 use reqwest::{Client, Method};
 use serde_json::Value;
@@ -27,6 +28,7 @@ pub struct UnifiClient {
     site: String,
     skip_tls_verify: bool,
     legacy: bool,
+    request_timeout: Duration,
 }
 
 impl fmt::Debug for UnifiClient {
@@ -40,6 +42,7 @@ impl fmt::Debug for UnifiClient {
             .field("site", &self.site)
             .field("skip_tls_verify", &self.skip_tls_verify)
             .field("legacy", &self.legacy)
+            .field("request_timeout", &self.request_timeout)
             .finish()
     }
 }
@@ -66,6 +69,7 @@ impl UnifiClient {
             site: cfg.site.clone(),
             skip_tls_verify: cfg.skip_tls_verify,
             legacy: cfg.legacy,
+            request_timeout: cfg.request_timeout,
         })
     }
 
@@ -87,6 +91,7 @@ impl UnifiClient {
             site: self.site.clone(),
             skip_tls_verify: self.skip_tls_verify,
             legacy: self.legacy,
+            request_timeout: self.request_timeout,
         }
     }
 
@@ -210,5 +215,24 @@ impl UnifiClient {
     /// See [`UnifiError`] for the failure cases this can return.
     pub async fn me(&self) -> Result<Value> {
         self.get(self.self_path(), "me").await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_round_trips_a_non_default_request_timeout() {
+        let cfg = UnifiConfig {
+            url: "https://unifi.local".to_string(),
+            api_key: "test-key".to_string(),
+            request_timeout: Duration::from_secs(90),
+            ..UnifiConfig::default()
+        };
+
+        let client = UnifiClient::new(&cfg).unwrap();
+
+        assert_eq!(client.config().request_timeout, Duration::from_secs(90));
     }
 }

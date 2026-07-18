@@ -19,6 +19,7 @@ fn config(url: String) -> UnifiConfig {
         site: "default".to_string(),
         skip_tls_verify: true,
         legacy: false,
+        ..UnifiConfig::default()
     }
 }
 

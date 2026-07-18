@@ -438,7 +438,12 @@ fn vendor_packages_may_depend_on_one_another() {
             "vendor",
             vec![dep("arr-common", "crates/integrations/arr-common")],
         ),
-        pkg("arr-common", "crates/integrations/arr-common", "vendor", vec![]),
+        pkg(
+            "arr-common",
+            "crates/integrations/arr-common",
+            "vendor",
+            vec![],
+        ),
     ]);
 
     assert!(failures.is_empty(), "{failures:#?}");

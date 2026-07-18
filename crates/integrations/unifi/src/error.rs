@@ -5,13 +5,21 @@
 //! key was rejected" versus "the controller is unreachable" can match on
 //! [`UnifiError`] instead of parsing a message string.
 
+use std::time::Duration;
+
 use thiserror::Error;
 
 /// Result alias for this crate's fallible operations.
 pub type Result<T> = std::result::Result<T, UnifiError>;
 
 /// Everything that can go wrong talking to a UniFi controller.
+///
+/// Marked `#[non_exhaustive]`: this crate is meant to be published and
+/// consumed externally, so a caller that matches on this must include a
+/// wildcard arm — adding a new variant (e.g. a future status-class split)
+/// must never be a semver-breaking change for downstream code.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum UnifiError {
     /// `UnifiConfig::url` was empty.
     #[error(
@@ -97,6 +105,21 @@ pub enum UnifiError {
         method: String,
         /// Full request URL.
         url: String,
+    },
+
+    /// The controller rejected the request for exceeding its rate limit (HTTP 429).
+    #[error(
+        "UniFi rate limit exceeded for {method} {url} (HTTP 429){}",
+        retry_after.map(|d| format!(" - retry after {}s", d.as_secs())).unwrap_or_default()
+    )]
+    RateLimited {
+        /// HTTP method of the rate-limited request.
+        method: String,
+        /// Full request URL.
+        url: String,
+        /// Parsed `Retry-After` response header, when present and expressed
+        /// in seconds (the HTTP-date form is not parsed).
+        retry_after: Option<Duration>,
     },
 
     /// A `GET` returned a successful status with no body, where a JSON body was expected.

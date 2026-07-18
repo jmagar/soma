@@ -50,7 +50,16 @@ shaping, caching, metrics) without touching every call site.
 Every fallible function returns [`UnifiError`] (aliased as `Result`), never
 `anyhow::Error` or a boxed `dyn Error`. Match on the variant when a caller
 needs to react differently — e.g. prompt for a new API key on
-`UnifiError::Unauthorized` versus retry on `UnifiError::Timeout`.
+`UnifiError::Unauthorized`, back off using `retry_after` on
+`UnifiError::RateLimited`, versus retry on `UnifiError::Timeout`.
+`UnifiError` is `#[non_exhaustive]`: a `match` must include a wildcard arm,
+since new variants can be added without that being a breaking change.
+
+## Configuration
+
+`UnifiConfig::request_timeout` controls the pooled HTTP client's per-request
+timeout (default 30s, `unifi::DEFAULT_REQUEST_TIMEOUT`). Override it for
+controllers or actions that routinely need longer.
 
 ## Testing
 
@@ -60,6 +69,16 @@ needs to react differently — e.g. prompt for a new API key on
   [`wiremock`](https://docs.rs/wiremock) mock server — no real controller
   needed. Copy that file's pattern for testing another integration crate's
   HTTP client.
+- `tests/action_dispatch.rs` drives the dynamic dispatcher
+  (`ActionDispatcher::execute`) end-to-end — capability lookup, hybrid
+  resolution, path substitution, URL construction, HTTP call — since that's
+  the crate's main entry point for anything beyond the named convenience
+  methods, and per-request-type tests alone don't exercise it.
+- `capabilities::internal_network::tests::no_dispatchable_mutating_action_shares_a_get_path_with_a_read_only_action`
+  is a catalog-wide invariant test: no mutating action's declared
+  method+path may collide with a read-only action's (the shape of a real
+  defect found in this crate's own bundled data — see git history). Any
+  crate with a bundled action catalog should have the equivalent.
 
 ```bash
 cargo test -p unifi

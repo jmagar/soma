@@ -47,7 +47,7 @@
 //! - [`http`] — the one place HTTP requests are made and errors mapped.
 //! - [`error`] — [`UnifiError`].
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 /// Dynamic action dispatch driven by the [`capabilities`] catalog.
 pub mod actions;
@@ -67,6 +67,6 @@ mod util;
 
 pub use actions::{ActionDispatcher, ActionRequest};
 pub use client::UnifiClient;
-pub use config::UnifiConfig;
+pub use config::{UnifiConfig, DEFAULT_REQUEST_TIMEOUT};
 pub use error::{Result, UnifiError};
 pub use service::UnifiService;

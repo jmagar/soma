@@ -17,6 +17,7 @@ fn config(url: String) -> UnifiConfig {
         site: "default".to_string(),
         skip_tls_verify: true,
         legacy: false,
+        ..UnifiConfig::default()
     }
 }
 
@@ -154,6 +155,55 @@ async fn an_unexpected_status_with_a_non_json_body_still_reports_the_status() {
             assert_eq!(*body, json!("<html>Bad Gateway</html>"));
         }
         other => panic!("expected UnexpectedStatus, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_rate_limited_response_carries_the_parsed_retry_after() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/proxy/network/api/s/default/stat/sta"))
+        .respond_with(ResponseTemplate::new(429).insert_header("Retry-After", "30"))
+        .mount(&server)
+        .await;
+
+    let client = UnifiClient::new(&config(server.uri())).unwrap();
+
+    let err = client.clients().await.unwrap_err();
+
+    match err {
+        UnifiError::RateLimited {
+            method,
+            url,
+            retry_after,
+        } => {
+            assert_eq!(method, "GET");
+            assert!(
+                url.ends_with("/proxy/network/api/s/default/stat/sta"),
+                "unexpected url: {url}"
+            );
+            assert_eq!(retry_after, Some(std::time::Duration::from_secs(30)));
+        }
+        other => panic!("expected RateLimited, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_rate_limited_response_without_retry_after_leaves_it_none() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/proxy/network/api/s/default/stat/sta"))
+        .respond_with(ResponseTemplate::new(429))
+        .mount(&server)
+        .await;
+
+    let client = UnifiClient::new(&config(server.uri())).unwrap();
+
+    let err = client.clients().await.unwrap_err();
+
+    match err {
+        UnifiError::RateLimited { retry_after, .. } => assert_eq!(retry_after, None),
+        other => panic!("expected RateLimited, got {other:?}"),
     }
 }
 

@@ -16,8 +16,6 @@ use serde_json::{json, Value};
 use crate::error::{Result, UnifiError};
 use crate::UnifiConfig;
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-
 /// Builds the pooled HTTP client used for every request against one controller.
 ///
 /// # Errors
@@ -27,7 +25,7 @@ pub fn build_client(cfg: &UnifiConfig) -> Result<Client> {
     reqwest::ClientBuilder::new()
         .danger_accept_invalid_certs(cfg.skip_tls_verify)
         .cookie_store(true)
-        .timeout(REQUEST_TIMEOUT)
+        .timeout(cfg.request_timeout)
         .build()
         .map_err(UnifiError::ClientBuild)
 }
@@ -38,10 +36,10 @@ pub fn build_client(cfg: &UnifiConfig) -> Result<Client> {
 /// # Errors
 /// Returns [`UnifiError::Timeout`] / [`UnifiError::Connect`] / [`UnifiError::Request`]
 /// for transport failures, [`UnifiError::Unauthorized`] / [`UnifiError::Forbidden`] /
-/// [`UnifiError::NotFound`] for the status codes UniFi controllers use for those
-/// conditions, and [`UnifiError::UnexpectedStatus`] for any other non-success
-/// status (its `body` is JSON when the response was JSON, otherwise the raw
-/// text). For a success status, returns [`UnifiError::EmptyBody`] for a `GET`
+/// [`UnifiError::NotFound`] / [`UnifiError::RateLimited`] for the status codes UniFi
+/// controllers use for those conditions, and [`UnifiError::UnexpectedStatus`] for any
+/// other non-success status (its `body` is JSON when the response was JSON, otherwise
+/// the raw text). For a success status, returns [`UnifiError::EmptyBody`] for a `GET`
 /// with no response body, or [`UnifiError::Decode`] if the body isn't valid
 /// JSON.
 pub async fn request_json(
@@ -90,6 +88,19 @@ pub async fn request_json(
                 method: method.to_string(),
                 url,
             })
+        }
+        StatusCode::TOO_MANY_REQUESTS => {
+            let retry_after = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+                .map(Duration::from_secs);
+            return Err(UnifiError::RateLimited {
+                method: method.to_string(),
+                url,
+                retry_after,
+            });
         }
         _ => {}
     }
