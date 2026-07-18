@@ -97,8 +97,11 @@ Full per-provider allowlist scoping (a schema change to `allowed_users`) was
 considered and rejected as disproportionate for this crate's actual
 deployment shape (single-operator homelab/small-fleet, not multi-tenant
 SaaS). Instead, `AuthState::new` logs a `tracing::warn!` at startup whenever
-2+ providers are configured with a non-empty allowlist — that log line is the
-visible signal operators should watch for, not a silent trade-off.
+2+ providers are configured — that log line is the visible signal operators
+should watch for, not a silent trade-off. (The check is purely
+`providers.len() > 1`, with no allowlist-emptiness condition — the allowlist
+can never actually be empty in OAuth mode anyway, since `admin_email` is
+required by `AuthConfig::validate`.)
 
 Practical guidance: if you need strict per-identity isolation between
 providers, run separate deployments (separate `soma-auth` SQLite databases)
