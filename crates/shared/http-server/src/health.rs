@@ -1,10 +1,15 @@
 //! Generic health-check route wiring.
 //!
 //! `soma_http_api::probe` owns the liveness/readiness response *bodies*.
-//! This module owns mounting them as ready-to-merge routers so products
-//! don't hand-roll the same two routes every time. Both are generic over
-//! the router's state type so a product can `.merge()` them into a bigger
-//! stateful router without a state-shape mismatch.
+//! This module owns mounting them as ready-to-merge routers so a product
+//! doesn't have to hand-roll the same two routes itself. Both are generic
+//! over the router's state type so a product can `.merge()` them into a
+//! bigger stateful router without a state-shape mismatch.
+//!
+//! Not yet adopted: `apps/soma`'s `/health` and `/readyz` routes are still
+//! hand-implemented in `crates/soma/api` rather than mounting these
+//! routers. This module is available scaffolding for that future
+//! consolidation, not something already wired into a live Soma surface.
 
 use std::future::Future;
 

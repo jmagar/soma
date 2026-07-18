@@ -2,16 +2,20 @@
 //!
 //! Unlike plain `tower::timeout`, `tower_http`'s [`TimeoutLayer`] never
 //! fails the inner service — on elapse it directly returns a response with
-//! the configured status code (`408 Request Timeout` by default), so it
-//! composes onto an Axum `Router` with no error-handling layer required.
+//! a caller-chosen status code, so it composes onto an Axum `Router` with
+//! no error-handling layer required. `tower_http` itself has no built-in
+//! default status code (its zero-arg constructor is deprecated in favor of
+//! `with_status_code`); [`timeout_layer`] below is this crate's own choice
+//! to default that code to `408 Request Timeout`.
 
 use std::time::Duration;
 
 use axum::http::StatusCode;
 pub use tower_http::timeout::TimeoutLayer;
 
-/// Build a layer that returns `408 Request Timeout` for any request taking
-/// longer than `duration`.
+/// Build a layer that returns `408 Request Timeout` (this crate's chosen
+/// default — see the module docs) for any request taking longer than
+/// `duration`.
 pub fn timeout_layer(duration: Duration) -> TimeoutLayer {
     TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, duration)
 }

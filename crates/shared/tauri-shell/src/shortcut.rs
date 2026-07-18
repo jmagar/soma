@@ -157,7 +157,14 @@ pub fn register_shortcut(
         .ok_or_else(|| format!("shortcut label `{new_label}` could not be parsed"))?;
 
     let Ok(mut guard) = state.0.lock() else {
-        // Mutex poisoned — fall back to unregister_all for safety.
+        // Mutex poisoned (some other code path panicked while holding the
+        // lock) — fall back to unregister_all for safety. Log at `error`
+        // so poisoning has a trail; this clears every global shortcut in
+        // the process, not just this app's own, which is worth flagging
+        // loudly rather than silently.
+        tracing::error!(
+            "ActiveShortcutState mutex poisoned; falling back to unregister_all before registering '{new_label}'"
+        );
         app.global_shortcut()
             .unregister_all()
             .map_err(|err| err.to_string())?;

@@ -577,14 +577,24 @@ async fn run_echo_command_prints_message_json() {
 #[tokio::test]
 async fn run_status_command_prints_status_json() {
     // Suppress the stale-binary warning field so the snapshot is stable
-    // regardless of source/binary mtimes in the build environment.
-    std::env::set_var("SOMA_SUPPRESS_STALE_BINARY_WARNING", "1");
+    // regardless of source/binary mtimes in the build environment. Save and
+    // restore any prior value — `cargo test` runs tests in this binary on
+    // shared threads, so an unrestored `set_var` would leak into whichever
+    // other test happens to run next.
+    const VAR: &str = "SOMA_SUPPRESS_STALE_BINARY_WARNING";
+    let previous = std::env::var(VAR).ok();
+    std::env::set_var(VAR, "1");
 
     let application = default_application();
     let mut io = TestIo::default();
-    run(application, Command::Status.into(), &mut io)
-        .await
-        .expect("status should run through the application facade");
+    let result = run(application, Command::Status.into(), &mut io).await;
+
+    match previous {
+        Some(value) => std::env::set_var(VAR, value),
+        None => std::env::remove_var(VAR),
+    }
+
+    result.expect("status should run through the application facade");
 
     let expected = serde_json::to_string_pretty(&serde_json::json!({
         "status": "ok",

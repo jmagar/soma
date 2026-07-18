@@ -16,9 +16,11 @@
 //! to a loopback TCP port with `axum::serve` (mirroring `soma_serve.rs`'s
 //! server-spawn pattern, but in-process rather than subprocess) and drives it
 //! with rmcp's real `StreamableHttpClientTransport` (reqwest-backed) client —
-//! a genuine network round trip through `apps/soma/src/http.rs`'s
-//! `mcp_state_for_state`/`streamable_http_service` wiring, which PR 12/13
-//! will change as `SomaApplication` and `Config` move to split crates.
+//! a genuine network round trip through `apps/soma/src/http.rs`'s router,
+//! which wires `bootstrap::mcp_state_for_state` and `streamable_http_service`
+//! together — this changed as `SomaApplication` and `Config` moved to split
+//! crates (PR 12/13) and again as `apps/soma` split into a composition-only
+//! layout (PR 18).
 #![cfg(feature = "mcp-http")]
 
 use std::net::TcpListener as StdTcpListener;
@@ -36,7 +38,13 @@ async fn spawn_http_mcp_server() -> anyhow::Result<(u16, tokio::task::JoinHandle
 
     let app = soma::server::router(soma::testing::loopback_state());
     let handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, app.into_make_service()).await;
+        if let Err(err) = axum::serve(listener, app.into_make_service()).await {
+            // The test aborts this task once the round trip completes, so an
+            // `Err` here only ever means the server died unexpectedly (not a
+            // clean shutdown) — surface it instead of letting the caller see
+            // an opaque "connection refused" with no indication why.
+            eprintln!("mcp http round-trip test server exited with error: {err}");
+        }
     });
     Ok((port, handle))
 }

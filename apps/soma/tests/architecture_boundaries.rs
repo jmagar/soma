@@ -204,6 +204,19 @@ fn runtime_state_exposes_the_application_facade_not_legacy_engines() {
 
     let runtime_sources = collect_rs_files("crates/soma/runtime/src");
     for source in &runtime_sources {
+        // Test-only files are exempt: `test_support.rs` (dev-dependency only,
+        // `#![cfg(test)]`, excluded from `cargo xtask check-architecture`'s
+        // layer graph — see its own module doc) constructs a real
+        // `SomaService`/`ProviderRegistry` stub to build a realistic
+        // `SomaApplication` for `protected_routes`/`protected_routes_proxy`
+        // axum-harness tests. This check's intent is soma-runtime's
+        // *production* surface never exposing raw legacy engines in place of
+        // the `SomaApplication` facade — not that the crate's own test
+        // fixtures can't construct one to exercise real behavior.
+        let name = source.file_name().and_then(|name| name.to_str());
+        if name == Some("test_support.rs") || name.is_some_and(|name| name.ends_with("_tests.rs")) {
+            continue;
+        }
         let contents = fs::read_to_string(source)
             .unwrap_or_else(|error| panic!("failed to read {}: {error}", source.display()));
         for forbidden in ["SomaService", "ProviderRegistry", "ProviderCall"] {
@@ -490,6 +503,47 @@ fn application_ports_are_available_to_all_composition_profiles() {
         source.contains("feature = \"mcp-stdio\"") && source.contains("feature = \"mcp-http\"")
     );
     assert!(lines.contains(&"mod bootstrap;"));
+}
+
+/// PR 18's acceptance criterion is that `apps/soma` "contains no business
+/// rules" (plan section 3.1). A prior review found `protected_routes.rs`
+/// (bearer-token auth, scope authorization) and `protected_routes_proxy.rs`
+/// (the inbound-to-upstream reverse-proxy engine) still living directly in
+/// `apps/soma/src` — real business/security logic in the composition root.
+/// Both were moved to `crates/soma/integrations` (their permanent home; see
+/// that crate's module doc comment). This test fails CI if that logic (or
+/// something that looks like it) is ever reintroduced into `apps/soma/src`,
+/// instead of relying on reviewer vigilance to catch it a second time.
+#[test]
+fn apps_soma_does_not_reintroduce_protected_route_business_logic() {
+    let forbidden = [
+        // Bearer-token validation / OAuth-scope authorization decisions —
+        // protected_routes.rs's `authenticate_protected_route_request`.
+        "validate_access_token_with_issuer",
+        "fn authenticate_protected_route_request",
+        // Gateway-subset dispatch workflow — protected_routes.rs's
+        // `dispatch_gateway_subset`.
+        "fn dispatch_gateway_subset",
+        // Inbound-to-upstream reverse-proxy engine —
+        // protected_routes_proxy.rs's `proxy_protected_mcp_route` and its
+        // backend-target resolver.
+        "fn proxy_protected_mcp_route",
+        "fn protected_route_upstream_target",
+    ];
+
+    for path in collect_rs_files("apps/soma/src") {
+        let src = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+        for pattern in forbidden {
+            assert!(
+                !src.contains(pattern),
+                "{} contains `{pattern}` — protected-route business logic belongs in \
+                 crates/soma/integrations (soma-integrations), not apps/soma \
+                 (composition root; plan section 3.1 \"Does not own\")",
+                rel(&path)
+            );
+        }
+    }
 }
 
 #[test]

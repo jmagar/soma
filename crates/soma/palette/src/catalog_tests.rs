@@ -89,3 +89,23 @@ fn catalog_response_carries_fingerprint_and_schema_version() {
     assert_eq!(response.fingerprint, "sha256:test");
     assert!(response.entries.is_empty());
 }
+
+#[test]
+fn flat_maps_tools_across_multiple_catalogs() {
+    let alpha = ToolSpec::new("alpha_tool", "Alpha", json!({"type": "object"}));
+    let beta = ToolSpec::new("beta_tool", "Beta", json!({"type": "object"}));
+    let snap = snapshot(vec![
+        manifest_with_tools("alpha", vec![alpha]),
+        manifest_with_tools("beta", vec![beta]),
+    ]);
+
+    let entries = palette_entries(&snap);
+
+    assert_eq!(entries.len(), 2);
+    assert!(entries
+        .iter()
+        .any(|entry| entry.id == "alpha_tool" && entry.provider == "alpha"));
+    assert!(entries
+        .iter()
+        .any(|entry| entry.id == "beta_tool" && entry.provider == "beta"));
+}

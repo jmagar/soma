@@ -26,18 +26,20 @@ pub fn palette_error_status(error: &ApplicationError) -> StatusCode {
 }
 
 /// `404` body for a launcher id that doesn't resolve to any palette-exposed
-/// tool. Kept distinct from `ApplicationError` mapping because catalog/schema
-/// lookups happen in this crate, before any call reaches `SomaApplication`.
+/// tool. The lookup happens in this crate, before any call reaches
+/// `SomaApplication`, so there is no real `ApplicationError` to map — but
+/// the body is still built as an `ApplicationError` value (rather than a
+/// hand-rolled `json!` literal) so every `/v1/palette/*` error response,
+/// found-then-failed or never-found, shares one wire shape
+/// (`code`/`message`/`retryable`/`remediation`/`details`) for the frontend.
 pub fn launcher_not_found(id: &str) -> Response {
-    (
-        StatusCode::NOT_FOUND,
-        Json(serde_json::json!({
-            "code": "launcher_not_found",
-            "message": format!("no palette-exposed launcher entry `{id}`"),
-            "remediation": "Refresh the catalog and use a known launcher id.",
-        })),
-    )
-        .into_response()
+    let error = ApplicationError::new(
+        "launcher_not_found",
+        format!("no palette-exposed launcher entry `{id}`"),
+        false,
+        "Refresh the catalog and use a known launcher id.",
+    );
+    (StatusCode::NOT_FOUND, Json(error)).into_response()
 }
 
 #[cfg(test)]

@@ -18,7 +18,8 @@ use serde_json::Value;
 use soma_application::{ExecuteActionRequest, ExecutionContext, SomaApplication};
 use soma_cli_core::common_args::{
     parse_bool_flag as core_parse_bool_flag,
-    parse_optional_value_flag as core_parse_optional_value_flag, reject_args as core_reject_args,
+    parse_optional_value_flag as core_parse_optional_value_flag,
+    parse_required_value_flag as core_parse_required_value_flag, reject_args as core_reject_args,
 };
 use soma_cli_core::confirmation::confirm_typed;
 use soma_domain::actions::{ActionSpec, SomaAction};
@@ -202,9 +203,10 @@ where
                 reject_args(rest, "help")?;
                 Some(Command::Help)
             }
-            // §48: doctor is always parsed here, dispatched via run_cli in main.rs.
+            // §48: doctor is always parsed here, dispatched via apps/soma::local::run
+            // (called from lib.rs::run(), called from bin/soma.rs).
             // CUSTOMIZE: Keep this arm. It routes to doctor::run_doctor() which needs
-            //           the full Config (not just SomaConfig), so main.rs handles it.
+            //           the full Config (not just SomaConfig), so apps/soma handles it.
             "doctor" => {
                 let json = parse_bool_flag(rest, "doctor", "--json")?;
                 Some(Command::Doctor { json })
@@ -301,7 +303,7 @@ pub async fn run(
                 params: json.clone(),
             }
         }
-        None => unreachable!("dispatched directly in apps/soma::runtime::run_cli"),
+        None => unreachable!("dispatched directly in apps/soma::local::run"),
     };
     let result = match application
         .execute_action(request, cli_execution_context(destructive_confirmed))
@@ -592,10 +594,7 @@ fn parse_optional_value_flag(args: &[String], command: &str, flag: &str) -> Resu
 }
 
 fn parse_required_value_flag(args: &[String], command: &str, flag: &str) -> Result<Option<String>> {
-    match parse_optional_value_flag(args, command, flag)? {
-        Some(value) => Ok(Some(value)),
-        None => Ok(None),
-    }
+    Ok(core_parse_required_value_flag(args, command, flag)?)
 }
 
 fn parse_watch_flags(args: &[String]) -> Result<(Option<String>, Option<String>)> {

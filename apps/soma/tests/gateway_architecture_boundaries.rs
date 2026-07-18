@@ -141,6 +141,87 @@ fn soma_gateway_has_no_forbidden_direct_dependencies() {
     }
 }
 
+/// Symbols that mark direct use of `rmcp`'s inbound-server machinery
+/// (`ServerHandler` impls, the tool/prompt router macros, low-level
+/// `rmcp::service` types). `soma-gateway` and `soma-mcp-proxy` must compose
+/// `soma-mcp-server` for anything server-shaped instead of reaching for these
+/// directly — PR 14 moved the residual inbound lifecycle/paging/protocol
+/// mechanics into `soma-mcp-server` for exactly this reason. `rmcp::model`
+/// data types (`Tool`, `Resource`, `Prompt`, ...) are fine: those are wire
+/// values, not server machinery, and `soma-mcp-server`'s conversion helpers
+/// return them by design.
+const RMCP_SERVER_MACHINERY_SYMBOLS: &[&str] = &[
+    "ServerHandler",
+    "rmcp::service::",
+    "#[tool_router]",
+    "#[prompt_router]",
+    "#[tool(",
+    "#[tool_handler",
+];
+
+fn rust_files_under(dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let entries = fs::read_dir(&current)
+            .unwrap_or_else(|e| panic!("failed to read dir {}: {e}", current.display()));
+        for entry in entries {
+            let entry = entry.expect("dir entry");
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+/// PR 14 closed the gap (tracked in the refactor plan, section 3.7) where
+/// `soma-gateway` and `soma-mcp-proxy` reached for `rmcp` server types
+/// directly instead of composing `soma-mcp-server`. Assert the dependency
+/// edges the plan calls for actually exist, so a future edit can't silently
+/// drop the `soma-mcp-server` dependency and reopen the gap.
+#[test]
+fn soma_gateway_and_proxy_depend_directly_on_soma_mcp_server() {
+    let metadata = cargo_metadata();
+    for crate_name in ["soma-gateway", "soma-mcp-proxy"] {
+        let package = package_by_name(&metadata, crate_name);
+        let direct_dependencies = package["dependencies"]
+            .as_array()
+            .expect("dependencies must be an array");
+        let depends_on_mcp_server = direct_dependencies
+            .iter()
+            .any(|dependency| dependency["name"].as_str() == Some("soma-mcp-server"));
+        assert!(
+            depends_on_mcp_server,
+            "{crate_name} must depend directly on soma-mcp-server (refactor plan section 3.7)"
+        );
+    }
+}
+
+#[test]
+fn soma_gateway_and_proxy_source_avoids_rmcp_server_machinery() {
+    for crate_src in [
+        "crates/shared/mcp/gateway/src",
+        "crates/shared/mcp/proxy/src",
+    ] {
+        let dir = workspace_root().join(crate_src);
+        for path in rust_files_under(&dir) {
+            let src = fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+            for symbol in RMCP_SERVER_MACHINERY_SYMBOLS {
+                assert!(
+                    !src.contains(symbol),
+                    "{} must not use rmcp server machinery directly ({symbol}); compose soma-mcp-server instead",
+                    path.display()
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn soma_gateway_resolved_graph_has_no_labby_or_product_crates() {
     let metadata = cargo_metadata();

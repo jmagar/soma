@@ -363,6 +363,57 @@ async fn cors_preflight_allows_mcp_protocol_headers() {
     }
 }
 
+#[tokio::test]
+async fn unmatched_route_returns_the_not_found_envelope() {
+    // Regression guard for the fallback swap from an inline
+    // `Json(json!({"error": "not_found"}))` closure to
+    // `soma_http_server::rejection::not_found_handler`: the composed router
+    // must still answer an unmatched path with the same 404 JSON shape --
+    // but only when no embedded web assets are present to claim the SPA
+    // fallback instead (see `http.rs`'s `router()`: `soma_web::serve_web_assets`
+    // intentionally returns 200 with `index.html` for client-side routing
+    // when `soma_web::web_assets_available()` is true). This is genuinely
+    // build-machine-dependent: `apps/web/out/` is embedded via `include_dir!`
+    // at compile time, so a dev box with a prior `apps/web` build present
+    // will legitimately take the SPA branch here.
+    let response = router(crate::testing::loopback_state())
+        .oneshot(
+            Request::builder()
+                .uri("/this-route-does-not-exist")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    #[cfg(feature = "web")]
+    fn web_assets_available() -> bool {
+        soma_web::web_assets_available()
+    }
+    #[cfg(not(feature = "web"))]
+    fn web_assets_available() -> bool {
+        false
+    }
+
+    if web_assets_available() {
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        assert!(
+            !bytes.is_empty(),
+            "SPA fallback should serve index.html content"
+        );
+    } else {
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should read");
+        let body: serde_json::Value = serde_json::from_slice(&bytes).expect("body should be json");
+        assert_eq!(body["error"], "not_found");
+    }
+}
+
 async fn oauth_state_with_gateway(temp: &tempfile::TempDir, gateway: GatewayConfig) -> AppState {
     crate::testing::oauth_state_with_gateway(temp.path(), gateway).await
 }

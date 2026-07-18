@@ -44,15 +44,23 @@ use soma_runtime::server::{resolve_auth_policy_kind, AuthPolicyKind};
     )
 ))]
 use soma_runtime::server::{GatewayProductState, SomaRuntime};
-#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
+#[cfg(all(feature = "cli", feature = "mcp-stdio"))]
 use tracing_subscriber::{fmt, EnvFilter};
 
 /// Initialize tracing at `level` unless `RUST_LOG` overrides it.
 ///
-/// Stdio mode always runs at `warn` (see [`crate::invocation::Mode`]) so
-/// JSON-RPC framing on stdout is never corrupted by log lines; the HTTP
+/// Only called from `run()` (gated `cli` + `mcp-stdio`) before it dispatches
+/// to a mode — never from `http::serve()` directly, since `tracing_subscriber`
+/// panics if a global default is installed twice. A downstream fork that
+/// embeds `soma::server::serve_http_mcp()` under `mcp-http` alone (bypassing
+/// `run()`) is responsible for initializing its own tracing subscriber, same
+/// as pre-PR18's `serve_http_mcp()` never called this either — it was always
+/// `bin/soma.rs`'s `main()` that did.
+///
+/// Stdio mode always runs at `warn` (see `crate::invocation::DispatchMode`)
+/// so JSON-RPC framing on stdout is never corrupted by log lines; the HTTP
 /// server defaults to `info`.
-#[cfg(any(feature = "cli", feature = "mcp-stdio", feature = "mcp-http"))]
+#[cfg(all(feature = "cli", feature = "mcp-stdio"))]
 pub(crate) fn init_logging(level: &str) {
     fmt()
         .with_env_filter(

@@ -54,5 +54,13 @@ tracing = "0.1"
 url = "2"
 
 [dev-dependencies]
+# Test-only: build a real AppState/SomaApplication stub, plus a real
+# GatewayApplicationPort/CodeModeApplicationPort, for `protected-routes`
+# axum-harness tests. Dev-dependencies are excluded from `cargo xtask
+# check-architecture`'s layer graph (normal-kind edges only), and
+# soma-integrations does not depend back on soma-runtime, so this creates
+# no cycle and no product-runtime -> product-integration edge for real builds.
+soma-client = { workspace = true }
+soma-integrations = { workspace = true, features = ["auth"] }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

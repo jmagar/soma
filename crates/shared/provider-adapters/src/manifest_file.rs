@@ -5,7 +5,7 @@
 //! already-parsed, already-validated `ProviderManifest` and the file it came
 //! from, builds the matching adapter for its declared `ProviderKind`.
 //!
-//! The directory scan, fingerting, and Soma-specific manifest policy
+//! The directory scan, fingerprinting, and Soma-specific manifest policy
 //! (reserved CLI command names, `SOMA_`/`LAB_` env-prefix denial) stay in
 //! `crates/soma/application` — see the PR10 deviation notes for why that
 //! orchestration did not move here.
