@@ -1,9 +1,11 @@
 use serde_json::json;
+use serial_test::serial;
 
 use super::budget::RunBudget;
 use crate::CodeModeConfig;
 
 #[test]
+#[serial(code_mode_call_budget_env)]
 fn budget_rejects_operations_over_configured_limit() {
     let config = CodeModeConfig {
         max_calls_per_run: Some(1),
