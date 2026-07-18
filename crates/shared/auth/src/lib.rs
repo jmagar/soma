@@ -12,6 +12,7 @@ pub mod error;
 pub mod google;
 pub mod jwt;
 pub mod oauth_provider;
+pub(crate) mod oidc;
 pub(crate) mod provider_http;
 #[cfg(feature = "http-axum")]
 pub mod metadata;
