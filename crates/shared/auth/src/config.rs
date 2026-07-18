@@ -91,6 +91,32 @@ pub struct GoogleConfig {
     pub scopes: Vec<String>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutheliaConfig {
+    #[serde(default)]
+    pub issuer_url: Option<Url>,
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+    #[serde(default = "default_authelia_callback_path")]
+    pub callback_path: String,
+    #[serde(default = "default_authelia_scopes")]
+    pub scopes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitHubConfig {
+    #[serde(default)]
+    pub client_id: String,
+    #[serde(default)]
+    pub client_secret: String,
+    #[serde(default = "default_github_callback_path")]
+    pub callback_path: String,
+    #[serde(default = "default_github_scopes")]
+    pub scopes: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthConfig {
     pub mode: AuthMode,
@@ -104,6 +130,16 @@ pub struct AuthConfig {
     /// through the SQLite-backed allowlist managed via the web UI.
     pub admin_email: String,
     pub google: GoogleConfig,
+    pub authelia: AutheliaConfig,
+    pub github: GitHubConfig,
+    /// Which configured provider `/authorize` and `/auth/login` use when the
+    /// request omits `?provider=`. Must name a provider that is actually
+    /// configured (validated in [`AuthConfig::validate`]). Resolved
+    /// automatically when unset: `google` > `authelia` > `github`, in that
+    /// priority order, picking the first one that has credentials — this is
+    /// what makes every existing single-provider (Google-only) deployment
+    /// keep working with zero config changes after upgrading.
+    pub default_provider: String,
     pub access_token_ttl: Duration,
     pub refresh_token_ttl: Duration,
     pub auth_code_ttl: Duration,
@@ -165,6 +201,9 @@ impl Default for AuthConfig {
             allowed_client_redirect_uris: Vec::new(),
             admin_email: String::new(),
             google: GoogleConfig::default(),
+            authelia: AutheliaConfig::default(),
+            github: GitHubConfig::default(),
+            default_provider: String::new(),
             access_token_ttl: Duration::from_secs(DEFAULT_ACCESS_TOKEN_TTL_SECS),
             refresh_token_ttl: Duration::from_secs(DEFAULT_REFRESH_TOKEN_TTL_SECS),
             auth_code_ttl: Duration::from_secs(DEFAULT_AUTH_CODE_TTL_SECS),
@@ -248,21 +287,111 @@ impl AuthConfig {
                     "{prefix}_PUBLIC_URL is required when {prefix}_AUTH_MODE=oauth"
                 )));
             }
-            if self.google.client_id.is_empty() {
+
+            let google_configured = !self.google.client_id.is_empty();
+            let authelia_configured = !self.authelia.client_id.is_empty();
+            let github_configured = !self.github.client_id.is_empty();
+
+            if google_configured && self.google.client_secret.is_empty() {
                 return Err(AuthError::Config(format!(
-                    "{prefix}_GOOGLE_CLIENT_ID is required when {prefix}_AUTH_MODE=oauth"
+                    "{prefix}_GOOGLE_CLIENT_SECRET is required when {prefix}_GOOGLE_CLIENT_ID is set"
                 )));
             }
-            if self.google.client_secret.is_empty() {
+            if authelia_configured {
+                if self.authelia.issuer_url.is_none() {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTHELIA_ISSUER_URL is required when {prefix}_AUTHELIA_CLIENT_ID is set"
+                    )));
+                }
+                if self.authelia.client_secret.is_empty() {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTHELIA_CLIENT_SECRET is required when {prefix}_AUTHELIA_CLIENT_ID is set"
+                    )));
+                }
+                // Google's authorize/token/JWKS endpoints are hardcoded `https://`
+                // string constants — no config can downgrade them. Authelia's are
+                // entirely operator-supplied, so unlike Google this crate must
+                // enforce the scheme itself: a plaintext issuer would send
+                // authorization codes, tokens, and `client_secret` (in the token
+                // exchange POST body) over the wire unencrypted with no other
+                // signal that anything is wrong.
+                if let Some(issuer) = self.authelia.issuer_url.as_ref()
+                    && issuer.scheme() != "https"
+                {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTHELIA_ISSUER_URL must use https, got `{}`",
+                        issuer.scheme()
+                    )));
+                }
+            }
+            if github_configured && self.github.client_secret.is_empty() {
                 return Err(AuthError::Config(format!(
-                    "{prefix}_GOOGLE_CLIENT_SECRET is required when {prefix}_AUTH_MODE=oauth"
+                    "{prefix}_GITHUB_CLIENT_SECRET is required when {prefix}_GITHUB_CLIENT_ID is set"
                 )));
+            }
+            // Two configured providers with the same (possibly operator-overridden)
+            // callback_path would make routes.rs's per-provider route-mounting loop
+            // (Task 10) hit axum's duplicate-route panic at startup instead of a
+            // clean config-time error — check pairwise uniqueness among only the
+            // providers that are actually configured.
+            {
+                let mut configured_paths: Vec<(&str, &str)> = Vec::new();
+                if google_configured {
+                    configured_paths.push(("google", self.google.callback_path.as_str()));
+                }
+                if authelia_configured {
+                    configured_paths.push(("authelia", self.authelia.callback_path.as_str()));
+                }
+                if github_configured {
+                    configured_paths.push(("github", self.github.callback_path.as_str()));
+                }
+                for i in 0..configured_paths.len() {
+                    for j in (i + 1)..configured_paths.len() {
+                        if configured_paths[i].1 == configured_paths[j].1 {
+                            return Err(AuthError::Config(format!(
+                                "{prefix}_{a}_CALLBACK_PATH and {prefix}_{b}_CALLBACK_PATH must not both be `{path}`",
+                                a = configured_paths[i].0.to_ascii_uppercase(),
+                                b = configured_paths[j].0.to_ascii_uppercase(),
+                                path = configured_paths[i].1,
+                            )));
+                        }
+                    }
+                }
+            }
+            if !google_configured && !authelia_configured && !github_configured {
+                return Err(AuthError::Config(format!(
+                    "at least one OAuth provider must be configured when {prefix}_AUTH_MODE=oauth — \
+                     set {prefix}_GOOGLE_CLIENT_ID, {prefix}_AUTHELIA_CLIENT_ID (+ {prefix}_AUTHELIA_ISSUER_URL), \
+                     or {prefix}_GITHUB_CLIENT_ID (each paired with its matching _CLIENT_SECRET)"
+                )));
+            }
+            match self.default_provider.as_str() {
+                "google" if !google_configured => {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTH_DEFAULT_PROVIDER=google but {prefix}_GOOGLE_CLIENT_ID is not set"
+                    )));
+                }
+                "authelia" if !authelia_configured => {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTH_DEFAULT_PROVIDER=authelia but {prefix}_AUTHELIA_CLIENT_ID is not set"
+                    )));
+                }
+                "github" if !github_configured => {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTH_DEFAULT_PROVIDER=github but {prefix}_GITHUB_CLIENT_ID is not set"
+                    )));
+                }
+                "google" | "authelia" | "github" => {}
+                other => {
+                    return Err(AuthError::Config(format!(
+                        "{prefix}_AUTH_DEFAULT_PROVIDER must be `google`, `authelia`, or `github`, got `{other}`"
+                    )));
+                }
             }
             if self.admin_email.is_empty() {
                 return Err(AuthError::Config(format!(
                     "{prefix}_AUTH_ADMIN_EMAIL is required when {prefix}_AUTH_MODE=oauth — \
-                     set the Google email of the bootstrap admin so no account \
-                     can log in unless explicitly permitted"
+                     set the admin's email so no account can log in unless explicitly permitted"
                 )));
             }
         }
@@ -400,6 +529,16 @@ impl AuthConfigBuilder {
         let key_g_secret = env_key(&prefix, "GOOGLE_CLIENT_SECRET");
         let key_g_callback = env_key(&prefix, "GOOGLE_CALLBACK_PATH");
         let key_g_scopes = env_key(&prefix, "GOOGLE_SCOPES");
+        let key_a_issuer = env_key(&prefix, "AUTHELIA_ISSUER_URL");
+        let key_a_id = env_key(&prefix, "AUTHELIA_CLIENT_ID");
+        let key_a_secret = env_key(&prefix, "AUTHELIA_CLIENT_SECRET");
+        let key_a_callback = env_key(&prefix, "AUTHELIA_CALLBACK_PATH");
+        let key_a_scopes = env_key(&prefix, "AUTHELIA_SCOPES");
+        let key_gh_id = env_key(&prefix, "GITHUB_CLIENT_ID");
+        let key_gh_secret = env_key(&prefix, "GITHUB_CLIENT_SECRET");
+        let key_gh_callback = env_key(&prefix, "GITHUB_CALLBACK_PATH");
+        let key_gh_scopes = env_key(&prefix, "GITHUB_SCOPES");
+        let key_default_provider = env_key(&prefix, "AUTH_DEFAULT_PROVIDER");
         let key_at_ttl = env_key(&prefix, "AUTH_ACCESS_TOKEN_TTL_SECS");
         let key_rt_ttl = env_key(&prefix, "AUTH_REFRESH_TOKEN_TTL_SECS");
         let key_code_ttl = env_key(&prefix, "AUTH_CODE_TTL_SECS");
@@ -416,6 +555,23 @@ impl AuthConfigBuilder {
             .default_data_dir
             .clone()
             .unwrap_or_else(default_auth_dir);
+        let google_client_id = read_string(&vars, &key_g_id).unwrap_or_default();
+        let authelia_client_id = read_string(&vars, &key_a_id).unwrap_or_default();
+        let github_client_id = read_string(&vars, &key_gh_id).unwrap_or_default();
+        let default_provider = read_string(&vars, &key_default_provider)
+            .map(|raw| raw.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| {
+                if !google_client_id.is_empty() {
+                    "google".to_string()
+                } else if !authelia_client_id.is_empty() {
+                    "authelia".to_string()
+                } else if !github_client_id.is_empty() {
+                    "github".to_string()
+                } else {
+                    "google".to_string()
+                }
+            });
         let config = AuthConfig {
             mode,
             public_url: read_url(&vars, &key_public_url)?,
@@ -427,12 +583,28 @@ impl AuthConfigBuilder {
             allowed_client_redirect_uris: read_csv(&vars, &key_redirects).unwrap_or_default(),
             admin_email,
             google: GoogleConfig {
-                client_id: read_string(&vars, &key_g_id).unwrap_or_default(),
+                client_id: google_client_id.clone(),
                 client_secret: read_string(&vars, &key_g_secret).unwrap_or_default(),
                 callback_path: read_string(&vars, &key_g_callback)
                     .unwrap_or_else(|| DEFAULT_CALLBACK_PATH.to_string()),
                 scopes: read_csv(&vars, &key_g_scopes).unwrap_or_else(default_google_scopes),
             },
+            authelia: AutheliaConfig {
+                issuer_url: read_url(&vars, &key_a_issuer)?,
+                client_id: read_string(&vars, &key_a_id).unwrap_or_default(),
+                client_secret: read_string(&vars, &key_a_secret).unwrap_or_default(),
+                callback_path: read_string(&vars, &key_a_callback)
+                    .unwrap_or_else(default_authelia_callback_path),
+                scopes: read_csv(&vars, &key_a_scopes).unwrap_or_else(default_authelia_scopes),
+            },
+            github: GitHubConfig {
+                client_id: read_string(&vars, &key_gh_id).unwrap_or_default(),
+                client_secret: read_string(&vars, &key_gh_secret).unwrap_or_default(),
+                callback_path: read_string(&vars, &key_gh_callback)
+                    .unwrap_or_else(default_github_callback_path),
+                scopes: read_csv(&vars, &key_gh_scopes).unwrap_or_else(default_github_scopes),
+            },
+            default_provider,
             access_token_ttl: Duration::from_secs(
                 read_u64(&vars, &key_at_ttl)?.unwrap_or(DEFAULT_ACCESS_TOKEN_TTL_SECS),
             ),
@@ -515,6 +687,27 @@ fn default_google_scopes() -> Vec<String> {
     ]
 }
 
+fn default_authelia_callback_path() -> String {
+    "/auth/authelia/callback".to_string()
+}
+
+fn default_authelia_scopes() -> Vec<String> {
+    vec![
+        "openid".to_string(),
+        "email".to_string(),
+        "profile".to_string(),
+        "offline_access".to_string(),
+    ]
+}
+
+fn default_github_callback_path() -> String {
+    "/auth/github/callback".to_string()
+}
+
+fn default_github_scopes() -> Vec<String> {
+    vec!["read:user".to_string(), "user:email".to_string()]
+}
+
 fn read_string(vars: &HashMap<String, String>, key: &str) -> Option<String> {
     vars.get(key).cloned()
 }
@@ -595,6 +788,103 @@ mod tests {
         ]))
         .unwrap_err();
         assert!(err.to_string().contains("LAB_PUBLIC_URL"));
+    }
+
+    #[test]
+    fn oauth_mode_requires_at_least_one_configured_provider() {
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap_err();
+        assert!(err.to_string().contains("at least one OAuth provider"));
+    }
+
+    #[test]
+    fn oauth_mode_accepts_authelia_only_configuration() {
+        let cfg = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_AUTHELIA_ISSUER_URL", "https://auth.example.com"),
+            ("LAB_AUTHELIA_CLIENT_ID", "id"),
+            ("LAB_AUTHELIA_CLIENT_SECRET", "secret"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.default_provider, "authelia");
+    }
+
+    #[test]
+    fn oauth_mode_accepts_github_only_configuration() {
+        let cfg = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GITHUB_CLIENT_ID", "id"),
+            ("LAB_GITHUB_CLIENT_SECRET", "secret"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.default_provider, "github");
+    }
+
+    #[test]
+    fn oauth_mode_default_provider_prefers_google_when_multiple_are_configured() {
+        let cfg = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GOOGLE_CLIENT_ID", "id"),
+            ("LAB_GOOGLE_CLIENT_SECRET", "secret"),
+            ("LAB_GITHUB_CLIENT_ID", "gh-id"),
+            ("LAB_GITHUB_CLIENT_SECRET", "gh-secret"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap();
+        assert_eq!(cfg.default_provider, "google");
+    }
+
+    #[test]
+    fn oauth_mode_rejects_default_provider_naming_an_unconfigured_provider() {
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GOOGLE_CLIENT_ID", "id"),
+            ("LAB_GOOGLE_CLIENT_SECRET", "secret"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+            ("LAB_AUTH_DEFAULT_PROVIDER", "github"),
+        ]))
+        .unwrap_err();
+        assert!(err.to_string().contains("LAB_AUTH_DEFAULT_PROVIDER=github"));
+    }
+
+    #[test]
+    fn oauth_mode_rejects_a_non_https_authelia_issuer_url() {
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_AUTHELIA_ISSUER_URL", "http://auth.internal"),
+            ("LAB_AUTHELIA_CLIENT_ID", "id"),
+            ("LAB_AUTHELIA_CLIENT_SECRET", "secret"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap_err();
+        assert!(err.to_string().contains("LAB_AUTHELIA_ISSUER_URL must use https"));
+    }
+
+    #[test]
+    fn oauth_mode_rejects_two_configured_providers_sharing_a_callback_path() {
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GOOGLE_CLIENT_ID", "id"),
+            ("LAB_GOOGLE_CLIENT_SECRET", "secret"),
+            ("LAB_GITHUB_CLIENT_ID", "gh-id"),
+            ("LAB_GITHUB_CLIENT_SECRET", "gh-secret"),
+            ("LAB_GITHUB_CALLBACK_PATH", "/auth/google/callback"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap_err();
+        assert!(err.to_string().contains("must not both be `/auth/google/callback`"));
     }
 
     #[test]
