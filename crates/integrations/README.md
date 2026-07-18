@@ -159,6 +159,16 @@ Work through this in order; `unifi` demonstrates every item.
   repo root), but if you add a new top-level ignore pattern anywhere in
   this repo, anchor it (`/name/`) unless you deliberately want it to match
   every nested directory with that name.
+- [ ] **Register the crate's `src/` root with `xtask/src/test_siblings.rs`**
+  — every workspace member's `src/` must appear in either
+  `CHECKED_SRC_ROOTS` (the `foo.rs`/`foo_tests.rs` sibling convention) or
+  `UNCHECKED_SRC_ROOTS` (inline `#[cfg(test)] mod tests`, with a reason).
+  `unifi` uses inline tests, so it's in the latter. Skipping this doesn't
+  fail fast — `crate_src_roots_classify_every_workspace_member` is the only
+  thing that catches it, and it only ran on the Windows build in this
+  round's own PR, not the PR that first added the crate to the workspace.
+  Run `cargo test -p xtask --bin xtask test_siblings` after adding a crate
+  here, not just `cargo xtask check-architecture`.
 
 ## Architecture enforcement
 

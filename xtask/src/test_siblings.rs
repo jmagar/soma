@@ -201,6 +201,14 @@ const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
          modules use inline tests. Split per-module rather than per-crate before \
          checking this tree.",
     ),
+    (
+        "crates/integrations/unifi/src",
+        "inline #[cfg(test)] mod tests throughout (63 as of writing), plus \
+         tests/client.rs and tests/action_dispatch.rs exercising the HTTP \
+         and dynamic-dispatch layers through the public API. This is the \
+         crates/integrations/* reference template's convention - see \
+         crates/integrations/README.md.",
+    ),
 ];
 
 fn crate_src_roots() -> Vec<PathBuf> {
