@@ -25,6 +25,7 @@ struct Operation {
 /// Panics if the bundled inventory JSON fails to parse — see
 /// [`super::all_capabilities`] for why that can only happen from a broken
 /// build, not at runtime.
+#[allow(clippy::expect_used)]
 pub fn capabilities() -> Vec<Capability> {
     let inventory: Inventory = serde_json::from_str(include_str!(
         "../../data/unifi_official_network_v10_3_58.json"

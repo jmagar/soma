@@ -36,10 +36,10 @@ async fn dispatches_a_dynamic_official_action_with_a_path_parameter() {
     let dispatcher = ActionDispatcher::new(client);
 
     let result = dispatcher
-        .execute(ActionRequest {
-            action: "official_list_clients".to_string(),
-            params: json!({ "siteId": "site-1" }),
-        })
+        .execute(ActionRequest::new(
+            "official_list_clients",
+            json!({ "siteId": "site-1" }),
+        ))
         .await
         .unwrap();
 
@@ -61,10 +61,10 @@ async fn dispatches_a_dynamic_internal_action_with_a_path_parameter() {
     let dispatcher = ActionDispatcher::new(client);
 
     let result = dispatcher
-        .execute(ActionRequest {
-            action: "unifi_get_lldp_neighbors".to_string(),
-            params: json!({ "device_mac": "aa-bb-cc" }),
-        })
+        .execute(ActionRequest::new(
+            "unifi_get_lldp_neighbors",
+            json!({ "device_mac": "aa-bb-cc" }),
+        ))
         .await
         .unwrap();
 
@@ -84,10 +84,10 @@ async fn hybrid_action_resolves_to_official_when_a_site_id_is_supplied() {
     let dispatcher = ActionDispatcher::new(client);
 
     let result = dispatcher
-        .execute(ActionRequest {
-            action: "list_clients".to_string(),
-            params: json!({ "siteId": "site-1" }),
-        })
+        .execute(ActionRequest::new(
+            "list_clients",
+            json!({ "siteId": "site-1" }),
+        ))
         .await
         .unwrap();
 
@@ -107,10 +107,7 @@ async fn hybrid_action_resolves_to_internal_by_default() {
     let dispatcher = ActionDispatcher::new(client);
 
     let result = dispatcher
-        .execute(ActionRequest {
-            action: "list_clients".to_string(),
-            params: json!({}),
-        })
+        .execute(ActionRequest::new("list_clients", json!({})))
         .await
         .unwrap();
 
@@ -127,10 +124,7 @@ async fn an_unknown_action_is_rejected_before_any_request_is_sent() {
     let dispatcher = ActionDispatcher::new(client);
 
     let err = dispatcher
-        .execute(ActionRequest {
-            action: "totally_bogus_action".to_string(),
-            params: json!({}),
-        })
+        .execute(ActionRequest::new("totally_bogus_action", json!({})))
         .await
         .unwrap_err();
 

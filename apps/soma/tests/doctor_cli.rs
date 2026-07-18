@@ -146,7 +146,13 @@ fn doctor_json_reports_deterministic_checks_for_a_clean_loopback_environment() {
 
     let data_dir = env.data_dir();
     let config_path = data_dir.join("config.toml");
-    let bin_path = bin_dir().join(format!("soma{}", std::env::consts::EXE_SUFFIX));
+    // Not `bin_dir().join("soma")` — that hardcodes the Unix filename and
+    // never matches on Windows, where the compiled binary is `soma.exe`.
+    // `binary()` is the same `CARGO_BIN_EXE_soma` path PATH is pointed at
+    // (see `command()` above) and check_binary_in_path resolves against, so
+    // reusing it here is both correct on every platform and guarantees this
+    // fixture can never drift from what the check under test actually finds.
+    let bin_path = PathBuf::from(binary());
 
     assert_eq!(
         checks[0],

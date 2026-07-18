@@ -97,6 +97,7 @@ async fn execute_generic(
     let full_path = resolve_internal_path(&api, &path, client.legacy());
     let mut value = client
         .request_json(
+            capability.action.as_str(),
             method,
             &full_path,
             effective_params.get("query"),
