@@ -168,6 +168,11 @@ impl Client {
         }
     }
 
+    /// Only called from `events::subscribe_events`, which is gated behind
+    /// the `events` feature - suppress the dead-code lint under default
+    /// features rather than widen this method's visibility or duplicate the
+    /// socket path lookup in `events.rs`.
+    #[cfg_attr(not(feature = "events"), allow(dead_code))]
     pub(crate) fn socket_path(&self) -> &std::path::Path {
         &self.0.socket_path
     }
