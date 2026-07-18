@@ -458,7 +458,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::config::GoogleConfig;
+    use crate::config::{GitHubConfig, GoogleConfig};
     use crate::util::now_unix;
 
     /// Builds a minimal `AuthState` for unit-testing `resolve_allowed_emails`.
@@ -493,6 +493,70 @@ mod tests {
         })
         .await
         .expect("auth state")
+    }
+
+    /// `build_providers` hand-writes each provider's map key (e.g.
+    /// `"google".to_string()`) as a string literal, independently of
+    /// `OAuthProvider::provider_id()` on the value stored under that key —
+    /// two never-cross-checked sources of truth for the same fact. Assert
+    /// they actually agree for a multi-provider deployment.
+    #[tokio::test]
+    async fn provider_map_keys_match_each_providers_provider_id() {
+        let dir = tempdir().expect("tempdir");
+        let state = AuthState::new(AuthConfig {
+            mode: AuthMode::OAuth,
+            public_url: Some(Url::parse("https://lab.example.com").expect("url")),
+            sqlite_path: dir.path().join("auth.db"),
+            key_path: dir.path().join("auth.pem"),
+            bootstrap_secret: None,
+            allowed_client_redirect_uris: Vec::new(),
+            admin_email: "admin@example.com".to_string(),
+            google: GoogleConfig {
+                client_id: "client-id".to_string(),
+                client_secret: "client-secret".to_string(),
+                callback_path: "/auth/google/callback".to_string(),
+                scopes: vec![
+                    "openid".to_string(),
+                    "email".to_string(),
+                    "profile".to_string(),
+                ],
+            },
+            github: GitHubConfig {
+                client_id: "gh-client".to_string(),
+                client_secret: "gh-secret".to_string(),
+                callback_path: "/auth/github/callback".to_string(),
+                scopes: vec!["read:user".to_string(), "user:email".to_string()],
+            },
+            access_token_ttl: Duration::from_secs(3600),
+            refresh_token_ttl: Duration::from_secs(3600),
+            auth_code_ttl: Duration::from_secs(300),
+            register_requests_per_minute: 10,
+            authorize_requests_per_minute: 20,
+            max_pending_oauth_states: 1024,
+            default_provider: "google".to_string(),
+            ..AuthConfig::default()
+        })
+        .await
+        .expect("auth state");
+
+        assert_eq!(
+            state.providers.len(),
+            2,
+            "expected both configured providers: {:?}",
+            state.providers.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            state
+                .providers
+                .iter()
+                .all(|(key, provider)| key.as_str() == provider.provider_id()),
+            "provider map key must match provider_id() for every entry: {:?}",
+            state
+                .providers
+                .iter()
+                .map(|(key, provider)| (key.clone(), provider.provider_id()))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[tokio::test]
