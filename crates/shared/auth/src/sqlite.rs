@@ -160,8 +160,8 @@ impl SqliteStore {
             conn.execute(
                 "INSERT INTO authorization_requests (
                     state, client_id, redirect_uri, client_state, resource, scope, provider_code_verifier,
-                    code_challenge, code_challenge_method, created_at, expires_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    code_challenge, code_challenge_method, created_at, expires_at, provider
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     request.state,
                     request.client_id,
@@ -174,6 +174,7 @@ impl SqliteStore {
                     request.code_challenge_method,
                     request.created_at,
                     request.expires_at,
+                    request.provider,
                 ],
             )
             .map_err(sqlite_error)?;
@@ -194,7 +195,7 @@ impl SqliteStore {
                  WHERE state = ?1
                    AND expires_at > ?2
                  RETURNING state, client_id, redirect_uri, client_state, scope, provider_code_verifier,
-                           code_challenge, code_challenge_method, created_at, expires_at, resource",
+                           code_challenge, code_challenge_method, created_at, expires_at, resource, provider",
                 params![state, now],
                 row_to_authorization_request,
             )
@@ -214,8 +215,8 @@ impl SqliteStore {
                 "INSERT INTO authorization_codes (
                     code, client_id, subject, redirect_uri, resource, scope,
                     code_challenge, code_challenge_method, provider_refresh_token,
-                    created_at, expires_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    created_at, expires_at, provider
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     code.code,
                     code.client_id,
@@ -228,6 +229,7 @@ impl SqliteStore {
                     code.provider_refresh_token,
                     code.created_at,
                     code.expires_at,
+                    code.provider,
                 ],
             )
             .map_err(sqlite_error)?;
@@ -246,7 +248,7 @@ impl SqliteStore {
                    AND expires_at > ?2
                  RETURNING code, client_id, subject, redirect_uri, scope,
                            code_challenge, code_challenge_method, provider_refresh_token,
-                           created_at, expires_at, resource",
+                           created_at, expires_at, resource, provider",
                 params![code, now],
                 row_to_authorization_code,
             )
@@ -278,8 +280,8 @@ impl SqliteStore {
             conn.execute(
                 "INSERT INTO refresh_tokens (
                     refresh_token_hash, client_id, subject, resource, scope,
-                    provider_refresh_token, created_at, expires_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    provider_refresh_token, created_at, expires_at, provider
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT(refresh_token_hash) DO UPDATE SET
                     client_id = excluded.client_id,
                     subject = excluded.subject,
@@ -287,7 +289,8 @@ impl SqliteStore {
                     scope = excluded.scope,
                     provider_refresh_token = excluded.provider_refresh_token,
                     created_at = excluded.created_at,
-                    expires_at = excluded.expires_at",
+                    expires_at = excluded.expires_at,
+                    provider = excluded.provider",
                 params![
                     hash,
                     token.client_id,
@@ -297,6 +300,7 @@ impl SqliteStore {
                     encrypted_provider_rt,
                     token.created_at,
                     token.expires_at,
+                    token.provider,
                 ],
             )
             .map_err(sqlite_error)?;
@@ -359,8 +363,8 @@ impl SqliteStore {
                 .execute(
                     "INSERT INTO refresh_tokens (
                     refresh_token_hash, client_id, subject, resource, scope,
-                    provider_refresh_token, created_at, expires_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    provider_refresh_token, created_at, expires_at, provider
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                     params![
                         new_hash,
                         new_token.client_id,
@@ -370,6 +374,7 @@ impl SqliteStore {
                         encrypted_provider_rt,
                         new_token.created_at,
                         new_token.expires_at,
+                        new_token.provider,
                     ],
                 )
                 .map_err(sqlite_error);
@@ -402,7 +407,7 @@ impl SqliteStore {
             let row = conn
                 .query_row(
                     "SELECT client_id, subject, scope,
-                        provider_refresh_token, created_at, expires_at, resource
+                        provider_refresh_token, created_at, expires_at, resource, provider
                  FROM refresh_tokens
                  WHERE refresh_token_hash = ?1
                    AND expires_at > ?2",
@@ -417,6 +422,7 @@ impl SqliteStore {
                             created_at: row.get(4)?,
                             expires_at: row.get(5)?,
                             resource: row.get(6).unwrap_or_default(),
+                            provider: row.get(7)?,
                         })
                     },
                 )
@@ -450,6 +456,32 @@ impl SqliteStore {
             conn.query_row(
                 "SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE expires_at > ?1)",
                 params![now],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count != 0)
+            .map_err(sqlite_error)
+        })
+        .await
+    }
+
+    /// Same as [`Self::has_any_refresh_token`], scoped to one provider.
+    ///
+    /// `authorize()` (Task 11) uses this instead of the unscoped version to
+    /// decide whether to force the upstream consent screen — the unscoped
+    /// version incorrectly treats "Google already has a refresh token on
+    /// file" as a reason to skip forced consent on a user's very first
+    /// Authelia or GitHub login, silently degrading that new provider's
+    /// first session to no local refresh token.
+    pub async fn has_any_refresh_token_for_provider(
+        &self,
+        provider: &str,
+    ) -> Result<bool, AuthError> {
+        let provider = provider.to_string();
+        let now = now_unix();
+        self.with_conn(move |conn| {
+            conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM refresh_tokens WHERE provider = ?1 AND expires_at > ?2)",
+                params![provider, now],
                 |row| row.get::<_, i64>(0),
             )
             .map(|count| count != 0)
@@ -535,14 +567,15 @@ impl SqliteStore {
         self.with_conn(move |conn| {
             conn.execute(
                 "INSERT INTO browser_login_states (
-                    state, return_to, provider_code_verifier, created_at, expires_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    state, return_to, provider_code_verifier, created_at, expires_at, provider
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     login.state,
                     login.return_to,
                     login.provider_code_verifier,
                     login.created_at,
                     login.expires_at,
+                    login.provider,
                 ],
             )
             .map_err(sqlite_error)?;
@@ -594,7 +627,7 @@ impl SqliteStore {
                 "DELETE FROM browser_login_states
                  WHERE state = ?1
                    AND expires_at > ?2
-                 RETURNING state, return_to, provider_code_verifier, created_at, expires_at",
+                 RETURNING state, return_to, provider_code_verifier, created_at, expires_at, provider",
                 params![state, now],
                 row_to_browser_login_state,
             )
@@ -1168,6 +1201,7 @@ fn open_connection(path: &Path) -> Result<Connection, AuthError> {
             client_state TEXT NOT NULL,
             resource TEXT NOT NULL DEFAULT '',
             scope TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'google',
             provider_code_verifier TEXT NOT NULL,
             code_challenge TEXT NOT NULL,
             code_challenge_method TEXT NOT NULL,
@@ -1181,6 +1215,7 @@ fn open_connection(path: &Path) -> Result<Connection, AuthError> {
             redirect_uri TEXT NOT NULL,
             resource TEXT NOT NULL DEFAULT '',
             scope TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'google',
             code_challenge TEXT NOT NULL,
             code_challenge_method TEXT NOT NULL,
             provider_refresh_token TEXT,
@@ -1193,6 +1228,7 @@ fn open_connection(path: &Path) -> Result<Connection, AuthError> {
             subject TEXT NOT NULL,
             resource TEXT NOT NULL DEFAULT '',
             scope TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'google',
             provider_refresh_token TEXT,
             created_at INTEGER NOT NULL,
             expires_at INTEGER NOT NULL
@@ -1208,6 +1244,7 @@ fn open_connection(path: &Path) -> Result<Connection, AuthError> {
         CREATE TABLE IF NOT EXISTS browser_login_states (
             state TEXT PRIMARY KEY,
             return_to TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'google',
             provider_code_verifier TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             expires_at INTEGER NOT NULL
@@ -1270,6 +1307,30 @@ fn open_connection(path: &Path) -> Result<Connection, AuthError> {
         "refresh_tokens",
         "resource",
         "TEXT NOT NULL DEFAULT ''",
+    )?;
+    add_column_if_missing(
+        &conn,
+        "authorization_requests",
+        "provider",
+        "TEXT NOT NULL DEFAULT 'google'",
+    )?;
+    add_column_if_missing(
+        &conn,
+        "authorization_codes",
+        "provider",
+        "TEXT NOT NULL DEFAULT 'google'",
+    )?;
+    add_column_if_missing(
+        &conn,
+        "refresh_tokens",
+        "provider",
+        "TEXT NOT NULL DEFAULT 'google'",
+    )?;
+    add_column_if_missing(
+        &conn,
+        "browser_login_states",
+        "provider",
+        "TEXT NOT NULL DEFAULT 'google'",
     )?;
 
     if !existed {
@@ -1449,6 +1510,7 @@ fn row_to_authorization_request(
         client_state: row.get(3)?,
         resource: row.get(10)?,
         scope: row.get(4)?,
+        provider: row.get(11)?,
         provider_code_verifier: row.get(5)?,
         code_challenge: row.get(6)?,
         code_challenge_method: row.get(7)?,
@@ -1465,6 +1527,7 @@ fn row_to_authorization_code(row: &rusqlite::Row<'_>) -> rusqlite::Result<Author
         redirect_uri: row.get(3)?,
         resource: row.get(10)?,
         scope: row.get(4)?,
+        provider: row.get(11)?,
         code_challenge: row.get(5)?,
         code_challenge_method: row.get(6)?,
         provider_refresh_token: row.get(7)?,
@@ -1491,6 +1554,7 @@ fn row_to_browser_login_state(row: &rusqlite::Row<'_>) -> rusqlite::Result<Brows
         provider_code_verifier: row.get(2)?,
         created_at: row.get(3)?,
         expires_at: row.get(4)?,
+        provider: row.get(5)?,
     })
 }
 
@@ -1602,6 +1666,7 @@ mod tests {
                 subject: "google-user".to_string(),
                 resource: "https://lab.example.com/mcp".to_string(),
                 scope: "lab".to_string(),
+                provider: "google".to_string(),
                 provider_refresh_token: Some("provider-refresh".to_string()),
                 created_at: now_unix() - 300,
                 expires_at: now_unix() - 1,
@@ -1629,6 +1694,7 @@ mod tests {
                 subject: "google-user".to_string(),
                 resource: "https://lab.example.com/mcp".to_string(),
                 scope: "lab".to_string(),
+                provider: "google".to_string(),
                 provider_refresh_token: None,
                 created_at: now_unix() - 300,
                 expires_at: now_unix() - 1,
@@ -1647,6 +1713,7 @@ mod tests {
                 subject: "google-user".to_string(),
                 resource: "https://lab.example.com/mcp".to_string(),
                 scope: "lab".to_string(),
+                provider: "google".to_string(),
                 provider_refresh_token: None,
                 created_at: now_unix(),
                 expires_at: now_unix() + 3600,
@@ -1674,6 +1741,7 @@ mod tests {
                 subject: "google-user".to_string(),
                 resource: "https://lab.example.com/mcp".to_string(),
                 scope: "lab".to_string(),
+                provider: "google".to_string(),
                 provider_refresh_token: None,
                 created_at: now - 600,
                 expires_at: now - 10,
@@ -1691,6 +1759,7 @@ mod tests {
                 client_state: "cs".to_string(),
                 resource: "https://lab.example.com/mcp".to_string(),
                 scope: "lab".to_string(),
+                provider: "google".to_string(),
                 provider_code_verifier: "verifier".to_string(),
                 code_challenge: "challenge".to_string(),
                 code_challenge_method: "S256".to_string(),
@@ -1708,6 +1777,7 @@ mod tests {
                 subject: "google-user".to_string(),
                 resource: "https://lab.example.com/mcp".to_string(),
                 scope: "lab".to_string(),
+                provider: "google".to_string(),
                 provider_refresh_token: None,
                 created_at: now,
                 expires_at: now + 3600,
@@ -1753,6 +1823,7 @@ mod tests {
             redirect_uri: "http://127.0.0.1:7777/callback".to_string(),
             resource: "https://lab.example.com/mcp".to_string(),
             scope: "lab".to_string(),
+            provider: "google".to_string(),
             code_challenge: "challenge".to_string(),
             code_challenge_method: "S256".to_string(),
             provider_refresh_token: Some("provider-refresh".to_string()),
