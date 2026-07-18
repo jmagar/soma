@@ -205,6 +205,15 @@ pub const ENV_KEY_SPECS: &[EnvKeySpec] = &[
         false,
         None,
     ),
+    spec(
+        "SOMA_MCP_TRACE_HEADERS",
+        EnvClassification::KeepEnv,
+        RuntimePlacement::Both,
+        Some("mcp.trace_headers"),
+        LegacyBehavior::Canonical,
+        false,
+        Some("CLAUDE_PLUGIN_OPTION_TRACE_HEADERS"),
+    ),
 ];
 
 pub fn all_specs() -> &'static [EnvKeySpec] {
