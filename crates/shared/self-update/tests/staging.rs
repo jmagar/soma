@@ -25,7 +25,10 @@ async fn stages_incrementally_and_normalizes_digest() {
     assert_eq!(staged.bytes_written(), body.len() as u64);
     assert_eq!(staged.sha256(), digest(body));
     assert_eq!(staged.target_version(), "2.0.0");
-    assert_eq!(staged.path().parent(), executable.parent());
+    assert_eq!(
+        staged.path().parent().unwrap().canonicalize().unwrap(),
+        executable.parent().unwrap().canonicalize().unwrap()
+    );
     assert_eq!(tokio::fs::read(staged.path()).await.unwrap(), body);
 }
 
