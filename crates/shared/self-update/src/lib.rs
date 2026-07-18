@@ -7,11 +7,14 @@
 #![forbid(unsafe_code)]
 
 mod error;
+mod directive;
+mod staging;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 pub use error::{Result, UpdateError};
+pub use staging::StagedArtifact;
 
 /// Network transports permitted for an artifact URL.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

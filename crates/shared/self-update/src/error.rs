@@ -9,12 +9,33 @@ pub enum UpdateError {
     InvalidDigest(String),
     #[error("invalid update policy: {0}")]
     InvalidPolicy(&'static str),
+    #[error("invalid base URL {url}: {message}")]
+    InvalidBaseUrl { url: String, message: String },
+    #[error("invalid artifact URL {url}: {message}")]
+    InvalidArtifactUrl { url: String, message: String },
+    #[error("artifact URL crosses origins from {base} to {artifact}")]
+    CrossOriginArtifact { base: String, artifact: String },
+    #[error("artifact transport is not permitted: {0}")]
+    InsecureTransport(String),
+    #[error("artifact exceeds {limit} byte limit (received at least {actual})")]
+    ArtifactTooLarge { limit: u64, actual: u64 },
+    #[error("artifact digest mismatch: expected {expected}, got {actual}")]
+    DigestMismatch { expected: String, actual: String },
     #[error("I/O operation failed for {path}: {source}")]
     Io {
         path: PathBuf,
         #[source]
         source: std::io::Error,
     },
+}
+
+impl UpdateError {
+    pub(crate) fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
+        Self::Io {
+            path: path.into(),
+            source,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, UpdateError>;
