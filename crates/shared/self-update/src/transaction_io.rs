@@ -1,4 +1,5 @@
 use std::fs::{File, OpenOptions};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -93,23 +94,13 @@ pub(super) fn create_backup(
     let hard_linked = strategy == BackupStrategy::HardLinkOrCopy
         && std::fs::hard_link(executable, backup).is_ok();
     if !hard_linked {
-        use std::os::unix::fs::PermissionsExt;
-
         let mut source =
             File::open(executable).map_err(|error| UpdateError::io(executable, error))?;
         let source_permissions = source
             .metadata()
             .map_err(|error| UpdateError::io(executable, error))?
             .permissions();
-        let mut destination = open_backup_copy_destination(backup, source_permissions.mode())?;
-        std::io::copy(&mut source, &mut destination)
-            .map_err(|error| UpdateError::io(backup, error))?;
-        destination
-            .set_permissions(source_permissions)
-            .map_err(|error| UpdateError::io(backup, error))?;
-        destination
-            .sync_all()
-            .map_err(|error| UpdateError::io(backup, error))?;
+        write_backup_copy(&mut source, backup, source_permissions)?;
     }
     let synced = (|| {
         use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
@@ -140,6 +131,45 @@ pub(super) fn create_backup(
             Err(error)
         }
     }
+}
+
+fn write_backup_copy<R: Read>(
+    source: &mut R,
+    backup: &Path,
+    source_permissions: std::fs::Permissions,
+) -> Result<()> {
+    write_backup_copy_with_cleanup(source, backup, source_permissions, remove_and_sync)
+}
+
+fn write_backup_copy_with_cleanup<R: Read, C: FnOnce(&Path) -> Result<()>>(
+    source: &mut R,
+    backup: &Path,
+    source_permissions: std::fs::Permissions,
+    cleanup: C,
+) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut destination = open_backup_copy_destination(backup, source_permissions.mode())?;
+    let operation = (|| {
+        std::io::copy(source, &mut destination).map_err(|error| UpdateError::io(backup, error))?;
+        destination
+            .set_permissions(source_permissions)
+            .map_err(|error| UpdateError::io(backup, error))?;
+        destination
+            .sync_all()
+            .map_err(|error| UpdateError::io(backup, error))
+    })();
+    if let Err(operation) = operation {
+        drop(destination);
+        return match cleanup(backup) {
+            Ok(()) => Err(operation),
+            Err(cleanup) => Err(UpdateError::TransactionCleanupFailed {
+                operation: Box::new(operation),
+                cleanup: Box::new(cleanup),
+            }),
+        };
+    }
+    Ok(())
 }
 
 fn open_backup_copy_destination(backup: &Path, source_mode: u32) -> Result<File> {
@@ -261,7 +291,6 @@ fn hash_reader(file: &mut File, path: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     loop {
-        use std::io::Read;
         let read = file
             .read(&mut buffer)
             .map_err(|error| UpdateError::io(path, error))?;
@@ -305,7 +334,68 @@ pub(super) fn sync_parent(path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::open_backup_copy_destination;
+    use super::{open_backup_copy_destination, write_backup_copy, write_backup_copy_with_cleanup};
+
+    struct FailingReader {
+        yielded: bool,
+    }
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            if self.yielded {
+                return Err(std::io::Error::other("injected copy failure"));
+            }
+            self.yielded = true;
+            buffer[..4].copy_from_slice(b"part");
+            Ok(4)
+        }
+    }
+
+    #[test]
+    fn backup_copy_error_removes_owned_partial_destination() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let backup = temp.path().join("partial-backup");
+        let mut source = FailingReader { yielded: false };
+
+        let error = write_backup_copy(&mut source, &backup, std::fs::Permissions::from_mode(0o700))
+            .unwrap_err();
+
+        assert!(matches!(error, crate::UpdateError::Io { .. }));
+        assert!(!backup.exists());
+    }
+
+    #[test]
+    fn backup_copy_cleanup_failure_preserves_both_errors() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let backup = temp.path().join("partial-backup");
+        let mut source = FailingReader { yielded: false };
+
+        let error = write_backup_copy_with_cleanup(
+            &mut source,
+            &backup,
+            std::fs::Permissions::from_mode(0o700),
+            |path| {
+                assert_eq!(path, backup);
+                assert_eq!(std::fs::read(path).unwrap(), b"part");
+                Err(crate::UpdateError::io(
+                    path,
+                    std::io::Error::other("injected durable cleanup failure"),
+                ))
+            },
+        )
+        .unwrap_err();
+
+        let crate::UpdateError::TransactionCleanupFailed { operation, cleanup } = error else {
+            panic!("expected combined copy and cleanup error");
+        };
+        assert!(matches!(*operation, crate::UpdateError::Io { .. }));
+        assert!(matches!(*cleanup, crate::UpdateError::Io { .. }));
+        std::fs::remove_file(backup).unwrap();
+    }
 
     #[test]
     fn backup_copy_destination_starts_with_source_mode_under_permissive_umask() {

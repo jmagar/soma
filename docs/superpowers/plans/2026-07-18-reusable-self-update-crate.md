@@ -22,7 +22,8 @@
 > process tree before their captured result is accepted. Staging cleanup guards
 > arm only after exclusive file creation, and post-marker pre-swap validation
 > errors clean authoritative state before backups while preserving combined
-> operation and cleanup failures.
+> operation and cleanup failures. Copy-backup failures also durably remove
+> their owned partial destination and preserve both errors at cleanup failures.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -119,6 +119,9 @@ rehashes the installed executable against the verified target digest before
 durably removing the authoritative marker and cleaning the backup. Changed
 bytes retain both marker and backup; a cleanup interruption after confirmation
 can leave only a harmless orphan backup.
+Copy-based backup creation owns its destination only after exclusive creation;
+copy, permission, or sync failures durably remove the partial backup and report
+both the operation and cleanup errors if removal cannot be completed.
 If mode, identity, or digest validation fails after a prepared marker is
 durable but before replacement, the installer durably removes that marker
 first and then removes the rollback backup. Cleanup failures retain the primary

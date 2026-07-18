@@ -46,7 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Staging cleanup ownership begins only after exclusive partial-file creation,
   so path collisions cannot delete preexisting files. Post-marker pre-swap
   validation failures durably remove authoritative state before rollback
-  backups and retain both the primary and any cleanup error.
+  backups and retain both the primary and any cleanup error. Copy-based backup
+  failures durably remove their partial rollback file and likewise retain both
+  errors if cleanup fails.
   Transaction lock guards explicitly unlock before descriptor close, making
   immediate back-to-back recovery calls deterministic.
   The crate has no internal workspace dependencies; this change
