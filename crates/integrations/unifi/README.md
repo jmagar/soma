@@ -22,6 +22,7 @@ the next one — **this crate demonstrates every item on it.**
 - [Dynamic action dispatch](#dynamic-action-dispatch)
 - [Legacy controller support](#legacy-controller-support)
 - [Error handling](#error-handling)
+- [Lints and panics](#lints-and-panics)
 - [Module layout](#module-layout)
 - [Extending: adding or fixing a capability](#extending-adding-or-fixing-a-capability)
 - [Testing](#testing)
@@ -174,10 +175,10 @@ let dispatcher = ActionDispatcher::new(client);
 
 // A dynamic official-API action with a path parameter.
 let clients = dispatcher
-    .execute(ActionRequest {
-        action: "official_list_clients".to_string(),
-        params: json!({ "siteId": "<site-id-from-official_list_sites>" }),
-    })
+    .execute(ActionRequest::new(
+        "official_list_clients",
+        json!({ "siteId": "<site-id-from-official_list_sites>" }),
+    ))
     .await?;
 # let _ = clients;
 # Ok(())
@@ -189,6 +190,12 @@ let clients = dispatcher
 the HTTP query string and request body are read from the reserved
 `params.query` and `params.body` sub-objects respectively. This split is
 easy to get backwards — path params are *not* nested under a `path` key.
+
+`ActionRequest` is `#[non_exhaustive]` — build it with [`ActionRequest::new`]
+(shown above), not a struct literal. Unlike this crate's other public types
+(see [Error handling](#error-handling)), this one *is* meant to be
+constructed by callers; the constructor exists specifically so a future
+added field can default instead of breaking every call site that builds one.
 
 `ActionDispatcher::execute` resolves an action in one of three ways,
 matching [`api::ApiSourceFamily`]:
@@ -306,6 +313,30 @@ right (their nested types have no reason to be flattened to the crate root).
   both run against the real bundled JSON, not a fixture, so they catch a bad
   entry immediately.
 
+## Lints and panics
+
+`lib.rs` sets three crate-level attributes:
+
+- `#![forbid(unsafe_code)]` — this crate has no `unsafe` and never will.
+- `#![deny(missing_docs)]` — every public item must have a doc comment.
+- `#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic))]`
+  — no panicking on data this crate doesn't control, enforced outside test
+  builds only (`.unwrap()`/`.expect()` in test code is normal, correct Rust,
+  not a smell this crate's own test suite should be forced to work around).
+
+Five non-test sites are exempted with a narrow, commented `#[allow]`, all for
+the same reason: they operate on the two bundled `data/*.json` files, which
+ship with the crate and are covered by this crate's own tests — a parse
+failure or unrecognized field there means the crate itself was built wrong,
+not that a caller supplied bad input. `capabilities::official_network::capabilities`
+and `capabilities::internal_network::capabilities` each `#[allow(clippy::expect_used)]`
+on the bundled JSON's `serde_json::from_str`; `capabilities::internal_network::auth_scope`
+`#[allow(clippy::panic)]`s on an unrecognized `auth_scope` value; and
+`actions::official::normalize_official_request` `#[allow(clippy::expect_used)]`s
+on two `Value::as_object_mut()` calls immediately guarded by the exact check
+they assert. A *new* unwrap/expect/panic anywhere else in non-test code
+fails the build — that's deliberate.
+
 ## Testing
 
 - Pure logic (path substitution, request normalization, name mapping, hybrid
@@ -325,6 +356,13 @@ right (their nested types have no reason to be flattened to the crate root).
   dispatcher itself. Copy this file's pattern too; testing only the named
   methods leaves the dynamic-dispatch path — most of what makes an
   integration crate's action count large — unverified.
+- **This file is `#![doc = include_str!("../README.md")]`'d into `lib.rs`**
+  — it's the crate's entire rustdoc landing page, not a separate summary
+  that can drift from it, and both of its `rust` code fences run as real
+  doctests under `cargo test --doc`. Keep every code example here
+  compilable (`no_run` is fine; `ignore` defeats the point) and every
+  `` [`Foo`] `` a real intra-doc link — `cargo doc -p unifi --no-deps` warns
+  on anything that doesn't resolve.
 
 ```bash
 cargo test -p unifi
@@ -340,4 +378,5 @@ Not yet published — `publish = false` in `Cargo.toml`. The package is named
 brand-neutral, crates.io-available name before publishing. The bundled
 `LICENSE` (MIT) is packaged with the crate independently of the
 workspace-root `LICENSE` — `cargo package -p unifi --list` confirms it ships
-in the tarball.
+in the tarball. See [`CHANGELOG.md`](CHANGELOG.md) for what's changed since
+extraction; everything so far is still under `[Unreleased]`.
