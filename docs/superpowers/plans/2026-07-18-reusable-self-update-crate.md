@@ -4,7 +4,7 @@
 
 **Goal:** Extract Cortex's agent binary update transaction into a portable `soma-self-update` shared crate that has no dependencies on any Soma, Cortex, or other workspace crate, while closing the URL-resolution, unbounded-download, validation-timeout, and recovery-test gaps found in the Cortex implementation.
 
-**Architecture:** Put a transport-neutral state machine in `crates/shared/self-update`: callers authenticate and obtain an update directive, resolve its artifact URL under an explicit transport policy, and hand the crate an `AsyncRead` body. The crate incrementally stages and hashes a bounded artifact, validates its exact reported version under a timeout, atomically replaces a Unix executable while retaining a rollback copy and durable marker, then returns an explicit restart action. Startup recovery and successful-health confirmation are separate calls so each host decides what “healthy” means. HTTP clients, bearer tokens, heartbeat DTOs, Axum routes, application configuration, and service restart policy remain outside the crate.
+**Architecture:** Put a transport-neutral state machine in `crates/shared/self-update`: callers authenticate and obtain an update directive, resolve its artifact URL under an explicit transport policy, and hand the crate an `AsyncRead` body. The crate incrementally stages and hashes a bounded artifact, validates its exact reported version under a timeout, atomically replaces a Unix executable while retaining a rollback copy and durable marker, then returns an explicit restart action. Startup recovery and successful-health confirmation are separate calls so each host decides what "healthy" means. HTTP clients, bearer tokens, heartbeat DTOs, Axum routes, application configuration, and service restart policy remain outside the crate.
 
 **Tech Stack:** Rust 2024 (MSRV 1.96), Tokio async I/O/processes, `serde`/`serde_json`, `sha2`, `thiserror`, `url`, `fs2`, public-API integration tests with `tempfile`, Cargo workspace/xtask architecture guards.
 
@@ -95,7 +95,7 @@
 
 - [x] **Step 4: Document portability and classify the test layout**
 
-  The README must open with: “`soma-self-update` is a standalone binary self-update transaction for Rust services. It has zero path-dependencies on the Soma workspace and can be copied into another repository wholesale.” Add concise Scope, Non-goals, Safety boundary, Platform support, and API lifecycle sections. Copy the repository MIT license into the crate. Add `crates/shared/self-update/src` to `UNCHECKED_SRC_ROOTS` with the reason that all behavior is tested through the public API in `tests/`.
+  The README must open with: "`soma-self-update` is a standalone binary self-update transaction for Rust services. It has zero path-dependencies on the Soma workspace and can be copied into another repository wholesale." Add concise Scope, Non-goals, Safety boundary, Platform support, and API lifecycle sections. Copy the repository MIT license into the crate. Add `crates/shared/self-update/src` to `UNCHECKED_SRC_ROOTS` with the reason that all behavior is tested through the public API in `tests/`.
 
 - [x] **Step 5: Run the focused tests and commit**
 

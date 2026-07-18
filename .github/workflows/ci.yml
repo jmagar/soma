@@ -141,6 +141,9 @@ jobs:
       - name: Check architecture boundaries
         run: cargo xtask check-architecture
 
+      - name: Check self-update production library features
+        run: cargo check -p soma-self-update --lib --locked
+
   # ── clippy: zero warnings ────────────────────────────────────────────────────
   clippy:
     name: Clippy
