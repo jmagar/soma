@@ -6,6 +6,7 @@ use rmcp::{
     transport::{ConfigureCommandExt, TokioChildProcess},
 };
 use serde_json::json;
+use serial_test::serial;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
@@ -113,6 +114,7 @@ async fn read_json_rpc_response(
 }
 
 #[tokio::test]
+#[serial(stdio_mcp_process)]
 async fn stdio_child_process_lists_tools_and_calls_actions() {
     let (service, stderr, _temp) = stdio_client().await.unwrap();
 
@@ -173,6 +175,7 @@ async fn stdio_child_process_lists_tools_and_calls_actions() {
 }
 
 #[tokio::test]
+#[serial(stdio_mcp_process)]
 async fn raw_stdio_json_rpc_preserves_structured_output_fields() -> anyhow::Result<()> {
     let (mut child, mut stdin, mut stdout, _temp) = raw_stdio_child().await?;
 
