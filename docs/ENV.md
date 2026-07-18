@@ -38,6 +38,7 @@ This file is generated from `ENV_KEY_SPECS` and typed config defaults. Run `carg
 | `SOMA_MCP_PORT` | `40060` | no | `mcp.port` | - | Bind port for HTTP transport. |
 | `SOMA_MCP_ALLOWED_HOSTS` | unset | no | `mcp.allowed_hosts` | - | Extra accepted Host header values, comma-separated. |
 | `SOMA_MCP_ALLOWED_ORIGINS` | unset | no | `mcp.allowed_origins` | - | Extra CORS origins, comma-separated. |
+| `SOMA_MCP_TRACE_HEADERS` | `off` | no | `mcp.trace_headers` | `CLAUDE_PLUGIN_OPTION_TRACE_HEADERS` | Trusted inbound HTTP trace-header extraction: `off`, `trusted`, or `trusted-with-baggage`. Enable only behind a transport-level trust boundary; see `docs/TRACE_CONTEXT.md`. |
 
 ## Docker runtime
 

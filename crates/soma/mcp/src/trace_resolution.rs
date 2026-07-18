@@ -23,16 +23,23 @@ pub(crate) struct TraceResolution {
 
 impl TraceResolution {
     pub(crate) fn from_meta_only(meta: &Meta) -> Self {
+        let summary = soma_mcp_server::trace::trace_summary_from_meta(meta, TraceTrust::Untrusted);
         Self {
-            summary: soma_mcp_server::trace::trace_summary_from_meta(meta, TraceTrust::Untrusted),
-            trace_context: trace_context_from_meta(meta),
+            trace_context: trace_context_from_summary(meta, &summary),
+            summary,
             http_trace_headers_present: false,
         }
     }
 }
 
+#[cfg(test)]
 pub(crate) fn trace_context_from_meta(meta: &Meta) -> Option<TraceContext> {
-    let fields = soma_mcp_server::trace::raw_trace_fields_from_meta(meta, TraceTrust::Untrusted)?;
+    let summary = soma_mcp_server::trace::trace_summary_from_meta(meta, TraceTrust::Untrusted);
+    trace_context_from_summary(meta, &summary)
+}
+
+fn trace_context_from_summary(meta: &Meta, summary: &TraceSummary) -> Option<TraceContext> {
+    let fields = soma_mcp_server::trace::raw_trace_fields_from_summary(meta, summary)?;
     Some(TraceContext {
         traceparent: fields.traceparent,
         tracestate: fields.tracestate,

@@ -34,6 +34,7 @@ Generated from script header comments.
 | `scripts/sync-cargo.sh` | Thin wrapper. Canonical implementation: cargo xtask sync-cargo. |
 | `scripts/test-mcp-auth.sh` | Thin wrapper. Canonical implementation: cargo xtask test-mcp-auth. |
 | `scripts/test-soma-features.sh` | Thin wrapper. Canonical implementation: cargo xtask test-soma-features. |
+| `scripts/test-trace-headers.sh` | Thin wrapper. Canonical implementation: cargo xtask test-trace-headers. |
 | `scripts/validate-plugin-layout.sh` | Thin wrapper. Canonical implementation: cargo xtask validate-plugin-layout. |
 | `scripts/web-watch.sh` | Thin wrapper. Canonical implementation: cargo xtask web-watch. |
 | `scripts/with_timeout.sh` | Wall-clock wrapper. Kills the wrapped command after N seconds. |

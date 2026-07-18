@@ -257,23 +257,42 @@ fn curl_status(port: u16, headers: &[(&str, &str)]) -> Result<u16> {
 }
 
 fn curl_preflight(port: u16, requested_headers: &str) -> Result<String> {
-    let output = Command::new("curl")
-        .args([
-            "-s",
-            "-i",
-            "-X",
-            "OPTIONS",
-            "-H",
-            &format!("Origin: http://127.0.0.1:{port}"),
-            "-H",
-            "Access-Control-Request-Method: POST",
-            "-H",
-            &format!("Access-Control-Request-Headers: {requested_headers}"),
-            &format!("http://127.0.0.1:{port}/mcp"),
-        ])
+    let output = curl_preflight_command(port, requested_headers)
         .output()
         .context("run curl preflight")?;
+    checked_preflight_output(output)
+}
+
+fn checked_preflight_output(output: std::process::Output) -> Result<String> {
+    if !output.status.success() {
+        bail!(
+            "curl preflight failed with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn curl_preflight_command(port: u16, requested_headers: &str) -> Command {
+    let timeout = REQUEST_TIMEOUT.as_secs().to_string();
+    let mut command = Command::new("curl");
+    command.args([
+        "-s",
+        "-i",
+        "--max-time",
+        &timeout,
+        "-X",
+        "OPTIONS",
+        "-H",
+        &format!("Origin: http://127.0.0.1:{port}"),
+        "-H",
+        "Access-Control-Request-Method: POST",
+        "-H",
+        &format!("Access-Control-Request-Headers: {requested_headers}"),
+        &format!("http://127.0.0.1:{port}/mcp"),
+    ]);
+    command
 }
 
 fn free_port() -> Result<u16> {
@@ -349,5 +368,43 @@ impl Drop for ServerGuard {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preflight_curl_uses_the_request_timeout() {
+        let command = curl_preflight_command(40060, "TraceParent");
+        let args: Vec<_> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy())
+            .collect();
+        let timeout_index = args
+            .iter()
+            .position(|arg| arg == "--max-time")
+            .expect("preflight curl should have --max-time");
+        assert_eq!(
+            args.get(timeout_index + 1).map(|arg| arg.as_ref()),
+            Some("5")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preflight_rejects_a_nonzero_curl_exit_status() {
+        use std::os::unix::process::ExitStatusExt;
+
+        let output = std::process::Output {
+            status: std::process::ExitStatus::from_raw(7 << 8),
+            stdout: Vec::new(),
+            stderr: b"timed out".to_vec(),
+        };
+
+        let error = checked_preflight_output(output).expect_err("nonzero curl must fail smoke");
+        assert!(error.to_string().contains("curl preflight failed"));
+        assert!(error.to_string().contains("timed out"));
     }
 }

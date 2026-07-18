@@ -302,6 +302,7 @@ def env_purpose(spec: EnvSpec) -> str:
         "SOMA_MCP_SERVER_NAME": "MCP server name advertised to clients.",
         "SOMA_MCP_ALLOWED_HOSTS": "Extra accepted Host header values, comma-separated.",
         "SOMA_MCP_ALLOWED_ORIGINS": "Extra CORS origins, comma-separated.",
+        "SOMA_MCP_TRACE_HEADERS": "Trusted inbound HTTP trace-header extraction: `off`, `trusted`, or `trusted-with-baggage`. Enable only behind a transport-level trust boundary; see `docs/TRACE_CONTEXT.md`.",
     }
     return purposes.get(spec.key, "CUSTOMIZE: document this environment variable.")
 
@@ -314,6 +315,7 @@ def env_default(spec: EnvSpec, host: str, port: int) -> str:
         "SOMA_MCP_NO_AUTH": "`false`",
         "SOMA_NOAUTH": "`false`",
         "SOMA_MCP_SERVER_NAME": f"`{default_string('default_server_name')}`",
+        "SOMA_MCP_TRACE_HEADERS": "`off`",
     }
     return defaults.get(spec.key, "unset")
 
@@ -411,6 +413,7 @@ def placeholder_for(spec: EnvSpec) -> str:
         "SOMA_MCP_SERVER_NAME": default_string("default_server_name"),
         "SOMA_MCP_ALLOWED_HOSTS": "example.yourdomain.com",
         "SOMA_MCP_ALLOWED_ORIGINS": "https://claude.ai",
+        "SOMA_MCP_TRACE_HEADERS": "off",
     }
     return placeholders.get(spec.key, "")
 
@@ -664,6 +667,7 @@ def plugin_setting_title(key: str) -> str:
         "auth_admin_email": "OAuth admin email",
         "soma_api_url": "Service API URL",
         "soma_api_key": "Service API key",
+        "trace_headers": "Inbound HTTP trace headers",
     }.get(key, key.replace("_", " ").title())
 
 
@@ -679,6 +683,7 @@ def plugin_setting_description(key: str, env_key: str) -> str:
         "auth_admin_email": "Bootstrap allowed Google account for OAuth mode.",
         "soma_api_url": "Optional upstream API URL for dropped-in tools that use the bundled SomaClient compatibility layer. Maps to SOMA_API_URL.",
         "soma_api_key": "Optional upstream API key for dropped-in tools that use the bundled SomaClient compatibility layer. Maps to SOMA_API_KEY.",
+        "trace_headers": "Trusted inbound HTTP trace-header extraction mode. Keep 'off' unless loopback or a trusted gateway strips or overwrites untrusted trace headers; see docs/TRACE_CONTEXT.md.",
     }
     return descriptions.get(key, f"Maps to {env_key}.")
 
@@ -696,6 +701,8 @@ def plugin_settings() -> list[dict]:
             default = False
         if key == "auth_mode":
             default = "bearer"
+        if key == "trace_headers":
+            default = "off"
         item = {
             "key": key,
             "env": spec.key,

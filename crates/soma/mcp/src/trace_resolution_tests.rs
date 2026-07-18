@@ -41,6 +41,25 @@ fn off_mode_still_summarizes_meta_traceparent() {
     assert!(!resolution.http_trace_headers_present);
 }
 
+#[test]
+fn meta_only_resolution_derives_context_from_its_validated_summary() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_tracestate("vendor=value");
+
+    let resolution = TraceResolution::from_meta_only(&meta);
+
+    assert_eq!(resolution.summary.trace_id_prefix(), Some("0af76519"));
+    assert!(resolution.summary.has_tracestate());
+    assert_eq!(
+        resolution.trace_context,
+        Some(TraceContext {
+            traceparent: Some(VALID_TRACEPARENT.to_owned()),
+            tracestate: Some("vendor=value".to_owned()),
+        })
+    );
+}
+
 #[cfg(feature = "http")]
 #[test]
 fn trusted_mode_extracts_traceparent_and_tracestate_from_headers() {
@@ -172,6 +191,22 @@ fn meta_trace_key_present_but_no_headers_means_no_conflict() {
 
     assert!(!resolution.http_trace_headers_present);
     assert!(meta_has_any_trace_key(&meta));
+}
+
+#[cfg(feature = "http")]
+#[test]
+fn ordinary_http_headers_do_not_report_trace_presence_or_conflict() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    let headers = headers_with(&[("authorization", "Bearer ordinary-request-token")]);
+
+    let resolution = resolve_trace_resolution(TraceHeaderMode::Trusted, &meta, Some(&headers));
+    let trace_context_conflict =
+        meta_has_any_trace_key(&meta) && resolution.http_trace_headers_present;
+
+    assert!(!resolution.http_trace_headers_present);
+    assert!(!trace_context_conflict);
+    assert_eq!(resolution.summary.trace_id_prefix(), Some("0af76519"));
 }
 
 #[test]

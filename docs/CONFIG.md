@@ -51,6 +51,7 @@ no_auth = false
 trusted_gateway = false
 allowed_hosts = []
 allowed_origins = []
+trace_headers = "off"     # off, trusted, or trusted-with-baggage
 
 [mcp.auth]
 mode = "bearer"           # or "oauth"
@@ -99,6 +100,7 @@ Current env overrides include:
 | `mcp.api_token` | `SOMA_MCP_TOKEN` |
 | `mcp.allowed_hosts` | `SOMA_MCP_ALLOWED_HOSTS` |
 | `mcp.allowed_origins` | `SOMA_MCP_ALLOWED_ORIGINS` |
+| `mcp.trace_headers` | `SOMA_MCP_TRACE_HEADERS` |
 | `mcp.auth.public_url` | `SOMA_MCP_PUBLIC_URL` |
 | `mcp.auth.mode` | `SOMA_MCP_AUTH_MODE` |
 | `mcp.auth.google_client_id` | `SOMA_MCP_GOOGLE_CLIENT_ID` |
@@ -119,6 +121,13 @@ Current env overrides include:
 | Explicit trusted gateway (`SOMA_NOAUTH=true`) | `TrustedGatewayUnscoped` |
 
 Non-loopback no-auth should only be used when an upstream gateway enforces authorization.
+
+`mcp.trace_headers` controls trusted inbound HTTP trace extraction and defaults
+to `off`. Bearer/OAuth authentication is not a trace-header trust boundary;
+enable `trusted` or `trusted-with-baggage` only on loopback or behind a trusted
+gateway that strips or overwrites untrusted trace headers. See
+[`TRACE_CONTEXT.md`](TRACE_CONTEXT.md) for modes, baggage handling, CORS, and
+the full trust model.
 
 ```rust
 pub enum AuthPolicy {

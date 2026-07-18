@@ -31,6 +31,12 @@ host = "0.0.0.0"            # bind to all interfaces; use 127.0.0.1 for local-on
 port = 40060                # SOMA_MCP_PORT; also update Dockerfile EXPOSE and docker-compose.yml
 server_name = "soma" # advertised to MCP clients in tools/list response
 
+# Trusted inbound HTTP trace-header extraction: off (default), trusted, or
+# trusted-with-baggage. Bearer/OAuth authentication alone is not a trust
+# boundary. Enable only on loopback or behind a trusted gateway that strips or
+# overwrites untrusted trace headers. See docs/TRACE_CONTEXT.md.
+trace_headers = "off"
+
 # Static bearer token — ALWAYS set via SOMA_MCP_TOKEN env var, not here.
 # api_token = ""
 

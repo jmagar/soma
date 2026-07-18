@@ -17,6 +17,20 @@ fn raw_trace_fields_recovers_traceparent_and_tracestate() {
 }
 
 #[test]
+fn raw_trace_fields_can_reuse_an_existing_summary() {
+    let mut meta = Meta::new();
+    meta.set_traceparent(VALID_TRACEPARENT);
+    meta.set_tracestate("vendor=value");
+    let summary = trace_summary_from_meta(&meta, TraceTrust::Untrusted);
+
+    let fields = raw_trace_fields_from_summary(&meta, &summary)
+        .expect("validated summary should gate raw field recovery");
+
+    assert_eq!(fields.traceparent.as_deref(), Some(VALID_TRACEPARENT));
+    assert_eq!(fields.tracestate.as_deref(), Some("vendor=value"));
+}
+
+#[test]
 fn raw_trace_fields_absent_without_valid_traceparent() {
     let mut meta = Meta::new();
     meta.set_traceparent("not-a-traceparent");

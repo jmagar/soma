@@ -107,9 +107,10 @@ fn trusted_with_baggage_rejects_mounted_oauth() {
     };
     config.mcp.trace_headers = TraceHeaderMode::TrustedWithBaggage;
     let error = resolve_auth_policy_kind(&config, false).unwrap_err();
-    assert!(error
-        .to_string()
-        .contains("not a trace-header trust boundary"));
+    let message = error.to_string();
+    assert!(message.contains("not a trace-header trust boundary"));
+    assert!(message.contains("SOMA_MCP_TRACE_HEADERS=trusted-with-baggage"));
+    assert!(!message.contains("TrustedWithBaggage"));
 }
 
 #[test]

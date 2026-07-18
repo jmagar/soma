@@ -176,6 +176,22 @@ pub enum TraceHeaderMode {
     TrustedWithBaggage,
 }
 
+impl TraceHeaderMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Trusted => "trusted",
+            Self::TrustedWithBaggage => "trusted-with-baggage",
+        }
+    }
+}
+
+impl std::fmt::Display for TraceHeaderMode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 // ── defaults ──────────────────────────────────────────────────────────────────
 
 fn default_mcp_host() -> String {

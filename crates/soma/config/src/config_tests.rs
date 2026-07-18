@@ -313,6 +313,18 @@ fn trace_header_mode_serde_uses_kebab_case() {
 }
 
 #[test]
+fn trace_header_mode_display_uses_accepted_config_values() {
+    for (mode, expected) in [
+        (TraceHeaderMode::Off, "off"),
+        (TraceHeaderMode::Trusted, "trusted"),
+        (TraceHeaderMode::TrustedWithBaggage, "trusted-with-baggage"),
+    ] {
+        assert_eq!(mode.as_str(), expected);
+        assert_eq!(mode.to_string(), expected);
+    }
+}
+
+#[test]
 fn trace_headers_toml_file_config_parses_all_three_values() {
     // Exercises the same `toml::from_str::<Config>` path `Config::load()` uses
     // for `config.toml`, without needing filesystem/cwd scaffolding — proves

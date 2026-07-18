@@ -31,6 +31,17 @@ pub struct RawTraceFields {
 /// when no valid trace id was extracted (absent, malformed, or over budget).
 pub fn raw_trace_fields_from_meta(meta: &Meta, trust: TraceTrust) -> Option<RawTraceFields> {
     let summary = trace_summary_from_meta(meta, trust);
+    raw_trace_fields_from_summary(meta, &summary)
+}
+
+/// Recover raw trace fields using an already validated request summary.
+///
+/// Product adapters that need both the summary and raw fields should call this
+/// helper to preserve the one-summary-per-request invariant.
+pub fn raw_trace_fields_from_summary(
+    meta: &Meta,
+    summary: &TraceSummary,
+) -> Option<RawTraceFields> {
     summary.trace_id_prefix()?;
     Some(RawTraceFields {
         traceparent: meta.get_traceparent().map(ToOwned::to_owned),

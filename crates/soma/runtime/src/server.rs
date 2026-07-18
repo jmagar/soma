@@ -185,7 +185,7 @@ fn validate_trace_headers_trust(mcp: &McpConfig, kind: AuthPolicyKind) -> Result
         AuthPolicyKind::LoopbackDev | AuthPolicyKind::TrustedGatewayUnscoped => Ok(()),
         AuthPolicyKind::MountedBearer | AuthPolicyKind::MountedOAuth => {
             anyhow::bail!(
-                "Refusing to start with SOMA_MCP_TRACE_HEADERS={:?} on a {:?} deployment.\n\
+                "Refusing to start with SOMA_MCP_TRACE_HEADERS={} on a {:?} deployment.\n\
                  \n\
                  Bearer/OAuth authentication is not a trace-header trust boundary — a caller \
                  presenting a valid token says nothing about whether an upstream gateway or \

@@ -108,6 +108,13 @@
       "description": "Bootstrap allowed Google account for OAuth mode.",
       "required": false,
       "default": ""
+    },
+    "trace_headers": {
+      "type": "string",
+      "title": "Inbound HTTP trace headers",
+      "description": "Trusted inbound HTTP trace-header extraction mode. Keep 'off' unless loopback or a trusted gateway strips or overwrites untrusted trace headers; see docs/TRACE_CONTEXT.md.",
+      "required": false,
+      "default": "off"
     }
   }
 }

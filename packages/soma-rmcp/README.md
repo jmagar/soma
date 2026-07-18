@@ -81,8 +81,11 @@ shipped `soma` command is the source of truth for product behavior.
   lists stay small even as provider catalogs grow.
 - One canonical binary: `soma` with explicit `serve`, `mcp`, and CLI modes for
   REST API, Streamable HTTP MCP, stdio MCP, optional web UI, and local actions.
-- Dynamic provider loading from `.json`, `.ts`, `.py`, and `.wasm` files, plus
-  native Rust providers and upstream MCP/OpenAPI provider kinds.
+- Dynamic provider loading from `.json`, `.ts`, `.py`, `.wasm`, and `.md`
+  files, plus native Rust providers and upstream MCP/OpenAPI provider kinds.
+  A structured `providers/{tools,prompts,resources}/` layout is supported
+  alongside root-level files, including path-derived MCP resources (static
+  files and dynamic `.ts` readers) with a path-traversal trust boundary.
 - Provider manifest contracts for tools, prompts, resources, tasks,
   elicitation forms, env requirements, capability grants, and surface overlays.
 - Shared validation, destructive-action confirmation, auth/scope enforcement,
@@ -501,6 +504,9 @@ soma help
 soma providers validate
 soma providers inspect
 soma providers test status
+soma providers list --dir ./examples/providers
+soma providers lint --dir ./examples/providers
+soma providers status --dir ./examples/providers
 soma doctor
 soma setup check
 soma package generate --check
@@ -560,12 +566,19 @@ upstream/platform credentials as required.
 | `SOMA_MCP_TOKEN` | bearer | empty | Static bearer token. |
 | `SOMA_MCP_ALLOWED_HOSTS` | no | empty | Extra comma-separated Host header values. |
 | `SOMA_MCP_ALLOWED_ORIGINS` | no | empty | Extra comma-separated CORS origins. |
+| `SOMA_MCP_TRACE_HEADERS` | no | `off` | Trusted inbound HTTP trace extraction: `off`, `trusted`, or `trusted-with-baggage`. |
 | `SOMA_MCP_AUTH_MODE` | no | `bearer` | `bearer` or `oauth`. |
 | `SOMA_MCP_PUBLIC_URL` | OAuth | empty | Public URL for OAuth metadata and callbacks. |
 | `SOMA_MCP_GOOGLE_CLIENT_ID` | OAuth | empty | Google OAuth client ID. |
 | `SOMA_MCP_GOOGLE_CLIENT_SECRET` | OAuth | empty | Google OAuth client secret. |
 | `SOMA_MCP_AUTH_ADMIN_EMAIL` | OAuth | empty | Initial/admin OAuth email. |
 | `RUST_LOG` | no | `info` | Log filter. Stdio mode suppresses noisy logs to avoid corrupting JSON-RPC. |
+
+Keep `SOMA_MCP_TRACE_HEADERS=off` unless the server is bound to loopback or a
+trusted gateway strips or overwrites trace headers from untrusted clients.
+Bearer/OAuth authentication alone is not that trust boundary. See
+[docs/TRACE_CONTEXT.md](docs/TRACE_CONTEXT.md) for the complete inbound-only
+trace-header contract.
 
 Samples:
 
@@ -744,9 +757,14 @@ configuration, and secret-scanning allowlists before publishing.
 ## Troubleshooting
 
 - `soma doctor` checks local configuration, appdata, and connectivity.
-- `soma providers validate` confirms provider manifests and compiled schemas.
+- `soma providers validate` confirms provider manifests and compiled schemas
+  against the *loaded, live* registry.
 - `soma providers inspect` shows provider surfaces, capability posture, and
   generated action inventory.
+- `soma providers list|lint|status` inspect drop-in provider files on disk
+  without loading the registry or executing any handler — safe to run before
+  the runtime touches TS/WASM/MCP/OpenAPI providers. See
+  [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 - Stdio mode keeps logs quiet so JSON-RPC is not corrupted; use HTTP mode or
   file logs when investigating noisy startup failures.
 - If generated docs drift, run `cargo xtask generate-provider-surfaces --write`
