@@ -1,5 +1,5 @@
 use super::*;
-use soma_config::{AuthConfig, SomaConfig};
+use soma_config::{AuthConfig, SomaConfig, TraceHeaderMode};
 use soma_gateway::config::{GatewayConfig, GatewayPaths, UpstreamConfig};
 use soma_gateway::gateway::config_store::FsGatewayConfigStore;
 
@@ -59,6 +59,30 @@ fn non_loopback_bearer_token_mounts_bearer_policy() {
     );
 }
 
+#[test]
+fn off_trace_headers_do_not_require_a_trust_boundary() {
+    let mut config = config("0.0.0.0");
+    config.mcp.api_token = Some("secret".into());
+    assert_eq!(
+        resolve_auth_policy_kind(&config, false).unwrap(),
+        AuthPolicyKind::MountedBearer
+    );
+}
+
+#[test]
+fn trusted_trace_headers_reject_mounted_bearer() {
+    let mut config = config("0.0.0.0");
+    config.mcp.api_token = Some("secret".into());
+    config.mcp.trace_headers = TraceHeaderMode::Trusted;
+    let error = resolve_auth_policy_kind(&config, false).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("not a trace-header trust boundary"),
+        "error was: {error}"
+    );
+}
+
 #[cfg(feature = "auth")]
 #[test]
 fn non_loopback_oauth_mounts_oauth_policy() {
@@ -70,6 +94,42 @@ fn non_loopback_oauth_mounts_oauth_policy() {
     assert_eq!(
         resolve_auth_policy_kind(&config, false).unwrap(),
         AuthPolicyKind::MountedOAuth
+    );
+}
+
+#[cfg(feature = "auth")]
+#[test]
+fn trusted_with_baggage_rejects_mounted_oauth() {
+    let mut config = config("0.0.0.0");
+    config.mcp.auth = AuthConfig {
+        mode: AuthMode::OAuth,
+        ..AuthConfig::default()
+    };
+    config.mcp.trace_headers = TraceHeaderMode::TrustedWithBaggage;
+    let error = resolve_auth_policy_kind(&config, false).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("not a trace-header trust boundary"));
+}
+
+#[test]
+fn trusted_trace_headers_allowed_on_loopback() {
+    let mut config = config("127.0.0.1");
+    config.mcp.trace_headers = TraceHeaderMode::TrustedWithBaggage;
+    assert_eq!(
+        resolve_auth_policy_kind(&config, false).unwrap(),
+        AuthPolicyKind::LoopbackDev
+    );
+}
+
+#[test]
+fn trusted_trace_headers_allowed_on_trusted_gateway_unscoped() {
+    let mut config = config("0.0.0.0");
+    config.mcp.no_auth = true;
+    config.mcp.trace_headers = TraceHeaderMode::Trusted;
+    assert_eq!(
+        resolve_auth_policy_kind(&config, true).unwrap(),
+        AuthPolicyKind::TrustedGatewayUnscoped
     );
 }
 

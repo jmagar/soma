@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::{SetupCommand, SetupReport};
-use soma_config::{Config, McpConfig, SomaConfig};
+use soma_config::{Config, McpConfig, SomaConfig, TraceHeaderMode};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -140,6 +140,23 @@ fn setup_check_reports_missing_env_as_advisory() {
         .advisory_failures
         .iter()
         .any(|failure| failure.code == "env_file_missing"));
+}
+
+#[test]
+fn setup_check_classifies_trace_header_trust_failure_separately() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = valid_config();
+    config.mcp.host = "0.0.0.0".into();
+    config.mcp.no_auth = false;
+    config.mcp.api_token = Some("secret".into());
+    config.mcp.trace_headers = TraceHeaderMode::Trusted;
+
+    let report = with_plugin_data(dir.path(), || super::setup_check(&config, true));
+
+    assert!(report
+        .blocking_failures
+        .iter()
+        .any(|failure| failure.code == "invalid_trace_headers_trust"));
 }
 
 #[test]

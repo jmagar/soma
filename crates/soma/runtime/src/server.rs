@@ -8,7 +8,7 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use soma_application::SomaApplication;
-use soma_config::{AuthMode, Config, McpConfig};
+use soma_config::{AuthMode, Config, McpConfig, TraceHeaderMode};
 #[cfg(feature = "protected-routes")]
 use soma_gateway::config::ProtectedMcpRouteConfig;
 use soma_gateway::{
@@ -108,7 +108,15 @@ pub fn trusted_gateway_from_env() -> bool {
 
 pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Result<AuthPolicyKind> {
     validate_public_url(config)?;
+    let kind = resolve_auth_policy_kind_unchecked(config, trusted_gateway)?;
+    validate_trace_headers_trust(&config.mcp, kind)?;
+    Ok(kind)
+}
 
+fn resolve_auth_policy_kind_unchecked(
+    config: &Config,
+    trusted_gateway: bool,
+) -> Result<AuthPolicyKind> {
     if config.mcp.is_loopback() {
         return Ok(AuthPolicyKind::LoopbackDev);
     }
@@ -159,6 +167,40 @@ pub fn resolve_auth_policy_kind(config: &Config, trusted_gateway: bool) -> Resul
              CUSTOMIZE: Replace SOMA_ prefix with your service's prefix throughout.",
             config.mcp.host
         );
+    }
+}
+
+/// Bearer/OAuth authentication is not a trace-header trust boundary: a
+/// client presenting a valid token says nothing about whether an upstream
+/// gateway/proxy stripped or overwrote inbound `traceparent`/`tracestate`/
+/// `baggage` headers from untrusted clients before the request reached this
+/// server. Only a real transport-level trust boundary (loopback bind, or an
+/// explicitly trusted upstream gateway/proxy) may enable HTTP trace-header
+/// extraction.
+fn validate_trace_headers_trust(mcp: &McpConfig, kind: AuthPolicyKind) -> Result<()> {
+    if mcp.trace_headers == TraceHeaderMode::Off {
+        return Ok(());
+    }
+    match kind {
+        AuthPolicyKind::LoopbackDev | AuthPolicyKind::TrustedGatewayUnscoped => Ok(()),
+        AuthPolicyKind::MountedBearer | AuthPolicyKind::MountedOAuth => {
+            anyhow::bail!(
+                "Refusing to start with SOMA_MCP_TRACE_HEADERS={:?} on a {:?} deployment.\n\
+                 \n\
+                 Bearer/OAuth authentication is not a trace-header trust boundary — a caller \
+                 presenting a valid token says nothing about whether an upstream gateway or \
+                 proxy stripped or overwrote inbound traceparent/tracestate/baggage headers \
+                 from untrusted clients before the request reached this server.\n\
+                 \n\
+                 Choose one of:\n\
+                 1. Set SOMA_MCP_TRACE_HEADERS=off (default; disables HTTP trace-header extraction).\n\
+                 2. Bind to loopback:  SOMA_MCP_HOST=127.0.0.1\n\
+                 3. Deploy behind a trusted proxy that strips/overwrites inbound trace headers \
+                    from untrusted clients, and set SOMA_NOAUTH=true.",
+                mcp.trace_headers,
+                kind,
+            );
+        }
     }
 }
 
