@@ -31,15 +31,32 @@ pub fn router(state: AuthState) -> Router {
         .route("/jwks", get(jwks))
         .route("/authorize", get(authorize))
         .route("/auth/login", get(browser_login))
-        .route("/auth/google/callback", get(callback))
         .route("/native/callback", get(native_callback))
         .route("/native/poll", get(native_poll))
         .route("/token", post(token));
+    for callback_path in callback_paths(&state) {
+        app = app.route(&callback_path, get(callback));
+    }
     if enable_registration {
         app = app.route("/register", post(register_client));
     }
     app.with_state(state)
         .layer(middleware::from_fn(auth_dispatch_observability))
+}
+
+/// Every configured provider's callback path, e.g.
+/// `["/auth/google/callback"]` for a Google-only deployment or
+/// `["/auth/authelia/callback", "/auth/github/callback", "/auth/google/callback"]`
+/// once all three are configured. The `callback` handler itself is
+/// provider-agnostic — see `authorize::callback` doc comment — so mounting
+/// it at N distinct static paths is purely about matching each upstream
+/// OAuth app's registered `redirect_uri`.
+fn callback_paths(state: &AuthState) -> Vec<String> {
+    state
+        .providers
+        .values()
+        .map(|provider| provider.callback_path().to_string())
+        .collect()
 }
 
 /// Bearer-only OAuth subset router for headless consumers.
@@ -55,7 +72,7 @@ pub fn router(state: AuthState) -> Router {
 ///
 /// Use [`router`] for the full surface.
 pub fn bearer_only_router(state: AuthState) -> Router {
-    Router::new()
+    let mut app = Router::new()
         .route(
             "/.well-known/oauth-authorization-server",
             get(authorization_server_metadata),
@@ -70,9 +87,11 @@ pub fn bearer_only_router(state: AuthState) -> Router {
         )
         .route("/jwks", get(jwks))
         .route("/authorize", get(authorize))
-        .route("/auth/google/callback", get(callback))
-        .route("/token", post(token))
-        .with_state(state)
+        .route("/token", post(token));
+    for callback_path in callback_paths(&state) {
+        app = app.route(&callback_path, get(callback));
+    }
+    app.with_state(state)
         .layer(middleware::from_fn(auth_dispatch_observability))
 }
 
