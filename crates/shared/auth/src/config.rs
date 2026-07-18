@@ -79,7 +79,7 @@ impl AuthModeConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoogleConfig {
     #[serde(default)]
     pub client_id: String,
@@ -91,7 +91,17 @@ pub struct GoogleConfig {
     pub scopes: Vec<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+impl std::fmt::Debug for GoogleConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GoogleConfig")
+            .field("client_id", &self.client_id)
+            .field("callback_path", &self.callback_path)
+            .field("scopes", &self.scopes)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AutheliaConfig {
     #[serde(default)]
     pub issuer_url: Option<Url>,
@@ -105,7 +115,18 @@ pub struct AutheliaConfig {
     pub scopes: Vec<String>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+impl std::fmt::Debug for AutheliaConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutheliaConfig")
+            .field("issuer_url", &self.issuer_url)
+            .field("client_id", &self.client_id)
+            .field("callback_path", &self.callback_path)
+            .field("scopes", &self.scopes)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GitHubConfig {
     #[serde(default)]
     pub client_id: String,
@@ -115,6 +136,16 @@ pub struct GitHubConfig {
     pub callback_path: String,
     #[serde(default = "default_github_scopes")]
     pub scopes: Vec<String>,
+}
+
+impl std::fmt::Debug for GitHubConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GitHubConfig")
+            .field("client_id", &self.client_id)
+            .field("callback_path", &self.callback_path)
+            .field("scopes", &self.scopes)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

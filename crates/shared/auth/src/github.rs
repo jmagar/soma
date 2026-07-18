@@ -17,7 +17,7 @@ const GITHUB_USER_EMAILS_ENDPOINT: &str = "https://api.github.com/user/emails";
 const GITHUB_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
 const GITHUB_USER_AGENT: &str = "soma-auth";
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct GitHubProvider {
     pub client_id: String,
     pub client_secret: String,
@@ -28,6 +28,16 @@ pub struct GitHubProvider {
     token_endpoint: Url,
     user_endpoint: Url,
     user_emails_endpoint: Url,
+}
+
+impl std::fmt::Debug for GitHubProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GitHubProvider")
+            .field("client_id", &self.client_id)
+            .field("redirect_uri", &self.redirect_uri)
+            .field("scopes", &self.scopes)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Deserialize)]
