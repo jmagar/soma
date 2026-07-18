@@ -12,6 +12,15 @@
 //! rather than assuming synchronous completion — see
 //! [`operations::Client::wait_for_operation`] for the recommended way to
 //! wait for one to finish.
+//!
+//! Unix-only: Incus itself only runs on Linux, and this crate's transport is
+//! a Unix domain socket ([`tokio::net::UnixStream`]) with no cross-platform
+//! equivalent, so the entire crate compiles to nothing on non-Unix targets
+//! (Windows CI, for instance) rather than hard-failing the workspace build -
+//! there is no meaningful non-Unix version of a client for a Linux-only
+//! daemon.
+
+#![cfg(unix)]
 
 pub mod config;
 pub mod error;
