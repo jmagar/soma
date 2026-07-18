@@ -40,7 +40,7 @@ pub(crate) async fn run() -> Result<()> {
             Ok(())
         }
         None => {
-            eprintln!("Unknown command. Run `example --help` for usage.");
+            eprintln!("Unknown command. Run `soma --help` for usage.");
             std::process::exit(1);
         }
     }

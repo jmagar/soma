@@ -16,9 +16,11 @@
 //! to a loopback TCP port with `axum::serve` (mirroring `soma_serve.rs`'s
 //! server-spawn pattern, but in-process rather than subprocess) and drives it
 //! with rmcp's real `StreamableHttpClientTransport` (reqwest-backed) client —
-//! a genuine network round trip through `apps/soma/src/http.rs`'s
-//! `mcp_state_for_state`/`streamable_http_service` wiring, which PR 12/13
-//! will change as `SomaApplication` and `Config` move to split crates.
+//! a genuine network round trip through `apps/soma/src/http.rs`'s router,
+//! which wires `bootstrap::mcp_state_for_state` and `streamable_http_service`
+//! together — this changed as `SomaApplication` and `Config` moved to split
+//! crates (PR 12/13) and again as `apps/soma` split into a composition-only
+//! layout (PR 18).
 #![cfg(feature = "mcp-http")]
 
 use std::net::TcpListener as StdTcpListener;

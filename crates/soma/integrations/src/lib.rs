@@ -31,6 +31,8 @@ pub mod gateway_auth;
 pub mod protected_routes;
 #[cfg(feature = "protected-http")]
 mod protected_routes_proxy;
+#[cfg(all(test, feature = "protected-http"))]
+mod test_support;
 
 pub mod codemode;
 

@@ -49,6 +49,10 @@ pub use soma_web as web;
 mod bootstrap;
 #[cfg(feature = "mcp-http")]
 mod http;
+// Only `run()` (gated below) references `invocation::*` — match its gate so
+// this module is not `dead_code` in an mcp-http-only build (e.g. a
+// downstream fork embedding just the HTTP server; see `run`'s doc comment).
+#[cfg(all(feature = "cli", feature = "mcp-stdio"))]
 mod invocation;
 #[cfg(feature = "cli")]
 mod local;
@@ -58,34 +62,33 @@ mod shutdown;
 mod stdio;
 
 /// Run the `soma` binary: classify `argv` into an execution mode (see
-/// `invocation::Mode`), then dispatch to the CLI (`local`), stdio MCP
+/// `crate::invocation::Mode`), then dispatch to the CLI (`local`), stdio MCP
 /// (`stdio`), or HTTP server (`http`). The sole entry point
 /// `apps/soma/src/bin/soma.rs` calls — everything else in this crate is
 /// composition, not process wiring.
 #[cfg(all(feature = "cli", feature = "mcp-stdio"))]
 pub async fn run(args: impl IntoIterator<Item = String>) -> anyhow::Result<()> {
     let args: Vec<String> = args.into_iter().collect();
-    let mode = invocation::resolve(&args);
 
-    match mode {
-        invocation::Mode::Help => {
+    let dispatch = match invocation::resolve(&args) {
+        invocation::Mode::Exit(invocation::ExitAction::Help) => {
             eprintln!("{}", cli::usage());
             return Ok(());
         }
-        invocation::Mode::Version => {
+        invocation::Mode::Exit(invocation::ExitAction::Version) => {
             println!("soma {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
-        _ => {}
-    }
+        invocation::Mode::Dispatch(dispatch) => dispatch,
+    };
 
     // Load ~/.soma/.env (or SOMA_HOME/.env) for local CLI/plugin runs before
     // any command loads typed config. Explicit process env still wins.
     config::load_dotenv();
-    bootstrap::init_logging(mode.default_log_level());
+    bootstrap::init_logging(dispatch.default_log_level());
 
-    match mode {
-        invocation::Mode::Serve => {
+    match dispatch {
+        invocation::DispatchMode::Serve => {
             #[cfg(feature = "mcp-http")]
             {
                 http::serve().await
@@ -95,9 +98,8 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> anyhow::Result<()> {
                 anyhow::bail!("`soma serve` requires the `mcp-http` or `server` feature")
             }
         }
-        invocation::Mode::Stdio => stdio::serve().await,
-        invocation::Mode::Cli => local::run().await,
-        invocation::Mode::Help | invocation::Mode::Version => unreachable!(),
+        invocation::DispatchMode::Stdio => stdio::serve().await,
+        invocation::DispatchMode::Cli => local::run().await,
     }
 }
 

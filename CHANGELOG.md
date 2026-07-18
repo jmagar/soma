@@ -324,6 +324,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR18 review fix (second pass): `apps/soma/src/invocation.rs`'s `Mode` enum
+  split into `Mode::Exit(ExitAction)` / `Mode::Dispatch(DispatchMode)` so
+  `lib.rs::run()` no longer needs an `unreachable!()` backstop for the
+  already-handled help/version arms — illegal dispatch-of-an-exit-action is
+  now unrepresentable instead of a runtime invariant. `mod invocation` (and
+  `bootstrap::init_logging`/its `tracing_subscriber` import) are now gated to
+  `cli` + `mcp-stdio`, their only real caller (`run()`), fixing `dead_code`
+  warnings under an `mcp-http`-only *library* build (the profile the prior
+  PR18 fix restored `soma::server::serve_http_mcp` for) without risking a
+  double-`tracing_subscriber::init()` panic by calling `init_logging` from
+  `http::serve()` instead. Added axum-harness test coverage for
+  `crates/soma/integrations/src/protected_routes.rs`'s
+  `authenticate_protected_route_request`/`protected_mcp_intercept` (missing
+  token, malformed token, insufficient scope, admin-scope bypass, missing
+  OAuth auth state, unmatched route) and
+  `protected_routes_proxy.rs`'s `protected_route_upstream_target` resolver
+  (backend_url vs. upstream vs. neither, upstream-not-found,
+  upstream-missing-url, unsupported-transport, bearer-token-env resolution) —
+  this security-critical path had zero test coverage before. Added an
+  `apps/soma` architecture-boundary test
+  (`apps_soma_does_not_reintroduce_protected_route_business_logic`) so the
+  protected-route logic the prior fix moved out of `apps/soma` cannot silently
+  reappear there. Fixed a stale `example --help` binary name in
+  `apps/soma/src/local.rs`'s unknown-command message and stale
+  `apps/soma::runtime::run_cli` references in `crates/soma/cli/src/lib.rs`
+  comments/panic messages (both predate this PR's `runtime.rs` ->
+  `bootstrap.rs`/`local.rs` split). Minor comment-accuracy fixes in
+  `local_tests.rs`/`stdio_tests.rs`/`mcp_http_roundtrip.rs`, and a doc comment
+  on `ProtectedMcpState`.
 - PR18 review fix: `protected_routes.rs` and `protected_routes_proxy.rs`
   (bearer-token authentication, OAuth-scope authorization, gateway-subset
   dispatch, and inbound-to-upstream proxy forwarding for protected MCP

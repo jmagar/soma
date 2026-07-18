@@ -500,6 +500,47 @@ fn application_ports_are_available_to_all_composition_profiles() {
     assert!(lines.contains(&"mod bootstrap;"));
 }
 
+/// PR 18's acceptance criterion is that `apps/soma` "contains no business
+/// rules" (plan section 3.1). A prior review found `protected_routes.rs`
+/// (bearer-token auth, scope authorization) and `protected_routes_proxy.rs`
+/// (the inbound-to-upstream reverse-proxy engine) still living directly in
+/// `apps/soma/src` — real business/security logic in the composition root.
+/// Both were moved to `crates/soma/integrations` (their permanent home; see
+/// that crate's module doc comment). This test fails CI if that logic (or
+/// something that looks like it) is ever reintroduced into `apps/soma/src`,
+/// instead of relying on reviewer vigilance to catch it a second time.
+#[test]
+fn apps_soma_does_not_reintroduce_protected_route_business_logic() {
+    let forbidden = [
+        // Bearer-token validation / OAuth-scope authorization decisions —
+        // protected_routes.rs's `authenticate_protected_route_request`.
+        "validate_access_token_with_issuer",
+        "fn authenticate_protected_route_request",
+        // Gateway-subset dispatch workflow — protected_routes.rs's
+        // `dispatch_gateway_subset`.
+        "fn dispatch_gateway_subset",
+        // Inbound-to-upstream reverse-proxy engine —
+        // protected_routes_proxy.rs's `proxy_protected_mcp_route` and its
+        // backend-target resolver.
+        "fn proxy_protected_mcp_route",
+        "fn protected_route_upstream_target",
+    ];
+
+    for path in collect_rs_files("apps/soma/src") {
+        let src = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
+        for pattern in forbidden {
+            assert!(
+                !src.contains(pattern),
+                "{} contains `{pattern}` — protected-route business logic belongs in \
+                 crates/soma/integrations (soma-integrations), not apps/soma \
+                 (composition root; plan section 3.1 \"Does not own\")",
+                rel(&path)
+            );
+        }
+    }
+}
+
 #[test]
 fn bare_mcp_profile_compiles_without_client_or_observability_features() {
     cargo(&[

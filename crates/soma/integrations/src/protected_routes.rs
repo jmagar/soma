@@ -28,6 +28,10 @@ use tower::ServiceExt;
 
 use crate::protected_routes_proxy::proxy_protected_mcp_route;
 
+/// State for the protected-MCP-route interceptor middleware: pairs the
+/// composition root's `AppState` with the MCP transport's `McpState` the
+/// gateway-subset dispatch path needs. Fields stay private; construct via
+/// [`ProtectedMcpState::new`].
 #[derive(Clone)]
 pub struct ProtectedMcpState {
     runtime: AppState,

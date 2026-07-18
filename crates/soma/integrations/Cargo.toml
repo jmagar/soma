@@ -69,3 +69,12 @@ tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+# Test-only: build a real `AppState`/`SomaApplication` stub for
+# `protected-http` axum-harness tests. Dev-dependencies are excluded from
+# `cargo xtask check-architecture`'s layer graph (normal-kind edges only), so
+# this does not create a product-integration -> legacy/product-support layer
+# dependency for real builds.
+soma-client = { workspace = true }
+soma-config = { workspace = true }
+soma-service = { workspace = true }
+tempfile = "3"
