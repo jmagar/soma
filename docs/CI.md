@@ -95,7 +95,7 @@ Jobs:
 - `container-smoke`: validates compose files and builds the Docker image
 - `toml`: `taplo check`
 - `lefthook-speed`: keeps pre-commit hooks staged-only and fast
-- `soma`: generated docs, plugin layout, scaffold, release-version, blob, coupled-file, and ASCII gates
+- `soma`: generated docs, plugin layout, scaffold, release-version, blob, coupled-file, ASCII, and TypeScript REST client sync (`cargo xtask check-ts-client --check`) gates
 - `deny`: `cargo deny check`
 - `gitleaks`: secret scanning
 - `ci-gate`: single aggregate status for branch protection
@@ -213,6 +213,26 @@ opening/updating an issue when there is drift.
 
 Do not use for: automatically bumping protocol dependencies. It reports; humans
 decide the migration.
+
+### `.github/workflows/codex-schema-drift-monitor.yml`
+
+Use for: diffing the vendored `crates/shared/codex-app-server-client/schema/methods.json`
+against whatever `codex` CLI is on the self-hosted runner's PATH
+(`cargo xtask codex-schema drift --json`), and opening/updating an issue when
+the app-server method surface (added, removed, or changed methods) has
+drifted from what was last regenerated.
+
+Scheduled rather than per-PR: drift only appears when someone bumps the
+`codex` CLI on the runner, not when a PR touches repo files, so a path-gated
+per-PR job would miss the case that matters. `codex` is not guaranteed to be
+installed on self-hosted runners, so `cargo xtask codex-schema drift`
+(unlike `regen`/`bisect`) treats a missing `codex` binary as a graceful,
+non-fatal skip (exit 0) rather than a failure - this workflow does not
+install `codex` itself, and a skip closes/opens no issue either way.
+
+Do not use for: regenerating the schema automatically. It reports; a
+maintainer runs `cargo xtask codex-schema regen <dir>` after reviewing the
+diff, same as the `rmcp-release-monitor` pattern for `rmcp`/MCP-schema drift.
 
 ## nextest configuration
 

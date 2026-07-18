@@ -51,7 +51,16 @@ pub enum CheckMode {
 }
 
 impl CheckMode {
-    fn parse(args: &[String], usage: &str) -> Result<Self> {
+    /// Parses the `--write`/`--check` flag pair shared by every
+    /// regenerate-or-verify xtask command (`check-openapi`,
+    /// `check-schema-docs`, `check-ts-client`).
+    ///
+    /// Returns `Ok(None)` when `--help` was handled and the caller should do
+    /// nothing else. That is why this returns an `Option` rather than a bare
+    /// `CheckMode`: printing usage and then running the command anyway (which
+    /// is what returning a default mode here used to do) surprises anyone who
+    /// asked what a command does and got it done to them instead.
+    pub(crate) fn parse(args: &[String], usage: &str) -> Result<Option<Self>> {
         let mut write = false;
         let mut check = false;
         for arg in args {
@@ -60,23 +69,27 @@ impl CheckMode {
                 "--check" => check = true,
                 "--help" | "-h" => {
                     println!("{usage}");
-                    return Ok(Self::Check);
+                    return Ok(None);
                 }
-                unknown => bail!("unknown option: {unknown}"),
+                unknown => bail!("unknown option: {unknown}\n\n{usage}"),
             }
         }
-        Ok(match (check, write) {
+        Ok(Some(match (check, write) {
             (false, false) | (true, false) => Self::Check,
             (false, true) => Self::Write,
+            // Both flags means "regenerate, then verify the result" - useful
+            // enough to keep rather than reject, and the only sequencing that
+            // makes sense for a pair of flags whose whole point is a
+            // generated artifact.
             (true, true) => Self::CheckAndWrite,
-        })
+        }))
     }
 
-    fn should_check(self) -> bool {
+    pub(crate) fn should_check(self) -> bool {
         matches!(self, Self::Check | Self::CheckAndWrite)
     }
 
-    fn should_write(self) -> bool {
+    pub(crate) fn should_write(self) -> bool {
         matches!(self, Self::Write | Self::CheckAndWrite)
     }
 }
@@ -94,7 +107,11 @@ pub fn asciicheck(args: &[String]) -> Result<()> {
 }
 
 pub fn check_openapi(args: &[String]) -> Result<()> {
-    let mode = CheckMode::parse(args, "Usage: cargo xtask check-openapi [--write] [--check]")?;
+    let Some(mode) =
+        CheckMode::parse(args, "Usage: cargo xtask check-openapi [--write] [--check]")?
+    else {
+        return Ok(());
+    };
     let root = current_dir()?;
     let rendered_value = render_openapi(&root)?;
     let rendered = canonical_json(&rendered_value)?;
@@ -132,10 +149,13 @@ pub fn check_openapi(args: &[String]) -> Result<()> {
 }
 
 pub fn check_schema_docs(args: &[String]) -> Result<()> {
-    let mode = CheckMode::parse(
+    let Some(mode) = CheckMode::parse(
         args,
         "Usage: cargo xtask check-schema-docs [--write] [--check]",
-    )?;
+    )?
+    else {
+        return Ok(());
+    };
     let root = current_dir()?;
     let doc = root.join("docs/MCP_SCHEMA.md");
     let rendered = render_schema_docs(&root)?;

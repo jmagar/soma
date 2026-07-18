@@ -10,11 +10,15 @@
 //!           that panic typify's schema-merge logic, the same failure mode
 //!           documented for `McpServerElicitationRequestParams` in the
 //!           crate's README.
+//!   drift   Diff the vendored schema/methods.json against a fresh (or saved)
+//!           `codex app-server generate-json-schema` dump and report added,
+//!           removed, and changed methods per section - see `drift.rs`.
 //!
 //! See `crates/shared/codex-app-server-client/README.md`'s "Regenerating the
 //! schema" section for the end-to-end workflow this drives.
 
 mod bisect;
+mod drift;
 mod merge;
 mod naming;
 mod regen;
@@ -49,6 +53,7 @@ pub fn run(args: &[String]) -> Result<()> {
     match args.first().map(String::as_str) {
         Some("regen") => regen::run(&args[1..]),
         Some("bisect") => bisect::run(&args[1..]),
+        Some("drift") => drift::run(&args[1..]),
         Some("--help") | Some("-h") | Some("help") | None => {
             print_help();
             Ok(())
@@ -72,10 +77,18 @@ SUBCOMMANDS:
                 dump, and stamp schema/CODEX_VERSION.txt with `codex --version`.
   bisect <dir>  Binary-search a fresh schema dump for the definition(s) that
                 panic typify's schema-merge logic (see README.md).
+  drift [--dir <dir>] [--json] [--strict]
+                Diff the vendored schema/methods.json against a fresh (or
+                --dir'd) `codex app-server generate-json-schema` dump and
+                report added/removed/changed methods per section. Missing
+                `codex` on PATH (with no --dir) is never a hard failure - it
+                prints \"skipped\" and exits 0. Run `cargo xtask codex-schema
+                drift --help` for the full flag reference.
   help          Show this help
 
 Typical workflow after upgrading the installed `codex` CLI:
   codex app-server generate-json-schema --out /tmp/codex-schema --experimental
+  cargo xtask codex-schema drift --dir /tmp/codex-schema   # see what changed
   cargo xtask codex-schema regen /tmp/codex-schema
   cargo build -p codex-app-server-client --all-targets
   cargo clippy -p codex-app-server-client --all-targets -- -D warnings
