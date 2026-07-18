@@ -5,7 +5,7 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 use crate::operations::{operation_from_envelope, Operation};
 use crate::transport::{
-    precondition_failed_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
+    resource_error_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,7 +42,10 @@ impl Client {
     /// later `If-Match` precondition.
     pub async fn get_image(&self, fingerprint: &str) -> Result<WithEtag<Image>> {
         let path = format!("/1.0/images/{fingerprint}");
-        let envelope = self.request(Method::Get, &path, &[], None, None).await?;
+        let envelope = self
+            .request(Method::Get, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, fingerprint))?;
         match envelope {
             crate::transport::IncusEnvelope::Sync { metadata, etag } => Ok(WithEtag {
                 value: serde_json::from_value(metadata)?,
@@ -77,13 +80,29 @@ impl Client {
         let envelope = self
             .request(Method::Put, &path, &[], Some(new_definition), etag)
             .await
-            .map_err(|err| precondition_failed_or(err, fingerprint))?;
+            .map_err(|err| resource_error_or(err, fingerprint))?;
         operation_from_envelope(envelope)
+    }
+
+    /// Same as [`Client::update_image`], but takes the `WithEtag` from a
+    /// prior [`Client::get_image`] call directly instead of a bare
+    /// `etag: Option<&str>` - see `instances::Client::update_instance_guarded`'s
+    /// doc comment for why this exists alongside the raw-`etag` version.
+    pub async fn update_image_guarded(
+        &self,
+        fetched: &WithEtag<Image>,
+        new_definition: &serde_json::Value,
+    ) -> Result<Operation> {
+        self.update_image(&fetched.value().fingerprint, new_definition, fetched.etag())
+            .await
     }
 
     pub async fn delete_image(&self, fingerprint: &str) -> Result<Operation> {
         let path = format!("/1.0/images/{fingerprint}");
-        let envelope = self.request(Method::Delete, &path, &[], None, None).await?;
+        let envelope = self
+            .request(Method::Delete, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, fingerprint))?;
         operation_from_envelope(envelope)
     }
 }

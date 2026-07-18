@@ -109,6 +109,89 @@ async fn update_instance_sends_if_match_header_when_etag_is_provided() {
 }
 
 #[tokio::test]
+async fn update_instance_guarded_derives_name_and_etag_from_a_real_fetch() {
+    let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen = seen_request.clone();
+    let instance_body = instance_json("c1");
+    let op_id = uuid::Uuid::new_v4().to_string();
+    let op_body = operation_json(&op_id);
+    let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = call_count.clone();
+    let (socket_path, _dir) = spawn_fake_daemon(move |req| {
+        let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if n == 0 {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"real-etag\"\r\nContent-Length: {}\r\n\r\n{instance_body}",
+                instance_body.len()
+            )
+            .into_bytes()
+        } else {
+            *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
+            json_response("HTTP/1.1 202 Accepted", &op_body)
+        }
+    })
+    .await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let fetched = client
+        .get_instance("c1")
+        .await
+        .expect("get_instance should succeed");
+
+    client
+        .update_instance_guarded(&fetched, &serde_json::json!({"config": {}}))
+        .await
+        .expect("update_instance_guarded should succeed");
+
+    let request_text = seen_request.lock().unwrap().clone();
+    assert!(
+        request_text.contains("PUT /1.0/instances/c1"),
+        "expected the guarded update to target the fetched instance's own name, got: \
+         {request_text}"
+    );
+    assert!(
+        request_text.contains("If-Match: \"real-etag\""),
+        "expected the guarded update to send the ETag from the real fetch, got: {request_text}"
+    );
+}
+
+#[tokio::test]
+async fn get_instance_maps_404_to_not_found() {
+    let body = r#"{"type":"error","error":"not found","error_code":404}"#;
+    let (socket_path, _dir) =
+        spawn_fake_daemon(move |_req| json_response("HTTP/1.1 404 Not Found", body)).await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let err = client
+        .get_instance("missing")
+        .await
+        .expect_err("404 must map to a distinguishable error, not the generic Error::Api");
+
+    assert!(matches!(
+        err,
+        crate::Error::NotFound { resource } if resource == "missing"
+    ));
+}
+
+#[tokio::test]
+async fn delete_instance_maps_404_to_not_found() {
+    let body = r#"{"type":"error","error":"not found","error_code":404}"#;
+    let (socket_path, _dir) =
+        spawn_fake_daemon(move |_req| json_response("HTTP/1.1 404 Not Found", body)).await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let err = client
+        .delete_instance("missing")
+        .await
+        .expect_err("404 must map to a distinguishable error");
+
+    assert!(matches!(
+        err,
+        crate::Error::NotFound { resource } if resource == "missing"
+    ));
+}
+
+#[tokio::test]
 async fn update_instance_maps_412_to_precondition_failed() {
     let body = r#"{"type":"error","error":"stale etag","error_code":412}"#;
     let (socket_path, _dir) =
@@ -141,6 +224,46 @@ async fn patch_instance_maps_412_to_precondition_failed() {
         .expect_err("412 must map to a distinguishable error on PATCH too");
 
     assert!(matches!(err, crate::Error::PreconditionFailed { .. }));
+}
+
+#[tokio::test]
+async fn patch_instance_guarded_derives_name_and_etag_from_a_real_fetch() {
+    let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen = seen_request.clone();
+    let instance_body = instance_json("c1");
+    let op_id = uuid::Uuid::new_v4().to_string();
+    let op_body = operation_json(&op_id);
+    let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = call_count.clone();
+    let (socket_path, _dir) = spawn_fake_daemon(move |req| {
+        let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if n == 0 {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"real-etag\"\r\nContent-Length: {}\r\n\r\n{instance_body}",
+                instance_body.len()
+            )
+            .into_bytes()
+        } else {
+            *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
+            json_response("HTTP/1.1 202 Accepted", &op_body)
+        }
+    })
+    .await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let fetched = client
+        .get_instance("c1")
+        .await
+        .expect("get_instance should succeed");
+
+    client
+        .patch_instance_guarded(&fetched, &serde_json::json!({"config": {}}))
+        .await
+        .expect("patch_instance_guarded should succeed");
+
+    let request_text = seen_request.lock().unwrap().clone();
+    assert!(request_text.contains("PATCH /1.0/instances/c1"));
+    assert!(request_text.contains("If-Match: \"real-etag\""));
 }
 
 #[tokio::test]

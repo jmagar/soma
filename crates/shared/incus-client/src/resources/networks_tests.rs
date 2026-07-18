@@ -10,10 +10,16 @@ fn network_json(name: &str) -> String {
     )
 }
 
-fn operation_json(id: &str) -> String {
-    format!(
-        r#"{{"type":"async","status":"Operation created","status_code":100,"operation":"/1.0/operations/{id}","metadata":{{"id":"{id}","class":"task","status":"Running","status_code":103,"resources":{{}},"may_cancel":true,"err":null}}}}"#
-    )
+/// The real Incus daemon's `SyncResponseLocation(true, nil, ...)` shape for
+/// create endpoints - `metadata` is JSON `null`, not an operation.
+fn sync_created_json() -> &'static str {
+    r#"{"type":"sync","status":"Success","status_code":200,"metadata":null}"#
+}
+
+/// The real Incus daemon's `EmptySyncResponse` shape for update/delete
+/// endpoints - `metadata` is an empty object, not an operation.
+fn empty_sync_json() -> &'static str {
+    r#"{"type":"sync","status":"Success","status_code":200,"metadata":{}}"#
 }
 
 #[tokio::test]
@@ -62,40 +68,38 @@ async fn list_networks_requires_explicit_recursion() {
 }
 
 #[tokio::test]
-async fn create_and_delete_network_return_operations() {
-    let id = uuid::Uuid::new_v4().to_string();
-    let body = operation_json(&id);
+async fn create_and_delete_network_are_synchronous() {
+    // Real Incus (cmd/incusd/networks.go: networksPost, networkDelete)
+    // always returns a sync response for these two endpoints - never an
+    // operation - so this crate's create_network/delete_network return
+    // Result<()>, not Result<Operation>.
     let (socket_path, _dir) =
-        spawn_fake_daemon(move |_req| json_response("HTTP/1.1 202 Accepted", &body)).await;
+        spawn_fake_daemon(move |_req| json_response("HTTP/1.1 200 OK", sync_created_json())).await;
     let client = Client::new(ClientConfig::unix_socket(socket_path));
 
-    let create_op = client
+    client
         .create_network(&serde_json::json!({"name": "br1", "type": "bridge"}))
         .await
-        .expect("create_network should return an Operation, per the crate-wide convention");
-    assert_eq!(create_op.id.to_string(), id);
+        .expect("create_network should succeed synchronously");
 
-    let delete_op = client
+    client
         .delete_network("br1")
         .await
-        .expect("delete_network should return an Operation");
-    assert_eq!(delete_op.id.to_string(), id);
+        .expect("delete_network should succeed synchronously");
 }
 
 #[tokio::test]
 async fn update_network_sends_if_match_header_when_etag_is_provided() {
     let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
     let seen = seen_request.clone();
-    let id = uuid::Uuid::new_v4().to_string();
-    let body = operation_json(&id);
     let (socket_path, _dir) = spawn_fake_daemon(move |req| {
         *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
-        json_response("HTTP/1.1 202 Accepted", &body)
+        json_response("HTTP/1.1 200 OK", empty_sync_json())
     })
     .await;
     let client = Client::new(ClientConfig::unix_socket(socket_path));
 
-    let op = client
+    client
         .update_network(
             "br1",
             &serde_json::json!({"config": {}}),
@@ -103,12 +107,49 @@ async fn update_network_sends_if_match_header_when_etag_is_provided() {
         )
         .await
         .expect("update_network should succeed");
-    assert_eq!(op.id.to_string(), id);
 
     assert!(seen_request
         .lock()
         .unwrap()
         .contains("If-Match: \"net-etag\""));
+}
+
+#[tokio::test]
+async fn update_network_guarded_derives_name_and_etag_from_a_real_fetch() {
+    let seen_request = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let seen = seen_request.clone();
+    let network_body = network_json("br1");
+    let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = call_count.clone();
+    let (socket_path, _dir) = spawn_fake_daemon(move |req| {
+        let n = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if n == 0 {
+            format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"real-net-etag\"\r\nContent-Length: {}\r\n\r\n{network_body}",
+                network_body.len()
+            )
+            .into_bytes()
+        } else {
+            *seen.lock().unwrap() = String::from_utf8_lossy(&req).into_owned();
+            json_response("HTTP/1.1 200 OK", empty_sync_json())
+        }
+    })
+    .await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let fetched = client
+        .get_network("br1")
+        .await
+        .expect("get_network should succeed");
+
+    client
+        .update_network_guarded(&fetched, &serde_json::json!({"config": {}}))
+        .await
+        .expect("update_network_guarded should succeed");
+
+    let request_text = seen_request.lock().unwrap().clone();
+    assert!(request_text.contains("PUT /1.0/networks/br1"));
+    assert!(request_text.contains("If-Match: \"real-net-etag\""));
 }
 
 #[tokio::test]

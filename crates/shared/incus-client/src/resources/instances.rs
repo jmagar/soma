@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::operations::{operation_from_envelope, Operation};
 use crate::transport::{
-    precondition_failed_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
+    resource_error_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
 };
 
 /// A container or virtual machine. `config`/`devices` stay untyped
@@ -75,7 +75,10 @@ impl Client {
     /// `If-Match` precondition.
     pub async fn get_instance(&self, name: &str) -> Result<WithEtag<Instance>> {
         let path = format!("/1.0/instances/{name}");
-        let envelope = self.request(Method::Get, &path, &[], None, None).await?;
+        let envelope = self
+            .request(Method::Get, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, name))?;
         match envelope {
             crate::transport::IncusEnvelope::Sync { metadata, etag } => Ok(WithEtag {
                 value: serde_json::from_value(metadata)?,
@@ -110,8 +113,25 @@ impl Client {
         let envelope = self
             .request(Method::Put, &path, &[], Some(new_definition), etag)
             .await
-            .map_err(|err| precondition_failed_or(err, name))?;
+            .map_err(|err| resource_error_or(err, name))?;
         operation_from_envelope(envelope)
+    }
+
+    /// Same as [`Client::update_instance`], but takes the `WithEtag` from a
+    /// prior [`Client::get_instance`] call directly instead of a bare
+    /// `etag: Option<&str>` - the "pit of success" version of the
+    /// fetch-then-guarded-update workflow, since it makes threading a
+    /// genuinely-fetched ETag the natural path rather than something a
+    /// caller has to remember to do by hand. `update_instance` remains
+    /// available directly for callers with a legitimate reason to supply
+    /// their own ETag (e.g. one persisted from a previous process).
+    pub async fn update_instance_guarded(
+        &self,
+        fetched: &WithEtag<Instance>,
+        new_definition: &serde_json::Value,
+    ) -> Result<Operation> {
+        self.update_instance(&fetched.value().name, new_definition, fetched.etag())
+            .await
     }
 
     /// Partial update (PATCH) - use this instead of `update_instance` for
@@ -126,13 +146,29 @@ impl Client {
         let envelope = self
             .request(Method::Patch, &path, &[], Some(patch), etag)
             .await
-            .map_err(|err| precondition_failed_or(err, name))?;
+            .map_err(|err| resource_error_or(err, name))?;
         operation_from_envelope(envelope)
+    }
+
+    /// Same as [`Client::patch_instance`], but takes the `WithEtag` from a
+    /// prior [`Client::get_instance`] call directly - see
+    /// [`Client::update_instance_guarded`]'s doc comment for why this
+    /// exists alongside the raw-`etag` version.
+    pub async fn patch_instance_guarded(
+        &self,
+        fetched: &WithEtag<Instance>,
+        patch: &serde_json::Value,
+    ) -> Result<Operation> {
+        self.patch_instance(&fetched.value().name, patch, fetched.etag())
+            .await
     }
 
     pub async fn delete_instance(&self, name: &str) -> Result<Operation> {
         let path = format!("/1.0/instances/{name}");
-        let envelope = self.request(Method::Delete, &path, &[], None, None).await?;
+        let envelope = self
+            .request(Method::Delete, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, name))?;
         operation_from_envelope(envelope)
     }
 
@@ -193,7 +229,10 @@ impl Client {
         snapshot_name: &str,
     ) -> Result<Operation> {
         let path = format!("/1.0/instances/{instance_name}/snapshots/{snapshot_name}");
-        let envelope = self.request(Method::Delete, &path, &[], None, None).await?;
+        let envelope = self
+            .request(Method::Delete, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, snapshot_name))?;
         operation_from_envelope(envelope)
     }
 }

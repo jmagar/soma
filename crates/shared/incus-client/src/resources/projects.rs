@@ -3,9 +3,8 @@
 use serde::Deserialize;
 
 use crate::error::{Error, Result};
-use crate::operations::{operation_from_envelope, Operation};
 use crate::transport::{
-    precondition_failed_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
+    resource_error_or, sync_metadata, Client, Method, RecursionQuery, WithEtag,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -36,7 +35,10 @@ impl Client {
     /// `If-Match` precondition.
     pub async fn get_project(&self, name: &str) -> Result<WithEtag<Project>> {
         let path = format!("/1.0/projects/{name}");
-        let envelope = self.request(Method::Get, &path, &[], None, None).await?;
+        let envelope = self
+            .request(Method::Get, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, name))?;
         match envelope {
             crate::transport::IncusEnvelope::Sync { metadata, etag } => Ok(WithEtag {
                 value: serde_json::from_value(metadata)?,
@@ -48,35 +50,57 @@ impl Client {
         }
     }
 
-    /// Always async, per the crate-wide mutation-return convention.
-    pub async fn create_project(&self, params: &serde_json::Value) -> Result<Operation> {
-        let envelope = self
-            .request(Method::Post, "/1.0/projects", &[], Some(params), None)
+    /// Creates a project. Synchronous: the project exists by the time this
+    /// returns, with no operation to wait on. Verified against
+    /// `cmd/incusd/api_project.go`'s `projectsPost` on the `lxc/incus`
+    /// `main` branch, which always returns `response.SyncResponseLocation`.
+    pub async fn create_project(&self, params: &serde_json::Value) -> Result<()> {
+        self.request(Method::Post, "/1.0/projects", &[], Some(params), None)
             .await?;
-        operation_from_envelope(envelope)
+        Ok(())
     }
 
     /// Full replacement update (PUT). `etag`, if provided, is sent as
     /// `If-Match` for optimistic concurrency; a stale ETag surfaces as
     /// `Error::PreconditionFailed`, not the generic `Error::Api`.
+    ///
+    /// Synchronous, like [`Client::create_project`] - verified against
+    /// `cmd/incusd/api_project.go`'s `projectChange`, which always returns
+    /// `response.EmptySyncResponse`.
     pub async fn update_project(
         &self,
         name: &str,
         new_definition: &serde_json::Value,
         etag: Option<&str>,
-    ) -> Result<Operation> {
+    ) -> Result<()> {
         let path = format!("/1.0/projects/{name}");
-        let envelope = self
-            .request(Method::Put, &path, &[], Some(new_definition), etag)
+        self.request(Method::Put, &path, &[], Some(new_definition), etag)
             .await
-            .map_err(|err| precondition_failed_or(err, name))?;
-        operation_from_envelope(envelope)
+            .map_err(|err| resource_error_or(err, name))?;
+        Ok(())
     }
 
-    pub async fn delete_project(&self, name: &str) -> Result<Operation> {
+    /// Same as [`Client::update_project`], but takes the `WithEtag` from a
+    /// prior [`Client::get_project`] call directly instead of a bare
+    /// `etag: Option<&str>` - see `instances::Client::update_instance_guarded`'s
+    /// doc comment for why this exists alongside the raw-`etag` version.
+    pub async fn update_project_guarded(
+        &self,
+        fetched: &WithEtag<Project>,
+        new_definition: &serde_json::Value,
+    ) -> Result<()> {
+        self.update_project(&fetched.value().name, new_definition, fetched.etag())
+            .await
+    }
+
+    /// Synchronous - verified against `cmd/incusd/api_project.go`'s
+    /// `projectDelete`, which always returns `response.EmptySyncResponse`.
+    pub async fn delete_project(&self, name: &str) -> Result<()> {
         let path = format!("/1.0/projects/{name}");
-        let envelope = self.request(Method::Delete, &path, &[], None, None).await?;
-        operation_from_envelope(envelope)
+        self.request(Method::Delete, &path, &[], None, None)
+            .await
+            .map_err(|err| resource_error_or(err, name))?;
+        Ok(())
     }
 }
 
