@@ -2,7 +2,7 @@
 //!
 //! These helpers decide *whether* a stream should receive ANSI styling or
 //! interactive behavior (progress lines, prompts). They do not decide *what*
-//! to print — see [`crate::color`] and [`crate::progress`] for that.
+//! to print — see [`crate::color`] for that.
 
 use std::io::IsTerminal;
 
@@ -96,5 +96,19 @@ mod tests {
     #[test]
     fn auto_requires_tty() {
         assert!(!resolve_color(ColorMode::Auto, false));
+    }
+
+    #[test]
+    fn auto_respects_no_color_even_on_a_tty() {
+        // Save/restore so this test doesn't leak state into others sharing
+        // the process (NO_COLOR is process-global).
+        let previous = std::env::var_os("NO_COLOR");
+        std::env::set_var("NO_COLOR", "1");
+        let result = resolve_color(ColorMode::Auto, true);
+        match previous {
+            Some(value) => std::env::set_var("NO_COLOR", value),
+            None => std::env::remove_var("NO_COLOR"),
+        }
+        assert!(!result, "NO_COLOR should disable Auto color even on a tty");
     }
 }

@@ -59,4 +59,16 @@ mod tests {
         let confirmed = confirm_typed(&mut output, &mut input, "Type yes: ", "yes").unwrap();
         assert!(confirmed);
     }
+
+    #[test]
+    fn confirm_typed_treats_closed_stdin_as_a_non_match() {
+        // An empty reader mimics closed/EOF stdin: `read_line` returns
+        // `Ok(0)` with `input` left empty, which trims to `""` — never
+        // equal to a non-empty `expected` token, so this fails closed
+        // (`Ok(false)`) rather than erroring or matching.
+        let mut input = io::Cursor::new(Vec::new());
+        let mut output = Vec::new();
+        let confirmed = confirm_typed(&mut output, &mut input, "Type yes: ", "yes").unwrap();
+        assert!(!confirmed);
+    }
 }

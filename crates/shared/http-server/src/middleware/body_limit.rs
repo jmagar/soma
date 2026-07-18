@@ -37,6 +37,27 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn request_exactly_at_limit_is_accepted() {
+        // Boundary check: a body of exactly `bytes` must be accepted, not
+        // rejected — guards against an off-by-one (`>` vs `>=`) regression
+        // in the limit comparison.
+        let app = Router::new()
+            .route(
+                "/",
+                post(|body: Bytes| async move { body.len().to_string() }),
+            )
+            .layer(body_limit_layer(8));
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/")
+            .body(Body::from("exactly8"))
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+    }
+
+    #[tokio::test]
     async fn request_over_limit_is_rejected() {
         let app = Router::new()
             .route(
