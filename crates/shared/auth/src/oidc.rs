@@ -50,6 +50,11 @@ struct CachedJwks {
 /// Shared RS256 ID-token verifier for OIDC-shaped upstream providers
 /// (Google, Authelia). Caches the provider's JWKS document and validates
 /// signature, expiry, audience, and issuer on every [`Self::verify`] call.
+///
+/// `Clone` (all fields are cheap-to-clone handles: `Arc`, `String`,
+/// `reqwest::Client`, `Url`) so `GoogleProvider`/`AutheliaProvider` can stay
+/// `#[derive(Clone)]` themselves, matching their pre-existing public API.
+#[derive(Clone)]
 pub(crate) struct OidcVerifier {
     provider_id: &'static str,
     issuer: String,
@@ -249,4 +254,13 @@ fn validate_header_alg(provider_id: &str, header: &Header) -> Result<(), AuthErr
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn parse_max_age_reads_cache_control_max_age() {
+        assert_eq!(super::parse_max_age("public, max-age=3600"), Some(3600));
+        assert_eq!(super::parse_max_age("no-cache"), None);
+    }
 }
