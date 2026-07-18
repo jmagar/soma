@@ -13,6 +13,8 @@ mod artifacts;
 mod asynchronous;
 #[path = "transaction_marker.rs"]
 mod marker;
+#[path = "transaction_pre_swap.rs"]
+mod pre_swap;
 #[path = "transaction_io.rs"]
 mod transaction_io;
 #[path = "transaction_layout.rs"]
@@ -23,10 +25,10 @@ use marker::marker_temp_owner_is_valid;
 use marker::{
     Marker, MarkerPhase, cleanup_marker_temp, preflight_marker_lifecycle, read_marker, write_marker,
 };
+use pre_swap::validate_or_cleanup;
 use transaction_io::{
-    absolute, create_backup, ensure_validated_artifact_mode, hash_file,
-    hash_stable_validated_artifact, remove_and_sync, remove_file, remove_if_present_and_sync,
-    restore_validated_artifact_mode, suffix_path, sync_parent, unique_backup,
+    absolute, create_backup, hash_file, hash_stable_validated_artifact, remove_and_sync,
+    remove_file, remove_if_present_and_sync, suffix_path, sync_parent, unique_backup,
 };
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -40,6 +42,10 @@ pub(super) enum TestFailpoint {
     AfterRollbackRename,
     FailedRenameAfterMarkerCleanup,
     FailedRenameAfterBackupCleanup,
+    PostMarkerModeFailure,
+    PostMarkerDigestFailure,
+    PostMarkerModeFailureWithStateCleanupFailure,
+    PostMarkerDigestFailureWithBackupCleanupFailure,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -155,15 +161,7 @@ impl Updater {
             return Err(error);
         }
         self.maybe_fail(TestFailpoint::AfterMarkerSync, &state)?;
-        restore_validated_artifact_mode(&validated, &validated_path)?;
-        let final_digest = hash_stable_validated_artifact(&validated, &validated_path)?;
-        if final_digest != validated.sha256() {
-            return Err(UpdateError::DigestMismatch {
-                expected: validated.sha256().to_owned(),
-                actual: final_digest,
-            });
-        }
-        ensure_validated_artifact_mode(&validated, &validated_path)?;
+        validate_or_cleanup(self, &validated, &validated_path, &state, &backup)?;
         let forced_rename_failure = self
             .failpoint_active(TestFailpoint::FailedRenameAfterMarkerCleanup)
             || self.failpoint_active(TestFailpoint::FailedRenameAfterBackupCleanup);

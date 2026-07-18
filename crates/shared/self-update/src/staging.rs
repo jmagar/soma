@@ -85,6 +85,24 @@ impl Drop for PartialArtifact {
     }
 }
 
+async fn create_partial(path: &Path) -> Result<(tokio::fs::File, PartialArtifact)> {
+    let mut open_options = tokio::fs::OpenOptions::new();
+    open_options.create_new(true).write(true);
+    #[cfg(unix)]
+    {
+        open_options.mode(0o600);
+    }
+    let file = open_options
+        .open(path)
+        .await
+        .map_err(|error| UpdateError::io(path, error))?;
+    let cleanup = PartialArtifact {
+        path: path.to_path_buf(),
+        armed: true,
+    };
+    Ok((file, cleanup))
+}
+
 impl Updater {
     pub async fn stage<R>(
         &self,
@@ -116,10 +134,6 @@ impl Updater {
             std::process::id(),
             STAGING_COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
-        let mut cleanup = PartialArtifact {
-            path: path.clone(),
-            armed: true,
-        };
         #[cfg(unix)]
         let intended_mode = {
             use std::os::unix::fs::PermissionsExt;
@@ -129,16 +143,7 @@ impl Updater {
                 Err(error) => return Err(UpdateError::io(self.layout().executable(), error)),
             }
         };
-        let mut open_options = tokio::fs::OpenOptions::new();
-        open_options.create_new(true).write(true);
-        #[cfg(unix)]
-        {
-            open_options.mode(0o600);
-        }
-        let mut file = open_options
-            .open(&path)
-            .await
-            .map_err(|error| UpdateError::io(&path, error))?;
+        let (mut file, mut cleanup) = create_partial(&path).await?;
         let result: Result<(u64, String)> = async {
             let mut buffer = [0_u8; 64 * 1024];
             let mut total = 0_u64;
@@ -218,4 +223,20 @@ fn encode_hex(bytes: &[u8]) -> String {
         output.push(HEX[(byte & 0x0f) as usize] as char);
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn create_partial_collision_preserves_preexisting_sentinel() {
+        let temp = tempfile::tempdir().unwrap();
+        let explicit_path = temp.path().join("explicit-collision.part");
+        let sentinel = b"not owned by the updater";
+        std::fs::write(&explicit_path, sentinel).unwrap();
+
+        assert!(create_partial(&explicit_path).await.is_err());
+        assert_eq!(std::fs::read(&explicit_path).unwrap(), sentinel);
+    }
 }

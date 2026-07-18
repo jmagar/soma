@@ -39,6 +39,97 @@ fn hash_bytes(bytes: &[u8]) -> String {
         .collect()
 }
 
+fn rollback_artifacts(updater: &Updater) -> Vec<PathBuf> {
+    std::fs::read_dir(updater.layout().executable().parent().unwrap())
+        .unwrap()
+        .filter_map(std::result::Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().contains(".rollback-"))
+        })
+        .collect()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn post_marker_mode_and_digest_failures_remove_state_then_backup() {
+    for failpoint in [
+        TestFailpoint::PostMarkerModeFailure,
+        TestFailpoint::PostMarkerDigestFailure,
+    ] {
+        let (_temp, updater, artifact, old, _new) = updater_and_artifact(1).await;
+        let staged = artifact.path().to_path_buf();
+        updater.set_test_failpoint(failpoint);
+
+        let error = updater.install(artifact, "1.0.0").await.unwrap_err();
+        match failpoint {
+            TestFailpoint::PostMarkerModeFailure => {
+                assert!(matches!(error, UpdateError::ArtifactIdentityChanged { .. }));
+            }
+            TestFailpoint::PostMarkerDigestFailure => {
+                assert!(matches!(error, UpdateError::DigestMismatch { .. }));
+            }
+            _ => unreachable!(),
+        }
+        assert_eq!(std::fs::read(updater.layout().executable()).unwrap(), old);
+        assert!(!updater.layout().state_file().exists());
+        assert!(rollback_artifacts(&updater).is_empty());
+        assert!(!staged.exists());
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn post_marker_cleanup_failures_preserve_primary_and_authoritative_ordering() {
+    for (failpoint, state_remains, backup_remains) in [
+        (
+            TestFailpoint::PostMarkerModeFailureWithStateCleanupFailure,
+            true,
+            true,
+        ),
+        (
+            TestFailpoint::PostMarkerDigestFailureWithBackupCleanupFailure,
+            false,
+            true,
+        ),
+    ] {
+        let (_temp, updater, artifact, old, _new) = updater_and_artifact(1).await;
+        let staged = artifact.path().to_path_buf();
+        updater.set_test_failpoint(failpoint);
+
+        let error = updater.install(artifact, "1.0.0").await.unwrap_err();
+        let UpdateError::TransactionCleanupFailed { operation, cleanup } = error else {
+            panic!("expected combined operation and cleanup error");
+        };
+        match failpoint {
+            TestFailpoint::PostMarkerModeFailureWithStateCleanupFailure => {
+                assert!(matches!(
+                    *operation,
+                    UpdateError::ArtifactIdentityChanged { .. }
+                ));
+            }
+            TestFailpoint::PostMarkerDigestFailureWithBackupCleanupFailure => {
+                assert!(matches!(*operation, UpdateError::DigestMismatch { .. }));
+            }
+            _ => unreachable!(),
+        }
+        assert!(matches!(*cleanup, UpdateError::Io { .. }));
+        assert_eq!(std::fs::read(updater.layout().executable()).unwrap(), old);
+        assert_eq!(updater.layout().state_file().exists(), state_remains);
+        assert_eq!(!rollback_artifacts(&updater).is_empty(), backup_remains);
+        assert!(!staged.exists());
+
+        updater.set_test_failpoint(TestFailpoint::None);
+        assert_eq!(
+            updater.recover_on_startup("1.0.0").await.unwrap(),
+            RecoveryAction::NoPendingUpdate
+        );
+        assert!(!updater.layout().state_file().exists());
+        if state_remains {
+            assert!(rollback_artifacts(&updater).is_empty());
+        }
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn failpoints_after_marker_and_swap_recover_idempotently() {
     for (failpoint, running, expected) in [

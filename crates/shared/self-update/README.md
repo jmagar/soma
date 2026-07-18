@@ -43,6 +43,8 @@ validation future triggers the same process-tree termination guard. After the
 leader exits, validation explicitly terminates and drains that process tree
 before accepting its captured status and output, so a successful candidate
 cannot leave a helper running after closing inherited pipes.
+Exclusive partial-file creation establishes cleanup ownership: a staging-path
+collision is reported without deleting or modifying the preexisting entry.
 The included atomic installer and re-exec adapter support Unix only.
 Non-Unix adopters can use directive, staging, and validation but the provided
 installer reports `UnsupportedPlatform`; supply a platform-specific deployment
@@ -117,6 +119,11 @@ rehashes the installed executable against the verified target digest before
 durably removing the authoritative marker and cleaning the backup. Changed
 bytes retain both marker and backup; a cleanup interruption after confirmation
 can leave only a harmless orphan backup.
+If mode, identity, or digest validation fails after a prepared marker is
+durable but before replacement, the installer durably removes that marker
+first and then removes the rollback backup. Cleanup failures retain the primary
+validation error and leave either a recoverable marker-plus-backup pair or an
+unreferenced backup, never a marker whose backup was deleted first.
 A running-version mismatch retains both marker and backup and returns a typed
 error; an operator must inspect that identity mismatch before explicitly
 removing recovery state. Corrupt markers, missing

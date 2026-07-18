@@ -55,6 +55,11 @@ pub enum UpdateError {
         operation: Box<UpdateError>,
         cleanup: std::io::Error,
     },
+    #[error("update operation failed: {operation}; transaction cleanup also failed: {cleanup}")]
+    TransactionCleanupFailed {
+        operation: Box<UpdateError>,
+        cleanup: Box<UpdateError>,
+    },
     #[error("I/O operation failed for {path}: {source}")]
     Io {
         path: PathBuf,

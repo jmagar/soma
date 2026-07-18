@@ -19,7 +19,10 @@
 > downloads and rollback copies are private before byte writes, marker schema 3
 > records the actual backup owner, intended executable modes survive validator
 > changes, and successful validators terminate and drain their configured
-> process tree before their captured result is accepted.
+> process tree before their captured result is accepted. Staging cleanup guards
+> arm only after exclusive file creation, and post-marker pre-swap validation
+> errors clean authoritative state before backups while preserving combined
+> operation and cleanup failures.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
