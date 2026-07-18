@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::process::Stdio;
 
 use rmcp::{
@@ -18,6 +19,23 @@ use tokio::{
 // bounded response budget.
 const STDIO_INITIALIZE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 const STDIO_RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const STDIO_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+async fn bounded_stdio_operation<T, E, F>(
+    operation: &str,
+    timeout: std::time::Duration,
+    future: F,
+) -> anyhow::Result<T>
+where
+    E: std::fmt::Display,
+    F: Future<Output = Result<T, E>>,
+{
+    match tokio::time::timeout(timeout, future).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(anyhow::anyhow!("{operation} failed: {error}")),
+        Err(_) => Err(anyhow::anyhow!("{operation} timed out after {timeout:?}")),
+    }
+}
 
 fn stdio_temp_context() -> anyhow::Result<(tempfile::TempDir, std::path::PathBuf)> {
     let temp_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
@@ -124,10 +142,20 @@ async fn read_json_rpc_response(
 }
 
 #[tokio::test]
-async fn stdio_child_process_lists_tools_and_calls_actions() {
-    let (service, stderr, _temp) = stdio_client().await.unwrap();
+async fn stdio_child_process_lists_tools_and_calls_actions() -> anyhow::Result<()> {
+    let (service, stderr, _temp) = bounded_stdio_operation(
+        "stdio client initialize",
+        STDIO_INITIALIZE_TIMEOUT,
+        stdio_client(),
+    )
+    .await?;
 
-    let tools = service.list_tools(Default::default()).await.unwrap();
+    let tools = bounded_stdio_operation(
+        "stdio tools/list",
+        STDIO_RESPONSE_TIMEOUT,
+        service.list_tools(Default::default()),
+    )
+    .await?;
     let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
     assert_eq!(names, vec!["soma"]);
     assert_eq!(
@@ -138,49 +166,55 @@ async fn stdio_child_process_lists_tools_and_calls_actions() {
         "object"
     );
 
-    let status = service
-        .call_tool(
+    let status = bounded_stdio_operation(
+        "stdio status tool call",
+        STDIO_RESPONSE_TIMEOUT,
+        service.call_tool(
             CallToolRequestParams::new("soma")
                 .with_arguments(json!({"action": "status"}).as_object().unwrap().clone()),
-        )
-        .await
-        .unwrap();
+        ),
+    )
+    .await?;
     let status = structured_result_json(&status);
     assert_eq!(status["status"], "ok", "status payload was {status}");
 
-    let echo = service
-        .call_tool(
+    let echo = bounded_stdio_operation(
+        "stdio echo tool call",
+        STDIO_RESPONSE_TIMEOUT,
+        service.call_tool(
             CallToolRequestParams::new("soma").with_arguments(
                 json!({"action": "echo", "message": "stdio works"})
                     .as_object()
                     .unwrap()
                     .clone(),
             ),
-        )
-        .await
-        .unwrap();
+        ),
+    )
+    .await?;
     let echo = structured_result_json(&echo);
     assert_eq!(echo["echo"], "stdio works");
 
-    service.cancel().await.unwrap();
+    bounded_stdio_operation(
+        "stdio client cancellation",
+        STDIO_SHUTDOWN_TIMEOUT,
+        service.cancel(),
+    )
+    .await?;
 
     if let Some(mut stderr) = stderr {
         let mut logs = String::new();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(1),
+        bounded_stdio_operation(
+            "stdio child stderr closure",
+            STDIO_SHUTDOWN_TIMEOUT,
             stderr.read_to_string(&mut logs),
         )
-        .await
-        {
-            Ok(Ok(_)) => {}
-            Ok(Err(error)) => panic!("failed to read stdio child stderr: {error}"),
-            Err(_) => panic!("stdio child stderr did not close after cancellation"),
-        }
+        .await?;
         assert!(
             !logs.contains("MCP server listening") && !logs.contains("HTTP server"),
             "stdio mode must not start network services; stderr was: {logs}"
         );
     }
+    Ok(())
 }
 
 #[tokio::test]
