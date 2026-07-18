@@ -257,10 +257,19 @@ where
         }
     }
 
-    let content_length = headers
+    // A malformed Content-Length (non-numeric, overflowing) must not be
+    // silently treated the same as "header absent" - falling through to the
+    // no-declared-length path would mask a corrupt/untrustworthy response
+    // as an ordinary one instead of surfacing the parse failure.
+    let content_length = match headers
         .iter()
         .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
-        .and_then(|(_, value)| value.parse::<usize>().ok());
+    {
+        Some((_, value)) => Some(value.parse::<usize>().map_err(|_| {
+            Error::InvalidResponse(format!("invalid Content-Length header: {value:?}"))
+        })?),
+        None => None,
+    };
     let is_chunked = headers.iter().any(|(name, value)| {
         name.eq_ignore_ascii_case("transfer-encoding") && value.eq_ignore_ascii_case("chunked")
     });

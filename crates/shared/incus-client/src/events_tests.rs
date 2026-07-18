@@ -1,5 +1,7 @@
 use futures::StreamExt;
 use tokio::net::UnixListener;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 use super::*;
@@ -9,6 +11,16 @@ use crate::transport::Client;
 /// Spawns a fake Incus daemon that accepts one WebSocket connection on a
 /// Unix socket and sends the given canned text frames before closing.
 async fn spawn_fake_events_daemon(frames: Vec<String>) -> (std::path::PathBuf, tempfile::TempDir) {
+    spawn_fake_events_daemon_with_close(frames, None).await
+}
+
+/// Like [`spawn_fake_events_daemon`], but lets the caller specify the close
+/// frame sent after the canned text frames (`None` closes with no frame at
+/// all, matching a clean end-of-stream).
+async fn spawn_fake_events_daemon_with_close(
+    frames: Vec<String>,
+    close: Option<CloseFrame>,
+) -> (std::path::PathBuf, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("create temp dir");
     let socket_path = dir.path().join("incus.sock");
     let listener = UnixListener::bind(&socket_path).expect("bind unix listener");
@@ -24,7 +36,7 @@ async fn spawn_fake_events_daemon(frames: Vec<String>) -> (std::path::PathBuf, t
             use futures::SinkExt;
             let _ = ws.send(Message::Text(frame.into())).await;
         }
-        let _ = ws.close(None).await;
+        let _ = ws.close(close).await;
     });
 
     (socket_path, dir)
@@ -69,6 +81,64 @@ async fn subscribe_events_yields_typed_lifecycle_and_logging_events() {
     assert!(matches!(first, Event::Lifecycle(_)));
     let second = stream.next().await.unwrap().unwrap();
     assert!(matches!(second, Event::Logging(_)));
+}
+
+#[tokio::test]
+async fn subscribe_events_surfaces_an_abnormal_close_as_an_error_not_a_silent_end() {
+    let (socket_path, _dir) = spawn_fake_events_daemon_with_close(
+        vec![],
+        Some(CloseFrame {
+            code: CloseCode::Error,
+            reason: "daemon restarting".into(),
+        }),
+    )
+    .await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let mut stream = client
+        .subscribe_events(EventFilter::default())
+        .await
+        .expect("subscribe should succeed");
+
+    let first = stream
+        .next()
+        .await
+        .expect("an abnormal close must surface as one Err item, not end the stream silently");
+    assert!(
+        matches!(first, Err(crate::Error::InvalidResponse(_))),
+        "expected InvalidResponse for a non-Normal close code, got {first:?}"
+    );
+
+    // After the abnormal-close error item, the stream ends (the underlying
+    // connection really is closed) - this proves the error doesn't loop
+    // forever re-observing the same close frame.
+    assert!(stream.next().await.is_none());
+}
+
+#[tokio::test]
+async fn subscribe_events_ends_silently_on_a_normal_close() {
+    let frame = r#"{"type":"lifecycle","metadata":{"action":"instance-started"}}"#.to_owned();
+    let (socket_path, _dir) = spawn_fake_events_daemon_with_close(
+        vec![frame],
+        Some(CloseFrame {
+            code: CloseCode::Normal,
+            reason: "".into(),
+        }),
+    )
+    .await;
+    let client = Client::new(ClientConfig::unix_socket(socket_path));
+
+    let mut stream = client
+        .subscribe_events(EventFilter::default())
+        .await
+        .expect("subscribe should succeed");
+
+    let first = stream.next().await.unwrap();
+    assert!(first.is_ok(), "the lifecycle event should parse cleanly");
+    assert!(
+        stream.next().await.is_none(),
+        "a Normal close code must end the stream silently, not as an Err item"
+    );
 }
 
 #[test]

@@ -14,11 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `incus-client` (crates/shared/incus-client) is now feature-complete for v1:
-  Unix-socket transport, operation wait/cancel (including WebSocket events
-  behind the `events` feature), and CRUD for instances (with lifecycle and
-  snapshots), images, networks, storage pools/volumes, and projects. Remote
-  mTLS transport and certificates CRUD are tracked separately for whenever a
-  real remote consumer exists.
+  Unix-socket transport (with a configurable per-request timeout, defaulting
+  to 30s), operation wait/cancel (including WebSocket events behind the
+  `events` feature), and CRUD for instances (with lifecycle and snapshots),
+  images, networks, storage pools/volumes, and projects, with ETag/`If-Match`
+  optimistic-concurrency support on instances, images, networks, and projects
+  (not yet on storage pools/volumes). Remote mTLS transport and certificates
+  CRUD are tracked separately for whenever a real remote consumer exists.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.

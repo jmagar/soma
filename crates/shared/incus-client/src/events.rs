@@ -12,6 +12,7 @@
 use futures::{Stream, StreamExt};
 use serde::Deserialize;
 use tokio::net::UnixStream;
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::WebSocketStream;
 
@@ -95,6 +96,13 @@ fn parse_event(text: &str) -> Result<Event> {
 /// `tokio_tungstenite::MaybeTlsStream`.
 pub struct EventStream {
     inner: WebSocketStream<UnixStream>,
+    // Set once the connection has genuinely ended (a close frame was seen,
+    // or the underlying stream itself ended). tokio-tungstenite doesn't
+    // guarantee a `Close`/`None` observation is the *last* thing a poll
+    // ever yields - without this, a caller could see the same
+    // abnormal-close `Err` (or `None`) repeat indefinitely instead of the
+    // stream actually terminating.
+    done: bool,
 }
 
 impl Stream for EventStream {
@@ -104,6 +112,9 @@ impl Stream for EventStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
+        if self.done {
+            return std::task::Poll::Ready(None);
+        }
         loop {
             match self.inner.poll_next_unpin(cx) {
                 std::task::Poll::Ready(Some(Ok(Message::Text(text)))) => {
@@ -114,8 +125,25 @@ impl Stream for EventStream {
                     // for the caller to see here - poll again.
                     continue;
                 }
+                // A close frame carrying a non-`Normal` code means the
+                // daemon ended the subscription abnormally (restart,
+                // internal error, protocol violation) rather than the
+                // subscription simply running its course - surface that as
+                // one `Err` item so a caller waiting on a specific event
+                // can't mistake "the daemon dropped us" for "nothing more
+                // to send."
+                std::task::Poll::Ready(Some(Ok(Message::Close(Some(frame)))))
+                    if frame.code != CloseCode::Normal =>
+                {
+                    self.done = true;
+                    return std::task::Poll::Ready(Some(Err(Error::InvalidResponse(format!(
+                        "/1.0/events subscription closed abnormally: {:?} ({})",
+                        frame.code, frame.reason
+                    )))));
+                }
                 std::task::Poll::Ready(Some(Ok(Message::Close(_))))
                 | std::task::Poll::Ready(None) => {
+                    self.done = true;
                     return std::task::Poll::Ready(None);
                 }
                 std::task::Poll::Ready(Some(Ok(Message::Binary(_) | Message::Frame(_)))) => {
@@ -148,7 +176,10 @@ impl Client {
         let (ws_stream, _response) = tokio_tungstenite::client_async(request, stream)
             .await
             .map_err(|err| Error::Transport(std::io::Error::other(err.to_string())))?;
-        Ok(EventStream { inner: ws_stream })
+        Ok(EventStream {
+            inner: ws_stream,
+            done: false,
+        })
     }
 }
 

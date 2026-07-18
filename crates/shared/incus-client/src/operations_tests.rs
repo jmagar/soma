@@ -125,6 +125,41 @@ async fn wait_for_operation_with_none_timeout_repolls_until_terminal_status() {
 }
 
 #[tokio::test]
+async fn wait_for_operation_is_not_bounded_by_the_client_wide_default_request_timeout() {
+    // Regression test: wait_for_operation's long-poll must not inherit
+    // Client::request's default per-request timeout - that default is sized
+    // for ordinary, fast-returning requests, while a long-poll legitimately
+    // blocks server-side for as long as the operation takes. Configure a
+    // client-wide default (50ms) far shorter than how long the fake daemon
+    // takes to respond (150ms) and assert the call still succeeds instead
+    // of failing with Error::Timeout.
+    let id = uuid::Uuid::new_v4();
+    let body = success_operation_json(&id.to_string(), 200);
+    let (socket_path, _dir) = crate::transport::unix::tests::spawn_fake_daemon(move |_req| {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        crate::transport::unix::tests::json_response("HTTP/1.1 200 OK", &body)
+    })
+    .await;
+    let client = Client::new(
+        ClientConfig::unix_socket(socket_path)
+            .with_request_timeout(Some(std::time::Duration::from_millis(50))),
+    );
+
+    let op = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        client.wait_for_operation(id, Some(std::time::Duration::from_secs(1))),
+    )
+    .await
+    .expect("must not hang")
+    .expect(
+        "a slow-but-successful long-poll must not fail with Error::Timeout just because it \
+         outlives the client's unrelated default per-request timeout",
+    );
+
+    assert_eq!(op.status_code, 200);
+}
+
+#[tokio::test]
 async fn cancel_operation_short_circuits_without_a_network_call_when_not_cancellable() {
     // Bind a listener but never accept a connection from it - if
     // cancel_operation made a network call here, the test would hang until

@@ -94,7 +94,16 @@ impl Client {
                 &[]
             };
             let path = format!("/1.0/operations/{id}/wait");
-            let envelope = self.request(Method::Get, &path, query, None, None).await?;
+            // Bypass the client's default per-request timeout here - this
+            // call already has its own server-side bound (the `timeout`
+            // query param above, or a genuinely unbounded long-poll when
+            // the caller passed `None`), and a legitimately slow operation
+            // (e.g. a large image import) must not fail with a client-side
+            // Error::Timeout just because it outlives the client's default,
+            // which is sized for ordinary fast requests, not long-polls.
+            let envelope = self
+                .request_with_timeout(Method::Get, &path, query, None, None, None)
+                .await?;
             let operation = operation_from_envelope(envelope)?;
 
             if !operation.is_terminal() {

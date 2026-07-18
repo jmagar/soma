@@ -139,10 +139,9 @@ impl Client {
         }))
     }
 
-    /// Executes one Incus API request and returns its parsed envelope.
-    /// Every resource and operation method in this crate is built on top of
-    /// this one method - nothing else in the crate does its own HTTP
-    /// framing or envelope parsing.
+    /// Executes one Incus API request and returns its parsed envelope,
+    /// bounded by the client's configured [`ClientConfig::with_request_timeout`].
+    /// Every resource method in this crate is built on top of this.
     pub(crate) async fn request(
         &self,
         method: Method,
@@ -150,6 +149,28 @@ impl Client {
         query: &[(&str, &str)],
         body: Option<&serde_json::Value>,
         if_match: Option<&str>,
+    ) -> Result<IncusEnvelope> {
+        self.request_with_timeout(method, path, query, body, if_match, self.0.request_timeout)
+            .await
+    }
+
+    /// Like [`Client::request`], but lets the caller override the client's
+    /// configured default timeout for this one call - used by
+    /// [`Client::wait_for_operation`]'s long-poll, which already has its own
+    /// server-side bound (Incus's `.../wait?timeout=<seconds>` query param,
+    /// or a genuinely unbounded long-poll when no `timeout` is given) and
+    /// must not *also* be subject to the client-wide default meant for
+    /// ordinary, fast-returning requests - otherwise any operation that
+    /// legitimately takes longer than that default to complete would fail
+    /// with `Error::Timeout` even though nothing actually went wrong.
+    pub(crate) async fn request_with_timeout(
+        &self,
+        method: Method,
+        path: &str,
+        query: &[(&str, &str)],
+        body: Option<&serde_json::Value>,
+        if_match: Option<&str>,
+        timeout: Option<Duration>,
     ) -> Result<IncusEnvelope> {
         let body_bytes = body.map(serde_json::to_vec).transpose()?;
         let raw = unix::execute(
@@ -161,18 +182,31 @@ impl Client {
                 body: body_bytes.as_deref(),
                 if_match,
             },
-            self.0.request_timeout,
+            timeout,
         )
         .await?;
 
         if raw.status >= 400 {
-            let error_body: serde_json::Value = serde_json::from_slice(&raw.body)
-                .unwrap_or_else(|_| serde_json::json!({"error": "unparseable error body"}));
-            let message = error_body
-                .get("error")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("unknown error")
-                .to_owned();
+            // Preserve the daemon's actual words in every fallback path
+            // instead of discarding the raw body behind a generic
+            // "unknown error"/"unparseable error body" string - a
+            // mismatch between the assumed `{"error": "..."}` shape and
+            // what a given Incus version/proxy actually sends shouldn't
+            // erase the only diagnostic information available.
+            let raw_body_lossy = || String::from_utf8_lossy(&raw.body).into_owned();
+            let message = match serde_json::from_slice::<serde_json::Value>(&raw.body) {
+                Ok(error_body) => match error_body.get("error").and_then(serde_json::Value::as_str)
+                {
+                    Some(text) => text.to_owned(),
+                    None => format!(
+                        "HTTP {}: response body did not match the expected {{\"error\": ...}} \
+                         shape: {}",
+                        raw.status,
+                        raw_body_lossy()
+                    ),
+                },
+                Err(_) => format!("HTTP {}: {}", raw.status, raw_body_lossy()),
+            };
             return Err(Error::Api {
                 status_code: raw.status,
                 message,
