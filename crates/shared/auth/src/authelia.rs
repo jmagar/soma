@@ -59,20 +59,36 @@ impl AutheliaProvider {
         client_secret: String,
         redirect_uri: Url,
     ) -> Result<Self, AuthError> {
-        drop(rustls::crypto::ring::default_provider().install_default());
+        crate::provider_http::install_rustls_default_once();
         let http = reqwest::Client::builder()
             .timeout(AUTHELIA_HTTP_TIMEOUT)
             .build()
             .map_err(|error| {
                 AuthError::Storage(format!("build authelia oauth http client: {error}"))
             })?;
-        let authorize_endpoint = issuer.join(AUTHELIA_AUTHORIZE_PATH).map_err(|error| {
+        // RFC 3986 relative-URL resolution: `Url::join` replaces the LAST
+        // path segment of a URL that doesn't end in `/`, not just appends.
+        // For a bare-origin issuer (`https://auth.example.com`) that's a
+        // no-op, but for a path-prefixed issuer without a trailing slash
+        // (`https://example.com/authelia`) it silently drops `/authelia`,
+        // producing `https://example.com/api/oidc/token` instead of
+        // `https://example.com/authelia/api/oidc/token` — wrong URL, no
+        // error. Guarantee a trailing slash before joining so `.join(...)`
+        // always appends under the full issuer path.
+        let issuer_base = if issuer.as_str().ends_with('/') {
+            issuer.clone()
+        } else {
+            Url::parse(&format!("{}/", issuer.as_str())).map_err(|error| {
+                AuthError::Config(format!("normalize authelia issuer url: {error}"))
+            })?
+        };
+        let authorize_endpoint = issuer_base.join(AUTHELIA_AUTHORIZE_PATH).map_err(|error| {
             AuthError::Config(format!("build authelia authorize endpoint: {error}"))
         })?;
-        let token_endpoint = issuer.join(AUTHELIA_TOKEN_PATH).map_err(|error| {
+        let token_endpoint = issuer_base.join(AUTHELIA_TOKEN_PATH).map_err(|error| {
             AuthError::Config(format!("build authelia token endpoint: {error}"))
         })?;
-        let jwks_endpoint = issuer
+        let jwks_endpoint = issuer_base
             .join(AUTHELIA_JWKS_PATH)
             .map_err(|error| AuthError::Config(format!("build authelia jwks endpoint: {error}")))?;
         let verifier = OidcVerifier::new(
@@ -119,6 +135,14 @@ impl AutheliaProvider {
         );
         self.issuer = issuer;
         self
+    }
+
+    /// Test-only accessor proving `AutheliaProvider::new`'s endpoint
+    /// construction resolves correctly against path-prefixed issuers — see
+    /// `authelia_token_endpoint_preserves_issuer_path_prefix_without_trailing_slash`.
+    #[cfg(test)]
+    pub(crate) fn token_endpoint(&self) -> &Url {
+        &self.token_endpoint
     }
 }
 
@@ -283,6 +307,28 @@ mod tests {
         assert!(url.as_str().contains("prompt=consent"));
     }
 
+    /// Regression test: a path-prefixed issuer WITHOUT a trailing slash must
+    /// not lose its path prefix during endpoint construction. RFC 3986
+    /// relative-URL resolution replaces the last path segment of a URL that
+    /// doesn't end in `/`, so `Url::join` against a bare
+    /// `https://example.com/authelia` issuer would silently produce
+    /// `https://example.com/api/oidc/token` instead of
+    /// `https://example.com/authelia/api/oidc/token`.
+    #[test]
+    fn authelia_token_endpoint_preserves_issuer_path_prefix_without_trailing_slash() {
+        let provider = AutheliaProvider::new(
+            Url::parse("https://example.com/authelia").unwrap(),
+            "client-id".to_string(),
+            "client-secret".to_string(),
+            Url::parse("https://lab.example.com/auth/authelia/callback").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            provider.token_endpoint().as_str(),
+            "https://example.com/authelia/api/oidc/token"
+        );
+    }
+
     #[tokio::test]
     async fn authelia_exchange_parses_subject_from_id_token() {
         let server = MockServer::start().await;
@@ -318,6 +364,103 @@ mod tests {
         );
     }
 
+    /// End-to-end coverage for `AutheliaProvider::refresh` — new token
+    /// exchange, `refresh_token`/`expires_in` propagation, and
+    /// re-verification of a fresh `id_token` via `OidcVerifier`. Google has
+    /// refresh coverage via `test_auth_state_with_mock_google`; GitHub's
+    /// refresh always errors by design (tested); Authelia's refresh path had
+    /// no test driving it end to end before this.
+    #[tokio::test]
+    async fn authelia_refresh_parses_subject_and_propagates_new_tokens() {
+        let server = MockServer::start().await;
+        let issuer = Url::parse(&server.uri()).unwrap();
+        Mock::given(method("POST"))
+            .and(path("/api/oidc/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "authelia-refreshed-access-token",
+                "refresh_token": "authelia-refreshed-refresh-token",
+                "expires_in": 7200,
+                "id_token": signed_test_id_token(&issuer, "client-id"),
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/oidc/jwks"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(test_jwks()))
+            .mount(&server)
+            .await;
+
+        let provider = test_authelia_provider().with_endpoints(
+            issuer.clone(),
+            issuer.join("api/oidc/authorization").unwrap(),
+            issuer.join("api/oidc/token").unwrap(),
+            issuer.join("api/oidc/jwks").unwrap(),
+        );
+
+        let exchange = provider
+            .refresh("authelia-existing-refresh-token")
+            .await
+            .unwrap();
+        assert_eq!(exchange.subject, "authelia-subject-123");
+        assert_eq!(exchange.email.as_deref(), Some("user@example.com"));
+        assert_eq!(exchange.email_verified, Some(true));
+        assert_eq!(
+            exchange.access_token,
+            "authelia-refreshed-access-token".to_string()
+        );
+        assert_eq!(
+            exchange.refresh_token.as_deref(),
+            Some("authelia-refreshed-refresh-token")
+        );
+        assert_eq!(exchange.expires_in, Some(7200));
+    }
+
+    /// Negative-path coverage that only Authelia can exercise: unlike
+    /// Google's hardcoded issuer constant, Authelia's issuer is
+    /// operator-configured and `.trim_end_matches('/')`-normalized, so a
+    /// bug in that normalization or in `OidcVerifier::verify`'s issuer
+    /// comparison would not be caught by any of Google's negative tests.
+    /// Mirrors `google_exchange_rejects_wrong_issuer_in_id_token`.
+    #[tokio::test]
+    async fn authelia_exchange_rejects_wrong_issuer_in_id_token() {
+        let server = MockServer::start().await;
+        let issuer = Url::parse(&server.uri()).unwrap();
+        Mock::given(method("POST"))
+            .and(path("/api/oidc/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "authelia-access-token",
+                "refresh_token": "authelia-refresh-token",
+                "expires_in": 3600,
+                "id_token": signed_test_id_token_with_raw_issuer(
+                    "https://evil.example.com",
+                    "client-id",
+                ),
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/oidc/jwks"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(test_jwks()))
+            .mount(&server)
+            .await;
+
+        let provider = test_authelia_provider().with_endpoints(
+            issuer.clone(),
+            issuer.join("api/oidc/authorization").unwrap(),
+            issuer.join("api/oidc/token").unwrap(),
+            issuer.join("api/oidc/jwks").unwrap(),
+        );
+
+        let error = provider
+            .exchange_code("code", "verifier")
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("issuer"),
+            "unexpected error: {error}"
+        );
+    }
+
     use reqwest::Url;
 
     fn test_authelia_provider() -> AutheliaProvider {
@@ -331,8 +474,12 @@ mod tests {
     }
 
     fn signed_test_id_token(issuer: &Url, client_id: &str) -> String {
+        signed_test_id_token_with_raw_issuer(issuer.as_str().trim_end_matches('/'), client_id)
+    }
+
+    fn signed_test_id_token_with_raw_issuer(issuer: &str, client_id: &str) -> String {
         let claims = json!({
-            "iss": issuer.as_str().trim_end_matches('/'),
+            "iss": issuer,
             "aud": client_id,
             "sub": "authelia-subject-123",
             "email": "user@example.com",
