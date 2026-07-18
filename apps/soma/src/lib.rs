@@ -106,7 +106,7 @@ pub async fn run(args: impl IntoIterator<Item = String>) -> anyhow::Result<()> {
             }
         }
         invocation::DispatchMode::Stdio => stdio::serve().await,
-        invocation::DispatchMode::Cli => local::run().await,
+        invocation::DispatchMode::Cli => local::run(&args).await,
     }
 }
 

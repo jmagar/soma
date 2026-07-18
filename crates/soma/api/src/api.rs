@@ -250,15 +250,29 @@ fn optional_name_params(name: Option<String>) -> Value {
 
 /// `GET /openapi.json` — generated OpenAPI schema for the REST surface.
 pub async fn openapi_json(State(state): State<ApiState>) -> axum::response::Response {
-    if let Some(response) = refresh_file_providers(&state) {
-        return response;
+    match build_openapi_document(&state).await {
+        Ok(value) => Json(value).into_response(),
+        Err(response) => response,
+    }
+}
+
+/// Refresh, build, and gateway-augment the OpenAPI document, returning the
+/// raw `Value` rather than a `Response`. `openapi_json` wraps this directly;
+/// the composition root (`apps/soma`) also calls it so it can layer its own
+/// route augmentation (e.g. Palette's `/v1/palette/*`) on top without
+/// `soma-api` depending on a peer product-surface crate.
+pub async fn build_openapi_document(
+    state: &ApiState,
+) -> Result<Value, axum::response::Response> {
+    if let Some(response) = refresh_file_providers(state) {
+        return Err(response);
     }
     match state.application().openapi_document() {
         Ok(mut value) => {
             openapi::augment_with_gateway_route(&mut value);
-            Json(value).into_response()
+            Ok(value)
         }
-        Err(error) => application_error_response(error),
+        Err(error) => Err(application_error_response(error)),
     }
 }
 

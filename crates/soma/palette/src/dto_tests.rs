@@ -78,10 +78,15 @@ fn execute_request_deserializes_confirm_destructive_camel_case_and_defaults() {
         serde_json::from_value(json!({"id": "ping", "confirmDestructive": true})).unwrap();
     assert_eq!(request.id, "ping");
     assert!(request.confirm_destructive);
-    assert_eq!(request.params, json!(null));
+    // Omitted `params` must default to an empty object, not `Value::Null` —
+    // provider input schemas validate against object-shaped schemas, so a
+    // zero-argument action would otherwise fail dispatch with
+    // `input_schema_failed` whenever a client omits `params` entirely.
+    assert_eq!(request.params, json!({}));
 
     let defaulted: LauncherExecuteRequest = serde_json::from_value(json!({"id": "ping"})).unwrap();
     assert!(!defaulted.confirm_destructive);
+    assert_eq!(defaulted.params, json!({}));
 }
 
 #[test]

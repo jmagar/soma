@@ -33,7 +33,10 @@ pub async fn execute_launcher(
     request: LauncherExecuteRequest,
     mut context: ExecutionContext,
 ) -> ExecuteOutcome {
-    let snapshot = state.application().catalog_snapshot();
+    let snapshot = match state.application().refresh_providers() {
+        Ok(snapshot) => snapshot,
+        Err(error) => return ExecuteOutcome::Failed(error),
+    };
     if find_schema(&snapshot, &request.id).is_none() {
         return ExecuteOutcome::NotFound;
     }

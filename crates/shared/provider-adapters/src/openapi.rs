@@ -299,7 +299,14 @@ fn validate_relative_path(
     action: &str,
     path: &str,
 ) -> Result<(), ProviderError> {
-    if path.starts_with("http://") || path.starts_with("https://") || path.starts_with("//") {
+    // Case-insensitive: `url::Url::join` (used downstream to resolve the
+    // final request URL) treats schemes case-insensitively, so a
+    // mixed/upper-case absolute URL like `HTTPS://169.254.169.254/latest`
+    // must be rejected here too — a case-sensitive check would let it slip
+    // through as "relative", get joined onto `base_url`, and send the
+    // request to a host never checked against `capabilities.network.allowed_hosts`.
+    let lower = path.to_ascii_lowercase();
+    if lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("//") {
         return Err(ProviderError::validation(
             &catalog.provider.name,
             action,

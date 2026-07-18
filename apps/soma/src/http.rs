@@ -24,16 +24,18 @@ use std::sync::Arc;
 #[cfg(feature = "observability")]
 use axum::http::StatusCode;
 use axum::{
+    extract::State,
     http::{HeaderName, HeaderValue, Method},
     middleware,
+    response::IntoResponse,
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use tracing::info;
 
 use crate::api::{
-    health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
-    v1_greet, v1_help, v1_provider_tool_action, v1_providers, v1_service_status,
+    health, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo, v1_greet,
+    v1_help, v1_provider_tool_action, v1_providers, v1_service_status,
 };
 use crate::bootstrap::{authorization_mode, mcp_state_for_state};
 use crate::gateway_api::v1_gateway_action;
@@ -45,6 +47,29 @@ use soma_mcp::{allowed_origins, streamable_http_config, streamable_http_service}
 use soma_runtime::server::{build_auth_layer, AppState, AuthPolicy};
 
 const MCP_BODY_LIMIT_BYTES: usize = 65_536;
+/// Matches the desktop Palette bridge's own cap
+/// (`apps/palette/src-tauri/src/labby_bridge.rs`) so launcher params that
+/// pass client-side validation are not rejected here as `413` before the
+/// handler runs. Applied only to `/v1/palette/*` — every other route keeps
+/// the tighter [`MCP_BODY_LIMIT_BYTES`].
+const PALETTE_BODY_LIMIT_BYTES: usize = 256 * 1024;
+
+/// `GET /openapi.json`, augmented with Palette's `/v1/palette/*` routes on
+/// top of `soma-api`'s own gateway-route augmentation. `soma-api` cannot
+/// depend on `soma-palette` directly (product-surface crates must not depend
+/// on one another — see `xtask check-architecture`), so this composition
+/// root, which already depends on both, layers the second augmentation on
+/// here instead of leaving the live `/openapi.json` (and any client
+/// generated from it) silently missing the mounted Palette endpoints.
+async fn openapi_json_with_palette(State(state): State<ApiState>) -> axum::response::Response {
+    match soma_api::api::build_openapi_document(&state).await {
+        Ok(mut value) => {
+            soma_palette::openapi::augment_with_palette_routes(&mut value);
+            Json(value).into_response()
+        }
+        Err(response) => response,
+    }
+}
 
 /// Build the HTTP `AppState`, compose the router, bind a listener, and serve
 /// until a shutdown signal drains in-flight requests. Re-exported as
@@ -117,11 +142,13 @@ pub fn router(state: AppState) -> Router {
                 .patch(v1_dynamic_provider_route)
                 .delete(v1_dynamic_provider_route),
         );
-    let palette: Router<soma_palette::PaletteState> = soma_palette::router();
+    let palette: Router<soma_palette::PaletteState> =
+        soma_palette::router().layer(body_limit_layer(PALETTE_BODY_LIMIT_BYTES));
 
     let api_and_mcp_resolved: Router<()> = mcp
         .with_state(mcp_state.clone())
         .merge(api.with_state(api_state.clone()))
+        .layer(body_limit_layer(MCP_BODY_LIMIT_BYTES))
         .merge(palette.with_state(palette_state));
 
     let authenticated = if let Some(layer) = auth_layer {
@@ -158,7 +185,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/readyz", get(readyz))
         .route("/status", get(status))
-        .route("/openapi.json", get(openapi_json));
+        .route("/openapi.json", get(openapi_json_with_palette));
     let public_runtime: Router<AppState> = Router::new().route(
         "/.well-known/oauth-protected-resource/{*route}",
         get(soma_runtime::protected_routes::protected_route_resource_metadata),
@@ -169,12 +196,13 @@ pub fn router(state: AppState) -> Router {
     let public_api = public_api.route("/metrics", get(metrics_handler));
     let public: Router<()> = public_api
         .with_state(api_state)
-        .merge(public_runtime.with_state(state.clone()));
+        .merge(public_runtime.with_state(state.clone()))
+        .layer(body_limit_layer(MCP_BODY_LIMIT_BYTES));
 
     let mut base: Router<()> = Router::new().merge(authenticated).merge(public);
 
     if let Some(oauth) = oauth_router {
-        base = base.merge(oauth);
+        base = base.merge(oauth.layer(body_limit_layer(MCP_BODY_LIMIT_BYTES)));
     }
 
     #[cfg(feature = "web")]
@@ -191,8 +219,11 @@ pub fn router(state: AppState) -> Router {
         soma_runtime::protected_routes::protected_mcp_intercept,
     ));
 
-    base.layer(body_limit_layer(MCP_BODY_LIMIT_BYTES))
-        .layer(cors_layer(&state.config))
+    // No blanket body-limit layer here: `/v1/palette/*` needs a higher cap
+    // (see `PALETTE_BODY_LIMIT_BYTES`) than the rest of the router, so each
+    // branch above (mcp+api, palette, public, oauth) carries its own
+    // explicit limit instead of one applied over the fully-merged router.
+    base.layer(cors_layer(&state.config))
 }
 
 pub(crate) fn api_state(state: &AppState) -> ApiState {

@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use soma_application::CatalogSnapshot;
 use soma_http_api::response::json_rejection_response;
 
 use crate::{
@@ -33,8 +34,24 @@ pub fn router() -> Router<PaletteState> {
         .route("/v1/palette/execute", post(post_execute))
 }
 
+/// Refresh the file-backed provider registry before taking a catalog
+/// snapshot. Every catalog-dependent `/v1/palette/*` handler goes through
+/// this instead of `catalog_snapshot()` directly — REST (`/v1/providers`)
+/// and MCP already refresh before serving, and reading a snapshot straight
+/// off the live registry without it left palette responses stale until an
+/// unrelated endpoint (or a process restart) happened to refresh it first.
+async fn refreshed_snapshot(state: &PaletteState) -> Result<CatalogSnapshot, Response> {
+    state
+        .application()
+        .refresh_providers()
+        .map_err(palette_error_response)
+}
+
 async fn get_catalog(State(state): State<PaletteState>) -> Response {
-    let snapshot = state.application().catalog_snapshot();
+    let snapshot = match refreshed_snapshot(&state).await {
+        Ok(snapshot) => snapshot,
+        Err(response) => return response,
+    };
     Json(catalog_response(&snapshot)).into_response()
 }
 
@@ -42,7 +59,10 @@ async fn get_search(
     State(state): State<PaletteState>,
     Query(query): Query<LauncherSearchQuery>,
 ) -> Response {
-    let snapshot = state.application().catalog_snapshot();
+    let snapshot = match refreshed_snapshot(&state).await {
+        Ok(snapshot) => snapshot,
+        Err(response) => return response,
+    };
     let entries = crate::catalog::palette_entries(&snapshot);
     let results = search_entries(&entries, &query.q, query.limit);
     Json(LauncherSearchResponse { entries: results }).into_response()
@@ -52,7 +72,10 @@ async fn get_schema(
     State(state): State<PaletteState>,
     Query(query): Query<LauncherSchemaQuery>,
 ) -> Response {
-    let snapshot = state.application().catalog_snapshot();
+    let snapshot = match refreshed_snapshot(&state).await {
+        Ok(snapshot) => snapshot,
+        Err(response) => return response,
+    };
     match find_schema(&snapshot, &query.id) {
         Some(schema) => Json(schema).into_response(),
         None => launcher_not_found(&query.id),

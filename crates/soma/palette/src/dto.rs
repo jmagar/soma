@@ -74,10 +74,18 @@ pub struct LauncherSchemaResponse {
 #[serde(rename_all = "camelCase")]
 pub struct LauncherExecuteRequest {
     pub id: String,
-    #[serde(default)]
+    /// Defaults to an empty object, not `Value::Null` (`Value::default()`) —
+    /// provider input schemas validate against object-shaped schemas, so a
+    /// zero-argument action (e.g. `status`) would otherwise fail dispatch
+    /// with `input_schema_failed` whenever a client omits `params` entirely.
+    #[serde(default = "default_params")]
     pub params: Value,
     #[serde(default)]
     pub confirm_destructive: bool,
+}
+
+fn default_params() -> Value {
+    Value::Object(serde_json::Map::new())
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

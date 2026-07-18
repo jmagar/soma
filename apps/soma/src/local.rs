@@ -10,9 +10,12 @@ use anyhow::Result;
 use soma_cli as cli;
 use soma_config::Config;
 
-/// Dispatch a CLI subcommand.
-pub(crate) async fn run() -> Result<()> {
-    let parsed = cli::parse_args()?;
+/// Dispatch a CLI subcommand from the same `argv` (excluding `argv[0]`)
+/// `invocation::resolve` already classified as `DispatchMode::Cli` — reparsing
+/// `std::env::args()` here would silently ignore args a caller passed
+/// explicitly to `soma::run()` (e.g. an embedder or an in-process test).
+pub(crate) async fn run(args: &[String]) -> Result<()> {
+    let parsed = cli::parse_args_from(args.iter().cloned())?;
     // Translate CLAUDE_PLUGIN_OPTION_* into SOMA_* env vars BEFORE Config::load()
     // so the plugin hook can call the binary directly (no plugin-setup.sh wrapper).
     if matches!(
