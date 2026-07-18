@@ -72,9 +72,9 @@ impl AutheliaProvider {
         let token_endpoint = issuer.join(AUTHELIA_TOKEN_PATH).map_err(|error| {
             AuthError::Config(format!("build authelia token endpoint: {error}"))
         })?;
-        let jwks_endpoint = issuer.join(AUTHELIA_JWKS_PATH).map_err(|error| {
-            AuthError::Config(format!("build authelia jwks endpoint: {error}"))
-        })?;
+        let jwks_endpoint = issuer
+            .join(AUTHELIA_JWKS_PATH)
+            .map_err(|error| AuthError::Config(format!("build authelia jwks endpoint: {error}")))?;
         let verifier = OidcVerifier::new(
             "authelia",
             issuer.as_str().trim_end_matches('/').to_string(),
@@ -258,7 +258,7 @@ mod tests {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use super::{AuthorizeUrlRequest, AutheliaProvider};
+    use super::{AutheliaProvider, AuthorizeUrlRequest};
 
     #[test]
     fn authelia_authorize_url_requests_offline_access_via_scope_not_access_type() {
@@ -271,7 +271,10 @@ mod tests {
             force_consent: true,
         };
         let url = provider.authorize_url(&request).unwrap();
-        assert!(url.as_str().contains("scope=openid+email+profile+offline_access"));
+        assert!(
+            url.as_str()
+                .contains("scope=openid+email+profile+offline_access")
+        );
         assert!(!url.as_str().contains("access_type="));
         assert!(url.as_str().contains("prompt=consent"));
     }
@@ -305,7 +308,10 @@ mod tests {
 
         let exchange = provider.exchange_code("code", "verifier").await.unwrap();
         assert_eq!(exchange.subject, "authelia-subject-123");
-        assert_eq!(exchange.refresh_token.as_deref(), Some("authelia-refresh-token"));
+        assert_eq!(
+            exchange.refresh_token.as_deref(),
+            Some("authelia-refresh-token")
+        );
     }
 
     use reqwest::Url;

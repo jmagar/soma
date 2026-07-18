@@ -122,9 +122,6 @@ mod tests {
     #[test]
     fn non_google_subjects_are_namespaced() {
         assert_eq!(namespaced_subject("github", "9182310"), "github:9182310");
-        assert_eq!(
-            namespaced_subject("authelia", "alice"),
-            "authelia:alice"
-        );
+        assert_eq!(namespaced_subject("authelia", "alice"), "authelia:alice");
     }
 }

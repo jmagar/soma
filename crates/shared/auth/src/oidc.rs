@@ -96,10 +96,7 @@ impl OidcVerifier {
         })?;
         validate_header_alg(self.provider_id, &header)?;
         let kid = header.kid.ok_or_else(|| {
-            AuthError::Storage(format!(
-                "{} id_token is missing a key id",
-                self.provider_id
-            ))
+            AuthError::Storage(format!("{} id_token is missing a key id", self.provider_id))
         })?;
         let key = self.find_jwk_for_kid(&kid).await?;
         if let Some(alg) = key.alg.as_deref()
@@ -173,7 +170,10 @@ impl OidcVerifier {
                 .as_ref()
                 .filter(|cached| cached.expires_at > Instant::now())
             {
-                debug!(provider = self.provider_id, "jwks cache hit after refresh lock");
+                debug!(
+                    provider = self.provider_id,
+                    "jwks cache hit after refresh lock"
+                );
                 cached.jwks.clone()
             } else {
                 self.refresh_jwks_locked(&mut cache).await?
@@ -187,10 +187,7 @@ impl OidcVerifier {
         self.refresh_jwks_locked(&mut cache).await
     }
 
-    async fn refresh_jwks_locked(
-        &self,
-        cache: &mut Option<CachedJwks>,
-    ) -> Result<Jwks, AuthError> {
+    async fn refresh_jwks_locked(&self, cache: &mut Option<CachedJwks>) -> Result<Jwks, AuthError> {
         let response = self
             .http
             .get(self.jwks_endpoint.clone())
@@ -210,7 +207,10 @@ impl OidcVerifier {
         let _ = status;
         let jwks = response.json::<Jwks>().await.map_err(|error| {
             warn!(provider = self.provider_id, error = %error, "jwks payload unreadable");
-            AuthError::Storage(format!("decode {} jwks response: {error}", self.provider_id))
+            AuthError::Storage(format!(
+                "decode {} jwks response: {error}",
+                self.provider_id
+            ))
         })?;
 
         *cache = Some(CachedJwks {

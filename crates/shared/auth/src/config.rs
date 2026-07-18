@@ -868,7 +868,10 @@ mod tests {
             ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
         ]))
         .unwrap_err();
-        assert!(err.to_string().contains("LAB_AUTHELIA_ISSUER_URL must use https"));
+        assert!(
+            err.to_string()
+                .contains("LAB_AUTHELIA_ISSUER_URL must use https")
+        );
     }
 
     #[test]
@@ -884,7 +887,10 @@ mod tests {
             ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
         ]))
         .unwrap_err();
-        assert!(err.to_string().contains("must not both be `/auth/google/callback`"));
+        assert!(
+            err.to_string()
+                .contains("must not both be `/auth/google/callback`")
+        );
     }
 
     #[test]
