@@ -11,15 +11,14 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "observability")]
+use axum::http::StatusCode;
 use axum::{
-    http::{HeaderName, HeaderValue, Method, StatusCode},
+    http::{HeaderName, HeaderValue, Method},
     middleware,
-    response::Json,
     routing::{get, post},
     Router,
 };
-use serde_json::json;
-use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use crate::api::{
     health, openapi_json, readyz, status, v1_capabilities, v1_dynamic_provider_route, v1_echo,
@@ -28,6 +27,9 @@ use crate::api::{
 use crate::application_ports::{authorization_mode, mcp_state_for_state};
 use crate::gateway_api::v1_gateway_action;
 use soma_api::ApiState;
+use soma_http_server::middleware::body_limit::body_limit_layer;
+use soma_http_server::middleware::cors::cors_layer as generic_cors_layer;
+use soma_http_server::rejection::not_found_handler;
 use soma_mcp::{allowed_origins, streamable_http_config, streamable_http_service};
 use soma_runtime::server::{build_auth_layer, AppState, AuthPolicy};
 
@@ -138,18 +140,17 @@ pub fn router(state: AppState) -> Router {
     let base = if soma_web::web_assets_available() {
         base.fallback(soma_web::serve_web_assets)
     } else {
-        base.fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))) })
+        base.fallback(not_found_handler)
     };
     #[cfg(not(feature = "web"))]
-    let base =
-        base.fallback(|| async { (StatusCode::NOT_FOUND, Json(json!({"error": "not_found"}))) });
+    let base = base.fallback(not_found_handler);
 
     let base = base.layer(middleware::from_fn_with_state(
         crate::protected_routes::ProtectedMcpState::new(state.clone(), mcp_state),
         crate::protected_routes::protected_mcp_intercept,
     ));
 
-    base.layer(RequestBodyLimitLayer::new(MCP_BODY_LIMIT_BYTES))
+    base.layer(body_limit_layer(MCP_BODY_LIMIT_BYTES))
         .layer(cors_layer(&state.config))
 }
 
@@ -185,8 +186,14 @@ async fn metrics_handler() -> axum::response::Response {
     }
 }
 
-fn cors_layer(config: &soma_config::McpConfig) -> CorsLayer {
-    let origins: Vec<HeaderValue> = allowed_origins(config)
+/// Soma's CORS policy: which origins are allowed (product config) and which
+/// methods/headers Soma's routes actually need — including the MCP protocol
+/// headers browser-based MCP clients send. The mechanical `CorsLayer`
+/// construction itself is generic and lives in `soma_http_server`.
+fn cors_layer(config: &soma_config::McpConfig) -> soma_http_server::middleware::cors::CorsLayer {
+    let configured = allowed_origins(config);
+    let configured_count = configured.len();
+    let origins: Vec<HeaderValue> = configured
         .into_iter()
         .filter_map(|o| match o.parse::<HeaderValue>() {
             Ok(hv) => Some(hv),
@@ -196,10 +203,20 @@ fn cors_layer(config: &soma_config::McpConfig) -> CorsLayer {
             }
         })
         .collect();
-    CorsLayer::new()
-        .allow_origin(origins)
-        .allow_methods([Method::POST, Method::GET])
-        .allow_headers([
+    // Every configured origin failed to parse: the resulting CORS policy
+    // permits no browser origin at all, which is easy to miss among
+    // per-origin `warn` lines above — call it out at `error` so it's
+    // discoverable when triaging a "CORS is completely broken" report.
+    if configured_count > 0 && origins.is_empty() {
+        tracing::error!(
+            configured_count,
+            "all configured CORS origins failed to parse — effective CORS allow-list is empty"
+        );
+    }
+    generic_cors_layer(
+        origins,
+        vec![Method::POST, Method::GET],
+        vec![
             axum::http::header::AUTHORIZATION,
             axum::http::header::CONTENT_TYPE,
             axum::http::header::ACCEPT,
@@ -210,7 +227,8 @@ fn cors_layer(config: &soma_config::McpConfig) -> CorsLayer {
             HeaderName::from_static("mcp-method"),
             HeaderName::from_static("mcp-name"),
             HeaderName::from_static("x-mcp-header"),
-        ])
+        ],
+    )
 }
 
 #[cfg(test)]
