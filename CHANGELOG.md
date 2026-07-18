@@ -162,6 +162,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   around the dispatcher stay in `soma-service` pending `crates/soma/integrations`
   (PR11). See the PR10 deviation notes for why the OpenAPI and upstream-MCP
   adapters were not fully delegated to `soma-openapi`/`soma-mcp-client`.
+- Add `soma-tauri-shell`, a reusable, product-neutral Tauri desktop shell
+  crate (window show/hide/resize/center, tray setup, global shortcut parse
+  and rebind, blur-dismiss state and window-lifecycle helpers, atomic
+  app-data JSON persistence, and Tauri command result/error helpers), and
+  `soma-palette`, Soma's Palette product surface crate owning
+  `/v1/palette/{catalog,search,schema,execute}` routes, Palette DTOs shared
+  by the HTTP server and desktop app, the `ToolSpec` Palette-overlay to
+  launcher-action mapping, launcher execution/auth policy, and Palette route
+  OpenAPI metadata. `apps/palette/src-tauri` stays an app-local Tauri
+  package (not a root workspace member) and now path-depends on
+  `soma-tauri-shell` for its window/tray/shortcut/persistence mechanics.
 - Add `soma-domain` product values and a transport-neutral `soma-application`
   facade over the legacy service/provider registry, with abstract gateway,
   Code Mode, and OpenAPI ports for incremental surface migration.
@@ -294,6 +305,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PR17 review fix: `soma-palette` duplicated `soma-api`'s
+  `ApplicationError.code` → `StatusCode` mapping verbatim instead of sharing
+  it through `soma-http-api` (both crates are `product-surface` and must not
+  depend on one another); moved the mapping to
+  `soma_http_api::response::application_error_status` and had both surfaces
+  delegate to it. `apps/palette/src-tauri/src/labby_bridge.rs` now
+  path-depends on `soma-palette` and consumes its `dto::LauncherExecuteRequest`
+  and `openapi::{CATALOG_PATH, SCHEMA_PATH, EXECUTE_PATH}` instead of
+  redefining the request shape and hardcoding the `/v1/palette/*` path
+  strings, per plan section 6.2's move instruction for that file. Removed
+  `RegistrySnapshot::cached_palette_manifest` from `soma-service`'s provider
+  registry — a pre-Palette-overlay placeholder manifest that PR 17's real
+  `soma_palette::catalog::catalog_response()` (backed by `ToolSpec` Palette
+  overlays) superseded; it was constructed on every registry build but read
+  nowhere in the workspace.
+- PR17 review fix (round 2): `crates/soma/palette/src/router.rs`'s
+  `post_execute` hand-rolled a `400`-only `JsonRejection` handler with its
+  own `{"error": ...}` body instead of delegating to
+  `soma_http_api::response::json_rejection_response` (the same helper
+  `soma-api` uses), losing the `413 Payload Too Large` distinction and the
+  shared `ErrorBody` shape; now delegates. `soma-palette`'s
+  `launcher_not_found` 404 body is now built as an `ApplicationError` value
+  instead of a hand-rolled `json!` literal, so every `/v1/palette/*` error
+  response shares one wire shape. Logged (previously silent) the
+  `soma-tauri-shell` poisoned-shortcut-mutex fallback and the discarded
+  `unmaximize`/`set_shadow`/`is_visible` window-mechanics errors. Fixed a
+  stale doc comment in `soma-palette`'s `search.rs` that described ranking
+  by match position instead of by which field matched. Added missing
+  behavioral test coverage: `execute_launcher`'s three outcomes, all four
+  `/v1/palette/*` HTTP handlers (via `tower::ServiceExt::oneshot`),
+  `palette_execution_context`'s auth/scope translation, DTO wire-format
+  contracts, and edge cases in `search`/`catalog`.
 - PR16 review fix: `soma-cli-core`'s `terminal` module doc comment linked to
   `crate::progress`, a module removed by the prior PR 16 reconciliation
   commit (`0e0d2b3`) for having zero call sites — `cargo doc -p
