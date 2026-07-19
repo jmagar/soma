@@ -382,6 +382,42 @@ async fn install_rejects_artifact_staged_by_another_layout_before_lock_creation(
 }
 
 #[tokio::test]
+async fn install_rejects_sibling_executables_staged_artifact_before_lock_creation() {
+    let temp = tempdir().unwrap();
+    let foo_executable = temp.path().join("foo");
+    let bar_executable = temp.path().join("bar");
+    let foo_state = temp.path().join("foo-state.json");
+    let bar_state = temp.path().join("bar-state.json");
+    let foo_old = b"#!/bin/sh\necho 'foo 1.0.0'\n";
+    let bar_old = b"#!/bin/sh\necho 'bar 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'foo 2.0.0'\n";
+    std::fs::write(&foo_executable, foo_old).unwrap();
+    std::fs::write(&bar_executable, bar_old).unwrap();
+    let foo_updater = Updater::new(
+        UpdateLayout::new(&foo_executable, &foo_state),
+        UpdatePolicy::default(),
+    );
+    let bar_updater = Updater::new(
+        UpdateLayout::new(&bar_executable, &bar_state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&foo_updater, new, "2.0.0").await;
+    let staged = artifact.path().to_path_buf();
+
+    assert!(matches!(
+        bar_updater.install(artifact, "1.0.0").await,
+        Err(UpdateError::InvalidStagedArtifact { .. })
+    ));
+    assert_eq!(std::fs::read(&foo_executable).unwrap(), foo_old);
+    assert_eq!(std::fs::read(&bar_executable).unwrap(), bar_old);
+    assert!(!foo_state.exists());
+    assert!(!bar_state.exists());
+    assert!(!foo_state.with_extension("json.lock").exists());
+    assert!(!bar_state.with_extension("json.lock").exists());
+    assert!(!staged.exists());
+}
+
+#[tokio::test]
 async fn install_rejects_stage_after_executable_parent_symlink_retarget() {
     let temp = tempdir().unwrap();
     let first = temp.path().join("first");

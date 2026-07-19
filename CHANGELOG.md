@@ -53,7 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failures remove and sync marker state before removing the backup, retaining
   both artifacts if authoritative-state cleanup cannot complete. Install also
   rejects validated artifacts outside the currently resolved executable
-  directory before acquiring its transaction lock or mutating filesystem state.
+  directory or outside that executable's exact staging-name grammar before
+  acquiring its transaction lock or mutating filesystem state.
   Transaction lock guards explicitly unlock before descriptor close, making
   immediate back-to-back recovery calls deterministic.
   The crate has no internal workspace dependencies; this change

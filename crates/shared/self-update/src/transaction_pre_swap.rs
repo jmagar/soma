@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::{Result, UpdateError, Updater, ValidatedArtifact};
 
 use super::TestFailpoint;
+use super::artifacts::exact_artifact_name;
 use super::transaction_io::{
     absolute, ensure_validated_artifact_mode, hash_stable_validated_artifact, remove_and_sync,
     remove_if_present_and_sync, restore_validated_artifact_mode,
@@ -13,7 +14,9 @@ pub(super) fn validated_artifact_path(
     validated: &ValidatedArtifact,
 ) -> Result<PathBuf> {
     let path = absolute(validated.path())?;
-    if path.parent() != executable.parent() {
+    if path.parent() != executable.parent()
+        || exact_artifact_name(executable, &path, "update", true).is_none()
+    {
         return Err(UpdateError::InvalidStagedArtifact { path });
     }
     Ok(path)

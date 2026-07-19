@@ -27,8 +27,8 @@
 > outer verification applies that contract to hard links too. Prepared-marker
 > write failures clean authoritative state before backups and retain the
 > recovery pair if state cleanup fails. Install rejects validated artifacts
-> outside the currently resolved executable directory before lock creation or
-> transaction mutation.
+> outside the currently resolved executable directory or that executable's
+> exact staging-name grammar before lock creation or transaction mutation.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
