@@ -31,15 +31,32 @@ pub fn router(state: AuthState) -> Router {
         .route("/jwks", get(jwks))
         .route("/authorize", get(authorize))
         .route("/auth/login", get(browser_login))
-        .route("/auth/google/callback", get(callback))
         .route("/native/callback", get(native_callback))
         .route("/native/poll", get(native_poll))
         .route("/token", post(token));
+    for callback_path in callback_paths(&state) {
+        app = app.route(&callback_path, get(callback));
+    }
     if enable_registration {
         app = app.route("/register", post(register_client));
     }
     app.with_state(state)
         .layer(middleware::from_fn(auth_dispatch_observability))
+}
+
+/// Every configured provider's callback path, e.g.
+/// `["/auth/google/callback"]` for a Google-only deployment or
+/// `["/auth/authelia/callback", "/auth/github/callback", "/auth/google/callback"]`
+/// once all three are configured. The `callback` handler itself is
+/// provider-agnostic — see `authorize::callback` doc comment — so mounting
+/// it at N distinct static paths is purely about matching each upstream
+/// OAuth app's registered `redirect_uri`.
+fn callback_paths(state: &AuthState) -> Vec<String> {
+    state
+        .providers
+        .values()
+        .map(|provider| provider.callback_path().to_string())
+        .collect()
 }
 
 /// Bearer-only OAuth subset router for headless consumers.
@@ -55,7 +72,7 @@ pub fn router(state: AuthState) -> Router {
 ///
 /// Use [`router`] for the full surface.
 pub fn bearer_only_router(state: AuthState) -> Router {
-    Router::new()
+    let mut app = Router::new()
         .route(
             "/.well-known/oauth-authorization-server",
             get(authorization_server_metadata),
@@ -70,9 +87,11 @@ pub fn bearer_only_router(state: AuthState) -> Router {
         )
         .route("/jwks", get(jwks))
         .route("/authorize", get(authorize))
-        .route("/auth/google/callback", get(callback))
-        .route("/token", post(token))
-        .with_state(state)
+        .route("/token", post(token));
+    for callback_path in callback_paths(&state) {
+        app = app.route(&callback_path, get(callback));
+    }
+    app.with_state(state)
         .layer(middleware::from_fn(auth_dispatch_observability))
 }
 
@@ -166,13 +185,18 @@ fn auth_dispatch_action(path: &str) -> &'static str {
         "/register" => "oauth.register",
         "/authorize" => "oauth.authorize",
         "/auth/login" => "oauth.browser_login",
-        "/auth/google/callback" => "oauth.callback",
         "/native/callback" => "oauth.native_callback",
         "/native/poll" => "oauth.native_poll",
         "/token" => "oauth.token",
         _ if path.starts_with("/.well-known/oauth-authorization-server/") => {
             "oauth.metadata.authorization_server"
         }
+        // Structural match, not an exact-string one: this function is a pure
+        // fn(&str) -> &'static str with no access to AuthState/configured
+        // providers, so it can't enumerate the operator-configured callback
+        // paths for every provider (Google, Authelia, GitHub, or a custom
+        // override). Any `/auth/*/callback`-shaped path is an OAuth callback.
+        _ if path.starts_with("/auth/") && path.ends_with("/callback") => "oauth.callback",
         _ => "oauth.unknown",
     }
 }
@@ -199,6 +223,22 @@ mod tests {
         assert_eq!(auth_dispatch_action("/register"), "oauth.register");
         assert_eq!(auth_dispatch_action("/authorize"), "oauth.authorize");
         assert_eq!(auth_dispatch_action("/token"), "oauth.token");
+        // Every configured provider's callback path — including
+        // operator-overridden custom ones — must map to "oauth.callback" so
+        // log-based alerting/dashboarding keyed on this action isn't blind
+        // to 2 of the 3 providers this crate supports.
+        assert_eq!(
+            auth_dispatch_action("/auth/google/callback"),
+            "oauth.callback"
+        );
+        assert_eq!(
+            auth_dispatch_action("/auth/authelia/callback"),
+            "oauth.callback"
+        );
+        assert_eq!(
+            auth_dispatch_action("/auth/github/callback"),
+            "oauth.callback"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

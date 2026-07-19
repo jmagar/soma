@@ -4,7 +4,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use axum::{routing::get, Router};
+use axum::{extract::ConnectInfo, routing::get, Router};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -52,6 +52,28 @@ async fn fake_router_is_served_through_soma_http_server() {
         response.ends_with("pong"),
         "expected body \"pong\", got response:\n{response}"
     );
+
+    server.abort();
+}
+
+#[tokio::test]
+async fn served_router_receives_peer_connect_info() {
+    let router = Router::new().route(
+        "/peer",
+        get(|ConnectInfo(addr): ConnectInfo<SocketAddr>| async move { addr.ip().to_string() }),
+    );
+    let listener = bind("127.0.0.1:0")
+        .await
+        .expect("bind should succeed on an ephemeral port");
+    let addr = listener.local_addr().expect("listener has a local addr");
+    let server = tokio::spawn(serve(listener, router));
+
+    let response = get_raw(addr, "/peer").await;
+    assert!(
+        response.starts_with("HTTP/1.1 200"),
+        "ConnectInfo extraction should succeed, got:\n{response}"
+    );
+    assert!(response.ends_with("127.0.0.1"));
 
     server.abort();
 }

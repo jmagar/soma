@@ -8,6 +8,7 @@
 
 use std::fmt;
 use std::future::Future;
+use std::net::SocketAddr;
 
 use axum::Router;
 use tokio::net::{TcpListener, ToSocketAddrs};
@@ -75,9 +76,12 @@ where
 /// No graceful shutdown — prefer [`serve_with_shutdown`] for anything that
 /// should drain in-flight requests before exiting.
 pub async fn serve(listener: TcpListener, router: Router) -> Result<(), ServerError> {
-    axum::serve(listener, router.into_make_service())
-        .await
-        .map_err(ServerError::Serve)
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .map_err(ServerError::Serve)
 }
 
 /// Serve `router` on `listener`, draining in-flight requests once `shutdown`
@@ -93,10 +97,13 @@ pub async fn serve_with_shutdown<F>(
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    axum::serve(listener, router.into_make_service())
-        .with_graceful_shutdown(shutdown)
-        .await
-        .map_err(ServerError::Serve)
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown)
+    .await
+    .map_err(ServerError::Serve)
 }
 
 #[cfg(test)]
