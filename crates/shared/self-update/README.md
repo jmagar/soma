@@ -164,8 +164,11 @@ the sidecar. Before creating any lock or authority file, it rejects collisions
 between either marker/marker-temporary namespace and every old/new lock,
 authority, and authority-temporary path. Existing paths are compared by
 filesystem identity and canonical path. Because destination leaves can be
-absent, case-fold-equivalent path names are conservatively treated as aliases;
-this can reject case-only distinct names on a case-sensitive filesystem, but
+absent, differing all-ASCII names under the same canonical parent are compared
+ASCII-case-insensitively. Any differing leaf containing non-ASCII or invalid
+UTF-8 bytes is conservatively treated as a possible alias because portable
+Unicode normalization and full case-fold behavior varies by filesystem. This
+intentionally rejects some distinct names on case-sensitive filesystems, but
 keeps validation side-effect-free and safe for case-insensitive mounts. It also
 refuses an initial migration while either
 marker path, either marker temporary, or any exact staged/rollback recovery

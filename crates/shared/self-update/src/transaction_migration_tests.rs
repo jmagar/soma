@@ -108,20 +108,55 @@ fn case_variant_absent_markers_are_rejected_before_side_effects() {
     migration_collision_is_side_effect_free("Update.JSON", "update.json");
 }
 
-fn migration_collision_is_side_effect_free(old_name: &str, new_name: &str) {
+#[test]
+fn unicode_full_casefold_candidates_are_rejected_before_side_effects() {
+    migration_collision_is_side_effect_free("Straße.json", "STRASSE.json");
+}
+
+#[test]
+fn unicode_sigma_candidates_are_rejected_before_side_effects() {
+    migration_collision_is_side_effect_free("σ.json", "ς.json");
+}
+
+#[test]
+fn unicode_normalization_candidates_are_rejected_before_side_effects() {
+    migration_collision_is_side_effect_free("é.json", "e\u{301}.json");
+}
+
+#[test]
+fn non_utf8_alias_check_is_side_effect_free() {
+    use std::os::unix::ffi::OsStringExt;
+
+    let temp = tempdir().unwrap();
+    let first = temp
+        .path()
+        .join(std::ffi::OsString::from_vec(b"update-\xff.json".to_vec()));
+    let second = temp
+        .path()
+        .join(std::ffi::OsString::from_vec(b"update-\xfe.json".to_vec()));
+
+    assert!(unresolved_leaves_may_alias(&first, &second));
+    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+}
+
+fn migration_collision_is_side_effect_free(
+    old_name: impl AsRef<std::ffi::OsStr>,
+    new_name: impl AsRef<std::ffi::OsStr>,
+) {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("agent");
-    let old_state = temp.path().join(old_name);
-    let new_state = temp.path().join(new_name);
+    let old_state = temp.path().join(old_name.as_ref());
+    let new_state = temp.path().join(new_name.as_ref());
     std::fs::write(&executable, b"old").unwrap();
     let updater = Updater::new(
         UpdateLayout::new(&executable, &old_state),
         UpdatePolicy::default(),
     );
 
-    assert!(matches!(
-        updater.migrate_state_file_sync(new_state),
-        Err(UpdateError::InvalidLayout { .. })
-    ));
+    let result = updater.migrate_state_file_sync(new_state);
+    assert!(
+        matches!(result, Err(UpdateError::InvalidLayout { .. })),
+        "unexpected migration result: {result:?}"
+    );
     assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
 }

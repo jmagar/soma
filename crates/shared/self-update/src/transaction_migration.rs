@@ -164,21 +164,44 @@ fn paths_may_alias(first: &Path, second: &Path) -> bool {
         return true;
     }
 
-    conservative_casefold_key(first) == conservative_casefold_key(second)
+    unresolved_leaves_may_alias(first, second)
 }
 
-fn conservative_casefold_key(path: &Path) -> Vec<u8> {
+fn unresolved_leaves_may_alias(first: &Path, second: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt;
 
-    match path.as_os_str().to_str() {
-        Some(path) => path.to_lowercase().into_bytes(),
-        None => path
-            .as_os_str()
-            .as_bytes()
-            .iter()
-            .map(u8::to_ascii_lowercase)
-            .collect(),
+    let (Some(first_parent), Some(second_parent), Some(first_leaf), Some(second_leaf)) = (
+        first.parent(),
+        second.parent(),
+        first.file_name(),
+        second.file_name(),
+    ) else {
+        return false;
+    };
+    let same_canonical_parent = match (
+        std::fs::canonicalize(first_parent),
+        std::fs::canonicalize(second_parent),
+    ) {
+        (Ok(first_parent), Ok(second_parent)) => first_parent == second_parent,
+        _ => false,
+    };
+    if !same_canonical_parent {
+        return false;
     }
+
+    let first_bytes = first_leaf.as_bytes();
+    let second_bytes = second_leaf.as_bytes();
+    if first_bytes == second_bytes {
+        return true;
+    }
+    if first_bytes.is_ascii() && second_bytes.is_ascii() {
+        return first_bytes.eq_ignore_ascii_case(second_bytes);
+    }
+
+    // Portable normalization and full case-fold behavior varies by filesystem.
+    // Refuse differing non-ASCII or invalid UTF-8 leaves rather than probing the
+    // directory and creating a lock before their identity is known.
+    true
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
