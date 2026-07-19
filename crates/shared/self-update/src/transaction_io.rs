@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 
 use crate::validation::ArtifactIdentity;
 use crate::{BackupStrategy, Result, UpdateError, ValidatedArtifact};
+use crate::staging::{VALIDATION_MODE, validate_executable_mode};
 
 static TRANSACTION_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -91,6 +92,14 @@ pub(super) fn create_backup(
     backup: &Path,
     strategy: BackupStrategy,
 ) -> Result<u32> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let source_mode = std::fs::symlink_metadata(executable)
+        .map_err(|error| UpdateError::io(executable, error))?
+        .permissions()
+        .mode()
+        & 0o7777;
+    validate_executable_mode(executable, source_mode)?;
     let hard_linked = strategy == BackupStrategy::HardLinkOrCopy
         && std::fs::hard_link(executable, backup).is_ok();
     if !hard_linked {
@@ -100,13 +109,14 @@ pub(super) fn create_backup(
             .metadata()
             .map_err(|error| UpdateError::io(executable, error))?
             .permissions();
+        validate_executable_mode(executable, source_permissions.mode() & 0o7777)?;
         write_backup_copy(&mut source, backup, source_permissions)?;
     }
     verify_or_cleanup_created_backup(backup, verify_created_backup, remove_and_sync)
 }
 
 fn verify_created_backup(backup: &Path) -> Result<u32> {
-    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 
     let file = OpenOptions::new()
         .read(true)
@@ -122,6 +132,7 @@ fn verify_created_backup(backup: &Path) -> Result<u32> {
             message: "rollback backup must be a non-symlink regular file".into(),
         });
     }
+    validate_executable_mode(backup, metadata.permissions().mode() & 0o7777)?;
     file.sync_all()
         .map_err(|error| UpdateError::io(backup, error))?;
     sync_parent(backup)?;
@@ -214,11 +225,13 @@ pub(super) fn restore_validated_artifact_mode(
         .map_err(|error| UpdateError::io(path, error))?;
     if !metadata.file_type().is_file()
         || ArtifactIdentity::from_metadata(&metadata) != validated.identity
+        || metadata.permissions().mode() & 0o7777 != VALIDATION_MODE
     {
         return Err(UpdateError::ArtifactIdentityChanged {
             path: path.to_path_buf(),
         });
     }
+    validate_executable_mode(path, validated.intended_mode())?;
     file.set_permissions(std::fs::Permissions::from_mode(validated.intended_mode()))
         .map_err(|error| UpdateError::io(path, error))?;
     let repaired = file
@@ -263,37 +276,42 @@ pub(super) fn hash_stable_validated_artifact(
     validated: &ValidatedArtifact,
     path: &Path,
 ) -> Result<String> {
+    use std::os::unix::fs::PermissionsExt;
+
     let path_metadata =
         std::fs::symlink_metadata(path).map_err(|error| UpdateError::io(path, error))?;
     if !path_metadata.file_type().is_file()
         || ArtifactIdentity::from_metadata(&path_metadata) != validated.identity
+        || path_metadata.permissions().mode() & 0o7777 != VALIDATION_MODE
     {
         return Err(UpdateError::ArtifactIdentityChanged {
             path: path.to_path_buf(),
         });
     }
     let mut file = File::open(path).map_err(|error| UpdateError::io(path, error))?;
-    let opened_identity = ArtifactIdentity::from_metadata(
-        &file
-            .metadata()
-            .map_err(|error| UpdateError::io(path, error))?,
-    );
-    if opened_identity != validated.identity {
+    let opened_metadata = file
+        .metadata()
+        .map_err(|error| UpdateError::io(path, error))?;
+    let opened_identity = ArtifactIdentity::from_metadata(&opened_metadata);
+    if opened_identity != validated.identity
+        || opened_metadata.permissions().mode() & 0o7777 != VALIDATION_MODE
+    {
         return Err(UpdateError::ArtifactIdentityChanged {
             path: path.to_path_buf(),
         });
     }
     let digest = hash_reader(&mut file, path)?;
-    let after_read_identity = ArtifactIdentity::from_metadata(
-        &file
-            .metadata()
-            .map_err(|error| UpdateError::io(path, error))?,
-    );
+    let after_read_metadata = file
+        .metadata()
+        .map_err(|error| UpdateError::io(path, error))?;
+    let after_read_identity = ArtifactIdentity::from_metadata(&after_read_metadata);
     let final_path_metadata =
         std::fs::symlink_metadata(path).map_err(|error| UpdateError::io(path, error))?;
     if !final_path_metadata.file_type().is_file()
         || after_read_identity != validated.identity
+        || after_read_metadata.permissions().mode() & 0o7777 != VALIDATION_MODE
         || ArtifactIdentity::from_metadata(&final_path_metadata) != validated.identity
+        || final_path_metadata.permissions().mode() & 0o7777 != VALIDATION_MODE
     {
         return Err(UpdateError::ArtifactIdentityChanged {
             path: path.to_path_buf(),
@@ -302,7 +320,7 @@ pub(super) fn hash_stable_validated_artifact(
     Ok(digest)
 }
 
-fn hash_reader(file: &mut File, path: &Path) -> Result<String> {
+pub(super) fn hash_reader(file: &mut File, path: &Path) -> Result<String> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     loop {

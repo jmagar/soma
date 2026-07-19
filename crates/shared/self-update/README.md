@@ -80,10 +80,14 @@ digest matches, staging changes it through the still-open descriptor to exact
 mode `0700` for validation. The named staged artifact never inherits setuid,
 setgid, group, or other permissions from the installed executable. Staging
 resolves the executable once, rejects a symlink leaf, and reads its intended
-full mode and device/inode identity through a no-follow descriptor. Installation
-revalidates that captured identity under the transaction locks, so replacing or
-retargeting the executable between staging and install cannot supply a stale
-permission mode.
+full mode and device/inode identity through a no-follow descriptor. It rejects
+source modes without owner execute, with any special bit, or with group/other
+write permission using the typed `UnsafeExecutableMode` error before creating
+or reading a partial artifact.
+Transports can call `Updater::preflight_stage` before starting a download;
+`stage` repeats the check. Installation revalidates the captured identity under
+the transaction locks, so replacing or retargeting the executable between
+staging and install cannot supply a stale permission mode.
 
 Installation acquires sorted, deduplicated advisory locks derived from both the
 canonical executable and state identities. The executable-derived lock is a
@@ -125,24 +129,26 @@ mode `0600`, synced, and re-checked before its exclusive lock is acquired.
 The transaction retains a unique rollback backup, records its actual owner in
 the marker, syncs the backup and its directory before the marker may reference
 it, then atomically renames the verified artifact. Copy destinations begin with
-the source executable mode before any bytes are written. Unix
+the prevalidated safe source executable mode before any bytes are written. Unix
 staging records the existing executable mode (falling back to restrictive
 `0700` only when no target exists) separately from the staged file's validation
-mode. Installation applies the intended full mode, including any source setuid
-or setgid bits, through the validated descriptor only at the final locked install
-boundary, then syncs and rechecks identity and mode immediately before
-replacement. Validator-side permission changes therefore cannot install a
-non-executable or prematurely privileged target. Adopters that do not want to
-preserve special bits must remove them from the installed executable before
-staging. Copy-based rollback backups preserve the same mode.
+mode. The artifact must remain exact mode `0700` through validation and the
+final locked digest check. Only then does installation apply a supported
+intended mode such as `0700`, `0750`, or `0755` through the validated descriptor,
+sync it, and recheck identity and mode immediately before replacement. Modes
+without owner execute or with setuid, setgid, sticky, group-write, or other-write
+bits are never accepted as source, staged, installed, or copy-backup modes.
+Validator-side permission changes therefore fail closed instead of being repaired.
 `BackupStrategy::Copy` is available when an adopter cannot use hard links or
 wants to exercise the copy path explicitly.
 A process crash at any marker, swap, or rollback boundary is completed or
 aborted idempotently by startup recovery. Each unconfirmed startup increments
 the marker only after hashing the installed executable against the verified
 target digest; changed bytes preserve recovery state and return an error. After
-the configured threshold the digest-verified backup is
-restored and the adopter must restart again. Successful health confirmation
+the configured threshold, recovery opens the backup with no-follow semantics,
+binds owner, safe executable mode, digest, and identity to that descriptor, and
+rechecks the descriptor and path immediately before rollback rename. The backup
+is then restored and the adopter must restart again. Successful health confirmation
 rehashes the installed executable against the verified target digest before
 durably removing the authoritative marker and cleaning the backup. Changed
 bytes retain both marker and backup; a cleanup interruption after confirmation

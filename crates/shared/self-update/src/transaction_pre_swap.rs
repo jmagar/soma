@@ -61,7 +61,6 @@ pub(super) fn validate_or_cleanup(
                 path: validated_path.to_owned(),
             });
         }
-        restore_validated_artifact_mode(validated, validated_path)?;
         let final_digest = hash_stable_validated_artifact(validated, validated_path)?;
         let forced_digest_failure = updater
             .failpoint_active(TestFailpoint::PostMarkerDigestFailure)
@@ -77,6 +76,7 @@ pub(super) fn validate_or_cleanup(
                 },
             });
         }
+        restore_validated_artifact_mode(validated, validated_path)?;
         ensure_validated_artifact_mode(validated, validated_path)
     })();
     match validation {

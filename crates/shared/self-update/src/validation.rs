@@ -8,6 +8,8 @@ use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use crate::{Result, StagedArtifact, UpdateError, Updater};
+#[cfg(unix)]
+use crate::staging::VALIDATION_MODE;
 
 const OUTPUT_LIMIT: usize = 16 * 1024;
 
@@ -203,8 +205,11 @@ impl Drop for ValidationProcessGuard {
 
 #[cfg(unix)]
 fn validated_path_identity(path: &std::path::Path) -> Result<ArtifactIdentity> {
+    use std::os::unix::fs::PermissionsExt;
+
     let metadata = std::fs::symlink_metadata(path).map_err(|error| UpdateError::io(path, error))?;
-    if !metadata.file_type().is_file() {
+    if !metadata.file_type().is_file() || metadata.permissions().mode() & 0o7777 != VALIDATION_MODE
+    {
         return Err(UpdateError::InvalidStagedArtifact {
             path: path.to_path_buf(),
         });
