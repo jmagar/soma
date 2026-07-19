@@ -5,7 +5,10 @@ use soma_self_update::{
 
 #[test]
 fn public_contract_is_constructible_without_product_types() {
-    let layout = UpdateLayout::new("/opt/example/bin/example", "/opt/example/state/update.json");
+    let executable = std::path::Path::new("opt/example/bin/example");
+    let state_file = std::path::Path::new("opt/example/state/update.json");
+    let construction_dir = std::env::current_dir().unwrap();
+    let layout = UpdateLayout::new(executable, state_file);
     let updater = Updater::new(layout, UpdatePolicy::default());
     let directive = UpdateDirective::new(
         "1.2.3",
@@ -28,10 +31,10 @@ fn public_contract_is_constructible_without_product_types() {
     };
     assert_eq!(
         migrated.updater().layout().state_file(),
-        std::path::Path::new("/opt/example/state/update.json")
+        construction_dir.join(state_file)
     );
     assert_eq!(
         migrated.into_updater().layout().executable(),
-        std::path::Path::new("/opt/example/bin/example")
+        construction_dir.join(executable)
     );
 }
