@@ -51,6 +51,7 @@ pub async fn execute(
     let full_path = api.path(&path);
     client
         .request_json(
+            capability.action.as_str(),
             method,
             &full_path,
             effective_params.get("query"),
@@ -62,6 +63,11 @@ pub async fn execute(
 /// The official "firewall policy ordering" endpoint requires the same zone
 /// id as both `sourceFirewallZoneId` and `destinationFirewallZoneId`; fill
 /// those in from the single `firewallZoneId` callers pass.
+// Both `.expect()`s below are guarded immediately above by the exact check
+// they assert (`params.is_object()` is forced true before the first,
+// `query.is_object()` is checked before the second) — logically infallible,
+// not caller-input-dependent.
+#[allow(clippy::expect_used)]
 fn normalize_official_request(action: &str, params: &mut Value) {
     if action != "official_get_firewall_policy_ordering" {
         return;

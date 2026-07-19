@@ -1,6 +1,6 @@
 [package]
-name = "unifi"
-description = "Core UniFi Network Controller API client: auth, official + internal REST bindings, capability detection, and actions."
+name = "gotify"
+description = "Standalone Gotify push-notification server client: messages, applications, clients, and server status."
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.96"
@@ -8,7 +8,7 @@ authors.workspace = true
 repository.workspace = true
 license = "MIT"
 readme = "README.md"
-keywords = ["unifi", "ubiquiti", "networking", "api-client"]
+keywords = ["gotify", "notifications", "push", "api-client"]
 categories = ["api-bindings", "network-programming"]
 publish = false
 
