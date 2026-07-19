@@ -1,10 +1,16 @@
 use super::home::{env_non_empty, soma_home};
+use serial_test::serial;
 
 #[test]
+#[serial(code_mode_soma_home)]
 fn soma_home_prefers_soma_home() {
+    let previous = std::env::var_os("SOMA_HOME");
     std::env::set_var("SOMA_HOME", "/tmp/soma-home-test");
     assert_eq!(soma_home(), std::path::PathBuf::from("/tmp/soma-home-test"));
-    std::env::remove_var("SOMA_HOME");
+    match previous {
+        Some(value) => std::env::set_var("SOMA_HOME", value),
+        None => std::env::remove_var("SOMA_HOME"),
+    }
 }
 
 #[test]

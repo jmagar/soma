@@ -66,7 +66,13 @@ fn plugin_manifests_share_identity_and_connection_settings() {
     }
 
     let user_config = claude["userConfig"].as_object().unwrap();
-    for key in ["server_url", "api_token", "soma_api_url", "soma_api_key"] {
+    for key in [
+        "server_url",
+        "api_token",
+        "soma_api_url",
+        "soma_api_key",
+        "trace_headers",
+    ] {
         assert!(
             user_config.contains_key(key),
             "Claude userConfig missing {key}"
@@ -79,7 +85,13 @@ fn plugin_manifests_share_identity_and_connection_settings() {
         .iter()
         .map(|setting| setting["name"].as_str().unwrap())
         .collect();
-    for key in ["server_url", "api_token", "soma_api_url", "soma_api_key"] {
+    for key in [
+        "server_url",
+        "api_token",
+        "soma_api_url",
+        "soma_api_key",
+        "trace_headers",
+    ] {
         assert!(
             gemini_settings.contains(&key),
             "Gemini settings missing {key}"

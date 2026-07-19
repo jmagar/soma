@@ -292,6 +292,7 @@ COMMANDS:
   generate-cli          Generate dist/soma-cli through mcporter
   repair                Rebuild and restart local soma-mcp runtime
   test-mcp-auth         Smoke-test HTTP MCP bearer auth
+  test-trace-headers    Bounded live smoke for SOMA_MCP_TRACE_HEADERS
   asciicheck            Check/fix explicit files for non-ASCII characters
   check-blob-size       Check changed git blobs against size budget
   block-env-commits     Prevent staged .env secrets from being committed

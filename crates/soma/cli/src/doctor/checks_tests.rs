@@ -12,7 +12,7 @@
 //! scaffolding.
 
 use super::*;
-use soma_config::{McpConfig, SomaConfig};
+use soma_config::{McpConfig, SomaConfig, TraceHeaderMode};
 
 // ── check_required_var ────────────────────────────────────────────────────────
 
@@ -255,4 +255,21 @@ fn auth_config_rejects_non_loopback_without_auth() {
 
     assert!(!check.ok);
     assert!(check.hint.unwrap().contains("SOMA_MCP_TOKEN"));
+}
+
+#[test]
+fn trace_header_trust_failure_omits_the_generic_auth_fix_list() {
+    let mut config = auth_config("0.0.0.0");
+    config.mcp.api_token = Some("secret".into());
+    config.mcp.trace_headers = TraceHeaderMode::Trusted;
+
+    let check = check_auth_config(&config);
+
+    assert!(!check.ok);
+    let hint = check.hint.expect("failure should include remediation");
+    assert!(hint.contains("not a trace-header trust boundary"));
+    assert!(
+        !hint.contains("Fix ONE of"),
+        "trace-header failures should not show the generic auth fix list: {hint}"
+    );
 }

@@ -1,9 +1,38 @@
 #[cfg(unix)]
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+
+use serial_test::serial;
 
 use super::runner_exe::{resolve_runner_exe, resolve_runner_exe_from};
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+
+    fn remove(key: &'static str) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::remove_var(key);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match self.previous.take() {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
 
 fn expected_runner_binary_name() -> &'static str {
     if cfg!(windows) {
@@ -11,11 +40,6 @@ fn expected_runner_binary_name() -> &'static str {
     } else {
         "soma-codemode-runner"
     }
-}
-
-fn env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 #[cfg(unix)]
@@ -183,9 +207,10 @@ fn override_rejects_group_or_world_writable_file() {
 }
 
 #[test]
+#[serial(code_mode_runner_exe_env)]
 fn old_lab_env_name_is_not_preferred() {
-    let _guard = env_lock().lock().unwrap();
     let legacy_env = concat!("LAB", "BY_CODE_MODE_RUNNER_EXE");
+    let _runner = EnvVarGuard::remove("SOMA_CODE_MODE_RUNNER_EXE");
     let temp = tempfile::tempdir().unwrap();
     let current = temp.path().join(expected_runner_binary_name());
     let legacy = temp.path().join("legacy-runner");
@@ -196,27 +221,24 @@ fn old_lab_env_name_is_not_preferred() {
         make_executable(&current);
         make_executable(&legacy);
     }
-    std::env::remove_var("SOMA_CODE_MODE_RUNNER_EXE");
-    std::env::set_var(legacy_env, &legacy);
+    let _legacy = EnvVarGuard::set(legacy_env, &legacy);
 
     let resolved = resolve_runner_exe_from(current.clone(), None).unwrap();
 
-    std::env::remove_var(legacy_env);
     assert_eq!(resolved, current);
 }
 
 #[test]
+#[serial(code_mode_runner_exe_env)]
 fn env_override_success_uses_soma_name() {
-    let _guard = env_lock().lock().unwrap();
     let temp = tempfile::tempdir().unwrap();
     let override_path = temp.path().join("env-runner");
     std::fs::write(&override_path, b"binary").unwrap();
     #[cfg(unix)]
     make_executable(&override_path);
-    std::env::set_var("SOMA_CODE_MODE_RUNNER_EXE", &override_path);
+    let _runner = EnvVarGuard::set("SOMA_CODE_MODE_RUNNER_EXE", &override_path);
 
     let resolved = resolve_runner_exe().unwrap();
 
-    std::env::remove_var("SOMA_CODE_MODE_RUNNER_EXE");
     assert_eq!(resolved, std::fs::canonicalize(override_path).unwrap());
 }

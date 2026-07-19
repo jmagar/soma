@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::{SetupCommand, SetupReport};
-use soma_config::{Config, McpConfig, SomaConfig};
+use soma_config::{Config, McpConfig, SomaConfig, TraceHeaderMode};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -143,9 +143,27 @@ fn setup_check_reports_missing_env_as_advisory() {
 }
 
 #[test]
+fn setup_check_classifies_trace_header_trust_failure_separately() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut config = valid_config();
+    config.mcp.host = "0.0.0.0".into();
+    config.mcp.no_auth = false;
+    config.mcp.api_token = Some("secret".into());
+    config.mcp.trace_headers = TraceHeaderMode::Trusted;
+
+    let report = with_plugin_data(dir.path(), || super::setup_check(&config, true));
+
+    assert!(report
+        .blocking_failures
+        .iter()
+        .any(|failure| failure.code == "invalid_trace_headers_trust"));
+}
+
+#[test]
 fn setup_repair_creates_env_file() {
     let dir = tempfile::tempdir().unwrap();
-    let config = valid_config();
+    let mut config = valid_config();
+    config.mcp.trace_headers = TraceHeaderMode::TrustedWithBaggage;
 
     let report = with_plugin_data(dir.path(), || super::setup_repair(&config).unwrap());
 
@@ -155,6 +173,7 @@ fn setup_repair_creates_env_file() {
     let contents = std::fs::read_to_string(&env_path).unwrap();
     assert!(contents.contains("SOMA_API_URL=https://example.test/api"));
     assert!(contents.contains("SOMA_API_KEY=\"secret with spaces\""));
+    assert!(contents.contains("SOMA_MCP_TRACE_HEADERS=trusted-with-baggage"));
 
     #[cfg(unix)]
     {

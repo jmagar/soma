@@ -289,22 +289,38 @@ fn cors_layer(config: &soma_config::McpConfig) -> soma_http_server::middleware::
             "all configured CORS origins failed to parse — effective CORS allow-list is empty"
         );
     }
-    generic_cors_layer(
-        origins,
-        vec![Method::POST, Method::GET],
-        vec![
-            axum::http::header::AUTHORIZATION,
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::ACCEPT,
-            // MCP protocol headers: Mcp-Protocol-Version (2025-06-18+) and the
-            // draft (2026-07-28 / SEP-2243) Mcp-Method, Mcp-Name, and x-mcp-header.
-            // Permitting them lets browser-based MCP clients clear CORS preflight.
-            HeaderName::from_static("mcp-protocol-version"),
-            HeaderName::from_static("mcp-method"),
-            HeaderName::from_static("mcp-name"),
-            HeaderName::from_static("x-mcp-header"),
+    let mut headers = vec![
+        axum::http::header::AUTHORIZATION,
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::ACCEPT,
+        // MCP protocol headers: Mcp-Protocol-Version (2025-06-18+) and the
+        // draft (2026-07-28 / SEP-2243) Mcp-Method, Mcp-Name, and x-mcp-header.
+        // Permitting them lets browser-based MCP clients clear CORS preflight.
+        HeaderName::from_static("mcp-protocol-version"),
+        HeaderName::from_static("mcp-method"),
+        HeaderName::from_static("mcp-name"),
+        HeaderName::from_static("x-mcp-header"),
+    ];
+    headers.extend(trace_header_cors_allow_list(config.trace_headers));
+
+    generic_cors_layer(origins, vec![Method::POST, Method::GET], headers)
+}
+
+/// CORS is transport permission only, never the trust decision. This static
+/// exact allow-list is computed once at router construction.
+fn trace_header_cors_allow_list(mode: soma_config::TraceHeaderMode) -> Vec<HeaderName> {
+    match mode {
+        soma_config::TraceHeaderMode::Off => Vec::new(),
+        soma_config::TraceHeaderMode::Trusted => vec![
+            HeaderName::from_static("traceparent"),
+            HeaderName::from_static("tracestate"),
         ],
-    )
+        soma_config::TraceHeaderMode::TrustedWithBaggage => vec![
+            HeaderName::from_static("traceparent"),
+            HeaderName::from_static("tracestate"),
+            HeaderName::from_static("baggage"),
+        ],
+    }
 }
 
 #[cfg(test)]

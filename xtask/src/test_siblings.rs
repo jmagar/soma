@@ -210,6 +210,12 @@ const UNCHECKED_SRC_ROOTS: &[(&str, &str)] = &[
          private internals. Siblings here would invite the opposite.",
     ),
     (
+        "crates/shared/self-update/src",
+        "behavior, portability, and dependency boundaries are exercised through \
+         the public API from tests/. Private crash failpoints have one focused \
+         transaction_tests.rs sibling because they cannot be exposed publicly.",
+    ),
+    (
         "crates/shared/tauri-shell/src",
         "extracted with window.rs/app.rs/tray.rs still untested (Tauri desktop \
          windowing needs a display to exercise) - no siblings for those three \

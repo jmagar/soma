@@ -325,18 +325,26 @@ pub fn check_auth_config(config: &Config) -> DoctorCheck {
         Ok(AuthPolicyKind::MountedBearer) => {
             DoctorCheck::pass("auth", "Auth mode", "bearer token (set)")
         }
-        Err(error) => DoctorCheck::fail(
-            "auth",
-            "Auth mode",
-            format!(
-                "{error}\n    \
-                 Fix ONE of:\n    \
-                 1. Bind to loopback:    SOMA_MCP_HOST=127.0.0.1\n    \
-                 2. Set a bearer token:  SOMA_MCP_TOKEN=$(openssl rand -hex 32)\n    \
-                 3. Enable OAuth:        SOMA_MCP_AUTH_MODE=oauth\n    \
-                 4. Upstream gateway:    SOMA_NOAUTH=true\n    \
-                 CUSTOMIZE: Replace SOMA_ prefix with your service prefix."
-            ),
-        ),
+        Err(error) => {
+            let message = if error.to_string().contains("SOMA_MCP_TRACE_HEADERS") {
+                // Auth policy itself resolved fine — this is a trace-header
+                // trust-boundary rejection (see `validate_trace_headers_trust`
+                // in soma-runtime). The error already carries its own
+                // complete remediation; the generic auth-setup fix list below
+                // would be wrong advice here, since auth isn't the problem.
+                error.to_string()
+            } else {
+                format!(
+                    "{error}\n    \
+                     Fix ONE of:\n    \
+                     1. Bind to loopback:    SOMA_MCP_HOST=127.0.0.1\n    \
+                     2. Set a bearer token:  SOMA_MCP_TOKEN=$(openssl rand -hex 32)\n    \
+                     3. Enable OAuth:        SOMA_MCP_AUTH_MODE=oauth\n    \
+                     4. Upstream gateway:    SOMA_NOAUTH=true\n    \
+                     CUSTOMIZE: Replace SOMA_ prefix with your service prefix."
+                )
+            };
+            DoctorCheck::fail("auth", "Auth mode", message)
+        }
     }
 }

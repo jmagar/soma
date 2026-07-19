@@ -1,8 +1,10 @@
 use super::checkout::RunnerPool;
 use super::config::PoolConfig;
 use super::runner_handle::RunnerSpawn;
+use serial_test::serial;
 
 #[tokio::test]
+#[serial(code_mode_runner_exe_env)]
 async fn pool_checkout_returns_runner_handle() {
     let pool = RunnerPool::new(PoolConfig::default(), RunnerSpawn::current_exe().unwrap());
     let lease = pool.checkout().await.unwrap();
@@ -11,6 +13,7 @@ async fn pool_checkout_returns_runner_handle() {
 }
 
 #[tokio::test]
+#[serial(code_mode_runner_exe_env)]
 async fn pool_reuses_successful_runner_until_recycle_threshold() {
     let config = PoolConfig {
         size: 1,

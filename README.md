@@ -566,6 +566,7 @@ upstream/platform credentials as required.
 | `SOMA_MCP_TOKEN` | bearer | empty | Static bearer token. |
 | `SOMA_MCP_ALLOWED_HOSTS` | no | empty | Extra comma-separated Host header values. |
 | `SOMA_MCP_ALLOWED_ORIGINS` | no | empty | Extra comma-separated CORS origins. |
+| `SOMA_MCP_TRACE_HEADERS` | no | `off` | Trusted inbound HTTP trace extraction: `off`, `trusted`, or `trusted-with-baggage`. |
 | `SOMA_MCP_AUTH_MODE` | no | `bearer` | `bearer` or `oauth`. |
 | `SOMA_MCP_PUBLIC_URL` | OAuth | empty | Public URL for OAuth metadata and callbacks. |
 | `SOMA_MCP_GOOGLE_CLIENT_ID` | OAuth | empty | Google OAuth client ID. |
@@ -578,6 +579,12 @@ upstream/platform credentials as required.
 | `SOMA_MCP_AUTH_DEFAULT_PROVIDER` | no | first configured | Provider used when a request omits `provider`; automatic priority is Google, Authelia, GitHub. |
 | `SOMA_MCP_AUTH_ADMIN_EMAIL` | OAuth | empty | Initial/admin OAuth email. |
 | `RUST_LOG` | no | `info` | Log filter. Stdio mode suppresses noisy logs to avoid corrupting JSON-RPC. |
+
+Keep `SOMA_MCP_TRACE_HEADERS=off` unless the server is bound to loopback or a
+trusted gateway strips or overwrites trace headers from untrusted clients.
+Bearer/OAuth authentication alone is not that trust boundary. See
+[docs/TRACE_CONTEXT.md](docs/TRACE_CONTEXT.md) for the complete inbound-only
+trace-header contract.
 
 Samples:
 

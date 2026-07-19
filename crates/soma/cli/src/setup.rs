@@ -254,8 +254,13 @@ fn require_oauth_field(
 
 fn check_auth(config: &Config, report: &mut SetupReport) {
     if let Err(error) = resolve_auth_policy_kind(config, config.mcp.trusted_gateway) {
+        let code = if error.to_string().contains("SOMA_MCP_TRACE_HEADERS") {
+            "invalid_trace_headers_trust"
+        } else {
+            "invalid_auth_policy"
+        };
         report.blocking_failures.push(SetupFailure {
-            code: "invalid_auth_policy",
+            code,
             message: error.to_string(),
         });
         return;
@@ -329,6 +334,10 @@ fn write_env(data_dir: &Path, config: &Config) -> Result<()> {
         dotenv_assignment("SOMA_MCP_HOST", &config.mcp.host)?,
         dotenv_assignment("SOMA_MCP_PORT", &config.mcp.port.to_string())?,
         dotenv_assignment("SOMA_MCP_NO_AUTH", &config.mcp.no_auth.to_string())?,
+        dotenv_assignment(
+            "SOMA_MCP_TRACE_HEADERS",
+            &config.mcp.trace_headers.to_string(),
+        )?,
     ];
 
     if let Some(token) = config.mcp.api_token.as_deref().filter(|v| !v.is_empty()) {
