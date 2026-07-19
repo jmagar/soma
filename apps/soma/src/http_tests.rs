@@ -363,6 +363,80 @@ async fn cors_preflight_allows_mcp_protocol_headers() {
     }
 }
 
+async fn preflight_allow_headers(state: AppState, requested_headers: &str) -> String {
+    let response = router(state)
+        .oneshot(
+            Request::builder()
+                .method(axum::http::Method::OPTIONS)
+                .uri("/mcp")
+                .header(axum::http::header::ORIGIN, "http://127.0.0.1:40060")
+                .header(axum::http::header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(
+                    axum::http::header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    requested_headers,
+                )
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    response
+        .headers()
+        .get(axum::http::header::ACCESS_CONTROL_ALLOW_HEADERS)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+}
+
+#[tokio::test]
+async fn off_mode_denies_trace_header_preflight() {
+    let allow_headers =
+        preflight_allow_headers(crate::testing::loopback_state(), "TraceParent").await;
+    assert!(
+        !allow_headers.contains("traceparent"),
+        "off mode must not allow traceparent, got: {allow_headers:?}"
+    );
+}
+
+#[tokio::test]
+async fn trusted_mode_allows_traceparent_and_tracestate_but_not_baggage() {
+    let state = crate::testing::loopback_state_with_mcp_config(soma_config::McpConfig {
+        trace_headers: soma_config::TraceHeaderMode::Trusted,
+        ..soma_config::McpConfig::default()
+    });
+    let allow_headers = preflight_allow_headers(state, "TraceParent, TraceState, Baggage").await;
+
+    assert!(
+        allow_headers.contains("traceparent"),
+        "got: {allow_headers:?}"
+    );
+    assert!(
+        allow_headers.contains("tracestate"),
+        "got: {allow_headers:?}"
+    );
+    assert!(
+        !allow_headers.contains("baggage"),
+        "trusted mode must not allow baggage, got: {allow_headers:?}"
+    );
+}
+
+#[tokio::test]
+async fn trusted_with_baggage_mode_allows_all_three_trace_headers() {
+    let state = crate::testing::loopback_state_with_mcp_config(soma_config::McpConfig {
+        trace_headers: soma_config::TraceHeaderMode::TrustedWithBaggage,
+        ..soma_config::McpConfig::default()
+    });
+    let allow_headers = preflight_allow_headers(state, "TraceParent, TraceState, Baggage").await;
+
+    for required in ["traceparent", "tracestate", "baggage"] {
+        assert!(
+            allow_headers.contains(required),
+            "CORS allow-headers must include {required}, got: {allow_headers:?}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn unmatched_route_returns_the_not_found_envelope() {
     // Regression guard for the fallback swap from an inline

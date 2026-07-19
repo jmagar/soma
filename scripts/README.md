@@ -68,6 +68,7 @@ usage text, Justfile wiring, CI references, and hook integration.
 | `check-plugin-hook-contract.py` | Python wrapper | `cargo xtask check-plugin-hook-contract` | Delegates to xtask to audit cross-repo plugin setup hook JSON contracts, optionally executing setup commands. |
 | `check-plugin-stdio-smoke.sh` | Bash wrapper | `cargo xtask check-plugin-stdio-smoke`, docs/contracts | Delegates to xtask to smoke-test the installed stdio plugin binary with JSON-RPC initialize plus `status`. |
 | `test-mcp-auth.sh` | Bash wrapper | `cargo xtask test-mcp-auth`, `just test-mcp-auth` | Delegates to xtask to smoke-test HTTP MCP bearer-auth behavior. |
+| `test-trace-headers.sh` | Bash smoke test | `scripts/test-trace-headers.sh` | Exercises trusted HTTP trace-header modes, `_meta` precedence, CORS exposure, and outbound non-propagation against a live Soma server. |
 | `generate-cli.sh` | Bash wrapper | `cargo xtask generate-cli`, `just generate-cli` | Delegates to xtask to use mcporter to generate a standalone CLI from a running MCP server schema. |
 | `sync-cargo.sh` | Bash wrapper | `cargo xtask sync-cargo`, plugin hook/runtime support | Delegates to xtask to copy `Cargo.lock` into plugin data directories, falling back to `cargo fetch` if needed. |
 

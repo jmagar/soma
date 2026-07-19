@@ -3,8 +3,10 @@
 
 use async_trait::async_trait;
 use axum::{
-    body::Body,
-    http::{header, Method, Request, StatusCode},
+    body::{Body, Bytes},
+    http::{header, HeaderMap, Method, Request, StatusCode},
+    response::IntoResponse,
+    routing::post,
 };
 use serde_json::{json, Value};
 use soma::{
@@ -17,14 +19,61 @@ use soma_application::provider_registry::{
 };
 use soma_application::ProviderError;
 use soma_domain::actions::ACTION_SPECS;
+use soma_gateway::config::{GatewayConfig, ProtectedMcpRouteConfig, UpstreamConfig};
 use soma_provider_core::{
     ProviderCatalog, ProviderIdentity, ProviderKind, ProviderManifest, ProviderTool, RestOverlay,
 };
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tower::ServiceExt;
 
 mod support;
 use support::request_json;
+
+#[tokio::test]
+async fn protected_route_proxy_does_not_forward_inbound_trace_headers() {
+    let seen_headers: Arc<Mutex<Vec<HeaderMap>>> = Arc::new(Mutex::new(Vec::new()));
+    let backend = header_capturing_backend_server(seen_headers.clone()).await;
+    let temp = tempfile::tempdir().unwrap();
+    let state = soma::testing::oauth_state_with_gateway(
+        temp.path(),
+        protected_gateway_config(Some(backend), None),
+    )
+    .await;
+    let token = protected_route_token(&state, "https://mcp.example.com/media", "soma:read");
+
+    let response = server::router(state)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/media")
+                .header(header::HOST, "mcp.example.com")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    "traceparent",
+                    "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01",
+                )
+                .header("tracestate", "vendor=value")
+                .header("baggage", "region=us-east-1")
+                .body(Body::from(r#"{"jsonrpc":"2.0","id":1}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let seen = seen_headers.lock().await;
+    assert_eq!(seen.len(), 1);
+    for name in ["traceparent", "tracestate", "baggage"] {
+        assert!(
+            !seen[0].contains_key(name),
+            "outbound proxied request must not carry {name}, got: {:?}",
+            seen[0]
+        );
+    }
+}
 
 fn provider_tool(name: &str, description: &str, input_schema: Value) -> ProviderTool {
     ProviderTool {
@@ -47,6 +96,73 @@ fn provider_tool(name: &str, description: &str, input_schema: Value) -> Provider
         examples: Vec::new(),
         meta: json!({}),
     }
+}
+
+fn protected_gateway_config(
+    upstream_url: Option<String>,
+    bearer_token_env: Option<&str>,
+) -> GatewayConfig {
+    GatewayConfig {
+        upstream: upstream_url
+            .map(|url| UpstreamConfig {
+                name: "backend".to_owned(),
+                url: Some(url),
+                bearer_token_env: bearer_token_env.map(ToOwned::to_owned),
+                ..UpstreamConfig::default()
+            })
+            .into_iter()
+            .collect(),
+        protected_mcp_routes: vec![ProtectedMcpRouteConfig {
+            name: "media".to_owned(),
+            public_host: "mcp.example.com".to_owned(),
+            public_path: "/media".to_owned(),
+            upstream: Some("backend".to_owned()),
+            scopes: vec!["soma:read".to_owned()],
+            ..ProtectedMcpRouteConfig::default()
+        }],
+        ..GatewayConfig::default()
+    }
+}
+
+fn protected_route_token(state: &server::AppState, audience: &str, scope: &str) -> String {
+    let AuthPolicy::Mounted {
+        auth_state: Some(auth_state),
+    } = &state.auth_policy
+    else {
+        panic!("test state must use OAuth auth policy");
+    };
+    auth_state
+        .signing_keys
+        .issue_access_token(&soma_auth::jwt::AccessClaims {
+            iss: "https://example.example.com".to_owned(),
+            sub: "google-user".to_owned(),
+            aud: audience.to_owned(),
+            exp: 4_102_444_800,
+            iat: 1_700_000_000,
+            jti: "protected-route-test".to_owned(),
+            scope: scope.to_owned(),
+            azp: "client".to_owned(),
+        })
+        .unwrap()
+}
+
+async fn header_capturing_backend_server(seen_headers: Arc<Mutex<Vec<HeaderMap>>>) -> String {
+    let app = axum::Router::new().route(
+        "/mcp",
+        post(move |headers: HeaderMap, _body: Bytes| {
+            let seen_headers = seen_headers.clone();
+            async move {
+                seen_headers.lock().await.push(headers);
+                (StatusCode::OK, "proxied").into_response()
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    format!("http://{addr}/mcp")
 }
 
 #[derive(Clone)]

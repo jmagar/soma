@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::process::Stdio;
 
 use rmcp::{
@@ -10,6 +11,31 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
+
+// `cargo test --workspace --all-features` runs many process-level integration
+// binaries concurrently. Cold Soma child startup can exceed five seconds under
+// that workspace load without indicating a protocol failure, so initialize has
+// a larger but still finite budget. Once initialized, calls retain a tighter
+// bounded response budget.
+const STDIO_INITIALIZE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const STDIO_RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+const STDIO_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+async fn bounded_stdio_operation<T, E, F>(
+    operation: &str,
+    timeout: std::time::Duration,
+    future: F,
+) -> anyhow::Result<T>
+where
+    E: std::fmt::Display,
+    F: Future<Output = Result<T, E>>,
+{
+    match tokio::time::timeout(timeout, future).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(anyhow::anyhow!("{operation} failed: {error}")),
+        Err(_) => Err(anyhow::anyhow!("{operation} timed out after {timeout:?}")),
+    }
+}
 
 fn stdio_temp_context() -> anyhow::Result<(tempfile::TempDir, std::path::PathBuf)> {
     let temp_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp");
@@ -92,9 +118,10 @@ async fn write_json_line(stdin: &mut ChildStdin, value: serde_json::Value) -> an
 async fn read_json_rpc_response(
     stdout: &mut BufReader<ChildStdout>,
     id: u64,
+    timeout: std::time::Duration,
 ) -> anyhow::Result<serde_json::Value> {
     let mut line = String::new();
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    tokio::time::timeout(timeout, async {
         loop {
             line.clear();
             let bytes = stdout.read_line(&mut line).await?;
@@ -109,14 +136,26 @@ async fn read_json_rpc_response(
         }
     })
     .await
-    .map_err(|_| anyhow::anyhow!("timed out waiting for JSON-RPC response id {id}"))?
+    .map_err(|_| {
+        anyhow::anyhow!("timed out after {timeout:?} waiting for JSON-RPC response id {id}")
+    })?
 }
 
 #[tokio::test]
-async fn stdio_child_process_lists_tools_and_calls_actions() {
-    let (service, stderr, _temp) = stdio_client().await.unwrap();
+async fn stdio_child_process_lists_tools_and_calls_actions() -> anyhow::Result<()> {
+    let (service, stderr, _temp) = bounded_stdio_operation(
+        "stdio client initialize",
+        STDIO_INITIALIZE_TIMEOUT,
+        stdio_client(),
+    )
+    .await?;
 
-    let tools = service.list_tools(Default::default()).await.unwrap();
+    let tools = bounded_stdio_operation(
+        "stdio tools/list",
+        STDIO_RESPONSE_TIMEOUT,
+        service.list_tools(Default::default()),
+    )
+    .await?;
     let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
     assert_eq!(names, vec!["soma"]);
     assert_eq!(
@@ -127,49 +166,55 @@ async fn stdio_child_process_lists_tools_and_calls_actions() {
         "object"
     );
 
-    let status = service
-        .call_tool(
+    let status = bounded_stdio_operation(
+        "stdio status tool call",
+        STDIO_RESPONSE_TIMEOUT,
+        service.call_tool(
             CallToolRequestParams::new("soma")
                 .with_arguments(json!({"action": "status"}).as_object().unwrap().clone()),
-        )
-        .await
-        .unwrap();
+        ),
+    )
+    .await?;
     let status = structured_result_json(&status);
     assert_eq!(status["status"], "ok", "status payload was {status}");
 
-    let echo = service
-        .call_tool(
+    let echo = bounded_stdio_operation(
+        "stdio echo tool call",
+        STDIO_RESPONSE_TIMEOUT,
+        service.call_tool(
             CallToolRequestParams::new("soma").with_arguments(
                 json!({"action": "echo", "message": "stdio works"})
                     .as_object()
                     .unwrap()
                     .clone(),
             ),
-        )
-        .await
-        .unwrap();
+        ),
+    )
+    .await?;
     let echo = structured_result_json(&echo);
     assert_eq!(echo["echo"], "stdio works");
 
-    service.cancel().await.unwrap();
+    bounded_stdio_operation(
+        "stdio client cancellation",
+        STDIO_SHUTDOWN_TIMEOUT,
+        service.cancel(),
+    )
+    .await?;
 
     if let Some(mut stderr) = stderr {
         let mut logs = String::new();
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(1),
+        bounded_stdio_operation(
+            "stdio child stderr closure",
+            STDIO_SHUTDOWN_TIMEOUT,
             stderr.read_to_string(&mut logs),
         )
-        .await
-        {
-            Ok(Ok(_)) => {}
-            Ok(Err(error)) => panic!("failed to read stdio child stderr: {error}"),
-            Err(_) => panic!("stdio child stderr did not close after cancellation"),
-        }
+        .await?;
         assert!(
             !logs.contains("MCP server listening") && !logs.contains("HTTP server"),
             "stdio mode must not start network services; stderr was: {logs}"
         );
     }
+    Ok(())
 }
 
 #[tokio::test]
@@ -193,7 +238,7 @@ async fn raw_stdio_json_rpc_preserves_structured_output_fields() -> anyhow::Resu
         }),
     )
     .await?;
-    let initialize = read_json_rpc_response(&mut stdout, 1).await?;
+    let initialize = read_json_rpc_response(&mut stdout, 1, STDIO_INITIALIZE_TIMEOUT).await?;
     assert_eq!(initialize["jsonrpc"], "2.0");
     assert!(initialize["result"]["protocolVersion"].is_string());
 
@@ -217,7 +262,7 @@ async fn raw_stdio_json_rpc_preserves_structured_output_fields() -> anyhow::Resu
         }),
     )
     .await?;
-    let tools = read_json_rpc_response(&mut stdout, 2).await?;
+    let tools = read_json_rpc_response(&mut stdout, 2, STDIO_RESPONSE_TIMEOUT).await?;
     let tool = &tools["result"]["tools"][0];
     assert_eq!(tool["name"], "soma");
     assert_eq!(tool["outputSchema"]["type"], "object");
@@ -247,7 +292,7 @@ async fn raw_stdio_json_rpc_preserves_structured_output_fields() -> anyhow::Resu
         }),
     )
     .await?;
-    let echo = read_json_rpc_response(&mut stdout, 3).await?;
+    let echo = read_json_rpc_response(&mut stdout, 3, STDIO_RESPONSE_TIMEOUT).await?;
     let echo_result = &echo["result"];
     assert_eq!(echo_result["structuredContent"]["_soma_action"], "echo");
     assert_eq!(echo_result["structuredContent"]["echo"], "raw stdio works");
@@ -270,7 +315,7 @@ async fn raw_stdio_json_rpc_preserves_structured_output_fields() -> anyhow::Resu
         }),
     )
     .await?;
-    let error = read_json_rpc_response(&mut stdout, 4).await?;
+    let error = read_json_rpc_response(&mut stdout, 4, STDIO_RESPONSE_TIMEOUT).await?;
     let error_result = &error["result"];
     assert_eq!(error_result["isError"], true);
     assert_eq!(error_result["structuredContent"]["kind"], "mcp_tool_error");

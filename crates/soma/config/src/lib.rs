@@ -10,5 +10,5 @@ pub mod env_registry;
 
 pub use config::{
     default_data_dir, load_dotenv, AuthConfig, AuthMode, Config, EffectiveRuntimeMode, McpConfig,
-    RuntimeMode, SomaConfig,
+    RuntimeMode, SomaConfig, TraceHeaderMode,
 };

@@ -25,6 +25,7 @@ use std::{
 };
 
 use serde_json::Value;
+use soma_config::env_registry::all_specs;
 use tempfile::tempdir;
 
 fn binary() -> &'static str {
@@ -61,6 +62,9 @@ impl DoctorEnv {
 
     fn command(&self) -> Command {
         let mut command = Command::new(binary());
+        for spec in all_specs() {
+            command.env_remove(spec.key);
+        }
         command
             .env("HOME", self._home.path())
             .env("SOMA_HOME", self.data_dir.path())
@@ -68,16 +72,6 @@ impl DoctorEnv {
             .env("SOMA_API_KEY", "")
             .env("SOMA_MCP_PORT", self.port.to_string())
             .env("PATH", bin_dir())
-            .env_remove("SOMA_MCP_HOST")
-            .env_remove("SOMA_MCP_TOKEN")
-            .env_remove("SOMA_MCP_NO_AUTH")
-            .env_remove("SOMA_NOAUTH")
-            .env_remove("SOMA_MCP_AUTH_MODE")
-            .env_remove("SOMA_MCP_GOOGLE_CLIENT_ID")
-            .env_remove("SOMA_MCP_GOOGLE_CLIENT_SECRET")
-            .env_remove("SOMA_MCP_ALLOWED_HOSTS")
-            .env_remove("SOMA_MCP_ALLOWED_ORIGINS")
-            .env_remove("SOMA_MCP_PUBLIC_URL")
             .env_remove("SOMA_PROVIDER_DIR")
             .env_remove("RUST_LOG");
         command
@@ -97,6 +91,34 @@ fn pass_line(name: &str, value: &str) -> String {
 
 fn fail_header_line(name: &str) -> String {
     format!("  ✗  {name}")
+}
+
+#[test]
+fn doctor_command_isolates_every_registered_soma_environment_key() {
+    let env = DoctorEnv::new();
+    let command = env.command();
+
+    for spec in all_specs() {
+        let configured = command
+            .get_envs()
+            .find(|(key, _)| *key == spec.key)
+            .map(|(_, value)| value);
+
+        match spec.key {
+            "SOMA_API_URL" | "SOMA_API_KEY" => {
+                assert_eq!(configured, Some(Some(std::ffi::OsStr::new(""))))
+            }
+            "SOMA_MCP_PORT" => assert_eq!(
+                configured,
+                Some(Some(std::ffi::OsStr::new(&env.port.to_string())))
+            ),
+            key => assert_eq!(
+                configured,
+                Some(None),
+                "DoctorEnv must remove inherited registry key {key}"
+            ),
+        }
+    }
 }
 
 #[test]

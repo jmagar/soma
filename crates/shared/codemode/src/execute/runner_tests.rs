@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use serial_test::serial;
+
 use crate::host::NoopHost;
 use crate::types::{CodeModeCaller, CodeModeSurface, ToolScope};
 use crate::CodeModeConfig;
@@ -7,6 +9,7 @@ use crate::CodeModeConfig;
 use super::runner::{execute_in_subprocess, SubprocessExecution};
 
 #[tokio::test]
+#[serial(code_mode_soma_home, code_mode_runner_exe_env)]
 async fn subprocess_runner_executes_plain_code_without_host() {
     let outcome = execute_in_subprocess::<NoopHost>(SubprocessExecution {
         host: None,

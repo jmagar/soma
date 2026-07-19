@@ -14,3 +14,4 @@ Generated from `crates/soma/config/src/env_registry.rs`.
 | `CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_ID` | `SOMA_MCP_GOOGLE_CLIENT_ID` | yes | `mcp.auth.google_client_id` |
 | `CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET` | `SOMA_MCP_GOOGLE_CLIENT_SECRET` | yes | `mcp.auth.google_client_secret` |
 | `CLAUDE_PLUGIN_OPTION_AUTH_ADMIN_EMAIL` | `SOMA_MCP_AUTH_ADMIN_EMAIL` | no | `mcp.auth.admin_email` |
+| `CLAUDE_PLUGIN_OPTION_TRACE_HEADERS` | `SOMA_MCP_TRACE_HEADERS` | no | `mcp.trace_headers` |

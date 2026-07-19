@@ -145,6 +145,7 @@ fn test_client_builds_with_empty_config() {
 }
 
 #[test]
+#[cfg(feature = "client")]
 fn test_api_action_url_preserves_base_path() {
     let root = Url::parse("https://example.test/").unwrap();
     let nested = Url::parse("https://example.test/api").unwrap();
@@ -378,6 +379,28 @@ async fn call_deployed_api_errors_on_invalid_json_body() {
     );
 }
 
+#[tokio::test]
+async fn deployed_api_status_call_never_sends_trace_headers() {
+    let observed: ObservedRequests = Arc::new(Mutex::new(Vec::new()));
+    let (base_url, handle) = mock_deployed_api(observed.clone()).await;
+    let client = SomaClient::new(&SomaConfig {
+        api_url: base_url,
+        api_key: "test-key".into(),
+        ..SomaConfig::default()
+    })
+    .expect("client should build");
+
+    client.status().await.expect("status should succeed");
+    handle.abort();
+
+    let seen = observed.lock().expect("observed requests should lock");
+    assert_eq!(seen.len(), 1);
+    assert!(
+        !seen[0].trace_headers_present,
+        "SomaClient must never emit trace headers on its own"
+    );
+}
+
 #[test]
 fn validate_action_path_segment_rejects_empty_action() {
     let err = validate_action_path_segment("").expect_err("empty action should fail validation");
@@ -446,6 +469,7 @@ struct ObservedRequest {
     path: String,
     body: Value,
     bearer: String,
+    trace_headers_present: bool,
 }
 
 type ObservedRequests = Arc<Mutex<Vec<ObservedRequest>>>;
@@ -599,6 +623,9 @@ fn push_observed(observed: &ObservedRequests, headers: &HeaderMap, path: &str, b
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
         .to_owned();
+    let trace_headers_present = headers.get("traceparent").is_some()
+        || headers.get("tracestate").is_some()
+        || headers.get("baggage").is_some();
     observed
         .lock()
         .expect("observed requests should lock")
@@ -606,5 +633,6 @@ fn push_observed(observed: &ObservedRequests, headers: &HeaderMap, path: &str, b
             path: path.to_owned(),
             body,
             bearer,
+            trace_headers_present,
         });
 }

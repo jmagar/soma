@@ -330,18 +330,18 @@ impl AuthSmokeOptions {
 }
 
 #[derive(Default)]
-struct AuthSmokeResults {
-    pass: usize,
-    fail: usize,
+pub(crate) struct AuthSmokeResults {
+    pub(crate) pass: usize,
+    pub(crate) fail: usize,
 }
 
 impl AuthSmokeResults {
-    fn pass(&mut self, label: &str) {
+    pub(crate) fn pass(&mut self, label: &str) {
         println!("PASS  {label}");
         self.pass += 1;
     }
 
-    fn fail(&mut self, label: &str) {
+    pub(crate) fn fail(&mut self, label: &str) {
         eprintln!("FAIL  {label}");
         self.fail += 1;
     }
