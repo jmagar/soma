@@ -20,7 +20,7 @@ use rmcp::{
     service::{Peer, RequestContext},
     ErrorData, RoleServer, ServerHandler,
 };
-use rmcp_traces::{TraceSummary, TraceTrust};
+use rmcp_traces::TraceTrust;
 use serde_json::{Map, Value};
 
 use soma_application::{ApplicationError, ExecutionContext, ReadResourceRequest, ResourceContent};
@@ -44,22 +44,24 @@ use super::{
     schemas::tool_definitions_for_catalogs as tool_definitions,
     state::McpState,
     tools::execute_tool,
-    ACTION_DISCRIMINATOR_FIELD,
+    trace_resolution, ACTION_DISCRIMINATOR_FIELD,
 };
 
 macro_rules! trace_summary_event {
-    ($level:ident, $trace_summary:expr, $message:literal, $($field:tt)*) => {
+    ($level:ident, $trace_resolution:expr, $trace_context_conflict:expr, $message:literal, $($field:tt)*) => {
         tracing::$level!(
             $($field)*
-            trace_id_prefix = ?$trace_summary.trace_id_prefix(),
-            span_id_prefix = ?$trace_summary.span_id_prefix(),
-            trace_sampled = ?$trace_summary.sampled(),
-            trace_trust = ?$trace_summary.trust(),
-            has_tracestate = $trace_summary.has_tracestate(),
-            baggage_member_count = $trace_summary.baggage_member_count(),
-            sensitive_baggage_member_count = $trace_summary.sensitive_baggage_member_count(),
-            trace_invalid_count = $trace_summary.invalid_count(),
-            trace_invalid_reasons = ?$trace_summary.invalid_reasons(),
+            trace_id_prefix = ?$trace_resolution.summary.trace_id_prefix(),
+            span_id_prefix = ?$trace_resolution.summary.span_id_prefix(),
+            trace_sampled = ?$trace_resolution.summary.sampled(),
+            trace_trust = ?$trace_resolution.summary.trust(),
+            has_tracestate = $trace_resolution.summary.has_tracestate(),
+            baggage_member_count = $trace_resolution.summary.baggage_member_count(),
+            sensitive_baggage_member_count = $trace_resolution.summary.sensitive_baggage_member_count(),
+            trace_invalid_count = $trace_resolution.summary.invalid_count(),
+            trace_invalid_reasons = ?$trace_resolution.summary.invalid_reasons(),
+            http_trace_headers_present = $trace_resolution.http_trace_headers_present,
+            trace_context_conflict = $trace_context_conflict,
             $message
         );
     };
@@ -142,9 +144,12 @@ impl ServerHandler for SomaRmcpServer {
                 return Err(error);
             }
         };
-        let trace_summary = trace_summary_from_context(&context);
+        let trace_resolution = trace_resolution_for_call(&self.state, &context);
+        let trace_context_conflict = trace_resolution.http_trace_headers_present
+            && trace_resolution::meta_has_any_trace_key(&context.meta);
         let route_scope = protected_route_scope(&context);
-        let execution_context = execution_context(&self.state, &context, auth);
+        let execution_context =
+            execution_context_with_trace(&self.state, auth, trace_resolution.trace_context.clone());
         let soma_allowed = protected_scope_allows_service(route_scope, "soma");
         if soma_allowed && self.state.config().conformance_fixtures {
             if let Some(result) = conformance::call_tool(&tool_name) {
@@ -161,11 +166,31 @@ impl ServerHandler for SomaRmcpServer {
             )
             .await
             {
+                if result.is_error == Some(true) {
+                    trace_summary_event!(
+                        warn,
+                        trace_resolution,
+                        trace_context_conflict,
+                        "MCP gateway tool execution failed",
+                        tool = %tool_name,
+                        action = action_opt.as_deref().unwrap_or_default(),
+                    );
+                } else {
+                    trace_summary_event!(
+                        info,
+                        trace_resolution,
+                        trace_context_conflict,
+                        "MCP gateway tool execution completed",
+                        tool = %tool_name,
+                        action = action_opt.as_deref().unwrap_or_default(),
+                    );
+                }
                 return Ok(result);
             }
             trace_summary_event!(
                 warn,
-                trace_summary,
+                trace_resolution,
+                trace_context_conflict,
                 "MCP tool rejected unknown tool",
                 tool = %tool_name,
                 action = action_opt.as_deref().unwrap_or_default(),
@@ -179,7 +204,8 @@ impl ServerHandler for SomaRmcpServer {
         if let Some(cursor) = response_page.cursor().map(str::to_owned) {
             trace_summary_event!(
                 info,
-                trace_summary,
+                trace_resolution,
+                trace_context_conflict,
                 "MCP tool returned cached response page",
                 tool = %tool_name,
                 action = empty_action_as_none(&action).unwrap_or_default(),
@@ -207,7 +233,8 @@ impl ServerHandler for SomaRmcpServer {
         let started = Instant::now();
         trace_summary_event!(
             info,
-            trace_summary,
+            trace_resolution,
+            trace_context_conflict,
             "MCP tool execution started",
             tool = %tool_name,
             action = %action,
@@ -217,7 +244,8 @@ impl ServerHandler for SomaRmcpServer {
             Ok(result) => {
                 trace_summary_event!(
                     info,
-                    trace_summary,
+                    trace_resolution,
+                    trace_context_conflict,
                     "MCP tool execution completed",
                     tool = %tool_name,
                     action = %action,
@@ -238,7 +266,8 @@ impl ServerHandler for SomaRmcpServer {
                 if application_error.is_some_and(ApplicationError::is_validation) {
                     trace_summary_event!(
                         warn,
-                        trace_summary,
+                        trace_resolution,
+                        trace_context_conflict,
                         "MCP tool rejected invalid params",
                         tool = %tool_name,
                         action = %action,
@@ -247,7 +276,8 @@ impl ServerHandler for SomaRmcpServer {
                 } else {
                     trace_summary_event!(
                         error,
-                        trace_summary,
+                        trace_resolution,
+                        trace_context_conflict,
                         "MCP tool execution failed",
                         tool = %tool_name,
                         action = %action,
@@ -615,14 +645,6 @@ fn empty_action_as_none(action: &str) -> Option<&str> {
     }
 }
 
-fn trace_summary_from_context(context: &RequestContext<RoleServer>) -> TraceSummary {
-    trace_summary_from_meta(&context.meta)
-}
-
-fn trace_summary_from_meta(meta: &rmcp::model::Meta) -> TraceSummary {
-    soma_mcp_server::trace::trace_summary_from_meta(meta, TraceTrust::Untrusted)
-}
-
 fn execution_context(
     state: &McpState,
     request: &RequestContext<RoleServer>,
@@ -632,6 +654,31 @@ fn execution_context(
         Some(principal(auth)),
         trace_context_from_meta(&request.meta),
     )
+}
+
+fn execution_context_with_trace(
+    state: &McpState,
+    auth: Option<&AuthContext>,
+    trace: Option<TraceContext>,
+) -> ExecutionContext {
+    state.execution_context(Some(principal(auth)), trace)
+}
+
+/// Resolve trace metadata for one authenticated `call_tool` invocation. `Off`
+/// mode returns without ever touching `RequestContext.extensions`.
+fn trace_resolution_for_call(
+    state: &McpState,
+    context: &RequestContext<RoleServer>,
+) -> trace_resolution::TraceResolution {
+    let mode = state.config().trace_headers;
+    if mode == soma_config::TraceHeaderMode::Off {
+        return trace_resolution::TraceResolution::from_meta_only(&context.meta);
+    }
+    let headers = context
+        .extensions
+        .get::<http::request::Parts>()
+        .map(|parts| &parts.headers);
+    trace_resolution::resolve_trace_resolution(mode, &context.meta, headers)
 }
 
 fn trace_context_from_meta(meta: &rmcp::model::Meta) -> Option<TraceContext> {

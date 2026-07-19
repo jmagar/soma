@@ -114,6 +114,7 @@ Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `soma:read` a
 | `SOMA_MCP_TOKEN` | — | Static bearer token |
 | `SOMA_MCP_ALLOWED_HOSTS` | — | Extra comma-separated Host header values |
 | `SOMA_MCP_ALLOWED_ORIGINS` | — | Extra comma-separated CORS origins |
+| `SOMA_MCP_TRACE_HEADERS` | `off` | Trusted inbound HTTP trace extraction; non-`off` requires loopback or a header-sanitizing trusted gateway. See `docs/TRACE_CONTEXT.md`. |
 | `SOMA_MCP_PUBLIC_URL` | — | Public URL for OAuth metadata endpoints |
 | `SOMA_MCP_AUTH_MODE` | `bearer` | `bearer` or `oauth` |
 | `SOMA_MCP_GOOGLE_CLIENT_ID` | — | Google OAuth client ID |

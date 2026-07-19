@@ -8,6 +8,7 @@ use soma_application::{
     ExecutionContext, GatewayExecuteRequest, GatewayPort, GatewayPromptRoute, GatewayReloadRequest,
     GatewayResourceRoute, GatewayRouteScope, GatewayToolRoute, PortError,
 };
+use soma_test_support::{tracing_test_lock, SharedBuf};
 
 use crate::{rmcp_server, testing::loopback_state_with_gateway};
 
@@ -40,13 +41,16 @@ impl GatewayPort for RecordingGateway {
         _scope: Option<&GatewayRouteScope>,
         _context: &ExecutionContext,
     ) -> Result<Vec<GatewayToolRoute>, PortError> {
-        Ok(vec![GatewayToolRoute {
-            name: "echo".to_owned(),
-            description: Some("echoes a message".to_owned()),
-            input_schema: Some(json!({"type": "object"})),
-            output_schema: None,
-            destructive: false,
-        }])
+        Ok([("echo", "echoes a message"), ("fail", "always fails")]
+            .into_iter()
+            .map(|(name, description)| GatewayToolRoute {
+                name: name.to_owned(),
+                description: Some(description.to_owned()),
+                input_schema: Some(json!({"type": "object"})),
+                output_schema: None,
+                destructive: false,
+            })
+            .collect())
     }
 
     async fn call_mcp_tool(
@@ -56,6 +60,9 @@ impl GatewayPort for RecordingGateway {
         _scope: Option<&GatewayRouteScope>,
         _context: &ExecutionContext,
     ) -> Result<Option<Value>, PortError> {
+        if name == "fail" {
+            return Err(PortError::new("upstream_failed", "synthetic failure"));
+        }
         Ok((name == "echo").then(|| json!({"echo": params["message"]})))
     }
 
@@ -104,9 +111,19 @@ impl GatewayPort for RecordingGateway {
     }
 }
 
-#[tokio::test]
+#[allow(clippy::await_holding_lock)]
+#[tokio::test(flavor = "current_thread")]
 async fn mcp_server_exposes_application_gateway_tools_resources_and_prompts() -> anyhow::Result<()>
 {
+    let _lock = tracing_test_lock();
+    let buf = SharedBuf::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(buf.writer())
+        .with_ansi(false)
+        .without_time()
+        .with_max_level(tracing::Level::INFO)
+        .finish();
+    let guard = tracing::subscriber::set_default(subscriber);
     let state = loopback_state_with_gateway(std::sync::Arc::new(RecordingGateway));
     let (server_transport, client_transport) = tokio::io::duplex(16 * 1024);
     let server_handle = tokio::spawn(async move {
@@ -136,6 +153,8 @@ async fn mcp_server_exposes_application_gateway_tools_resources_and_prompts() ->
         echo.structured_content,
         Some(json!({"echo": "through-soma"}))
     );
+    let failed = client.call_tool(CallToolRequestParams::new("fail")).await?;
+    assert_eq!(failed.is_error, Some(true));
 
     let resources = client.list_resources(Default::default()).await?;
     let uri = resources
@@ -162,5 +181,23 @@ async fn mcp_server_exposes_application_gateway_tools_resources_and_prompts() ->
 
     client.cancel().await?;
     server_handle.await??;
+    drop(guard);
+
+    let logs = buf.contents();
+    assert!(
+        logs.contains("MCP gateway tool execution completed"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("tool=echo"), "logs were: {logs}");
+    assert!(
+        logs.contains("MCP gateway tool execution failed"),
+        "logs were: {logs}"
+    );
+    assert!(logs.contains("tool=fail"), "logs were: {logs}");
+    assert_eq!(
+        logs.matches("MCP gateway tool execution completed").count(),
+        1,
+        "failed gateway calls must not be logged as completed: {logs}"
+    );
     Ok(())
 }

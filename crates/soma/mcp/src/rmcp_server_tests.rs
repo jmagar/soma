@@ -11,12 +11,12 @@ use soma_application::{ApplicationError, ApplicationErrorDetails, ResourceConten
 use soma_domain::token_limit::MAX_RESPONSE_BYTES;
 use soma_provider_core::ProviderResource;
 
-use crate::assert_result_has_no_meta;
+use crate::{assert_result_has_no_meta, trace_resolution};
 
 use super::{
     application_error_payload, resource_contents_from_output, resource_read_error,
     rmcp_resource_from_catalog_resource, rmcp_tool_from_json, tool_error_result,
-    trace_context_from_meta, trace_summary_from_meta, unknown_tool_error,
+    trace_context_from_meta, unknown_tool_error,
 };
 
 const VALID_TRACEPARENT: &str = "00-0af7651916cd43dd8448eb211c80319c-00f067aa0ba902b7-01";
@@ -185,7 +185,7 @@ fn trace_summary_for_logs_uses_untrusted_fail_soft_policy() {
     meta.set_tracestate("vendor=value");
     meta.set_baggage("a".repeat(9 * 1024));
 
-    let summary = trace_summary_from_meta(&meta);
+    let summary = trace_resolution::TraceResolution::from_meta_only(&meta).summary;
 
     assert_eq!(summary.trace_id_prefix(), Some("0af76519"));
     assert_eq!(summary.span_id_prefix(), Some("00f067aa"));

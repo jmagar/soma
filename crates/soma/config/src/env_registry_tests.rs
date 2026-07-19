@@ -49,3 +49,12 @@ fn plugin_option_mapping_is_derived_from_specs() {
         "SOMA_MCP_GOOGLE_CLIENT_SECRET"
     )));
 }
+
+#[test]
+fn trace_headers_env_is_registered_and_maps_to_mcp_config() {
+    let spec =
+        spec_for("SOMA_MCP_TRACE_HEADERS").expect("SOMA_MCP_TRACE_HEADERS should be registered");
+    assert_eq!(spec.toml_destination, Some("mcp.trace_headers"));
+    assert!(!spec.secret, "trace-header mode is not a secret");
+    assert_eq!(spec.classification, EnvClassification::KeepEnv);
+}
