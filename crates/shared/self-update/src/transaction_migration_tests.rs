@@ -110,17 +110,17 @@ fn case_variant_absent_markers_are_rejected_before_side_effects() {
 
 #[test]
 fn unicode_full_casefold_candidates_are_rejected_before_side_effects() {
-    migration_collision_is_side_effect_free("Straße.json", "STRASSE.json");
+    migration_collision_is_side_effect_free("Stra\u{df}e.json", "STRASSE.json");
 }
 
 #[test]
 fn unicode_sigma_candidates_are_rejected_before_side_effects() {
-    migration_collision_is_side_effect_free("σ.json", "ς.json");
+    migration_collision_is_side_effect_free("\u{3c3}.json", "\u{3c2}.json");
 }
 
 #[test]
 fn unicode_normalization_candidates_are_rejected_before_side_effects() {
-    migration_collision_is_side_effect_free("é.json", "e\u{301}.json");
+    migration_collision_is_side_effect_free("\u{e9}.json", "e\u{301}.json");
 }
 
 #[test]
