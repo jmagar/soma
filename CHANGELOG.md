@@ -74,6 +74,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed bytes and let startup recovery reconcile the prepared marker.
   The crate has no internal workspace dependencies; this change
   does not enable self-update behavior in the Soma runtime or integrate Cortex.
+- `incus-client` (crates/shared/incus-client) is now feature-complete for v1:
+  Unix-socket transport (with a configurable per-request timeout, defaulting
+  to 30s, correctly excluded from `wait_for_operation`'s long-poll), operation
+  wait/cancel (including WebSocket events behind the `events` feature, with
+  abnormal-close-code detection), and CRUD for instances (with lifecycle and
+  snapshots), images, networks, storage pools/volumes, and projects, with
+  ETag/`If-Match` optimistic-concurrency support - including guarded
+  convenience methods - across every resource type. Sync-vs-async return
+  types (`Result<()>` vs `Result<Operation>` vs `Result<Option<Operation>>`)
+  were corrected per-endpoint against the real `lxc/incus` daemon source
+  rather than assumed: network/project/storage-pool create/update/delete are
+  synchronous, storage-volume creation is conditionally sync-or-async
+  depending on the request payload, and only instance/image creation and
+  instance lifecycle actions are genuinely async. 404 responses now map to a
+  distinguishable `Error::NotFound`. Remote mTLS transport and certificates
+  CRUD are tracked separately for whenever a real remote consumer exists.
+  See `crates/shared/incus-client/README.md` for the full API reference.
+- `soma-auth` gained a multi-provider OAuth login system:
+  - **`OAuthProvider` trait** (`crates/shared/auth/src/oauth_provider.rs`) generalizes the
+    previously Google-only login flow. `AuthState.google: Arc<GoogleProvider>` became
+    `AuthState.providers: Arc<BTreeMap<String, Arc<dyn OAuthProvider>>>` plus
+    `default_provider: String`.
+  - **Authelia support** (`AutheliaProvider`) — a real OIDC Provider, same
+    authorization-code + PKCE + RS256 ID-token shape as Google, configurable issuer via
+    `{PREFIX}_AUTHELIA_ISSUER_URL`. Shares a new `oidc.rs` JWKS verifier with `GoogleProvider`.
+  - **GitHub support** (`GitHubProvider`) — plain OAuth2, no ID token; fetches `GET /user` +
+    `GET /user/emails` for identity. GitHub OAuth Apps issue non-expiring access tokens with
+    no refresh token, so GitHub-authenticated sessions never receive a local refresh token —
+    documented, not a bug.
+  - A deployment can configure more than one provider simultaneously. `/auth/login` renders
+    a plain HTML picker when more than one is configured and the request doesn't already say
+    `?provider=`; `/authorize` accepts the same optional `?provider=` query param for headless
+    MCP clients. Each configured provider mounts its own static callback path
+    (`/auth/google/callback`, `/auth/authelia/callback`, `/auth/github/callback` by default,
+    each independently overridable via `{PREFIX}_{PROVIDER}_CALLBACK_PATH`).
+  - Four SQLite tables (`authorization_requests`, `authorization_codes`, `refresh_tokens`,
+    `browser_login_states`) gained a `provider TEXT NOT NULL DEFAULT 'google'` column.
+    Non-Google subjects are namespaced `{provider_id}:{raw_subject}` to avoid collisions
+    across providers sharing one DB; Google's existing bare-`sub` subject format is
+    unchanged for backward compatibility with already-issued sessions.
+  - `force_consent` (used to guarantee a refresh token on first login) is now scoped
+    per-provider instead of globally — a deployment with an existing Google refresh
+    token on file no longer skips forced consent on a user's first Authelia/GitHub login.
+  - The email allowlist remains a single list shared across all configured providers;
+    see `docs/AUTH.md` for the resulting security trade-off when running 2+ providers
+    simultaneously, and the startup warning log that surfaces it.
+  - Authelia issuer URLs must be `https://`; callback paths across configured providers
+    must be pairwise distinct (both enforced at config-validation time, not as an axum
+    startup panic).
+  - This plan touched only `crates/shared/auth/**`. Wiring Authelia/GitHub into the `soma`
+    binary's own CLI/config/setup-wizard/doctor surface is a separate, dependent change.
 - Restructured `apps/soma` (plan section 3.1, PR 18) into a composition-only
   layout: `bootstrap.rs` builds the concrete dependency graph (config, the
   transport client, provider registries, gateway/Code Mode adapters,
