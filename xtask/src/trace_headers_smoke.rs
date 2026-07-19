@@ -368,7 +368,60 @@ impl ServerGuard {
         if let Ok(mut file) = std::fs::File::open(&self.log_path) {
             let _ = file.read_to_string(&mut contents);
         }
-        contents
+        strip_ansi(&contents)
+    }
+}
+
+/// Strip ANSI/CSI escape sequences (`\x1b[...<letter>`) from `soma serve`'s
+/// captured subprocess log before substring-matching it.
+///
+/// `tracing_subscriber::fmt()` defaults to ANSI-colorized output unless
+/// `.with_ansi(false)` is explicitly set (see
+/// `apps/soma/src/bootstrap.rs::init_logging`) — confirmed empirically that
+/// this holds even when stdout/stderr are redirected to a plain file, not
+/// just a real terminal. The in-process tracing captures in
+/// `apps/soma/tests/mcp_trace_headers.rs` sidestep this by building their own
+/// subscriber with `.with_ansi(false)`, but this smoke spawns a real `soma`
+/// subprocess and can only observe its already-formatted stdout/stderr text,
+/// so color codes land *inside* field name/value boundaries (e.g.
+/// `trace_id_prefix` <ESC>[0m<ESC>[2m `=` <ESC>[0m `Some(...)`) and silently
+/// break a naive `contains(...)` check — every "logs contain X" assertion
+/// failed until this was added, even though the underlying trace data was
+/// correct (verified by hand against the raw captured log).
+fn strip_ansi(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next(); // consume '['
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+            continue;
+        }
+        output.push(ch);
+    }
+    output
+}
+
+#[cfg(test)]
+mod strip_ansi_tests {
+    use super::strip_ansi;
+
+    #[test]
+    fn removes_sgr_escape_sequences_between_field_name_and_value() {
+        let colored = "\u{1b}[3mtrace_id_prefix\u{1b}[0m\u{1b}[2m=\u{1b}[0mSome(\"0af76519\")";
+        assert_eq!(strip_ansi(colored), "trace_id_prefix=Some(\"0af76519\")");
+    }
+
+    #[test]
+    fn leaves_plain_text_untouched() {
+        assert_eq!(
+            strip_ansi("http_trace_headers_present=false"),
+            "http_trace_headers_present=false"
+        );
     }
 }
 
