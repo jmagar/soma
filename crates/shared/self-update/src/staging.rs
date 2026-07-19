@@ -10,7 +10,12 @@ use crate::transaction::path_validation::validate_distinct_paths;
 
 static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[cfg(unix)]
-const VALIDATION_MODE: u32 = 0o700;
+pub(crate) const VALIDATION_MODE: u32 = 0o700;
+#[cfg(unix)]
+const UNSAFE_EXECUTABLE_MODE_BITS: u32 = 0o7022;
+#[cfg(unix)]
+const UNSAFE_EXECUTABLE_MODE_REMEDIATION: &str =
+    "remove special bits and group/other write permissions before staging an update";
 
 /// A fully downloaded artifact whose digest matches its directive.
 #[derive(Debug)]
@@ -132,6 +137,22 @@ async fn create_partial(path: &Path) -> Result<(tokio::fs::File, PartialArtifact
 }
 
 impl Updater {
+    /// Checks whether the installed executable is safe to update before a
+    /// transport starts downloading artifact bytes.
+    ///
+    /// [`Updater::stage`] repeats this check so callers cannot bypass it or
+    /// rely on stale preflight state.
+    pub fn preflight_stage(&self) -> Result<()> {
+        self.ensure_layout_bound()?;
+        reject_executable_leaf_symlink(self.layout().executable())?;
+        #[cfg(unix)]
+        {
+            let layout = self.validated_layout()?;
+            executable_mode_and_identity(&layout.executable)?;
+        }
+        Ok(())
+    }
+
     pub async fn stage<R>(
         &self,
         mut reader: R,
@@ -140,8 +161,7 @@ impl Updater {
     where
         R: AsyncRead + Unpin,
     {
-        self.ensure_layout_bound()?;
-        reject_executable_leaf_symlink(self.layout().executable())?;
+        self.preflight_stage()?;
         #[cfg(unix)]
         let layout = self.validated_layout()?;
         #[cfg(unix)]
@@ -267,6 +287,7 @@ fn executable_mode_and_identity(path: &Path) -> Result<(u32, ExecutableIdentity)
         ));
     }
     let mode = metadata.permissions().mode() & 0o7777;
+    validate_executable_mode(path, mode)?;
     Ok((
         mode,
         ExecutableIdentity::Present {
@@ -275,6 +296,19 @@ fn executable_mode_and_identity(path: &Path) -> Result<(u32, ExecutableIdentity)
             mode,
         },
     ))
+}
+
+#[cfg(unix)]
+pub(crate) fn validate_executable_mode(path: &Path, mode: u32) -> Result<()> {
+    let mode = mode & 0o7777;
+    if mode & UNSAFE_EXECUTABLE_MODE_BITS != 0 {
+        return Err(UpdateError::UnsafeExecutableMode {
+            path: path.to_path_buf(),
+            mode,
+            remediation: UNSAFE_EXECUTABLE_MODE_REMEDIATION,
+        });
+    }
+    Ok(())
 }
 
 fn encode_hex(bytes: &[u8]) -> String {

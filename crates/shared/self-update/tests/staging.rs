@@ -247,10 +247,10 @@ fn staged_artifact_is_private_until_verified_under_permissive_umask() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn staging_uses_private_validation_mode_independent_of_source() {
+async fn staging_uses_private_validation_mode_for_supported_source_modes() {
     use std::os::unix::fs::PermissionsExt;
 
-    for mode in [0o700, 0o750, 0o2755, 0o4755] {
+    for mode in [0o700, 0o750, 0o755] {
         let temp = tempdir().unwrap();
         let executable = temp.path().join("example");
         std::fs::write(&executable, b"old").unwrap();
@@ -269,6 +269,67 @@ async fn staging_uses_private_validation_mode_independent_of_source() {
                 & 0o7777,
             0o700
         );
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unsafe_source_modes_are_rejected_before_reading_or_creating_transaction_artifacts() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use tokio::io::{AsyncRead, ReadBuf};
+
+    struct PanicReader;
+
+    impl AsyncRead for PanicReader {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _context: &mut Context<'_>,
+            _buffer: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            panic!("unsafe executable mode must be rejected before reading artifact bytes");
+        }
+    }
+
+    for mode in [0o4755, 0o2755, 0o1755, 0o777, 0o775] {
+        let temp = tempdir().unwrap();
+        let executable = temp.path().join("example");
+        let state = temp.path().join("state.json");
+        std::fs::write(&executable, b"old").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(mode)).unwrap();
+        let updater = Updater::new(
+            UpdateLayout::new(&executable, &state),
+            UpdatePolicy::default(),
+        );
+        let directive = UpdateDirective::new("2", "/binary", digest(b"new")).unwrap();
+
+        assert!(matches!(
+            updater.preflight_stage(),
+            Err(UpdateError::UnsafeExecutableMode {
+                mode: rejected_mode,
+                ..
+            }) if rejected_mode == mode
+        ));
+        match updater.stage(PanicReader, &directive).await {
+            Err(UpdateError::UnsafeExecutableMode {
+                path,
+                mode: rejected_mode,
+                remediation,
+            }) => {
+                assert_eq!(path, executable);
+                assert_eq!(rejected_mode, mode);
+                assert!(remediation.contains("remove special bits"));
+            }
+            result => panic!("expected typed unsafe-mode rejection, got {result:?}"),
+        }
+
+        assert!(!state.exists());
+        let entries: Vec<_> = std::fs::read_dir(temp.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(entries, [std::ffi::OsString::from("example")]);
     }
 }
 

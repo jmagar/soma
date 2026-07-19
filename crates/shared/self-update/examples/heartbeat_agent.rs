@@ -62,6 +62,9 @@ async fn lifecycle() -> soma_self_update::Result<()> {
     let directive = directive_from_verified_payload(&verified_payload)?;
     let endpoint = Url::parse("https://host/v1/heartbeats").expect("static endpoint is valid");
     let artifact_url = directive.resolve_artifact_url(&endpoint, updater.policy().transport())?;
+    // Fail closed on unsafe installed permissions before starting the artifact
+    // request. `stage` repeats this preflight before reading response bytes.
+    updater.preflight_stage()?;
     let (response_url, reader) = fetch_artifact(&artifact_url).await;
     directive.validate_artifact_response_url(
         &endpoint,
