@@ -5299,6 +5299,7 @@ name = "soma-auth"
 version = "0.4.1"
 dependencies = [
  "anyhow",
+ "async-trait",
  "axum",
  "base64 0.22.1",
  "chacha20poly1305",

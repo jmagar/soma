@@ -89,6 +89,8 @@ pub struct AuthorizeQuery {
     pub resource: Option<String>,
     #[serde(default)]
     pub scope: String,
+    #[serde(default)]
+    pub provider: Option<String>,
     pub code_challenge: String,
     pub code_challenge_method: String,
 }
@@ -103,6 +105,8 @@ pub struct CallbackQuery {
 pub struct BrowserLoginQuery {
     #[serde(default)]
     pub return_to: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +151,7 @@ pub struct AuthorizationRequestRow {
     pub client_state: String,
     pub resource: String,
     pub scope: String,
+    pub provider: String,
     pub provider_code_verifier: String,
     pub code_challenge: String,
     pub code_challenge_method: String,
@@ -162,6 +167,7 @@ pub struct AuthorizationCodeRow {
     pub redirect_uri: String,
     pub resource: String,
     pub scope: String,
+    pub provider: String,
     pub code_challenge: String,
     pub code_challenge_method: String,
     pub provider_refresh_token: Option<String>,
@@ -176,6 +182,7 @@ pub struct RefreshTokenRow {
     pub subject: String,
     pub resource: String,
     pub scope: String,
+    pub provider: String,
     pub provider_refresh_token: Option<String>,
     pub created_at: i64,
     pub expires_at: i64,
@@ -195,6 +202,7 @@ pub struct BrowserSessionRow {
 pub struct BrowserLoginStateRow {
     pub state: String,
     pub return_to: String,
+    pub provider: String,
     pub provider_code_verifier: String,
     pub created_at: i64,
     pub expires_at: i64,

@@ -82,6 +82,14 @@ fn binary_in_path_passes_for_windows_cmd_given_the_bare_name() {
         "cmd should be found in PATH given only the bare name"
     );
     assert_eq!(check.category, "config");
+    assert!(
+        check
+            .value
+            .unwrap()
+            .to_ascii_lowercase()
+            .ends_with("cmd.exe"),
+        "resolved path should include the platform executable suffix"
+    );
 }
 
 #[cfg(windows)]
