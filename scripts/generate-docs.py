@@ -331,7 +331,7 @@ def env_default(spec: EnvSpec, host: str, port: int) -> str:
         "SOMA_MCP_AUTHELIA_SCOPES": "`openid,email,profile,offline_access`",
         "SOMA_MCP_GITHUB_CALLBACK_PATH": "`/auth/github/callback`",
         "SOMA_MCP_GITHUB_SCOPES": "`read:user,user:email`",
-        "SOMA_MCP_AUTH_DEFAULT_PROVIDER": "automatic",
+        "SOMA_MCP_AUTH_DEFAULT_PROVIDER": "`automatic`",
         "SOMA_MCP_SERVER_NAME": f"`{default_string('default_server_name')}`",
     }
     return defaults.get(spec.key, "unset")

@@ -12,7 +12,6 @@ use crate::error::AuthError;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthorizeUrlRequest {
     pub state: String,
-    pub scope: String,
     pub code_challenge: String,
     pub code_challenge_method: String,
     /// Force the upstream's full consent screen even if the user already

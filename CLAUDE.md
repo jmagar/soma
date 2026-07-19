@@ -127,6 +127,20 @@ Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `soma:read` a
 | `SOMA_MCP_AUTH_ADMIN_EMAIL` | — | OAuth admin email |
 | `RUST_LOG` | `info` | Log filter |
 
+`SOMA_MCP_AUTHELIA_*`, `SOMA_MCP_GITHUB_*`, and `SOMA_MCP_AUTH_DEFAULT_PROVIDER`
+are read directly from process env by `soma_auth::AuthConfigBuilder` (via
+`crates/soma/integrations/src/auth.rs`'s `soma_auth_config_builder()`, called
+from `http_auth_policy()`/`bootstrap.rs` when `auth_mode=oauth`) — not through
+`crates/soma/config::Config`'s typed struct, which has no matching fields.
+Both are legitimate env var sources in this codebase; auth config in
+particular bypasses the typed `Config` layer.
+
+Optional per-provider overrides not shown above (defaults match
+`crates/shared/auth/src/config.rs`): `SOMA_MCP_GOOGLE_CALLBACK_PATH`,
+`SOMA_MCP_GOOGLE_SCOPES`, `SOMA_MCP_AUTHELIA_CALLBACK_PATH`,
+`SOMA_MCP_AUTHELIA_SCOPES`, `SOMA_MCP_GITHUB_CALLBACK_PATH`,
+`SOMA_MCP_GITHUB_SCOPES`.
+
 ## Elicitation
 
 The `elicit_name` action demonstrates MCP elicitation (spec 2025-06-18). The server calls `peer.elicit::<T>()` to ask the MCP client for user input mid-call. The type `T` must:

@@ -5,7 +5,7 @@ use reqwest::Url;
 
 use crate::error::AuthError;
 use crate::oauth_provider::{AuthorizeUrlRequest, OAuthProvider, ProviderExchange};
-use crate::oidc::OidcVerifier;
+use crate::oidc::{OidcVerifier, TokenAuthMethod};
 use crate::provider_http::build_authorize_url;
 
 const AUTHELIA_HTTP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -83,7 +83,8 @@ impl AutheliaProvider {
             issuer.as_str().trim_end_matches('/').to_string(),
             jwks_endpoint,
             http.clone(),
-        );
+        )
+        .with_token_auth_method(TokenAuthMethod::ClientSecretBasic);
 
         Ok(Self {
             client_id,
@@ -119,7 +120,8 @@ impl AutheliaProvider {
             issuer.as_str().trim_end_matches('/').to_string(),
             jwks_endpoint,
             self.http.clone(),
-        );
+        )
+        .with_token_auth_method(TokenAuthMethod::ClientSecretBasic);
         self.issuer = issuer;
         self
     }
@@ -196,7 +198,7 @@ mod tests {
     use rsa::traits::PublicKeyParts;
     use serde_json::json;
     use std::sync::OnceLock;
-    use wiremock::matchers::{method, path};
+    use wiremock::matchers::{basic_auth, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::{AutheliaProvider, AuthorizeUrlRequest};
@@ -207,7 +209,6 @@ mod tests {
         let provider = test_authelia_provider();
         let request = AuthorizeUrlRequest {
             state: "state-123".to_string(),
-            scope: "lab".to_string(),
             code_challenge: "challenge".to_string(),
             code_challenge_method: "S256".to_string(),
             force_consent: true,
@@ -327,6 +328,48 @@ mod tests {
             Some("authelia-refreshed-refresh-token")
         );
         assert_eq!(exchange.expires_in, Some(7200));
+    }
+
+    /// Authelia's OIDC provider defaults confidential clients to
+    /// `client_secret_basic` unless the operator explicitly opts a client
+    /// into `client_secret_post`. This mock only matches a token request
+    /// that authenticates via the `Authorization: Basic` header (not a
+    /// `client_secret` form field) — if `AutheliaProvider` ever regresses to
+    /// posting the secret in the body instead, the request matches no mock,
+    /// wiremock returns its default 404, and the exchange fails.
+    #[tokio::test]
+    async fn authelia_exchange_authenticates_via_http_basic_not_a_body_secret() {
+        let server = MockServer::start().await;
+        let issuer = Url::parse(&server.uri()).unwrap();
+        Mock::given(method("POST"))
+            .and(path("/api/oidc/token"))
+            .and(basic_auth("client-id", "client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "authelia-access-token",
+                "refresh_token": "authelia-refresh-token",
+                "expires_in": 3600,
+                "id_token": signed_test_id_token(&issuer, "client-id"),
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/api/oidc/jwks"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(test_jwks()))
+            .mount(&server)
+            .await;
+
+        let provider = test_authelia_provider().with_endpoints(
+            issuer.clone(),
+            issuer.join("api/oidc/authorization").unwrap(),
+            issuer.join("api/oidc/token").unwrap(),
+            issuer.join("api/oidc/jwks").unwrap(),
+        );
+
+        let exchange = provider
+            .exchange_code("code", "verifier")
+            .await
+            .expect("token request must authenticate via HTTP Basic to match Authelia's default");
+        assert_eq!(exchange.subject, "authelia-subject-123");
     }
 
     /// Negative-path coverage that only Authelia can exercise: unlike

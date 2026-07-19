@@ -111,7 +111,6 @@ pub async fn browser_login(
 
     let location = provider.authorize_url(&AuthorizeUrlRequest {
         state: request_state,
-        scope: state.config.default_scope.clone(),
         code_challenge: provider_code_challenge,
         code_challenge_method: "S256".to_string(),
         force_consent: true,
@@ -279,7 +278,6 @@ pub async fn authorize(
         .await?;
     let location = provider.authorize_url(&AuthorizeUrlRequest {
         state: request_state,
-        scope: scope.clone(),
         code_challenge: provider_code_challenge,
         code_challenge_method: "S256".to_string(),
         force_consent,
@@ -2760,10 +2758,9 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
-        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
-        // default_github_scopes() (only applied via #[serde(default = ...)]
-        // during deserialization) — validate() now requires `user:email`.
-        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
+        // GitHubConfig::default() now provides default_github_scopes()
+        // (["read:user", "user:email"]), which validate() requires — see
+        // `impl Default for GitHubConfig` in config_providers.rs.
         let state = test_auth_state_with_config(config).await;
         let app = router(state);
         let response = app
@@ -2791,10 +2788,9 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
-        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
-        // default_github_scopes() (only applied via #[serde(default = ...)]
-        // during deserialization) — validate() now requires `user:email`.
-        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
+        // GitHubConfig::default() now provides default_github_scopes()
+        // (["read:user", "user:email"]), which validate() requires — see
+        // `impl Default for GitHubConfig` in config_providers.rs.
         let state = test_auth_state_with_config(config).await;
         let app = router(state);
         let response = app
@@ -2842,10 +2838,9 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
-        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
-        // default_github_scopes() (only applied via #[serde(default = ...)]
-        // during deserialization) — validate() now requires `user:email`.
-        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
+        // GitHubConfig::default() now provides default_github_scopes()
+        // (["read:user", "user:email"]), which validate() requires — see
+        // `impl Default for GitHubConfig` in config_providers.rs.
         let state = test_auth_state_with_config(config).await;
         state
             .store
@@ -2952,10 +2947,9 @@ Iy60nwnOxK6B5mZV2Cs+kv8=
         let mut config = test_auth_config();
         config.github.client_id = "gh-client".to_string();
         config.github.client_secret = "gh-secret".to_string();
-        // GitHubConfig::default()'s scopes is Vec::default() ("[]"), not
-        // default_github_scopes() (only applied via #[serde(default = ...)]
-        // during deserialization) — validate() now requires `user:email`.
-        config.github.scopes = vec!["read:user".to_string(), "user:email".to_string()];
+        // GitHubConfig::default() now provides default_github_scopes()
+        // (["read:user", "user:email"]), which validate() requires — see
+        // `impl Default for GitHubConfig` in config_providers.rs.
         let base_state = test_auth_state_with_config(config).await;
 
         let google = GoogleProvider::new(

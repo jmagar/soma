@@ -289,7 +289,6 @@ mod tests {
         let redirect = reqwest::Url::parse("https://client.test/auth/callback").unwrap();
         let request = AuthorizeUrlRequest {
             state: "state".to_string(),
-            scope: "unused-local-scope".to_string(),
             code_challenge: "challenge".to_string(),
             code_challenge_method: "S256".to_string(),
             force_consent: true,

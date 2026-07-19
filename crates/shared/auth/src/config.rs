@@ -8,6 +8,14 @@ use url::Url;
 use crate::at_rest::TokenEncryptionKey;
 use crate::error::AuthError;
 
+#[path = "config_providers.rs"]
+mod config_providers;
+pub use config_providers::{AutheliaConfig, GitHubConfig, GoogleConfig};
+use config_providers::{
+    default_authelia_callback_path, default_authelia_scopes, default_github_callback_path,
+    default_github_scopes, default_google_scopes,
+};
+
 const DEFAULT_CALLBACK_PATH: &str = "/auth/google/callback";
 const DEFAULT_AUTH_DB_NAME: &str = "auth.db";
 const DEFAULT_KEY_NAME: &str = "auth-jwt.pem";
@@ -94,75 +102,6 @@ impl AuthModeConfig {
         Ok(Self {
             mode: AuthMode::parse(vars.get(&key).map(String::as_str), &key)?,
         })
-    }
-}
-
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GoogleConfig {
-    #[serde(default)]
-    pub client_id: String,
-    #[serde(default)]
-    pub client_secret: String,
-    #[serde(default = "default_callback_path")]
-    pub callback_path: String,
-    #[serde(default = "default_google_scopes")]
-    pub scopes: Vec<String>,
-}
-
-impl std::fmt::Debug for GoogleConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GoogleConfig")
-            .field("client_id", &self.client_id)
-            .field("callback_path", &self.callback_path)
-            .field("scopes", &self.scopes)
-            .finish_non_exhaustive()
-    }
-}
-
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AutheliaConfig {
-    #[serde(default)]
-    pub issuer_url: Option<Url>,
-    #[serde(default)]
-    pub client_id: String,
-    #[serde(default)]
-    pub client_secret: String,
-    #[serde(default = "default_authelia_callback_path")]
-    pub callback_path: String,
-    #[serde(default = "default_authelia_scopes")]
-    pub scopes: Vec<String>,
-}
-
-impl std::fmt::Debug for AutheliaConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AutheliaConfig")
-            .field("issuer_url", &self.issuer_url)
-            .field("client_id", &self.client_id)
-            .field("callback_path", &self.callback_path)
-            .field("scopes", &self.scopes)
-            .finish_non_exhaustive()
-    }
-}
-
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitHubConfig {
-    #[serde(default)]
-    pub client_id: String,
-    #[serde(default)]
-    pub client_secret: String,
-    #[serde(default = "default_github_callback_path")]
-    pub callback_path: String,
-    #[serde(default = "default_github_scopes")]
-    pub scopes: Vec<String>,
-}
-
-impl std::fmt::Debug for GitHubConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GitHubConfig")
-            .field("client_id", &self.client_id)
-            .field("callback_path", &self.callback_path)
-            .field("scopes", &self.scopes)
-            .finish_non_exhaustive()
     }
 }
 
@@ -395,22 +334,44 @@ impl AuthConfig {
             // (Task 10) hit axum's duplicate-route panic at startup instead of a
             // clean config-time error — check pairwise uniqueness among only the
             // providers that are actually configured.
+            //
+            // Compare the NORMALIZED path (leading `/` guaranteed), not the raw
+            // config string: `build_provider_redirect_uri` (state.rs) strips any
+            // leading `/` from `callback_path` and re-adds exactly one before
+            // mounting the route, so an operator-supplied path without a leading
+            // `/` (e.g. `authorize`) mounts as `/authorize` at startup even though
+            // it wouldn't textually match `/authorize` in `FIXED_ROUTE_PATHS` or
+            // another provider's raw `callback_path`. Normalizing here first keeps
+            // this check honest about what actually gets mounted.
             {
-                let mut configured_paths: Vec<(&str, &str)> = Vec::new();
+                fn normalize_callback_path(path: &str) -> String {
+                    format!("/{}", path.trim_start_matches('/'))
+                }
+
+                let mut configured_paths: Vec<(&str, String)> = Vec::new();
                 if google_configured {
-                    configured_paths.push(("google", self.google.callback_path.as_str()));
+                    configured_paths.push((
+                        "google",
+                        normalize_callback_path(&self.google.callback_path),
+                    ));
                 }
                 if authelia_configured {
-                    configured_paths.push(("authelia", self.authelia.callback_path.as_str()));
+                    configured_paths.push((
+                        "authelia",
+                        normalize_callback_path(&self.authelia.callback_path),
+                    ));
                 }
                 if github_configured {
-                    configured_paths.push(("github", self.github.callback_path.as_str()));
+                    configured_paths.push((
+                        "github",
+                        normalize_callback_path(&self.github.callback_path),
+                    ));
                 }
                 for i in 0..configured_paths.len() {
                     for j in (i + 1)..configured_paths.len() {
                         if configured_paths[i].1 == configured_paths[j].1 {
                             return Err(AuthError::Config(format!(
-                                "{prefix}_{a}_CALLBACK_PATH and {prefix}_{b}_CALLBACK_PATH must not both be `{path}`",
+                                "{prefix}_{a}_CALLBACK_PATH and {prefix}_{b}_CALLBACK_PATH must not both resolve to `{path}`",
                                 a = configured_paths[i].0.to_ascii_uppercase(),
                                 b = configured_paths[j].0.to_ascii_uppercase(),
                                 path = configured_paths[i].1,
@@ -421,9 +382,11 @@ impl AuthConfig {
                 // Same failure mode as above, but against this crate's own
                 // fixed routes rather than another provider's callback_path.
                 for (provider, path) in &configured_paths {
-                    if FIXED_ROUTE_PATHS.contains(path) || path.starts_with(WELL_KNOWN_PREFIX) {
+                    if FIXED_ROUTE_PATHS.contains(&path.as_str())
+                        || path.starts_with(WELL_KNOWN_PREFIX)
+                    {
                         return Err(AuthError::Config(format!(
-                            "{prefix}_{provider_upper}_CALLBACK_PATH must not be `{path}` — \
+                            "{prefix}_{provider_upper}_CALLBACK_PATH must not resolve to `{path}` — \
                              that path is reserved for this crate's own `{path}` route",
                             provider_upper = provider.to_ascii_uppercase(),
                         )));
@@ -747,39 +710,6 @@ fn home_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-fn default_callback_path() -> String {
-    DEFAULT_CALLBACK_PATH.to_string()
-}
-
-fn default_google_scopes() -> Vec<String> {
-    vec![
-        "openid".to_string(),
-        "email".to_string(),
-        "profile".to_string(),
-    ]
-}
-
-fn default_authelia_callback_path() -> String {
-    "/auth/authelia/callback".to_string()
-}
-
-fn default_authelia_scopes() -> Vec<String> {
-    vec![
-        "openid".to_string(),
-        "email".to_string(),
-        "profile".to_string(),
-        "offline_access".to_string(),
-    ]
-}
-
-fn default_github_callback_path() -> String {
-    "/auth/github/callback".to_string()
-}
-
-fn default_github_scopes() -> Vec<String> {
-    vec!["read:user".to_string(), "user:email".to_string()]
-}
-
 fn read_string(vars: &HashMap<String, String>, key: &str) -> Option<String> {
     vars.get(key).cloned()
 }
@@ -844,7 +774,35 @@ fn read_usize(vars: &HashMap<String, String>, key: &str) -> Result<Option<usize>
 
 #[cfg(test)]
 mod tests {
-    use super::{AuthConfig, AuthConfigBuilder, AuthMode, AuthModeConfig};
+    use super::{AuthConfig, AuthConfigBuilder, AuthMode, AuthModeConfig, AutheliaConfig};
+
+    /// Guards against a regression where `GoogleConfig`/`AutheliaConfig`/
+    /// `GitHubConfig` derived `Default` (giving `callback_path: String::new()`
+    /// instead of the `#[serde(default = "fn")]` value) made `validate()`'s
+    /// unconditional Google callback-path check reject ANY struct-literal
+    /// `AuthConfig` that configures only Authelia/GitHub and relies on
+    /// `..AuthConfig::default()` for the unused `google` field — a shape that
+    /// bypasses `AuthConfigBuilder` entirely (test fixtures, or a downstream
+    /// consumer constructing `AuthConfig` directly).
+    #[test]
+    fn validate_accepts_a_struct_literal_config_configuring_only_authelia() {
+        let cfg = AuthConfig {
+            mode: AuthMode::OAuth,
+            public_url: Some(url::Url::parse("https://lab.example.com").unwrap()),
+            admin_email: "admin@example.com".to_string(),
+            authelia: AutheliaConfig {
+                issuer_url: Some(url::Url::parse("https://auth.example.com").unwrap()),
+                client_id: "id".to_string(),
+                client_secret: "secret".to_string(),
+                ..AutheliaConfig::default()
+            },
+            default_provider: "authelia".to_string(),
+            ..AuthConfig::default()
+        };
+        cfg.validate().expect(
+            "google's untouched defaults must not block validation of an authelia-only config",
+        );
+    }
 
     #[test]
     fn bearer_mode_preserves_existing_http_token_behavior() {
@@ -975,7 +933,32 @@ mod tests {
         .unwrap_err();
         assert!(
             err.to_string()
-                .contains("must not both be `/auth/google/callback`")
+                .contains("must not both resolve to `/auth/google/callback`")
+        );
+    }
+
+    #[test]
+    fn oauth_mode_rejects_two_configured_providers_sharing_a_callback_path_missing_a_leading_slash()
+    {
+        // A `callback_path` without a leading `/` still mounts at the same
+        // normalized route as one that has it (build_provider_redirect_uri
+        // in state.rs prepends the missing `/`), so the collision check must
+        // catch this even though the raw strings don't textually match.
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GOOGLE_CLIENT_ID", "id"),
+            ("LAB_GOOGLE_CLIENT_SECRET", "secret"),
+            ("LAB_GITHUB_CLIENT_ID", "gh-id"),
+            ("LAB_GITHUB_CLIENT_SECRET", "gh-secret"),
+            ("LAB_GITHUB_CALLBACK_PATH", "auth/google/callback"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("must not both resolve to `/auth/google/callback`"),
+            "unexpected error: {err}"
         );
     }
 
@@ -991,7 +974,33 @@ mod tests {
         ]))
         .unwrap_err();
         assert!(
-            err.to_string().contains("must not be `/authorize`"),
+            err.to_string().contains("must not resolve to `/authorize`"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn oauth_mode_rejects_a_callback_path_colliding_with_a_fixed_crate_route_missing_a_leading_slash()
+     {
+        // Same as above but without the leading `/` on the operator-supplied
+        // value. Uses GitHub, not Google: Google's callback_path has its own
+        // unconditional "must start with `/`" check earlier in validate()
+        // (a different guard than the one under test here), so a Google
+        // fixture would never reach the collision-check normalization this
+        // test exists to cover. GitHub/Authelia have no such standalone
+        // check, so this is the only path that exercises it — the value
+        // still mounts at `/authorize` once state.rs builds the redirect URI.
+        let err = AuthConfig::from_sources(fake_env_with_many([
+            ("LAB_AUTH_MODE", "oauth"),
+            ("LAB_PUBLIC_URL", "https://lab.example.com"),
+            ("LAB_GITHUB_CLIENT_ID", "id"),
+            ("LAB_GITHUB_CLIENT_SECRET", "secret"),
+            ("LAB_GITHUB_CALLBACK_PATH", "authorize"),
+            ("LAB_AUTH_ADMIN_EMAIL", "admin@example.com"),
+        ]))
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("must not resolve to `/authorize`"),
             "unexpected error: {err}"
         );
     }
@@ -1012,7 +1021,7 @@ mod tests {
         .unwrap_err();
         assert!(
             err.to_string()
-                .contains("must not be `/.well-known/oauth-authorization-server`"),
+                .contains("must not resolve to `/.well-known/oauth-authorization-server`"),
             "unexpected error: {err}"
         );
     }

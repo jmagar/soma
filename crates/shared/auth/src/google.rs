@@ -428,7 +428,6 @@ mod tests {
     fn sample_request() -> AuthorizeUrlRequest {
         AuthorizeUrlRequest {
             state: "state-123".to_string(),
-            scope: "lab".to_string(),
             code_challenge: "challenge".to_string(),
             code_challenge_method: "S256".to_string(),
             force_consent: true,

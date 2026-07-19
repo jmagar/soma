@@ -43,7 +43,7 @@ This file is generated from `ENV_KEY_SPECS` and typed config defaults. Run `carg
 | `SOMA_MCP_GITHUB_CLIENT_SECRET` | unset | yes | - | - | GitHub OAuth App client secret. |
 | `SOMA_MCP_GITHUB_CALLBACK_PATH` | `/auth/github/callback` | no | - | - | GitHub callback path (default: `/auth/github/callback`). |
 | `SOMA_MCP_GITHUB_SCOPES` | `read:user,user:email` | no | - | - | Comma-separated GitHub scopes; must include `user:email` (default: `read:user,user:email`). |
-| `SOMA_MCP_AUTH_DEFAULT_PROVIDER` | automatic | no | - | - | Provider used when `provider` is omitted: `google`, `authelia`, or `github`; automatic priority is Google, Authelia, GitHub. |
+| `SOMA_MCP_AUTH_DEFAULT_PROVIDER` | `automatic` | no | - | - | Provider used when `provider` is omitted: `google`, `authelia`, or `github`; automatic priority is Google, Authelia, GitHub. |
 | `SOMA_MCP_AUTH_ADMIN_EMAIL` | unset | no | `mcp.auth.admin_email` | `CLAUDE_PLUGIN_OPTION_AUTH_ADMIN_EMAIL` | Initial/admin email allowed by the OAuth flow. |
 | `SOMA_MCP_HOST` | `127.0.0.1` | no | `mcp.host` | - | Bind host for HTTP transport. Set `0.0.0.0` only with bearer, OAuth, or trusted-gateway auth configured. |
 | `SOMA_MCP_SERVER_NAME` | `soma` | no | `mcp.server_name` | - | MCP server name advertised to clients. |

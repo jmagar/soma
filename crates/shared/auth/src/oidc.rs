@@ -13,6 +13,27 @@ use crate::oauth_provider::ProviderExchange;
 use crate::provider_http::{RequestErrors, RequestTrace, read_json_response};
 use crate::util::fingerprint;
 
+/// Which RFC 6749 §2.3.1 client-authentication method to use on the token
+/// endpoint (`exchange_code`/`refresh`).
+///
+/// Google's token endpoint accepts `client_secret` in the POST body
+/// regardless of how the client credential was provisioned, so Google keeps
+/// using [`Self::ClientSecretPost`] (this crate's original, pre-multi-provider
+/// behavior). Authelia's OIDC provider defaults confidential clients to
+/// `client_secret_basic` unless the operator explicitly sets
+/// `token_endpoint_auth_method: client_secret_post` on the client — sending
+/// `client_secret` in the body instead of the `Authorization` header would
+/// silently fail authentication against that (documented) default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TokenAuthMethod {
+    /// `client_id`/`client_secret` in the POST body (RFC 6749 §2.3.1,
+    /// "NOT RECOMMENDED" but widely supported; Google's default).
+    ClientSecretPost,
+    /// `client_id`/`client_secret` via HTTP Basic `Authorization` header
+    /// (RFC 6749 §2.3.1's default/recommended method; Authelia's default).
+    ClientSecretBasic,
+}
+
 const DEFAULT_JWKS_TTL: Duration = Duration::from_secs(60 * 60);
 /// Per-request timeout on the JWKS GET. Bound aggressively (5s) so a slow
 /// upstream JWKS endpoint cannot starve a tokio worker holding the JWKS
@@ -81,6 +102,8 @@ pub(crate) struct OidcVerifier {
     jwks_endpoint: Url,
     http: reqwest::Client,
     jwks_cache: Arc<RwLock<Option<CachedJwks>>>,
+    /// Token-endpoint client authentication method. See [`TokenAuthMethod`].
+    token_auth_method: TokenAuthMethod,
 }
 
 impl OidcVerifier {
@@ -97,6 +120,7 @@ impl OidcVerifier {
             jwks_endpoint,
             http,
             jwks_cache: Arc::new(RwLock::new(None)),
+            token_auth_method: TokenAuthMethod::ClientSecretPost,
         }
     }
 
@@ -108,11 +132,48 @@ impl OidcVerifier {
         self
     }
 
+    /// Override the token-endpoint client authentication method. Defaults to
+    /// [`TokenAuthMethod::ClientSecretPost`] (Google's behavior); Authelia
+    /// opts into [`TokenAuthMethod::ClientSecretBasic`].
+    #[must_use]
+    pub(crate) fn with_token_auth_method(mut self, method: TokenAuthMethod) -> Self {
+        self.token_auth_method = method;
+        self
+    }
+
     #[cfg(test)]
     #[must_use]
     pub(crate) fn with_jwks_endpoint(mut self, jwks_endpoint: Url) -> Self {
         self.jwks_endpoint = jwks_endpoint;
         self
+    }
+
+    /// Builds the token-endpoint POST request, applying `client_id`/
+    /// `client_secret` per [`Self::token_auth_method`]: appended to the form
+    /// body for [`TokenAuthMethod::ClientSecretPost`], or sent via the HTTP
+    /// `Authorization: Basic` header (and omitted from the body, per RFC
+    /// 6749 §3.2.1 — a client authenticated at the transport level does not
+    /// also repeat its credentials in the body) for
+    /// [`TokenAuthMethod::ClientSecretBasic`].
+    fn token_request<'a>(
+        &self,
+        http: &reqwest::Client,
+        token_endpoint: &Url,
+        client_id: &'a str,
+        client_secret: &'a str,
+        mut form: Vec<(&'a str, &'a str)>,
+    ) -> reqwest::RequestBuilder {
+        let mut request = http.post(token_endpoint.clone());
+        match self.token_auth_method {
+            TokenAuthMethod::ClientSecretPost => {
+                form.push(("client_id", client_id));
+                form.push(("client_secret", client_secret));
+            }
+            TokenAuthMethod::ClientSecretBasic => {
+                request = request.basic_auth(client_id, Some(client_secret));
+            }
+        }
+        request.form(&form)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -135,14 +196,18 @@ impl OidcVerifier {
         );
         let payload: OidcTokenResponse = read_json_response(
             trace,
-            http.post(token_endpoint.clone()).form(&[
-                ("grant_type", "authorization_code"),
-                ("code", code),
-                ("client_id", client_id),
-                ("client_secret", client_secret),
-                ("redirect_uri", redirect_uri.as_str()),
-                ("code_verifier", code_verifier),
-            ]),
+            self.token_request(
+                http,
+                token_endpoint,
+                client_id,
+                client_secret,
+                vec![
+                    ("grant_type", "authorization_code"),
+                    ("code", code),
+                    ("redirect_uri", redirect_uri.as_str()),
+                    ("code_verifier", code_verifier),
+                ],
+            ),
             RequestErrors::new(
                 self.provider_id,
                 format!("exchange {} auth code", self.provider_id),
@@ -171,12 +236,16 @@ impl OidcVerifier {
         );
         let payload: OidcTokenResponse = read_json_response(
             trace,
-            http.post(token_endpoint.clone()).form(&[
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-                ("client_id", client_id),
-                ("client_secret", client_secret),
-            ]),
+            self.token_request(
+                http,
+                token_endpoint,
+                client_id,
+                client_secret,
+                vec![
+                    ("grant_type", "refresh_token"),
+                    ("refresh_token", refresh_token),
+                ],
+            ),
             RequestErrors::new(
                 self.provider_id,
                 format!("refresh {} token", self.provider_id),
