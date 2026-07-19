@@ -53,6 +53,12 @@ pub enum UpdateError {
     ArtifactIdentityChanged { path: PathBuf },
     #[error("executable identity or mode changed after staging: {path}")]
     ExecutableIdentityChanged { path: PathBuf },
+    #[error("unsafe executable mode {mode:#06o} for {path}: {remediation}")]
+    UnsafeExecutableMode {
+        path: PathBuf,
+        mode: u32,
+        remediation: &'static str,
+    },
     #[error("staging failed for {path}: {operation}; cleanup also failed: {cleanup}")]
     ArtifactCleanupFailed {
         path: PathBuf,

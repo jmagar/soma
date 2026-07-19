@@ -41,7 +41,7 @@ async fn install_rehashes_validated_bytes_before_mutating_live_state() {
 }
 
 #[tokio::test]
-async fn install_restores_intended_mode_after_validator_changes_it() {
+async fn validation_rejects_a_candidate_that_changes_its_private_mode() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");
     let state = temp.path().join("update.json");
@@ -53,27 +53,19 @@ async fn install_restores_intended_mode_after_validator_changes_it() {
         UpdateLayout::new(&executable, &state),
         UpdatePolicy::default(),
     );
-    let artifact = validated(&updater, new, "2.0.0").await;
-    assert_eq!(
-        std::fs::metadata(artifact.path())
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777,
-        0o644
-    );
-
-    updater.install(artifact, "1.0.0").await.unwrap();
-
-    assert_eq!(
-        std::fs::metadata(&executable).unwrap().permissions().mode() & 0o777,
-        0o750
-    );
+    let directive = UpdateDirective::new("2.0.0", "/binary", digest(new)).unwrap();
+    let staged = updater.stage(&new[..], &directive).await.unwrap();
+    assert!(matches!(
+        updater.validate(staged).await,
+        Err(UpdateError::InvalidStagedArtifact { .. })
+    ));
+    assert_eq!(std::fs::read(&executable).unwrap(), old);
+    assert!(!state.exists());
 }
 
 #[tokio::test]
-async fn privileged_source_mode_is_applied_only_during_final_install() {
-    for intended_mode in [0o2755, 0o4755] {
+async fn supported_source_mode_is_applied_only_during_final_install() {
+    for intended_mode in [0o700, 0o750, 0o755] {
         let temp = tempdir().unwrap();
         let executable = temp.path().join("example");
         let state = temp.path().join("update.json");
@@ -223,10 +215,10 @@ async fn install_rejects_same_bytes_from_a_replaced_regular_inode() {
 }
 
 #[tokio::test]
-async fn copy_backup_and_rollback_preserve_restrictive_unix_modes() {
+async fn copy_backup_and_rollback_preserve_only_safe_unix_modes() {
     use std::os::unix::fs::PermissionsExt;
 
-    for mode in [0o700, 0o750] {
+    for mode in [0o700, 0o750, 0o755] {
         let temp = tempdir().unwrap();
         let executable = temp.path().join("example");
         let state = temp.path().join("update.json");
@@ -247,13 +239,17 @@ async fn copy_backup_and_rollback_preserve_restrictive_unix_modes() {
             serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
         let backup = std::path::Path::new(marker["backup"].as_str().unwrap());
         assert_eq!(
-            std::fs::metadata(backup).unwrap().permissions().mode() & 0o777,
+            std::fs::metadata(backup).unwrap().permissions().mode() & 0o7777,
             mode
+        );
+        assert_eq!(
+            std::fs::metadata(backup).unwrap().permissions().mode() & 0o7022,
+            0
         );
         updater.recover_on_startup("2.0.0").await.unwrap();
         updater.recover_on_startup("2.0.0").await.unwrap();
         assert_eq!(
-            std::fs::metadata(&executable).unwrap().permissions().mode() & 0o777,
+            std::fs::metadata(&executable).unwrap().permissions().mode() & 0o7777,
             mode
         );
     }
@@ -513,6 +509,7 @@ async fn install_rejects_executable_identity_change_after_staging() {
     );
     let artifact = validated(&updater, new, "2.0.0").await;
     std::fs::write(&replacement, other).unwrap();
+    std::fs::set_permissions(&replacement, std::fs::Permissions::from_mode(0o700)).unwrap();
     std::fs::rename(&replacement, &executable).unwrap();
 
     assert!(matches!(
