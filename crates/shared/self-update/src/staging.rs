@@ -9,6 +9,8 @@ use crate::{Result, UpdateDirective, UpdateError, Updater, reject_executable_lea
 use crate::transaction::path_validation::validate_distinct_paths;
 
 static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
+#[cfg(unix)]
+const VALIDATION_MODE: u32 = 0o700;
 
 /// A fully downloaded artifact whose digest matches its directive.
 #[derive(Debug)]
@@ -209,7 +211,7 @@ impl Updater {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                file.set_permissions(std::fs::Permissions::from_mode(intended_mode))
+                file.set_permissions(std::fs::Permissions::from_mode(VALIDATION_MODE))
                     .await
                     .map_err(|error| UpdateError::io(&path, error))?;
                 file.sync_all()

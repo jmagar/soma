@@ -220,7 +220,7 @@ fn staged_artifact_is_private_until_verified_under_permissive_umask() {
                     .permissions()
                     .mode()
                     & 0o777,
-                0o750
+                0o700
             );
         });
         return;
@@ -247,10 +247,10 @@ fn staged_artifact_is_private_until_verified_under_permissive_umask() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn staging_preserves_existing_executable_mode() {
+async fn staging_uses_private_validation_mode_independent_of_source() {
     use std::os::unix::fs::PermissionsExt;
 
-    for mode in [0o700, 0o750] {
+    for mode in [0o700, 0o750, 0o2755, 0o4755] {
         let temp = tempdir().unwrap();
         let executable = temp.path().join("example");
         std::fs::write(&executable, b"old").unwrap();
@@ -266,8 +266,8 @@ async fn staging_preserves_existing_executable_mode() {
                 .unwrap()
                 .permissions()
                 .mode()
-                & 0o777,
-            mode
+                & 0o7777,
+            0o700
         );
     }
 }

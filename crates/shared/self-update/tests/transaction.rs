@@ -71,6 +71,50 @@ async fn install_restores_intended_mode_after_validator_changes_it() {
     );
 }
 
+#[tokio::test]
+async fn privileged_source_mode_is_applied_only_during_final_install() {
+    for intended_mode in [0o2755, 0o4755] {
+        let temp = tempdir().unwrap();
+        let executable = temp.path().join("example");
+        let state = temp.path().join("update.json");
+        let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+        let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+        std::fs::write(&executable, old).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(intended_mode))
+            .unwrap();
+        let updater = Updater::new(
+            UpdateLayout::new(&executable, &state),
+            UpdatePolicy::default(),
+        );
+        let directive = UpdateDirective::new("2.0.0", "/binary", digest(new)).unwrap();
+        let staged = updater.stage(&new[..], &directive).await.unwrap();
+        assert_eq!(
+            std::fs::metadata(staged.path())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o700
+        );
+        let validated = updater.validate(staged).await.unwrap();
+        assert_eq!(
+            std::fs::metadata(validated.path())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o7777,
+            0o700
+        );
+
+        updater.install(validated, "1.0.0").await.unwrap();
+
+        assert_eq!(
+            std::fs::metadata(&executable).unwrap().permissions().mode() & 0o7777,
+            intended_mode
+        );
+    }
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn install_yields_the_async_executor_while_transaction_work_blocks() {
     use std::sync::Arc;

@@ -75,13 +75,15 @@ files are untouched. Calling startup recovery before each service loop therefore
 bounds crash leftovers across process restarts. Marker input is capped at 64
 KiB. Failed staging explicitly reports both the operation and cleanup error;
 automatic `Drop` cleanup is reserved as a best-effort cancellation fallback.
-On Unix each partial begins mode `0600` even under a permissive umask; only
-after the digest matches does staging apply the intended executable mode through
-the still-open partial descriptor. Staging resolves the executable once, rejects
-a symlink leaf, and reads its mode and device/inode identity through a no-follow
-descriptor. Installation revalidates that captured identity under the
-transaction locks, so replacing or retargeting the executable between staging
-and install cannot supply a stale permission mode.
+On Unix each partial begins mode `0600` even under a permissive umask; after the
+digest matches, staging changes it through the still-open descriptor to exact
+mode `0700` for validation. The named staged artifact never inherits setuid,
+setgid, group, or other permissions from the installed executable. Staging
+resolves the executable once, rejects a symlink leaf, and reads its intended
+full mode and device/inode identity through a no-follow descriptor. Installation
+revalidates that captured identity under the transaction locks, so replacing or
+retargeting the executable between staging and install cannot supply a stale
+permission mode.
 
 Installation acquires sorted, deduplicated advisory locks derived from both the
 canonical executable and state identities. The executable-derived lock is a
@@ -124,13 +126,17 @@ The transaction retains a unique rollback backup, records its actual owner in
 the marker, syncs the backup and its directory before the marker may reference
 it, then atomically renames the verified artifact. Copy destinations begin with
 the source executable mode before any bytes are written. Unix
-staging preserves the existing executable mode (falling back to restrictive
-`0700` only when no target exists). Installation restores that intended mode
-through the validated descriptor, syncs it, and rechecks identity and mode
-immediately before replacement, so validator-side permission changes cannot
-install a non-executable target. Copy-based rollback backups preserve the same
-mode. `BackupStrategy::Copy` is available when an adopter cannot use hard links
-or wants to exercise the copy path explicitly.
+staging records the existing executable mode (falling back to restrictive
+`0700` only when no target exists) separately from the staged file's validation
+mode. Installation applies the intended full mode, including any source setuid
+or setgid bits, through the validated descriptor only at the final locked install
+boundary, then syncs and rechecks identity and mode immediately before
+replacement. Validator-side permission changes therefore cannot install a
+non-executable or prematurely privileged target. Adopters that do not want to
+preserve special bits must remove them from the installed executable before
+staging. Copy-based rollback backups preserve the same mode.
+`BackupStrategy::Copy` is available when an adopter cannot use hard links or
+wants to exercise the copy path explicitly.
 A process crash at any marker, swap, or rollback boundary is completed or
 aborted idempotently by startup recovery. Each unconfirmed startup increments
 the marker only after hashing the installed executable against the verified
