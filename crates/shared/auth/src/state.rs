@@ -6,13 +6,16 @@ use std::time::Instant;
 
 use dashmap::DashMap;
 use tokio::sync::Mutex;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use url::Url;
 
+use crate::authelia::AutheliaProvider;
 use crate::config::{AuthConfig, AuthMode};
 use crate::error::AuthError;
+use crate::github::GitHubProvider;
 use crate::google::GoogleProvider;
 use crate::jwt::SigningKeys;
+use crate::oauth_provider::OAuthProvider;
 use crate::sqlite::SqliteStore;
 
 const RATE_LIMIT_RETRY_AFTER_MS: u64 = 60_000;
@@ -106,7 +109,8 @@ pub struct AuthState {
     pub config: Arc<AuthConfig>,
     pub store: SqliteStore,
     pub signing_keys: Arc<SigningKeys>,
-    pub google: Arc<GoogleProvider>,
+    pub providers: Arc<BTreeMap<String, Arc<dyn OAuthProvider>>>,
+    pub default_provider: String,
     allowed_resource_scopes: Arc<RwLock<BTreeMap<String, BTreeSet<String>>>>,
     authorize_limiter: PerIpRateLimiter,
     register_limiter: PerIpRateLimiter,
@@ -120,6 +124,16 @@ pub struct AuthState {
 
 impl AuthState {
     pub async fn new(config: AuthConfig) -> Result<Self, AuthError> {
+        // Run the full validator first — struct-literal callers (test
+        // fixtures, or a downstream consumer bypassing AuthConfigBuilder)
+        // otherwise skip every safety check `validate()` enforces (HTTPS-only
+        // Authelia issuer, callback-path collisions, GitHub scope
+        // requirements, etc.). `validate()` only asserts OAuth-mode-specific
+        // invariants when `mode == AuthMode::OAuth`, so the manual mode check
+        // immediately below is NOT redundant with it — it's the only thing
+        // that rejects a non-OAuth config reaching `AuthState::new` at all.
+        config.validate()?;
+
         if !matches!(config.mode, AuthMode::OAuth) {
             return Err(AuthError::Config(format!(
                 "AuthState requires {prefix}_AUTH_MODE=oauth",
@@ -133,34 +147,58 @@ impl AuthState {
                 prefix = config.env_prefix
             ))
         })?;
-        let redirect_uri = build_google_redirect_uri(&public_url, &config.google.callback_path);
         let store = SqliteStore::open(config.sqlite_path.clone()).await?;
         let signing_keys = SigningKeys::load_or_create(&config.key_path)?;
-        let mut google = GoogleProvider::new(
-            config.google.client_id.clone(),
-            config.google.client_secret.clone(),
-            redirect_uri,
-        )?;
-        google.scopes.clone_from(&config.google.scopes);
+        let providers = build_providers(&public_url, &config)?;
+        if !providers.contains_key(&config.default_provider) {
+            return Err(AuthError::Config(format!(
+                "{prefix}_AUTH_DEFAULT_PROVIDER `{provider}` is not a configured provider",
+                prefix = config.env_prefix,
+                provider = config.default_provider,
+            )));
+        }
         info!(
-            crate_name = "lab-auth",
+            crate_name = "soma-auth",
             env_prefix = %config.env_prefix,
             auth_mode = "oauth",
             public_url = %public_url,
-            google_redirect_uri = %google.redirect_uri,
+            configured_providers = ?providers.keys().collect::<Vec<_>>(),
+            default_provider = %config.default_provider,
             sqlite_path = %config.sqlite_path.display(),
             key_path = %config.key_path.display(),
-            google_scopes = ?config.google.scopes,
             "auth state initialized"
         );
+        // Security posture note (see this plan's Global Constraints): the
+        // email allowlist is a single flat list shared across every
+        // configured provider, and being on it grants full admin scope
+        // regardless of which provider authenticated the user. With 2+
+        // providers configured, the deployment's effective admin-gate
+        // strength is that of its weakest provider's identity-verification
+        // signal (GitHub's non-re-verified "primary && verified" email flag
+        // is weaker than Google/Authelia's live per-login ID-token claim).
+        // `admin_email` is always non-empty in OAuth mode (enforced by
+        // `AuthConfig::validate`), so this warning fires on every startup
+        // where it's relevant — never silently.
+        if providers.len() > 1 {
+            warn!(
+                crate_name = "soma-auth",
+                env_prefix = %config.env_prefix,
+                configured_providers = ?providers.keys().collect::<Vec<_>>(),
+                "multiple OAuth providers configured — the email allowlist is shared across all \
+                 of them, so admin access is only as strong as the weakest configured provider's \
+                 identity verification; see docs/AUTH.md"
+            );
+        }
 
         let authorize_limiter = PerIpRateLimiter::new(config.authorize_requests_per_minute);
         let register_limiter = PerIpRateLimiter::new(config.register_requests_per_minute);
+        let default_provider = config.default_provider.clone();
         Ok(Self {
             config: Arc::new(config),
             store,
             signing_keys: Arc::new(signing_keys),
-            google: Arc::new(google),
+            providers: Arc::new(providers),
+            default_provider,
             allowed_resource_scopes: Arc::new(RwLock::new(BTreeMap::new())),
             authorize_limiter,
             register_limiter,
@@ -286,20 +324,43 @@ impl AuthState {
         Ok(())
     }
 
+    /// Look up a specific configured provider by id. Returns
+    /// [`AuthError::Validation`] if `id` does not name a configured
+    /// provider — this is a request-shaped error (bad `?provider=` query
+    /// param, or a stale DB row naming a provider that has since been
+    /// unconfigured), not a server fault.
+    pub fn provider(&self, id: &str) -> Result<Arc<dyn OAuthProvider>, AuthError> {
+        self.providers
+            .get(id)
+            .cloned()
+            .ok_or_else(|| AuthError::Validation(format!("unknown oauth provider `{id}`")))
+    }
+
+    /// [`Self::provider`], falling back to [`Self::default_provider`] when
+    /// `id` is `None`.
+    pub fn provider_or_default(
+        &self,
+        id: Option<&str>,
+    ) -> Result<Arc<dyn OAuthProvider>, AuthError> {
+        self.provider(id.unwrap_or(self.default_provider.as_str()))
+    }
+
     #[cfg(test)]
     pub fn for_tests(
         config: AuthConfig,
         store: SqliteStore,
         signing_keys: SigningKeys,
-        google: GoogleProvider,
+        providers: BTreeMap<String, Arc<dyn OAuthProvider>>,
     ) -> Self {
         let authorize_limiter = PerIpRateLimiter::new(config.authorize_requests_per_minute);
         let register_limiter = PerIpRateLimiter::new(config.register_requests_per_minute);
+        let default_provider = config.default_provider.clone();
         Self {
             config: Arc::new(config),
             store,
             signing_keys: Arc::new(signing_keys),
-            google: Arc::new(google),
+            providers: Arc::new(providers),
+            default_provider,
             allowed_resource_scopes: Arc::new(RwLock::new(BTreeMap::new())),
             authorize_limiter,
             register_limiter,
@@ -307,9 +368,74 @@ impl AuthState {
             cimd_cache: Arc::new(crate::cimd::document::DocumentCache::new()),
         }
     }
+
+    #[cfg(test)]
+    pub fn google_only_providers(
+        google: GoogleProvider,
+    ) -> BTreeMap<String, Arc<dyn OAuthProvider>> {
+        let mut providers: BTreeMap<String, Arc<dyn OAuthProvider>> = BTreeMap::new();
+        providers.insert("google".to_string(), Arc::new(google));
+        providers
+    }
 }
 
-fn build_google_redirect_uri(public_url: &Url, callback_path: &str) -> Url {
+fn build_providers(
+    public_url: &Url,
+    config: &AuthConfig,
+) -> Result<BTreeMap<String, Arc<dyn OAuthProvider>>, AuthError> {
+    let mut providers: BTreeMap<String, Arc<dyn OAuthProvider>> = BTreeMap::new();
+
+    if !config.google.client_id.is_empty() {
+        let redirect_uri = build_provider_redirect_uri(public_url, &config.google.callback_path);
+        let mut google = GoogleProvider::new(
+            config.google.client_id.clone(),
+            config.google.client_secret.clone(),
+            redirect_uri,
+        )?;
+        google.scopes.clone_from(&config.google.scopes);
+        providers.insert("google".to_string(), Arc::new(google));
+    }
+
+    if !config.authelia.client_id.is_empty() {
+        let issuer = config.authelia.issuer_url.clone().ok_or_else(|| {
+            AuthError::Config(format!(
+                "{}_AUTHELIA_ISSUER_URL is required when {}_AUTHELIA_CLIENT_ID is set",
+                config.env_prefix, config.env_prefix
+            ))
+        })?;
+        let redirect_uri = build_provider_redirect_uri(public_url, &config.authelia.callback_path);
+        let mut authelia = AutheliaProvider::new(
+            issuer,
+            config.authelia.client_id.clone(),
+            config.authelia.client_secret.clone(),
+            redirect_uri,
+        )?;
+        authelia.scopes.clone_from(&config.authelia.scopes);
+        providers.insert("authelia".to_string(), Arc::new(authelia));
+    }
+
+    if !config.github.client_id.is_empty() {
+        let redirect_uri = build_provider_redirect_uri(public_url, &config.github.callback_path);
+        let mut github = GitHubProvider::new(
+            config.github.client_id.clone(),
+            config.github.client_secret.clone(),
+            redirect_uri,
+        )?;
+        github.scopes.clone_from(&config.github.scopes);
+        providers.insert("github".to_string(), Arc::new(github));
+    }
+
+    if providers.is_empty() {
+        return Err(AuthError::Config(format!(
+            "at least one OAuth provider must be configured when {}_AUTH_MODE=oauth",
+            config.env_prefix
+        )));
+    }
+
+    Ok(providers)
+}
+
+fn build_provider_redirect_uri(public_url: &Url, callback_path: &str) -> Url {
     let mut redirect_uri = public_url.clone();
     let base_path = redirect_uri.path().trim_end_matches('/');
     let callback_path = callback_path.trim_start_matches('/');
@@ -332,7 +458,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::config::GoogleConfig;
+    use crate::config::{GitHubConfig, GoogleConfig};
     use crate::util::now_unix;
 
     /// Builds a minimal `AuthState` for unit-testing `resolve_allowed_emails`.
@@ -362,10 +488,75 @@ mod tests {
             register_requests_per_minute: 10,
             authorize_requests_per_minute: 20,
             max_pending_oauth_states: 1024,
+            default_provider: "google".to_string(),
             ..AuthConfig::default()
         })
         .await
         .expect("auth state")
+    }
+
+    /// `build_providers` hand-writes each provider's map key (e.g.
+    /// `"google".to_string()`) as a string literal, independently of
+    /// `OAuthProvider::provider_id()` on the value stored under that key —
+    /// two never-cross-checked sources of truth for the same fact. Assert
+    /// they actually agree for a multi-provider deployment.
+    #[tokio::test]
+    async fn provider_map_keys_match_each_providers_provider_id() {
+        let dir = tempdir().expect("tempdir");
+        let state = AuthState::new(AuthConfig {
+            mode: AuthMode::OAuth,
+            public_url: Some(Url::parse("https://lab.example.com").expect("url")),
+            sqlite_path: dir.path().join("auth.db"),
+            key_path: dir.path().join("auth.pem"),
+            bootstrap_secret: None,
+            allowed_client_redirect_uris: Vec::new(),
+            admin_email: "admin@example.com".to_string(),
+            google: GoogleConfig {
+                client_id: "client-id".to_string(),
+                client_secret: "client-secret".to_string(),
+                callback_path: "/auth/google/callback".to_string(),
+                scopes: vec![
+                    "openid".to_string(),
+                    "email".to_string(),
+                    "profile".to_string(),
+                ],
+            },
+            github: GitHubConfig {
+                client_id: "gh-client".to_string(),
+                client_secret: "gh-secret".to_string(),
+                callback_path: "/auth/github/callback".to_string(),
+                scopes: vec!["read:user".to_string(), "user:email".to_string()],
+            },
+            access_token_ttl: Duration::from_secs(3600),
+            refresh_token_ttl: Duration::from_secs(3600),
+            auth_code_ttl: Duration::from_secs(300),
+            register_requests_per_minute: 10,
+            authorize_requests_per_minute: 20,
+            max_pending_oauth_states: 1024,
+            default_provider: "google".to_string(),
+            ..AuthConfig::default()
+        })
+        .await
+        .expect("auth state");
+
+        assert_eq!(
+            state.providers.len(),
+            2,
+            "expected both configured providers: {:?}",
+            state.providers.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            state
+                .providers
+                .iter()
+                .all(|(key, provider)| key.as_str() == provider.provider_id()),
+            "provider map key must match provider_id() for every entry: {:?}",
+            state
+                .providers
+                .iter()
+                .map(|(key, provider)| (key.clone(), provider.provider_id()))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[tokio::test]
@@ -442,14 +633,15 @@ mod tests {
             register_requests_per_minute: 10,
             authorize_requests_per_minute: 20,
             max_pending_oauth_states: 1024,
+            default_provider: "google".to_string(),
             ..AuthConfig::default()
         })
         .await
         .expect("auth state");
 
         assert_eq!(
-            state.google.redirect_uri.as_str(),
-            "https://lab.example.com/gateway/auth/google/callback"
+            state.provider("google").unwrap().callback_path(),
+            "/gateway/auth/google/callback"
         );
     }
 }
