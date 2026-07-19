@@ -3,12 +3,20 @@ use soma_self_update::{
     UpdatePolicy, Updater,
 };
 
-#[test]
-fn public_contract_is_constructible_without_product_types() {
-    let executable = std::path::Path::new("opt/example/bin/example");
-    let state_file = std::path::Path::new("opt/example/state/update.json");
+#[tokio::test]
+async fn public_contract_is_constructible_without_product_types() {
     let construction_dir = std::env::current_dir().unwrap();
-    let layout = UpdateLayout::new(executable, state_file);
+    let fixture = tempfile::Builder::new()
+        .prefix("self-update-public-api-")
+        .tempdir_in(&construction_dir)
+        .unwrap();
+    let relative = fixture.path().strip_prefix(&construction_dir).unwrap();
+    let executable = relative.join("bin/example");
+    let state_file = relative.join("state/update.json");
+    std::fs::create_dir_all(construction_dir.join(executable.parent().unwrap())).unwrap();
+    std::fs::create_dir_all(construction_dir.join(state_file.parent().unwrap())).unwrap();
+    std::fs::write(construction_dir.join(&executable), b"old").unwrap();
+    let layout = UpdateLayout::new(&executable, &state_file);
     let updater = Updater::new(layout, UpdatePolicy::default());
     let directive = UpdateDirective::new(
         "1.2.3",
@@ -25,16 +33,22 @@ fn public_contract_is_constructible_without_product_types() {
         RecoveryAction::NoPendingUpdate,
         RecoveryAction::NoPendingUpdate
     ));
+    updater
+        .stage(&[][..], &directive)
+        .await
+        .unwrap()
+        .cleanup()
+        .unwrap();
     let migrated = MigrationOutcome::MigratedIndeterminate {
         updater,
         diagnostic: "directory sync must be retried".into(),
     };
     assert_eq!(
         migrated.updater().layout().state_file(),
-        construction_dir.join(state_file)
+        construction_dir.join(&state_file)
     );
     assert_eq!(
         migrated.into_updater().layout().executable(),
-        construction_dir.join(executable)
+        construction_dir.join(&executable)
     );
 }

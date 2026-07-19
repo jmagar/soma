@@ -141,6 +141,8 @@ fn non_utf8_alias_check_is_side_effect_free() {
 
 #[test]
 fn filesystem_identical_parent_metadata_is_recognized() {
+    use super::super::path_validation::metadata_identity_matches;
+
     let temp = tempdir().unwrap();
     let other = temp.path().join("other");
     std::fs::create_dir(&other).unwrap();

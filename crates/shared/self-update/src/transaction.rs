@@ -19,6 +19,8 @@ mod marker;
 mod migration;
 #[path = "transaction_outcome.rs"]
 mod outcome;
+#[path = "transaction_paths.rs"]
+pub(crate) mod path_validation;
 #[path = "transaction_pre_swap.rs"]
 mod pre_swap;
 #[path = "transaction_io.rs"]
@@ -74,6 +76,7 @@ impl Updater {
         let validated_path = pre_swap::validated_artifact_path(&paths.executable, &validated)?;
         let _locks = self.transaction_locks(&paths)?;
         let (executable, state) = (paths.executable, paths.state);
+        validated.revalidate_source_executable(&executable)?;
         let target = validated.target_version().to_owned();
         let backup = unique_backup(&executable);
         let marker_temp = suffix_path(&state, ".tmp");

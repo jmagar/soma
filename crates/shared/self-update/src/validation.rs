@@ -52,6 +52,11 @@ impl ValidatedArtifact {
     pub(crate) fn intended_mode(&self) -> u32 {
         self.staged.intended_mode
     }
+
+    #[cfg(unix)]
+    pub(crate) fn revalidate_source_executable(&self, path: &std::path::Path) -> Result<()> {
+        self.staged.revalidate_source_executable(path)
+    }
 }
 
 impl Updater {

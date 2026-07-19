@@ -51,6 +51,8 @@ pub enum UpdateError {
     InvalidStagedArtifact { path: PathBuf },
     #[error("staged artifact identity changed after validation: {path}")]
     ArtifactIdentityChanged { path: PathBuf },
+    #[error("executable identity or mode changed after staging: {path}")]
+    ExecutableIdentityChanged { path: PathBuf },
     #[error("staging failed for {path}: {operation}; cleanup also failed: {cleanup}")]
     ArtifactCleanupFailed {
         path: PathBuf,

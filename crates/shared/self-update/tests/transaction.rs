@@ -454,6 +454,59 @@ async fn install_rejects_stage_after_executable_parent_symlink_retarget() {
 }
 
 #[tokio::test]
+async fn install_rejects_executable_identity_change_after_staging() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let replacement = temp.path().join("replacement");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let other = b"#!/bin/sh\necho 'example 1.0.1'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+    std::fs::write(&replacement, other).unwrap();
+    std::fs::rename(&replacement, &executable).unwrap();
+
+    assert!(matches!(
+        updater.install(artifact, "1.0.0").await,
+        Err(UpdateError::ExecutableIdentityChanged { .. })
+    ));
+    assert_eq!(std::fs::read(&executable).unwrap(), other);
+    assert!(!state.exists());
+}
+
+#[tokio::test]
+async fn install_rejects_executable_mode_change_after_staging() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("example");
+    let state = temp.path().join("update.json");
+    let old = b"#!/bin/sh\necho 'example 1.0.0'\n";
+    let new = b"#!/bin/sh\necho 'example 2.0.0'\n";
+    std::fs::write(&executable, old).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+    let artifact = validated(&updater, new, "2.0.0").await;
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(matches!(
+        updater.install(artifact, "1.0.0").await,
+        Err(UpdateError::ExecutableIdentityChanged { .. })
+    ));
+    assert_eq!(
+        std::fs::metadata(&executable).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert!(!state.exists());
+}
+
+#[tokio::test]
 async fn oversized_markers_fail_bounded_and_remain_for_diagnosis() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");
@@ -969,14 +1022,32 @@ async fn layout_collisions_are_rejected_before_filesystem_mutation() {
             UpdateLayout::new(&executable, &state),
             UpdatePolicy::default(),
         );
-        let artifact = validated(&updater, update, "2.0.0").await;
+        let directive = UpdateDirective::new("2.0.0", "/binary", digest(update)).unwrap();
         assert!(matches!(
-            updater.install(artifact, "1.0.0").await,
+            updater.stage(&update[..], &directive).await,
             Err(UpdateError::InvalidLayout { .. })
         ));
         assert_eq!(std::fs::read(&executable).unwrap(), original);
         assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
     }
+}
+
+#[tokio::test]
+async fn casefolded_authority_alias_is_rejected_before_filesystem_mutation() {
+    let temp = tempdir().unwrap();
+    let executable = temp.path().join("agent");
+    let state = temp.path().join(".AGENT.UPDATE.AUTHORITY");
+    std::fs::write(&executable, b"old").unwrap();
+    let updater = Updater::new(
+        UpdateLayout::new(&executable, &state),
+        UpdatePolicy::default(),
+    );
+
+    assert!(matches!(
+        updater.recover_on_startup("1").await,
+        Err(UpdateError::InvalidLayout { .. })
+    ));
+    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 1);
 }
 
 #[tokio::test]

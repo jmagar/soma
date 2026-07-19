@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{Marker, MarkerPhase, hash_file, sync_parent};
+use super::{Marker, MarkerPhase, hash_file, path_validation::paths_may_alias, sync_parent};
 use crate::{Result, UpdateError};
 
 pub(super) fn validate_backup_candidate(
@@ -16,15 +16,7 @@ pub(super) fn validate_backup_candidate(
         .chain(locks.iter().map(std::path::PathBuf::as_path))
         .chain([marker_temp, staged])
     {
-        let collides = backup == protected
-            || match (
-                std::fs::canonicalize(backup),
-                std::fs::canonicalize(protected),
-            ) {
-                (Ok(backup), Ok(protected)) => backup == protected,
-                _ => false,
-            };
-        if collides {
+        if paths_may_alias(backup, protected) {
             return Err(UpdateError::InvalidLayout {
                 first: backup.to_path_buf(),
                 second: protected.to_path_buf(),

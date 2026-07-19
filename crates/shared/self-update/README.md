@@ -76,7 +76,12 @@ bounds crash leftovers across process restarts. Marker input is capped at 64
 KiB. Failed staging explicitly reports both the operation and cleanup error;
 automatic `Drop` cleanup is reserved as a best-effort cancellation fallback.
 On Unix each partial begins mode `0600` even under a permissive umask; only
-after the digest matches does staging apply the intended executable mode.
+after the digest matches does staging apply the intended executable mode through
+the still-open partial descriptor. Staging resolves the executable once, rejects
+a symlink leaf, and reads its mode and device/inode identity through a no-follow
+descriptor. Installation revalidates that captured identity under the
+transaction locks, so replacing or retargeting the executable between staging
+and install cannot supply a stale permission mode.
 
 Installation acquires sorted, deduplicated advisory locks derived from both the
 canonical executable and state identities. The executable-derived lock is a
@@ -105,8 +110,12 @@ Serialized state is capped at the same 64 KiB limit on both writes and reads.
 Before backup creation or executable replacement, installation preflights the
 largest reachable phase and attempt-count representation so later recovery
 writes cannot outgrow that cap. Generated rollback paths are
-checked against executable, state, lock, marker-temporary, and staged identities
-before the backup is created.
+checked with the same filesystem-alias-aware predicate used by layout and
+migration validation before the backup is created. Primary layout validation
+likewise rejects aliases among the executable, state, marker temporary,
+authority, authority temporary, executable lock, and state lock before any lock
+or authority file is created; each generated staging path is added to that
+namespace before its partial file is created.
 The advisory lock is also created mode `0600`, opened no-follow/nonblocking,
 and descriptor-validated as a current-effective-user-owned regular file. An
 owned legacy lock with broader permissions or special bits is repaired to exact

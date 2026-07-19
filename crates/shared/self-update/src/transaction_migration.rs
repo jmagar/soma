@@ -5,6 +5,9 @@ use super::authority::{
     AuthorityWriteOutcome, read_state_authority_unconfirmed, rewrite_state_authority,
 };
 use super::transaction_io::{suffix_path, sync_parent};
+use super::path_validation::paths_may_alias;
+#[cfg(test)]
+use super::path_validation::unresolved_leaves_may_alias;
 use crate::{MigrationOutcome, Result, UpdateError, UpdateLayout, Updater, bind_state_identity};
 
 impl Updater {
@@ -135,90 +138,6 @@ fn validate_marker_namespace(
         }
     }
     Ok(())
-}
-
-fn paths_may_alias(first: &Path, second: &Path) -> bool {
-    if first == second {
-        return true;
-    }
-
-    if let (Ok(first_metadata), Ok(second_metadata)) =
-        (std::fs::metadata(first), std::fs::metadata(second))
-    {
-        use std::os::unix::fs::MetadataExt;
-        if first_metadata.dev() == second_metadata.dev()
-            && first_metadata.ino() == second_metadata.ino()
-        {
-            return true;
-        }
-    }
-
-    let same_canonical_path = match (
-        std::fs::canonicalize(first),
-        std::fs::canonicalize(second),
-    ) {
-        (Ok(first_canonical), Ok(second_canonical)) => first_canonical == second_canonical,
-        _ => false,
-    };
-    if same_canonical_path {
-        return true;
-    }
-
-    unresolved_leaves_may_alias(first, second)
-}
-
-fn unresolved_leaves_may_alias(first: &Path, second: &Path) -> bool {
-    use std::os::unix::ffi::OsStrExt;
-
-    let (Some(first_parent), Some(second_parent), Some(first_leaf), Some(second_leaf)) = (
-        first.parent(),
-        second.parent(),
-        first.file_name(),
-        second.file_name(),
-    ) else {
-        return false;
-    };
-    if !parents_share_identity(first_parent, second_parent) {
-        return false;
-    }
-
-    let first_bytes = first_leaf.as_bytes();
-    let second_bytes = second_leaf.as_bytes();
-    if first_bytes == second_bytes {
-        return true;
-    }
-    if first_bytes.is_ascii() && second_bytes.is_ascii() {
-        return first_bytes.eq_ignore_ascii_case(second_bytes);
-    }
-
-    // Portable normalization and full case-fold behavior varies by filesystem.
-    // Refuse differing non-ASCII or invalid UTF-8 leaves rather than probing the
-    // directory and creating a lock before their identity is known.
-    true
-}
-
-fn parents_share_identity(first: &Path, second: &Path) -> bool {
-    let same_canonical_path = match (
-        std::fs::canonicalize(first),
-        std::fs::canonicalize(second),
-    ) {
-        (Ok(first), Ok(second)) => first == second,
-        _ => false,
-    };
-    if same_canonical_path {
-        return true;
-    }
-
-    match (std::fs::metadata(first), std::fs::metadata(second)) {
-        (Ok(first), Ok(second)) => metadata_identity_matches(&first, &second),
-        _ => false,
-    }
-}
-
-fn metadata_identity_matches(first: &std::fs::Metadata, second: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-
-    first.dev() == second.dev() && first.ino() == second.ino()
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]

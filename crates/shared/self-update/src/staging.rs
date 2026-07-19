@@ -5,6 +5,8 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
 use crate::{Result, UpdateDirective, UpdateError, Updater, reject_executable_leaf_symlink};
+#[cfg(unix)]
+use crate::transaction::path_validation::validate_distinct_paths;
 
 static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -18,6 +20,19 @@ pub struct StagedArtifact {
     cleanup_on_drop: bool,
     #[cfg(unix)]
     pub(crate) intended_mode: u32,
+    #[cfg(unix)]
+    source_identity: ExecutableIdentity,
+}
+
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExecutableIdentity {
+    Present {
+        device: u64,
+        inode: u64,
+        mode: u32,
+    },
+    Absent,
 }
 
 impl StagedArtifact {
@@ -32,6 +47,17 @@ impl StagedArtifact {
     }
     pub fn bytes_written(&self) -> u64 {
         self.bytes_written
+    }
+
+    #[cfg(unix)]
+    pub(crate) fn revalidate_source_executable(&self, path: &Path) -> Result<()> {
+        let (_, current) = executable_mode_and_identity(path)?;
+        if current != self.source_identity {
+            return Err(UpdateError::ExecutableIdentityChanged {
+                path: path.to_path_buf(),
+            });
+        }
+        Ok(())
     }
 
     /// Explicitly removes the staged file and reports cleanup failures.
@@ -114,18 +140,17 @@ impl Updater {
     {
         self.ensure_layout_bound()?;
         reject_executable_leaf_symlink(self.layout().executable())?;
-        let configured_directory = self
-            .layout()
-            .executable()
+        #[cfg(unix)]
+        let layout = self.validated_layout()?;
+        #[cfg(unix)]
+        let resolved_executable = &layout.executable;
+        #[cfg(not(unix))]
+        let resolved_executable = self.layout().executable();
+        let directory = resolved_executable
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
-        let directory = tokio::fs::canonicalize(configured_directory)
-            .await
-            .map_err(|error| UpdateError::io(configured_directory, error))?;
-        let name = self
-            .layout()
-            .executable()
+        let name = resolved_executable
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or("executable");
@@ -135,14 +160,13 @@ impl Updater {
             STAGING_COUNTER.fetch_add(1, Ordering::Relaxed)
         ));
         #[cfg(unix)]
-        let intended_mode = {
-            use std::os::unix::fs::PermissionsExt;
-            match tokio::fs::metadata(self.layout().executable()).await {
-                Ok(metadata) => metadata.permissions().mode() & 0o7777,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0o700,
-                Err(error) => return Err(UpdateError::io(self.layout().executable(), error)),
-            }
-        };
+        let (intended_mode, source_identity) = executable_mode_and_identity(resolved_executable)?;
+        #[cfg(unix)]
+        {
+            let mut namespace = layout.protected.clone();
+            namespace.push(path.clone());
+            validate_distinct_paths(&namespace)?;
+        }
         let (mut file, mut cleanup) = create_partial(&path).await?;
         let result: Result<(u64, String)> = async {
             let mut buffer = [0_u8; 64 * 1024];
@@ -185,7 +209,7 @@ impl Updater {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                tokio::fs::set_permissions(&path, std::fs::Permissions::from_mode(intended_mode))
+                file.set_permissions(std::fs::Permissions::from_mode(intended_mode))
                     .await
                     .map_err(|error| UpdateError::io(&path, error))?;
                 file.sync_all()
@@ -211,8 +235,44 @@ impl Updater {
             cleanup_on_drop: true,
             #[cfg(unix)]
             intended_mode,
+            #[cfg(unix)]
+            source_identity,
         })
     }
+}
+
+#[cfg(unix)]
+fn executable_mode_and_identity(path: &Path) -> Result<(u32, ExecutableIdentity)> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
+        .open(path)
+    {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((0o700, ExecutableIdentity::Absent));
+        }
+        Err(error) => return Err(UpdateError::io(path, error)),
+    };
+    let metadata = file
+        .metadata()
+        .map_err(|error| UpdateError::io(path, error))?;
+    if !metadata.file_type().is_file() {
+        return Err(UpdateError::InvalidPolicy(
+            "executable path must be a regular file",
+        ));
+    }
+    let mode = metadata.permissions().mode() & 0o7777;
+    Ok((
+        mode,
+        ExecutableIdentity::Present {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            mode,
+        },
+    ))
 }
 
 fn encode_hex(bytes: &[u8]) -> String {

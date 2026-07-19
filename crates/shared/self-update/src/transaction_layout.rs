@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use fs2::FileExt;
 
 use super::authority::{authority_paths, ensure_state_authority};
+use super::path_validation::validate_distinct_paths;
 use super::transaction_io::{path_identity, suffix_path};
 use crate::{Result, UpdateError, Updater, bind_state_identity, reject_executable_leaf_symlink};
 
@@ -18,11 +19,11 @@ impl Drop for TransactionLock {
     }
 }
 
-pub(super) struct LayoutPaths {
-    pub(super) executable: PathBuf,
+pub(crate) struct LayoutPaths {
+    pub(crate) executable: PathBuf,
     pub(super) state: PathBuf,
     pub(super) locks: Vec<PathBuf>,
-    pub(super) protected: Vec<PathBuf>,
+    pub(crate) protected: Vec<PathBuf>,
     pub(super) executable_lock: PathBuf,
     pub(super) authority: PathBuf,
     pub(super) authority_temp: PathBuf,
@@ -101,7 +102,7 @@ impl Updater {
             .collect()
     }
 
-    pub(super) fn validated_layout(&self) -> Result<LayoutPaths> {
+    pub(crate) fn validated_layout(&self) -> Result<LayoutPaths> {
         self.ensure_layout_bound()?;
         reject_executable_leaf_symlink(self.layout().executable())?;
         let executable = path_identity(self.layout().executable())?;
@@ -109,26 +110,19 @@ impl Updater {
             .map_err(|error| UpdateError::io(self.layout().state_file(), error))?;
         let executable_lock = executable_lock_path(&executable)?;
         let (authority, authority_temp) = authority_paths(&executable)?;
+        let state_temp = suffix_path(&state, ".tmp");
         let mut locks = vec![executable_lock.clone(), suffix_path(&state, ".lock")];
         locks.sort();
         locks.dedup();
         let mut protected = vec![
             executable.clone(),
             state.clone(),
+            state_temp,
             authority.clone(),
             authority_temp.clone(),
         ];
         protected.extend(locks.iter().cloned());
-        for (index, first) in protected.iter().enumerate() {
-            for second in &protected[index + 1..] {
-                if first == second {
-                    return Err(UpdateError::InvalidLayout {
-                        first: first.clone(),
-                        second: second.clone(),
-                    });
-                }
-            }
-        }
+        validate_distinct_paths(&protected)?;
         Ok(LayoutPaths {
             executable,
             state,
