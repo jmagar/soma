@@ -6,8 +6,11 @@ use crate::{MigrationOutcome, RecoveryAction, Result, UpdateError, Updater, Vali
 impl Updater {
     /// Moves this executable's durable state authority to a new idle marker path.
     ///
-    /// Migration refuses to run while any marker, marker temporary, staged
-    /// artifact, or rollback artifact exists. Both success variants carry the
+    /// An initial migration refuses to run while any marker, marker temporary,
+    /// staged artifact, or rollback artifact exists. Once authority already
+    /// names the destination, a retry only confirms the directory boundary and
+    /// does not reject transaction state created through the returned updater.
+    /// Both success variants carry the
     /// updater bound to the new state path; callers must retain it even when the
     /// authority rename's directory sync is reported as indeterminate. Retrying
     /// the same migration is idempotent.

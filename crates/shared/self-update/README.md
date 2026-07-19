@@ -162,7 +162,12 @@ authority. The method acquires the executable lock and both old and new state
 locks in sorted order, verifies the current authority, and atomically rewrites
 the sidecar. Before creating any lock or authority file, it rejects collisions
 between either marker/marker-temporary namespace and every old/new lock,
-authority, and authority-temporary path. It also refuses migration while either
+authority, and authority-temporary path. Existing paths are compared by
+filesystem identity and canonical path. Because destination leaves can be
+absent, case-fold-equivalent path names are conservatively treated as aliases;
+this can reject case-only distinct names on a case-sensitive filesystem, but
+keeps validation side-effect-free and safe for case-insensitive mounts. It also
+refuses an initial migration while either
 marker path, either marker temporary, or any exact staged/rollback recovery
 artifact exists. This makes pending and indeterminate transactions explicit
 operator work instead of silently orphaning recovery state.
@@ -172,6 +177,9 @@ that new updater when the authority rename succeeded but directory sync failed;
 callers must retain it and log the diagnostic rather than returning to the old
 state path. `MigrationOutcome::into_updater` handles both variants safely.
 Retrying the same migration is idempotent and confirms the directory boundary.
+Once authority already names the destination, the retry does not reapply the
+pre-migration cleanliness checks, so a transaction safely started with the
+returned updater is not disturbed.
 
 The public install, startup-recovery, and confirmation methods are async for
 service integration, but their synchronous hashing, copying, advisory locking,

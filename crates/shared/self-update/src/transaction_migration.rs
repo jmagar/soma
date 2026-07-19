@@ -48,6 +48,15 @@ impl Updater {
             }
             None => AuthorityState::Absent,
         };
+        if authority_state == AuthorityState::Migrated {
+            return Ok(match sync_parent(&old.authority) {
+                Ok(()) => MigrationOutcome::Migrated { updater: migrated },
+                Err(error) => MigrationOutcome::MigratedIndeterminate {
+                    updater: migrated,
+                    diagnostic: error.to_string(),
+                },
+            });
+        }
         ensure_absent(&old.state, "the current transaction marker exists")?;
         ensure_absent(
             &suffix_path(&old.state, ".tmp"),
@@ -59,15 +68,6 @@ impl Updater {
             "the destination marker temporary file exists",
         )?;
         ensure_no_recovery_artifacts(&old.executable)?;
-        if authority_state == AuthorityState::Migrated {
-            return Ok(match sync_parent(&old.authority) {
-                Ok(()) => MigrationOutcome::Migrated { updater: migrated },
-                Err(error) => MigrationOutcome::MigratedIndeterminate {
-                    updater: migrated,
-                    diagnostic: error.to_string(),
-                },
-            });
-        }
         if authority_state == AuthorityState::Current {
             sync_parent(&old.authority)?;
         }
@@ -121,7 +121,7 @@ fn validate_marker_namespace(
             .map(PathBuf::as_path)
             .chain(std::iter::once(protected_temp.as_path()))
         {
-            if marker == protected {
+            if paths_may_alias(marker, protected) {
                 let matching_namespace = allow_matching_marker_namespace
                     && ((marker == &marker_layout.state && protected == protected_layout.state)
                         || (marker == &marker_temp && protected == protected_temp));
@@ -135,6 +135,50 @@ fn validate_marker_namespace(
         }
     }
     Ok(())
+}
+
+fn paths_may_alias(first: &Path, second: &Path) -> bool {
+    if first == second {
+        return true;
+    }
+
+    if let (Ok(first_metadata), Ok(second_metadata)) =
+        (std::fs::metadata(first), std::fs::metadata(second))
+    {
+        use std::os::unix::fs::MetadataExt;
+        if first_metadata.dev() == second_metadata.dev()
+            && first_metadata.ino() == second_metadata.ino()
+        {
+            return true;
+        }
+    }
+
+    let same_canonical_path = match (
+        std::fs::canonicalize(first),
+        std::fs::canonicalize(second),
+    ) {
+        (Ok(first_canonical), Ok(second_canonical)) => first_canonical == second_canonical,
+        _ => false,
+    };
+    if same_canonical_path {
+        return true;
+    }
+
+    conservative_casefold_key(first) == conservative_casefold_key(second)
+}
+
+fn conservative_casefold_key(path: &Path) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+
+    match path.as_os_str().to_str() {
+        Some(path) => path.to_lowercase().into_bytes(),
+        None => path
+            .as_os_str()
+            .as_bytes()
+            .iter()
+            .map(u8::to_ascii_lowercase)
+            .collect(),
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
