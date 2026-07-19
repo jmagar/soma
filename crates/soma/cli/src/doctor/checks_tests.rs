@@ -88,7 +88,7 @@ fn binary_in_path_passes_for_windows_cmd_given_the_bare_name() {
             .unwrap()
             .to_ascii_lowercase()
             .ends_with("cmd.exe"),
-        "resolved path should include the Windows executable suffix"
+        "resolved path should include the platform executable suffix"
     );
 }
 

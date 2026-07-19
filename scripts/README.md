@@ -349,7 +349,12 @@ Generates volatile docs and metadata from canonical Rust specs:
 - `docs/generated/plugin-settings.md`
 - `docs/generated/scripts-index.md`
 
-The checker fails when any generated file drifts.
+The checker fails when any generated file drifts. Env var descriptions,
+defaults, and placeholders (including per-provider OAuth vars like
+`SOMA_MCP_AUTHELIA_*` and `SOMA_MCP_GITHUB_*`) are hand-curated in this
+script's `env_purpose`/`env_default`/`placeholder_for` maps — add new vars
+there, not just to `ENV_KEY_SPECS`, or `--check` will fail with a missing
+description/default/placeholder.
 
 ### `check-stale-claims.py`
 
