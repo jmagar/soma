@@ -635,10 +635,13 @@ async fn owned_legacy_lock_permissions_are_repaired_before_use() {
     let temp = tempdir().unwrap();
     let executable = temp.path().join("example");
     let state = temp.path().join("update.json");
-    let lock = temp.path().join("update.json.lock");
+    let state_lock = temp.path().join("update.json.lock");
+    let executable_lock = temp.path().join(".example.update.lock");
     std::fs::write(&executable, b"old").unwrap();
-    std::fs::write(&lock, b"").unwrap();
-    std::fs::set_permissions(&lock, std::fs::Permissions::from_mode(0o666)).unwrap();
+    std::fs::write(&state_lock, b"").unwrap();
+    std::fs::write(&executable_lock, b"").unwrap();
+    std::fs::set_permissions(&state_lock, std::fs::Permissions::from_mode(0o4600)).unwrap();
+    std::fs::set_permissions(&executable_lock, std::fs::Permissions::from_mode(0o2600)).unwrap();
     let updater = Updater::new(
         UpdateLayout::new(&executable, &state),
         UpdatePolicy::default(),
@@ -649,7 +652,15 @@ async fn owned_legacy_lock_permissions_are_repaired_before_use() {
         RecoveryAction::NoPendingUpdate
     );
     assert_eq!(
-        std::fs::metadata(&lock).unwrap().permissions().mode() & 0o777,
+        std::fs::metadata(&state_lock).unwrap().permissions().mode() & 0o7777,
+        0o600
+    );
+    assert_eq!(
+        std::fs::metadata(&executable_lock)
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777,
         0o600
     );
 }
@@ -984,7 +995,11 @@ async fn idle_state_authority_can_be_migrated_explicitly() {
         RecoveryAction::NoPendingUpdate
     );
 
-    let migrated = updater.migrate_state_file(&new_state).await.unwrap();
+    let migrated = updater
+        .migrate_state_file(&new_state)
+        .await
+        .unwrap()
+        .into_updater();
 
     assert_eq!(migrated.layout().state_file(), new_state);
     assert_eq!(

@@ -109,8 +109,8 @@ checked against executable, state, lock, marker-temporary, and staged identities
 before the backup is created.
 The advisory lock is also created mode `0600`, opened no-follow/nonblocking,
 and descriptor-validated as a current-effective-user-owned regular file. An
-owned legacy lock with broader permissions is repaired to `0600`, synced, and
-re-checked before its exclusive lock is acquired.
+owned legacy lock with broader permissions or special bits is repaired to exact
+mode `0600`, synced, and re-checked before its exclusive lock is acquired.
 The transaction retains a unique rollback backup, records its actual owner in
 the marker, syncs the backup and its directory before the marker may reference
 it, then atomically renames the verified artifact. Copy destinations begin with
@@ -160,12 +160,18 @@ reported marker or backup path.
 Use `Updater::migrate_state_file` to intentionally move an executable's state
 authority. The method acquires the executable lock and both old and new state
 locks in sorted order, verifies the current authority, and atomically rewrites
-the sidecar. It refuses migration while either marker path, either marker
-temporary, or any exact staged/rollback recovery artifact exists. This makes
-pending and indeterminate transactions explicit operator work instead of
-silently orphaning recovery state. Use the returned `Updater` for subsequent
-transactions. Retrying the same migration is idempotent when an earlier call
-renamed the new authority record but could not confirm its directory sync.
+the sidecar. Before creating any lock or authority file, it rejects collisions
+between either marker/marker-temporary namespace and every old/new lock,
+authority, and authority-temporary path. It also refuses migration while either
+marker path, either marker temporary, or any exact staged/rollback recovery
+artifact exists. This makes pending and indeterminate transactions explicit
+operator work instead of silently orphaning recovery state.
+`MigrationOutcome::Migrated` carries the updater bound to the new state after
+the authority and directory are durable. `MigratedIndeterminate` also carries
+that new updater when the authority rename succeeded but directory sync failed;
+callers must retain it and log the diagnostic rather than returning to the old
+state path. `MigrationOutcome::into_updater` handles both variants safely.
+Retrying the same migration is idempotent and confirms the directory boundary.
 
 The public install, startup-recovery, and confirmation methods are async for
 service integration, but their synchronous hashing, copying, advisory locking,

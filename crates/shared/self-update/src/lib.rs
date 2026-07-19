@@ -223,6 +223,39 @@ pub struct Updater {
     test_failpoint: std::sync::Arc<std::sync::atomic::AtomicU8>,
 }
 
+/// Result of intentionally moving an executable's durable state authority.
+#[derive(Clone, Debug)]
+pub enum MigrationOutcome {
+    /// The authority rename and parent-directory sync both completed.
+    Migrated { updater: Updater },
+    /// The authority rename completed, but its parent-directory sync failed.
+    ///
+    /// The caller must retain and use `updater`: returning to the old updater
+    /// after the authority has changed would select a state path that is no
+    /// longer authoritative. Log `diagnostic` and retry the migration later if
+    /// the durability boundary must be confirmed.
+    MigratedIndeterminate {
+        updater: Updater,
+        diagnostic: String,
+    },
+}
+
+impl MigrationOutcome {
+    /// Returns the updater bound to the new authoritative state path.
+    pub fn into_updater(self) -> Updater {
+        match self {
+            Self::Migrated { updater } | Self::MigratedIndeterminate { updater, .. } => updater,
+        }
+    }
+
+    /// Borrows the updater bound to the new authoritative state path.
+    pub fn updater(&self) -> &Updater {
+        match self {
+            Self::Migrated { updater } | Self::MigratedIndeterminate { updater, .. } => updater,
+        }
+    }
+}
+
 impl Updater {
     pub fn new(layout: UpdateLayout, policy: UpdatePolicy) -> Self {
         let (layout, layout_resolution_error) = bind_layout_to_current_dir(layout);

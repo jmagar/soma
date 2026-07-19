@@ -1,16 +1,20 @@
 use std::path::PathBuf;
 
 use super::{ConfirmationOutcome, InstallOutcome};
-use crate::{RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
+use crate::{MigrationOutcome, RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
 
 impl Updater {
     /// Moves this executable's durable state authority to a new idle marker path.
     ///
     /// Migration refuses to run while any marker, marker temporary, staged
-    /// artifact, or rollback artifact exists. Use the returned updater for all
-    /// subsequent transactions. Retrying the same migration is idempotent if a
-    /// prior call reached authority rename but failed its directory sync.
-    pub async fn migrate_state_file(&self, new_state_file: impl Into<PathBuf>) -> Result<Self> {
+    /// artifact, or rollback artifact exists. Both success variants carry the
+    /// updater bound to the new state path; callers must retain it even when the
+    /// authority rename's directory sync is reported as indeterminate. Retrying
+    /// the same migration is idempotent.
+    pub async fn migrate_state_file(
+        &self,
+        new_state_file: impl Into<PathBuf>,
+    ) -> Result<MigrationOutcome> {
         let updater = self.clone();
         let new_state_file = new_state_file.into();
         let error_path = new_state_file.clone();

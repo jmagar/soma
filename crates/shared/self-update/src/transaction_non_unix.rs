@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
+use crate::{MigrationOutcome, RecoveryAction, Result, UpdateError, Updater, ValidatedArtifact};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InstallOutcome {
@@ -26,7 +26,10 @@ pub enum ConfirmationOutcome {
 }
 
 impl Updater {
-    pub async fn migrate_state_file(&self, _new_state_file: impl Into<PathBuf>) -> Result<Self> {
+    pub async fn migrate_state_file(
+        &self,
+        _new_state_file: impl Into<PathBuf>,
+    ) -> Result<MigrationOutcome> {
         Err(UpdateError::UnsupportedPlatform)
     }
 

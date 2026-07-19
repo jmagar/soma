@@ -1,5 +1,6 @@
 use soma_self_update::{
-    ArtifactTransportPolicy, RecoveryAction, UpdateDirective, UpdateLayout, UpdatePolicy, Updater,
+    ArtifactTransportPolicy, MigrationOutcome, RecoveryAction, UpdateDirective, UpdateLayout,
+    UpdatePolicy, Updater,
 };
 
 #[test]
@@ -21,4 +22,16 @@ fn public_contract_is_constructible_without_product_types() {
         RecoveryAction::NoPendingUpdate,
         RecoveryAction::NoPendingUpdate
     ));
+    let migrated = MigrationOutcome::MigratedIndeterminate {
+        updater,
+        diagnostic: "directory sync must be retried".into(),
+    };
+    assert_eq!(
+        migrated.updater().layout().state_file(),
+        std::path::Path::new("/opt/example/state/update.json")
+    );
+    assert_eq!(
+        migrated.into_updater().layout().executable(),
+        std::path::Path::new("/opt/example/bin/example")
+    );
 }

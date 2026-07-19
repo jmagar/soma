@@ -11,6 +11,11 @@ const MAGIC: &[u8; 8] = b"SOMAUPD1";
 const DIGEST_BYTES: usize = 32;
 const MAX_PATH_BYTES: usize = 16 * 1024;
 
+pub(super) enum AuthorityWriteOutcome {
+    Durable,
+    RenamedIndeterminate(UpdateError),
+}
+
 pub(super) fn ensure_state_authority(
     updater: &Updater,
     authority: &Path,
@@ -23,17 +28,27 @@ pub(super) fn ensure_state_authority(
             first: bound,
             second: state.to_path_buf(),
         }),
-        None => write_authority(updater, authority, temporary, state),
+        None => match write_authority(updater, authority, temporary, state)? {
+            AuthorityWriteOutcome::Durable => Ok(()),
+            AuthorityWriteOutcome::RenamedIndeterminate(error) => Err(error),
+        },
     }
 }
 
 pub(super) fn read_state_authority(authority: &Path, temporary: &Path) -> Result<Option<PathBuf>> {
-    cleanup_temporary(temporary)?;
-    let bound = read_authority(authority)?;
+    let bound = read_state_authority_unconfirmed(authority, temporary)?;
     if bound.is_some() {
         sync_parent(authority)?;
     }
     Ok(bound)
+}
+
+pub(super) fn read_state_authority_unconfirmed(
+    authority: &Path,
+    temporary: &Path,
+) -> Result<Option<PathBuf>> {
+    cleanup_temporary(temporary)?;
+    read_authority(authority)
 }
 
 pub(super) fn rewrite_state_authority(
@@ -41,7 +56,7 @@ pub(super) fn rewrite_state_authority(
     authority: &Path,
     temporary: &Path,
     state: &Path,
-) -> Result<()> {
+) -> Result<AuthorityWriteOutcome> {
     cleanup_temporary(temporary)?;
     write_authority(updater, authority, temporary, state)
 }
@@ -77,7 +92,7 @@ fn write_authority(
     authority: &Path,
     temporary: &Path,
     state: &Path,
-) -> Result<()> {
+) -> Result<AuthorityWriteOutcome> {
     use std::os::unix::fs::OpenOptionsExt;
 
     let encoded = encode(state)?;
@@ -98,8 +113,13 @@ fn write_authority(
     file.sync_all()
         .map_err(|error| UpdateError::io(temporary, error))?;
     std::fs::rename(temporary, authority).map_err(|error| UpdateError::io(authority, error))?;
-    updater.maybe_fail(TestFailpoint::AuthorityBeforeDirectorySync, authority)?;
-    sync_parent(authority)
+    if let Err(error) = updater.maybe_fail(TestFailpoint::AuthorityBeforeDirectorySync, authority) {
+        return Ok(AuthorityWriteOutcome::RenamedIndeterminate(error));
+    }
+    match sync_parent(authority) {
+        Ok(()) => Ok(AuthorityWriteOutcome::Durable),
+        Err(error) => Ok(AuthorityWriteOutcome::RenamedIndeterminate(error)),
+    }
 }
 
 fn cleanup_temporary(path: &Path) -> Result<()> {

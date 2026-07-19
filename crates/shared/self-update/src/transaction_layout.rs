@@ -50,7 +50,7 @@ impl Updater {
                 message: "transaction lock must be a service-owned non-symlink regular file".into(),
             });
         }
-        if metadata.mode() & 0o777 != 0o600 {
+        if metadata.mode() & 0o7777 != 0o600 {
             file.set_permissions(std::fs::Permissions::from_mode(0o600))
                 .map_err(|error| UpdateError::io(lock_path, error))?;
             file.sync_all()
@@ -58,7 +58,7 @@ impl Updater {
             let repaired = file
                 .metadata()
                 .map_err(|error| UpdateError::io(lock_path, error))?;
-            if repaired.mode() & 0o777 != 0o600 {
+            if repaired.mode() & 0o7777 != 0o600 {
                 return Err(UpdateError::InvalidMarker {
                     path: lock_path.to_path_buf(),
                     message: "transaction lock permissions must be 0600".into(),

@@ -64,9 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lock inode. Crash-boundary tests cover partial authority writes and file- and
   directory-sync failures. `Updater::migrate_state_file` explicitly moves that
   authority only while both state locations and all recovery artifacts are
-  idle. Construction-time state binding errors preserve their original path,
-  I/O kind, and diagnostic message. Failures after executable replacement return a
-  typed restart-required indeterminate outcome so adopters restart into the
+  idle. Migration validates the combined old/new marker and protected namespace
+  before creating locks, and returns a typed outcome carrying the new updater
+  when the authority rename succeeds but directory durability is indeterminate.
+  Transaction locks repair and recheck exact mode `0600`, including special
+  bits. Construction-time state binding errors preserve their original path,
+  I/O kind, and diagnostic message. Failures after executable replacement return
+  a typed restart-required indeterminate outcome so adopters restart into the
   installed bytes and let startup recovery reconcile the prepared marker.
   The crate has no internal workspace dependencies; this change
   does not enable self-update behavior in the Soma runtime or integrate Cortex.
