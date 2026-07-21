@@ -107,7 +107,11 @@ fn main() {
             temp.path().join("state.json"),
         ),
         UpdatePolicy::default()
-            .with_validation_timeout(Duration::from_millis(250))
+            // Generous timeout: the validator must launch, spawn cmd.exe, and
+            // write the child PID file before the kill fires. 250ms lost that
+            // race on loaded CI runners; the validator sleeps 30s, so the
+            // timeout still triggers long before the fixture exits.
+            .with_validation_timeout(Duration::from_secs(3))
             .unwrap(),
     );
     let directive = UpdateDirective::new("2.0.0", "/agent", digest).unwrap();
@@ -118,7 +122,22 @@ fn main() {
         updater.validate(staged).await,
         Err(UpdateError::ValidationTimedOut { .. })
     ));
-    let pid = std::fs::read_to_string(child_file).unwrap();
+    let pid = {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Ok(contents) = std::fs::read_to_string(&child_file) {
+                if !contents.trim().is_empty() {
+                    break contents;
+                }
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "validator child pid file never appeared at {}",
+                child_file.display()
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    };
     let mut attempts = 0;
     let last_listing = loop {
         let output = std::process::Command::new("tasklist.exe")
