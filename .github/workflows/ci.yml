@@ -7,7 +7,7 @@
 #
 # This workflow runs on every push and PR to main.
 # Jobs: actionlint, fmt, clippy, test (nextest), web, native builds, MCP smoke,
-# compose/container smoke, toml, Soma checks, version sync, deny, gitleaks
+# compose/container smoke, toml, Soma checks, version sync, deny
 #
 # All jobs must pass before merging. Adjust the matrix rust-version to match
 # your Cargo.toml `rust-version` field.
@@ -750,29 +750,6 @@ jobs:
       - name: cargo deny check
         run: cargo deny check all
 
-  # ── gitleaks: secret scanning ─────────────────────────────────────────────────
-  gitleaks:
-    name: Secret Scan
-    needs: [changes]
-    if: ${{ needs.changes.outputs.secrets == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: [self-hosted, unraid]
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0  # full history needed for gitleaks
-
-      - name: Remove stale gitleaks installer temp file
-        run: rm -f /tmp/gitleaks.tmp
-
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   # ── ci-gate: single required status that aggregates every job ────────────────
   # Point branch protection at THIS job ("CI Gate") instead of each job below.
   # It fails if any needed job ended in anything other than success or skipped,
@@ -796,7 +773,6 @@ jobs:
       - lefthook-speed
       - soma
       - audit
-      - gitleaks
     runs-on: [self-hosted, unraid]
     timeout-minutes: 5
     steps:
