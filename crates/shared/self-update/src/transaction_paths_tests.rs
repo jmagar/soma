@@ -3,7 +3,10 @@ use super::*;
 #[test]
 fn absent_casefold_aliases_are_rejected_without_side_effects() {
     let temp = tempfile::tempdir().unwrap();
-    let paths = vec![temp.path().join("Update.JSON"), temp.path().join("update.json")];
+    let paths = vec![
+        temp.path().join("Update.JSON"),
+        temp.path().join("update.json"),
+    ];
 
     assert!(matches!(
         validate_distinct_paths(&paths),

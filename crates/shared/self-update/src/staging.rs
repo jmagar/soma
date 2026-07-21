@@ -4,9 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 
-use crate::{Result, UpdateDirective, UpdateError, Updater, reject_executable_leaf_symlink};
 #[cfg(unix)]
 use crate::transaction::path_validation::validate_distinct_paths;
+use crate::{Result, UpdateDirective, UpdateError, Updater, reject_executable_leaf_symlink};
 
 static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[cfg(unix)]
@@ -14,8 +14,7 @@ pub(crate) const VALIDATION_MODE: u32 = 0o700;
 #[cfg(unix)]
 const UNSAFE_EXECUTABLE_MODE_BITS: u32 = 0o7022;
 #[cfg(unix)]
-const UNSAFE_EXECUTABLE_MODE_REMEDIATION: &str =
-    "grant owner execute and remove special bits and group/other write permissions before staging an update";
+const UNSAFE_EXECUTABLE_MODE_REMEDIATION: &str = "grant owner execute and remove special bits and group/other write permissions before staging an update";
 
 /// A fully downloaded artifact whose digest matches its directive.
 #[derive(Debug)]
@@ -34,11 +33,7 @@ pub struct StagedArtifact {
 #[cfg(unix)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExecutableIdentity {
-    Present {
-        device: u64,
-        inode: u64,
-        mode: u32,
-    },
+    Present { device: u64, inode: u64, mode: u32 },
     Absent,
 }
 

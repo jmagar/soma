@@ -4,10 +4,10 @@ use super::artifacts::ensure_no_recovery_artifacts;
 use super::authority::{
     AuthorityWriteOutcome, read_state_authority_unconfirmed, rewrite_state_authority,
 };
-use super::transaction_io::{suffix_path, sync_parent};
 use super::path_validation::paths_may_alias;
 #[cfg(test)]
 use super::path_validation::unresolved_leaves_may_alias;
+use super::transaction_io::{suffix_path, sync_parent};
 use crate::{MigrationOutcome, Result, UpdateError, UpdateLayout, Updater, bind_state_identity};
 
 impl Updater {
