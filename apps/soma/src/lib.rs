@@ -2,7 +2,7 @@
 //!
 //! Exposes the service layer, config, and transport client so that integration
 //! tests can import them without duplicating state construction. The
-//! composition root itself lives in private modules: [`bootstrap`] builds the
+//! composition root itself lives in private modules: `bootstrap` builds the
 //! concrete dependency graph, `invocation` classifies `argv` into an
 //! execution mode, and `local`/`http`/`stdio` run each mode. [`run`] is the
 //! single public entry point `apps/soma/src/bin/soma.rs` calls (plan

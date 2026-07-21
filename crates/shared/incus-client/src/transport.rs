@@ -1,7 +1,7 @@
 //! The one place resource/operation code reaches the Incus daemon through:
-//! [`Client::request`]. Everything below this module is HTTP framing
+//! `Client::request`. Everything below this module is HTTP framing
 //! (`transport::unix`); everything above it (operations, resources) works
-//! only with [`IncusEnvelope`], never raw bytes.
+//! only with `IncusEnvelope`, never raw bytes.
 
 pub(crate) mod unix;
 

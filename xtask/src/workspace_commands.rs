@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use std::process::{Command, Stdio};
 use walkdir::WalkDir;
 
 use crate::{
@@ -90,17 +91,201 @@ pub(crate) fn dist() -> Result<()> {
     Ok(())
 }
 
+/// `cargo xtask doc` — generate rustdoc API reference for workspace crates.
+///
+/// Defaults match the repo's documented doc-build posture: public items only,
+/// no dependency docs, all features so the full gated surface renders. The
+/// `--strict` flag enforces `RUSTDOCFLAGS=-D warnings` (what CI and
+/// `cargo xtask ci` use); without it warnings are surfaced but non-fatal so a
+/// stray doc-link doesn't block a local `cargo xtask doc --open`.
+pub(crate) fn doc(args: &[String]) -> Result<()> {
+    let mut cargo_args = vec![
+        "doc".to_owned(),
+        "--workspace".to_owned(),
+        "--no-deps".to_owned(),
+        "--locked".to_owned(),
+    ];
+    let mut all_features = true;
+    let mut open = false;
+    let mut strict = false;
+    let mut packages: Vec<String> = Vec::new();
+    let mut document_private_items = false;
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--open" => open = true,
+            "--strict" => strict = true,
+            "--no-all-features" => all_features = false,
+            "--document-private-items" => document_private_items = true,
+            "--all-features" => all_features = true,
+            "-p" | "--package" => {
+                let pkg = iter
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("`{arg}` requires a package name"))?;
+                packages.push(pkg.clone());
+            }
+            "--help" | "-h" => {
+                println!("{DOC_HELP}");
+                return Ok(());
+            }
+            other => bail!("Unknown `cargo xtask doc` option: {other:?}"),
+        }
+    }
+
+    if all_features {
+        cargo_args.push("--all-features".to_owned());
+    }
+    if document_private_items {
+        cargo_args.push("--document-private-items".to_owned());
+    }
+    for pkg in &packages {
+        cargo_args.push("-p".to_owned());
+        cargo_args.push(pkg.clone());
+    }
+    if open {
+        cargo_args.push("--open".to_owned());
+    }
+
+    print_doc_plan(
+        all_features,
+        &packages,
+        document_private_items,
+        open,
+        strict,
+    );
+
+    // Drive `cargo doc` directly rather than through `run_cargo` so we can set
+    // RUSTDOCFLAGS on the child env. Mirrors `run_cargo`'s streaming behavior.
+    let mut cmd = Command::new("cargo");
+    cmd.args(&cargo_args);
+    if strict {
+        cmd.env("RUSTDOCFLAGS", "-D warnings");
+    }
+    cmd.stdin(Stdio::null());
+
+    let status = cmd
+        .status()
+        .with_context(|| "Failed to spawn `cargo doc`")?;
+    if !status.success() {
+        bail!("`cargo doc` exited with status {status}");
+    }
+
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into());
+    let doc_root = std::path::Path::new(&target_dir).join("doc");
+    println!();
+    println!("==> Rustdoc generated under {doc_root:?}");
+    if !open {
+        println!(
+            "    Open {}/soma/index.html (or pass --open)",
+            doc_root.display()
+        );
+    }
+    if !strict {
+        println!("    Note: warnings were not fatal. CI enforces them via `--strict`.");
+    }
+    Ok(())
+}
+
+/// Build rustdoc with `RUSTDOCFLAGS=-D warnings` — the CI-grade doc gate.
+/// Used by `cargo xtask ci`. Standalone `cargo xtask doc --strict` uses the
+/// same flag via the `doc()` arg path; this helper exists so `ci()` reads as
+/// one line per check, matching the surrounding steps.
+fn run_doc_strict() -> Result<()> {
+    let status = Command::new("cargo")
+        .args([
+            "doc",
+            "--workspace",
+            "--no-deps",
+            "--all-features",
+            "--locked",
+        ])
+        .env("RUSTDOCFLAGS", "-D warnings")
+        .stdin(Stdio::null())
+        .status()
+        .context("Failed to spawn `cargo doc`")?;
+    if !status.success() {
+        bail!("`cargo doc` exited with status {status}");
+    }
+    Ok(())
+}
+
+fn print_doc_plan(
+    all_features: bool,
+    packages: &[String],
+    document_private_items: bool,
+    open: bool,
+    strict: bool,
+) {
+    println!("==> cargo xtask doc");
+    println!(
+        "    features:        {}",
+        if all_features { "all" } else { "default" }
+    );
+    println!(
+        "    packages:        {}",
+        if packages.is_empty() {
+            "workspace".to_owned()
+        } else {
+            packages.join(", ")
+        }
+    );
+    println!(
+        "    private items:   {}",
+        if document_private_items {
+            "yes"
+        } else {
+            "no (public only)"
+        }
+    );
+    println!("    open in browser: {}", if open { "yes" } else { "no" });
+    println!(
+        "    strict (-D warn): {}",
+        if strict { "yes" } else { "no" }
+    );
+}
+
+const DOC_HELP: &str = "cargo xtask doc — generate Rust API documentation (rustdoc)
+
+USAGE:
+  cargo xtask doc [OPTIONS]
+
+OPTIONS:
+      --open                    Open the generated docs in a browser
+      --strict                  Treat rustdoc warnings as errors
+                                (RUSTDOCFLAGS=\"-D warnings\"; mirrors CI)
+      --no-all-features         Document default features only (faster)
+      --all-features            Document all features (default)
+      --document-private-items  Include private items (internal/team docs)
+  -p, --package <NAME>          Document a single workspace package
+                                (repeatable; --no-deps is always set)
+  -h, --help                    Show this help
+
+DEFAULTS:
+  Public items only, no dependency docs, all features. These match the
+  repo's documented cargo-doc posture and what `.github/workflows/docs.yml`
+  deploys to GitHub Pages.
+
+EXAMPLES:
+  cargo xtask doc                     # full workspace API docs
+  cargo xtask doc --open              # ...and open in a browser
+  cargo xtask doc -p soma-application # one crate only
+  cargo xtask doc --strict            # CI-grade (warnings are errors)";
+
 pub(crate) fn ci() -> Result<()> {
-    println!("==> [1/14] cargo fmt --check");
+    println!("==> [1/15] cargo fmt --check");
     run_cargo(&["fmt", "--all", "--", "--check"]).context("fmt failed — run `cargo fmt` to fix")?;
 
-    println!("==> [2/14] cargo xtask check-architecture");
+    println!("==> [2/15] cargo xtask check-architecture");
     architecture::check(std::path::Path::new(".")).context("architecture check failed")?;
 
-    println!("==> [3/14] cargo clippy");
+    println!("==> [3/15] cargo clippy");
     run_cargo(&["clippy", "--all-targets", "--", "-D", "warnings"]).context("clippy failed")?;
 
-    println!("==> [4/14] cargo nextest run --profile ci");
+    println!("==> [4/15] cargo doc --workspace --no-deps --all-features (-D warnings)");
+    run_doc_strict().context("rustdoc failed — run `cargo xtask doc --strict` to see details")?;
+
+    println!("==> [5/15] cargo nextest run --profile ci");
     if command_exists("cargo-nextest") {
         run_cargo(&["nextest", "run", "--profile", "ci"]).context("nextest failed")?;
     } else {
@@ -108,41 +293,41 @@ pub(crate) fn ci() -> Result<()> {
         run_cargo(&["test"]).context("cargo test failed")?;
     }
 
-    println!("==> [5/14] taplo check");
+    println!("==> [6/15] taplo check");
     if command_exists("taplo") {
         run_cmd("taplo", &["check"]).context("taplo check failed — run `taplo format` to fix")?;
     } else {
         eprintln!("  (taplo not installed — skipping TOML format check)");
     }
 
-    println!("==> [6/14] cargo xtask patterns");
+    println!("==> [7/15] cargo xtask patterns");
     patterns::run(patterns::PatternOptions::default())
         .context("PATTERNS.md contract check failed")?;
 
-    println!("==> [7/14] cargo xtask check-test-siblings");
+    println!("==> [8/15] cargo xtask check-test-siblings");
     test_siblings::check().context("test sibling check failed")?;
 
-    println!("==> [8/14] cargo xtask check-docs");
+    println!("==> [9/15] cargo xtask check-docs");
     check_docs().context("generated docs check failed")?;
 
-    println!("==> [9/14] cargo xtask check-stale-claims");
+    println!("==> [10/15] cargo xtask check-stale-claims");
     check_stale_claims().context("stale claim check failed")?;
 
-    println!("==> [10/14] cargo xtask check-mcp-registry");
+    println!("==> [11/15] cargo xtask check-mcp-registry");
     mcp_registry::check_default(std::path::Path::new("."))
         .context("MCP registry manifest check failed")?;
 
-    println!("==> [11/14] cargo xtask check-provider-manifest-contract");
+    println!("==> [12/15] cargo xtask check-provider-manifest-contract");
     provider_manifest::check().context("provider manifest contract check failed")?;
 
-    println!("==> [12/14] cargo xtask check-palette-manifest --check");
+    println!("==> [13/15] cargo xtask check-palette-manifest --check");
     generated_surfaces::check_palette_manifest(&["--check".to_owned()])
         .context("Palette manifest check failed")?;
 
-    println!("==> [13/14] cargo xtask check-web-source-sync");
+    println!("==> [14/15] cargo xtask check-web-source-sync");
     web_source::check().context("web source bundle drifted from apps/web")?;
 
-    println!("==> [14/14] cargo audit");
+    println!("==> [15/15] cargo audit");
     if command_exists("cargo-audit") {
         run_cargo(&["audit"]).context("cargo audit found vulnerabilities")?;
     } else {
@@ -280,6 +465,7 @@ COMMANDS:
   cargo-generate        Smoke-test real cargo-generate output (--no-cargo-check)
   cargo-generate-post   Internal generated-project rewrite command
   generate-docs         Generate volatile docs and metadata from canonical specs
+  doc                   Generate Rust API docs (rustdoc) for workspace crates (--open, --strict)
   check-docs            Validate generated docs and metadata are current
   check-mcp-registry    Validate server.json against docs/contracts/mcp-server.schema.json
   check-stale-claims    Fail on stale hardcoded Soma claims

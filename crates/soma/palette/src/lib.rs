@@ -1,6 +1,6 @@
 //! `soma-palette` — Soma's Palette product API and adapter.
 //!
-//! Owns the `/v1/palette/*` route/handler definitions ([`router`]), the
+//! Owns the `/v1/palette/*` route/handler definitions ([module `router`]), the
 //! Palette DTOs shared by the HTTP server and the desktop app, the product
 //! mapping from provider `ToolSpec` Palette overlays into launcher actions,
 //! product launcher execution/auth policy, product error mapping, and

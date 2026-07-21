@@ -207,6 +207,22 @@ just openapi-check
 
 The generator derives REST-capable actions from `ACTION_SPECS` and excludes MCP-only actions.
 
+### Rust API docs (rustdoc)
+
+Build the per-crate Rust API reference (public items only, no dependency docs,
+all features) with:
+
+```bash
+just doc          # cargo xtask doc → target/doc/
+just doc-open     # ...and open in a browser
+just doc-check    # RUSTDOCFLAGS="-D warnings" (mirrors CI)
+```
+
+Output is **not committed** — it lands under `target/doc/` (gitignored). The
+same build runs in CI (`.github/workflows/docs.yml`) with `-D warnings` and,
+on `main`, deploys to GitHub Pages. See `docs/CI.md` for the one-time Pages
+setup and `docs/XTASKS.md` for the full `cargo xtask doc` flag reference.
+
 ### Reference docs
 
 `docs/references/` is populated by `scripts/refresh-docs.sh` and committed when

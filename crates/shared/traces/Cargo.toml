@@ -15,6 +15,9 @@ categories = ["development-tools", "network-programming"]
 [package.metadata.soma-architecture]
 layer = "shared"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = []
 http = ["dep:http"]

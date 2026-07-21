@@ -23,6 +23,12 @@ autobins = false
 [package.metadata.soma-architecture]
 layer = "app"
 
+# Render the full feature-gated API surface on docs.rs (cli, mcp, api, auth,
+# oauth, web, palette, ...). Without this docs.rs builds with default features
+# only and every gated item would be missing from the rendered page.
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 name = "soma"
 
