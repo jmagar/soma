@@ -384,7 +384,7 @@ impl ServerGuard {
 /// subscriber with `.with_ansi(false)`, but this smoke spawns a real `soma`
 /// subprocess and can only observe its already-formatted stdout/stderr text,
 /// so color codes land *inside* field name/value boundaries (e.g.
-/// `trace_id_prefix` <ESC>[0m<ESC>[2m `=` <ESC>[0m `Some(...)`) and silently
+/// `trace_id_prefix` `<ESC>[0m<ESC>[2m` `=` `<ESC>[0m` `Some(...)`) and silently
 /// break a naive `contains(...)` check — every "logs contain X" assertion
 /// failed until this was added, even though the underlying trace data was
 /// correct (verified by hand against the raw captured log).

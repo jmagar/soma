@@ -2,7 +2,7 @@
 //!
 //! Assigns a UUID to `x-request-id` on the way in (unless the caller already
 //! supplied one) and copies it back onto the response on the way out.
-//! Compose both layers with [`tower::ServiceBuilder`]: `set` outermost (so
+//! Compose both layers with `tower::ServiceBuilder`: `set` outermost (so
 //! it runs first on the way in) and `propagate` innermost (so it runs last
 //! on the way out, after the response has been fully built, and so
 //! survives handler and error-mapping layers placed between them):

@@ -15,6 +15,7 @@
 //!   cargo-generate Smoke-test cargo-generate output
 //!   cargo-generate-post Apply cargo-generate post-processing rewrites
 //!   generate-docs Generate volatile docs and metadata from canonical specs
+//!   doc           Generate Rust API documentation (rustdoc) for workspace crates
 //!   generate-provider-surfaces Generate provider docs and marketplace catalogs
 //!   check-docs    Validate generated docs and metadata are current
 //!   check-mcp-registry Validate server.json against the MCP registry schema
@@ -99,6 +100,7 @@ fn main() -> Result<()> {
         Some("cargo-generate") => cargo_generate(&args[1..]),
         Some("cargo-generate-post") => cargo_generate_post::run(&args[1..]),
         Some("generate-docs") => workspace_commands::generate_docs(),
+        Some("doc") => workspace_commands::doc(&args[1..]),
         Some("generate-provider-surfaces") => generated_surfaces::provider_surfaces(&args[1..]),
         Some("check-docs") => workspace_commands::check_docs(),
         Some("check-architecture") => architecture::check(workspace_root),

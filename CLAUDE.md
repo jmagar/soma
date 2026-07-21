@@ -172,6 +172,8 @@ just dev                  # SOMA_MCP_HOST=127.0.0.1 SOMA_MCP_NO_AUTH=true cargo 
 just test                 # cargo test
 just lint                 # cargo clippy -- -D warnings
 just fmt                  # cargo fmt
+just doc                  # cargo xtask doc — rustdoc API reference (target/doc/)
+just doc-check            # cargo xtask doc --strict — RUSTDOCFLAGS="-D warnings" (CI grade)
 just gen-token            # openssl rand -hex 32
 just health               # curl http://localhost:40060/health | jq .
 ```
@@ -235,6 +237,7 @@ PR mode uses the merge-base of the PR branch and `origin/main`; main mode compar
 - **`elicit_name` is MCP-only** — elicitation requires a live client connection; it cannot be invoked from the CLI. This is the one intentional parity exception.
 - **`watch`, `serve`, and `doctor` are CLI infrastructure** — they are not MCP actions and have no parity requirement. `watch` polls `/health` and emits state-change lines to stdout (used by the plugin monitor). `serve` starts the HTTP server. `doctor` runs pre-flight checks. None belong in the MCP parity table.
 - **CI runs on self-hosted runners behind path-aware gates** — Linux jobs use `[self-hosted, tootie, soma]`, Windows native artifact checks use `[self-hosted, Windows, soma, steamy]`, and both `ci.yml` and `msrv.yml` route jobs through `cargo xtask changed-paths`. Branch protection should require the stable aggregate `CI Gate` and `MSRV Gate` statuses, not individual path-skipped jobs. This is a **private** repo, so branch-protection lookup is unavailable without GitHub Pro/public visibility and live settings are manual state. Full setup and troubleshooting are in [`docs/CI.md`](docs/CI.md), [`docs/LINUX-RUNNER.md`](docs/LINUX-RUNNER.md), and [`docs/WINDOWS-RUNNER.md`](docs/WINDOWS-RUNNER.md).
+- **rustdoc is gated** — `cargo doc --workspace --no-deps --all-features` runs with `RUSTDOCFLAGS=-D warnings` both in `cargo xtask ci` (step 4/15) and in `.github/workflows/docs.yml`. The latter also deploys to GitHub Pages on `main` (requires Settings → Pages → Source = "GitHub Actions" as a one-time setup). `docs.yml`'s `rustdoc` job is path-skipped like the others; require the aggregate `Docs` status check. Run `just doc-check` locally before pushing to catch broken doc-links early.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->

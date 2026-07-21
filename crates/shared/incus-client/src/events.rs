@@ -1,5 +1,5 @@
 //! WebSocket subscription to Incus's `/1.0/events` push-notification
-//! stream. This is an *enhancement* over [`crate::operations::Client::wait_for_operation`],
+//! stream. This is an *enhancement* over [`Client::wait_for_operation`],
 //! not a replacement - that method works without this `events` feature at
 //! all.
 //!

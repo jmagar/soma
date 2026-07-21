@@ -15,6 +15,9 @@ categories = ["development-tools", "web-programming"]
 [package.metadata.soma-architecture]
 layer = "shared"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = ["preserve-order"]
 preserve-order = ["serde_json/preserve_order"]

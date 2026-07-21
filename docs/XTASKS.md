@@ -34,6 +34,7 @@ xtask/
 | `cargo xtask check-env` | Validate required environment before server start. |
 | `cargo xtask patterns` | Check static contracts derived from `docs/PATTERNS.md`. |
 | `cargo xtask generate-docs` | Regenerate volatile docs and metadata from canonical Rust specs. |
+| `cargo xtask doc` | Build Rust API docs (rustdoc) for the workspace. `--open` to browse, `--strict` to treat warnings as errors (mirrors CI), `-p <crate>` for one package. |
 | `cargo xtask check-docs` | Fail when generated docs or metadata drift from canonical Rust specs. |
 | `cargo xtask check-stale-claims` | Fail when known stale hardcoded Soma claims reappear. |
 | `cargo xtask sync-web-source` | Copy editable `apps/web` source into `crates/soma/web/assets/source` with generated artifacts excluded. |
@@ -119,6 +120,29 @@ It renders volatile tables and metadata from `ACTION_SPECS`,
 
 `cargo xtask check-docs` runs the same renderer in drift-check mode and is part
 of local CI, contract audit, and release checks.
+
+## Rust API docs (rustdoc)
+
+`cargo xtask doc` builds the rustdoc API reference for every workspace crate.
+Defaults match the repo's documented doc-build posture: **public items only,
+no dependency docs, all features** so the full feature-gated surface renders.
+
+```bash
+cargo xtask doc                     # full workspace API docs → target/doc/
+cargo xtask doc --open              # ...and open in a browser
+cargo xtask doc -p soma-application # one crate only
+cargo xtask doc --strict            # RUSTDOCFLAGS="-D warnings" (CI grade)
+```
+
+- `--strict` enforces the same `RUSTDOCFLAGS=-D warnings` gate that
+  `cargo xtask ci` and `.github/workflows/docs.yml` use. Without it, a stray
+  doc-link surfaces as a non-fatal warning rather than blocking a local
+  `--open` browse.
+- `--no-all-features` documents default features only (faster local rebuild).
+- `--document-private-items` is an opt-in escape hatch for internal/team docs;
+  the default public-only output is what gets deployed to GitHub Pages.
+
+The `just doc` / `just doc-open` / `just doc-check` recipes delegate here.
 
 ## symlink-docs
 

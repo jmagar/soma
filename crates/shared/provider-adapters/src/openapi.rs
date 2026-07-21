@@ -26,7 +26,7 @@
 //! hold, two things it does NOT rely on `soma-openapi` for are handled here:
 //! `validate_base_url` fails closed (denies dispatch) when a provider's
 //! `capabilities.network` grant is absent or disabled, rather than treating
-//! that as "no restriction needed"; and [`dispatch_client`] disables HTTP
+//! that as "no restriction needed"; and `dispatch_client` disables HTTP
 //! redirects, so an allowlisted host can't hand a request off to a
 //! non-allowlisted address via a 3xx response.
 //!

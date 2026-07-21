@@ -234,6 +234,39 @@ Do not use for: regenerating the schema automatically. It reports; a
 maintainer runs `cargo xtask codex-schema regen <dir>` after reviewing the
 diff, same as the `rmcp-release-monitor` pattern for `rmcp`/MCP-schema drift.
 
+### `.github/workflows/docs.yml`
+
+Use for: building the Rust API reference (`cargo doc --workspace --no-deps
+--all-features`) with warnings as errors, and deploying the rendered HTML to
+GitHub Pages on every push to `main`. PRs run the same build (and the
+`-D warnings` gate) but do not deploy.
+
+Path-gated to `**/*.rs`, `**/Cargo.toml`, `Cargo.lock`, `.cargo/config.toml`,
+and the workflow itself, so doc-only, web-only, or config-only changes skip
+it. Runs on the same `[self-hosted, tootie, rmcp-template]` Linux runner as
+the rest of CI.
+
+Two jobs:
+
+- **`rustdoc`** — always runs on path match. Builds the docs, writes a
+  redirect `index.html` → `soma/` (the canonical product crate), and uploads
+  a Pages artifact. Scoped to `contents: read`.
+- **`pages`** — `needs: rustdoc`, main-only. Deploys the artifact via
+  `actions/deploy-pages`. Carries the broader `pages: write` /
+  `id-token: write` permissions, which is why this lives in its own workflow
+  rather than as a `ci.yml` job.
+
+**One-time setup:** in repo Settings → Pages → Source, select "GitHub
+Actions". Until that's set, the `pages` job will fail with a Pages-not-enabled
+error; the `rustdoc` build+gate still works on its own.
+
+**Branch protection:** this is a private repo and `rustdoc` is path-skipped,
+so require the aggregate `Docs` status check (not the individual job) — same
+pattern as the `CI Gate` / `MSRV Gate` aggregates.
+
+Locally, the same gate is `just doc-check` (which runs `cargo xtask doc
+--strict`). `cargo xtask ci` includes it as step `[4/15]`.
+
 ## nextest configuration
 
 CI uses `cargo nextest` with a dedicated profile in `.config/nextest.toml`:

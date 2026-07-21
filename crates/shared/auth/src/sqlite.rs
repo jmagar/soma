@@ -275,7 +275,7 @@ impl SqliteStore {
     /// caller-returned value contains it.  If an encryption key is configured,
     /// `provider_refresh_token` is encrypted at rest before storage.
     ///
-    /// Use [`rotate_refresh_token`] instead of calling this twice when replacing
+    /// Use [`Self::rotate_refresh_token`] instead of calling this twice when replacing
     /// an existing token — that method performs the swap atomically.
     pub async fn upsert_refresh_token(&self, token: RefreshTokenRow) -> Result<(), AuthError> {
         let hash = hash_token(&token.refresh_token);
