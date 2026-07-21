@@ -34,6 +34,7 @@
 #   - just conformance → boots a server and runs the official MCP conformance suite; CI/manual only
 #   - cargo xtask patterns → full-repo contract scan; runs in CI and `just soma-check`
 #   - cargo xtask check-release-versions → PR/main release gate; runs in CI and release scripts
+#   - cargo xtask doc --strict → rustdoc -D warnings gate; runs in CI (docs.yml) and `just doc-check`
 #
 # CUSTOMIZE: Resist the urge to add more hooks here. If something slows down
 #           your commit flow, developers will start using --no-verify, which

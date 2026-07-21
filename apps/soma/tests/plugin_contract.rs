@@ -198,7 +198,9 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
     let launcher = json("packages/soma-rmcp/package.json");
     let expected_npm = format!(
         "soma-rmcp@{}",
-        launcher["version"].as_str().expect("launcher package version")
+        launcher["version"]
+            .as_str()
+            .expect("launcher package version")
     );
     assert_eq!(
         manifest["_meta"]["io.modelcontextprotocol.registry/publisher-provided"]["distribution"]
