@@ -3,11 +3,10 @@ use std::io::Seek;
 use std::path::{Path, PathBuf};
 
 use super::{
-    Marker, MarkerPhase, path_validation::paths_may_alias, sync_parent,
-    transaction_io::hash_reader,
+    Marker, MarkerPhase, path_validation::paths_may_alias, sync_parent, transaction_io::hash_reader,
 };
-use crate::{Result, UpdateError};
 use crate::staging::validate_executable_mode;
+use crate::{Result, UpdateError};
 
 pub(super) fn validate_backup_candidate(
     executable: &Path,
@@ -167,8 +166,7 @@ impl ValidatedRollbackBackup {
             });
         }
         self.revalidate_path(state)?;
-        std::fs::rename(&self.path, executable)
-            .map_err(|error| UpdateError::io(executable, error))
+        std::fs::rename(&self.path, executable).map_err(|error| UpdateError::io(executable, error))
     }
 }
 

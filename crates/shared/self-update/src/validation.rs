@@ -7,9 +7,9 @@ use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use tokio::io::{AsyncRead, AsyncReadExt};
 
-use crate::{Result, StagedArtifact, UpdateError, Updater};
 #[cfg(unix)]
 use crate::staging::VALIDATION_MODE;
+use crate::{Result, StagedArtifact, UpdateError, Updater};
 
 const OUTPUT_LIMIT: usize = 16 * 1024;
 
