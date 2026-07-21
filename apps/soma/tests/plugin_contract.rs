@@ -195,10 +195,15 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
         assert!(npm_envs.contains(&name), "npm metadata missing {name}");
     }
 
+    let launcher = json("packages/soma-rmcp/package.json");
+    let expected_npm = format!(
+        "soma-rmcp@{}",
+        launcher["version"].as_str().expect("launcher package version")
+    );
     assert_eq!(
         manifest["_meta"]["io.modelcontextprotocol.registry/publisher-provided"]["distribution"]
             ["npm"],
-        "soma-rmcp@0.4.7"
+        expected_npm.as_str()
     );
 }
 
