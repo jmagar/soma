@@ -33,12 +33,13 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Force CI through sccache on both Linux and Windows. This also overrides the
-  # repo's dev-only scripts/cargo-rustc-wrapper, whose local binary-sync side
-  # effects are not wanted in CI and whose bash wrapper cannot run on Windows.
-  RUSTC_WRAPPER: sccache
-  CARGO_BUILD_RUSTC_WRAPPER: sccache
-  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+  # Builds route through the soldr front door (cargo tool shims installed by
+  # ./.github/actions/setup-rust-soldr). soldr sets RUSTC_WRAPPER for its cargo
+  # child, which also keeps the dev-only scripts/cargo-rustc-wrapper (used by
+  # sibling repos / user-level config) overridden in CI. The artifact store
+  # lives on the persistent self-hosted runner disk, same pattern as the old
+  # SCCACHE_DIR; the native Windows job runs without any compile wrapper.
+  SOLDR_CACHE_DIR: ${{ github.workspace }}/../.soldr-cache
   # Keep Windows artifacts portable even on self-hosted runners whose user-level
   # Cargo config may contain target-cpu=native or machine-specific SIMD flags.
   WINDOWS_PORTABLE_RUSTFLAGS: >-
@@ -69,8 +70,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Classify changed paths
         id: classify
@@ -117,8 +118,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
         with:
           components: rustfmt
 
@@ -135,8 +136,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Check architecture boundaries
         run: cargo xtask check-architecture
@@ -154,8 +155,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
         with:
           components: clippy
 
@@ -188,8 +189,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       # CUSTOMIZE: Change cache key prefix from "soma" to your repo name.
       - name: Cache Cargo
@@ -238,7 +239,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node pnpm
           cache: true
@@ -311,8 +312,8 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -350,10 +351,16 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      # Native Windows cargo historically misbehaved under compile wrappers,
+      # so this job installs soldr without cargo shims and pins the wrapper
+      # env empty (an empty RUSTC_WRAPPER also keeps any user-level
+      # rustc-wrapper config on the runner overridden).
+      - name: Install Rust and soldr (no cargo shims)
+        uses: ./.github/actions/setup-rust-soldr
+        with:
+          enable-shims: "false"
 
-      - name: Disable sccache for native Windows cargo
+      - name: Run native Windows cargo without a compile wrapper
         shell: pwsh
         run: |
           "RUSTC_WRAPPER=" >> $env:GITHUB_ENV
@@ -383,10 +390,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           rustc -vV
-          sccache --version
+          soldr --version
           "RUSTC_WRAPPER=$env:RUSTC_WRAPPER"
           "CARGO_BUILD_RUSTC_WRAPPER=$env:CARGO_BUILD_RUSTC_WRAPPER"
-          "SCCACHE_DIR=$env:SCCACHE_DIR"
+          "SOLDR_CACHE_DIR=$env:SOLDR_CACHE_DIR"
           "RUSTFLAGS=$env:RUSTFLAGS"
           rustc --print cfg | Select-String 'target_feature'
           cargo config get build.rustflags --merged
@@ -505,11 +512,11 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node npm:mcporter
           cache: true
@@ -627,11 +634,11 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Install taplo
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: cargo:taplo-cli
           cache: true
@@ -664,15 +671,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       # Only used by "Check TypeScript REST client" below - `cargo xtask
       # check-ts-client` itself skips gracefully (exit 0) if node/pnpm end up
       # missing from PATH for any reason, so this step is not load-bearing
       # for the rest of this job's Rust-only checks.
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node pnpm
           cache: true
@@ -738,11 +745,11 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Install cargo-deny
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: aqua:EmbarkStudios/cargo-deny@0.19.8
           cache: true

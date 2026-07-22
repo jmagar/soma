@@ -17,9 +17,7 @@ concurrency:
 
 env:
   CARGO_INCREMENTAL: "0"
-  RUSTC_WRAPPER: sccache
-  CARGO_BUILD_RUSTC_WRAPPER: sccache
-  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+  SOLDR_CACHE_DIR: ${{ github.workspace }}/../.soldr-cache
 
 jobs:
   sync:
@@ -32,8 +30,8 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Configure git
         run: |
