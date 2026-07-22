@@ -360,7 +360,7 @@ impl AppState {
     }
 }
 
-/// Build an [`AuthLayer`] from an [`AuthPolicy`], or `None` when the trust
+/// Build a [`soma_auth::AuthLayer`] from an [`AuthPolicy`], or `None` when the trust
 /// boundary is outside the mounted HTTP auth layer.
 #[cfg(feature = "auth")]
 pub fn build_auth_layer(

@@ -123,7 +123,7 @@ pub struct AuthConfig {
     pub github: GitHubConfig,
     /// Which configured provider `/authorize` and `/auth/login` use when the
     /// request omits `?provider=`. Must name a provider that is actually
-    /// configured (validated in [`AuthConfig::validate`]). Resolved
+    /// configured (validated in `AuthConfig::validate`). Resolved
     /// automatically when unset: `google` > `authelia` > `github`, in that
     /// priority order, picking the first one that has credentials — this is
     /// what makes every existing single-provider (Google-only) deployment

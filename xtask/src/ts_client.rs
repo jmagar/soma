@@ -23,7 +23,7 @@
 //!
 //! # Why a graceful skip, not a hard failure, when `node`/`pnpm` are missing
 //!
-//! Mirrors [`super::codex_schema::drift`]'s posture on a missing `codex` CLI:
+//! Mirrors `codex_schema::drift`'s posture on a missing `codex` CLI:
 //! this repo's self-hosted CI runners are not guaranteed to have a
 //! Node/pnpm toolchain provisioned (see docs/CI.md), and a drift check that
 //! hard-fails whenever the runner's toolchain lags reads as CI flakiness, not

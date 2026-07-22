@@ -28,10 +28,7 @@ pub(super) fn paths_may_alias(first: &Path, second: &Path) -> bool {
         return true;
     }
 
-    let same_canonical_path = match (
-        std::fs::canonicalize(first),
-        std::fs::canonicalize(second),
-    ) {
+    let same_canonical_path = match (std::fs::canonicalize(first), std::fs::canonicalize(second)) {
         (Ok(first_canonical), Ok(second_canonical)) => first_canonical == second_canonical,
         _ => false,
     };
@@ -69,10 +66,7 @@ pub(super) fn unresolved_leaves_may_alias(first: &Path, second: &Path) -> bool {
 }
 
 fn parents_share_identity(first: &Path, second: &Path) -> bool {
-    let same_canonical_path = match (
-        std::fs::canonicalize(first),
-        std::fs::canonicalize(second),
-    ) {
+    let same_canonical_path = match (std::fs::canonicalize(first), std::fs::canonicalize(second)) {
         (Ok(first), Ok(second)) => first == second,
         _ => false,
     };

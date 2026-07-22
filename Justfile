@@ -84,6 +84,18 @@ release: build-release
 check:
     cargo check
 
+# Generate Rust API documentation (rustdoc) for all workspace crates (no deps)
+doc:
+    cargo xtask doc
+
+# Generate Rust API docs and open them in a browser
+doc-open:
+    cargo xtask doc --open
+
+# Build rustdoc with warnings as errors (mirrors CI; run before pushing)
+doc-check:
+    cargo xtask doc --strict
+
 # Check Rust formatting without modifying files (used in CI + lefthook)
 fmt-check:
     cargo fmt -- --check
@@ -214,12 +226,13 @@ soma-check:
 fleet-alignment-check:
     cargo xtask check-plugin-hook-contract
 
-# Run all local quality checks in sequence: fmt-check → lint → check → test
+# Run all local quality checks in sequence: fmt-check → lint → check → test → doc-check
 verify:
     just fmt-check
     just lint
     just check
     just test
+    just doc-check
 
 # Preview the path-aware local pre-push plan without running checks
 pre-push-plan:

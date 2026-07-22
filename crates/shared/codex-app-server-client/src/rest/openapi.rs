@@ -28,12 +28,12 @@
 //! `crates/shared/codemode/Cargo.toml`) flip `serde_json::Map` to an
 //! insertion-order-preserving `IndexMap` for every crate in that build,
 //! including this one - see `xtask/Cargo.toml`'s comment on the same
-//! incident for prior art. [`json::obj`] below builds every JSON object in
+//! incident for prior art. `json::obj` below builds every JSON object in
 //! this module by sorting its entries before insertion, so
 //! [`openapi_spec`]'s serialized output is byte-identical either way.
 //! [`serde_json::json!`] is still used freely for arrays and scalar leaves,
 //! where element order is meaningful (arrays) or there's nothing to order
-//! (leaves) - only object-shaped literals go through [`json::obj`].
+//! (leaves) - only object-shaped literals go through `json::obj`.
 //!
 //! # Module layout
 //!
@@ -61,7 +61,7 @@ use route_table::{RouteDef, ROUTES};
 /// Builds the full OpenAPI 3.1.0 document for the `rest` module.
 ///
 /// Deterministic: every object in the returned [`serde_json::Value`] is
-/// built through [`json::obj`], so `serde_json::to_string_pretty(&openapi_spec())`
+/// built through `json::obj`, so `serde_json::to_string_pretty(&openapi_spec())`
 /// is byte-identical run to run and build to build - see the module docs'
 /// "Determinism" section. `tests::openapi_spec_matches_checked_in_file`
 /// pins that output against the checked-in `openapi.json`.

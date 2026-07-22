@@ -3,7 +3,7 @@
 //! shared by DCR-registered clients and CIMD `client_id`s (see
 //! [`crate::cimd`]). Split out of `authorize.rs` to keep that module under
 //! the repo's file-size contract — `authorize()` itself still lives there
-//! and calls [`resolve_client_redirect_uris`] from here.
+//! and calls `resolve_client_redirect_uris` from here.
 
 use std::net::SocketAddr;
 

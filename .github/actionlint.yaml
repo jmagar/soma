@@ -3,5 +3,7 @@ self-hosted-runner:
     - rmcp-template
     - steamy
     - tootie
+    - unraid
+    - dookie
 
 config-variables: null

@@ -5,9 +5,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use sha2::{Digest, Sha256};
 
+use crate::staging::{VALIDATION_MODE, validate_executable_mode};
 use crate::validation::ArtifactIdentity;
 use crate::{BackupStrategy, Result, UpdateError, ValidatedArtifact};
-use crate::staging::{VALIDATION_MODE, validate_executable_mode};
 
 static TRANSACTION_COUNTER: AtomicU64 = AtomicU64::new(0);
 

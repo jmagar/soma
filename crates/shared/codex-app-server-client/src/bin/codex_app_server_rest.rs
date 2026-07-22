@@ -26,7 +26,7 @@
 //! positional arguments, no combinable short flags) - well within what a
 //! small hand-rolled loop can parse correctly and exhaustively unit-test,
 //! which is the real risk `clap` mitigates for larger/more dynamic grammars.
-//! [`parse_cli`] is that loop; [`tests::cli`] exercises both `--flag value`
+//! [`parse_cli`] is that loop; `tests::cli` exercises both `--flag value`
 //! and `--flag=value` forms, unknown-flag rejection, and duplicate-flag
 //! rejection.
 

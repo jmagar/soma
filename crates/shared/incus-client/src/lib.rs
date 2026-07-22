@@ -10,8 +10,8 @@
 //!
 //! Every operation-returning mutation surfaces a [`operations::Operation`]
 //! rather than assuming synchronous completion — see
-//! [`operations::Client::wait_for_operation`] for the recommended way to
-//! wait for one to finish.
+//! [`Client::wait_for_operation`] for the recommended way to wait for one to
+//! finish.
 //!
 //! Unix-only: Incus itself only runs on Linux, and this crate's transport is
 //! a Unix domain socket ([`tokio::net::UnixStream`]) with no cross-platform

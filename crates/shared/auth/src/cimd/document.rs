@@ -9,7 +9,7 @@
 //!    network access needed to prove a *rejection*; a real "successful
 //!    public resolution" is not unit-tested here (see the plan's Global
 //!    Constraints for why: no network access in CI).
-//! 3. [`fetch_via_pinned_address`] / [`fetch_document_at`] — given an
+//! 3. `fetch_via_pinned_address` / `fetch_document_at` — given an
 //!    ALREADY resolved+validated address, builds a pinned/no-proxy/
 //!    no-redirect client and does the GET + peer-recheck + streaming-cap +
 //!    parse + validate. Tested against a local `wiremock` server by
@@ -158,7 +158,7 @@ pub fn is_cimd_client_id(client_id: &str) -> bool {
     client_id.starts_with("https://")
 }
 
-/// Resolve `host:port` via DNS (bounded by [`DNS_TIMEOUT`]) and return the
+/// Resolve `host:port` via DNS (bounded by `DNS_TIMEOUT`) and return the
 /// first resolved address, rejecting the *entire* result set if *any*
 /// resolved address is private/loopback/etc — a hostname resolving to a
 /// mix of public and private addresses is treated as untrusted outright
@@ -446,7 +446,7 @@ impl Default for DocumentCache {
 /// short negative-result cooldown for cached failures), else SSRF-validate
 /// the URL shape, resolve+validate DNS (for domain hosts) or use the
 /// already-validated IP literal directly, fetch via
-/// [`fetch_via_pinned_address`], and cache the result either way.
+/// `fetch_via_pinned_address`, and cache the result either way.
 ///
 /// # Errors
 /// Propagates [`CimdError`] from any of the composed validation/fetch
