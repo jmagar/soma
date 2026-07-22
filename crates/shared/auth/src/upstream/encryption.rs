@@ -1,6 +1,6 @@
 //! chacha20poly1305 AEAD wrapper for token-at-rest encryption.
 //!
-//! The cipher operations live in the shared [`crate::aead`] core (one
+//! The cipher operations live in the shared crate-internal `aead` core (one
 //! implementation for both at-rest stacks); this module owns key loading
 //! from `{PREFIX}_OAUTH_ENCRYPTION_KEY` and the upstream error taxonomy.
 //!

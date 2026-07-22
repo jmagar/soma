@@ -37,7 +37,7 @@ pub struct JwksDocument {
 /// Note the field shape is Ed25519's (`kty=OKP`, `crv=Ed25519`, raw public
 /// point in `x`), not RSA's `n`/`e` — the local IdP migrated from RS256 to
 /// EdDSA. Upstream provider JWKS (Google/Authelia) still use the separate
-/// RSA-shaped `Jwk` type in [`crate::oidc`].
+/// RSA-shaped `Jwk` type in the crate-internal `oidc` module.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JwkKey {
     pub kty: String,
