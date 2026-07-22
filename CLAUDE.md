@@ -112,6 +112,7 @@ Auth is selected in `build_auth_policy()` in `main.rs`. Scopes are `soma:read` a
 | `SOMA_MCP_PORT` | `40060` | Bind port |
 | `SOMA_MCP_NO_AUTH` | `false` | Disable auth (loopback only) |
 | `SOMA_MCP_TOKEN` | — | Static bearer token |
+| `SOMA_MCP_STATIC_TOKEN_WRITE` | `false` | Grant the static bearer token `soma:write` in addition to `soma:read` (read-only by default) |
 | `SOMA_MCP_ALLOWED_HOSTS` | — | Extra comma-separated Host header values |
 | `SOMA_MCP_ALLOWED_ORIGINS` | — | Extra comma-separated CORS origins |
 | `SOMA_MCP_TRACE_HEADERS` | `off` | Trusted inbound HTTP trace extraction; non-`off` requires loopback or a header-sanitizing trusted gateway. See `docs/TRACE_CONTEXT.md`. |

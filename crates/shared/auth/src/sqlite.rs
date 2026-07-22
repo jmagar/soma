@@ -571,6 +571,13 @@ impl SqliteStore {
         .await
     }
 
+    /// Run an arbitrary SQL batch against the store — test fixtures only.
+    ///
+    /// Gated behind `cfg(any(test, debug_assertions))` (deliberately not a
+    /// Cargo feature, mirroring `upstream::cache`'s test seam) so an
+    /// arbitrary-SQL execution method can never ship in
+    /// `--all-features --release` artifacts.
+    #[cfg(any(test, debug_assertions))]
     pub async fn execute_test_statement(&self, sql: &str) -> Result<(), AuthError> {
         let sql = sql.to_string();
         self.with_conn(move |conn| conn.execute_batch(&sql).map_err(sqlite_error))

@@ -97,6 +97,12 @@ pub struct McpConfig {
     pub conformance_fixtures: bool,
     /// Static bearer token for simple auth (SOMA_MCP_TOKEN).
     pub api_token: Option<String>,
+    /// Grant the static bearer token `soma:write` in addition to the
+    /// default `soma:read` (SOMA_MCP_STATIC_TOKEN_WRITE). Off by default so
+    /// a leaked static token cannot perform write actions unless the
+    /// operator explicitly opted in (pattern ported from cortex's
+    /// `static_token_is_admin`).
+    pub static_token_write: bool,
     /// Additional allowed Host header values (comma-separated in env).
     pub allowed_hosts: Vec<String>,
     /// Additional allowed CORS origins (comma-separated in env).
@@ -237,6 +243,7 @@ impl Default for McpConfig {
             trusted_gateway: false,
             conformance_fixtures: false,
             api_token: None,
+            static_token_write: false,
             allowed_hosts: Vec::new(),
             allowed_origins: Vec::new(),
             trace_headers: TraceHeaderMode::default(),
@@ -378,6 +385,10 @@ impl Config {
             &mut config.mcp.conformance_fixtures,
         )?;
         env_opt_str("SOMA_MCP_TOKEN", &mut config.mcp.api_token);
+        env_bool(
+            "SOMA_MCP_STATIC_TOKEN_WRITE",
+            &mut config.mcp.static_token_write,
+        )?;
         env_list("SOMA_MCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
         env_list("SOMA_MCP_ALLOWED_ORIGINS", &mut config.mcp.allowed_origins);
         env_opt_str("SOMA_MCP_PUBLIC_URL", &mut config.mcp.auth.public_url);

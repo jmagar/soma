@@ -246,6 +246,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `SOMA_MCP_STATIC_TOKEN_WRITE` (default `false`): the static bearer token
+  stays read-only (`soma:read`) unless the operator explicitly grants
+  `soma:write`, applied through the single `build_auth_layer` call site so
+  bearer-only and OAuth-hybrid deployments can never drift (pattern ported
+  from cortex's `static_token_is_admin`).
+- Rejected bearer tokens now emit a rate-limited `warn` carrying a short
+  SHA-256 token fingerprint (never the token) plus the peer address when
+  available — at most one per fingerprint per 60s with a bounded tracking
+  map, making brute-force attempts operator-visible without log flooding
+  (pattern ported from cortex's ingest auth).
+
 - Add `crates/shared/self-update` as a standalone, transport-neutral binary
   update transaction with bounded streaming SHA-256 verification, timed exact-
   version validation, Unix atomic replacement, and durable health confirmation
@@ -705,6 +716,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and overridable" contract. An oversized body is rejected with `413`
     (distinct from a malformed-JSON `400`); every request-body route documents
     it, guarded by `every_route_with_a_request_body_documents_413`.
+
+### Security
+
+- Bound the per-IP OAuth rate-limiter bucket map (`/authorize`, `/register`):
+  idle buckets are swept and the least-recently-used bucket is evicted at a
+  4096-entry cap, closing unbounded memory growth under IPv6 source-address
+  churn (pattern ported from labby-auth's bounded limiter).
+- Browser-session CSRF header comparison is now constant-time, matching the
+  crate's static-bearer and PKCE comparison discipline.
+- `SqliteStore::execute_test_statement` (arbitrary-SQL test fixture helper)
+  is now compiled out of release builds via `cfg(any(test, debug_assertions))`.
 
 ### Changed
 
