@@ -88,6 +88,13 @@ runs:
         cache-preset: minimal
         shims: ${{ inputs.enable-shims }}
         toolchain: ${{ inputs.toolchain }}
+        # platform-default keeps the system linker (cc/gcc). soldr's own
+        # default (`fast`) injects a clang + mold/rust-lld toolchain that the
+        # CI runner image does not have (`error: linker 'clang' not found`),
+        # and soma leaves linker choice to the developer's global config, so
+        # CI has no linker preference to honor. This matches the pre-migration
+        # sccache behavior (system default linker).
+        linker: platform-default
 
     # GitHub release assets are MUTABLE: the version pin above pins the tag
     # name, not the bytes — a compromised upstream account could swap the
