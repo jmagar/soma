@@ -98,6 +98,8 @@ jobs:
     needs: validate-release-tag
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/web
@@ -131,6 +133,8 @@ jobs:
     runs-on: [self-hosted, unraid]
     needs: [validate-release-tag, frontend-assets]
     timeout-minutes: 60
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:

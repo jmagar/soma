@@ -135,7 +135,14 @@ function encodePathSegment(value: string, paramName: string): string {
  * `/v1/call/` the same way a raw `sessionId`/`requestKey` of `".."` must not.
  */
 export function encodeMethodPath(method: string): string {
-  const trimmed = method.replace(/^\/+|\/+$/g, "");
+  // Trim leading/trailing "/" with a linear character scan rather than a
+  // regex. `/^\/+|\/+$/g` is a super-linear (ReDoS-prone) pattern on inputs
+  // that are long runs of slashes; a scan is O(n) and behaves identically.
+  let start = 0;
+  let end = method.length;
+  while (start < end && method.charCodeAt(start) === 47 /* "/" */) start += 1;
+  while (end > start && method.charCodeAt(end - 1) === 47 /* "/" */) end -= 1;
+  const trimmed = method.slice(start, end);
   if (trimmed.length === 0) {
     throw new TypeError("method must not be empty");
   }
