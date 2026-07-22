@@ -47,7 +47,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.validate.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -96,7 +96,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
@@ -149,7 +149,7 @@ jobs:
       security-events: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
@@ -179,7 +179,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
