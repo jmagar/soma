@@ -65,8 +65,8 @@ jobs:
           ref: ${{ fromJson(needs.release-please.outputs.pr).headBranchName }}
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Sync version-bearing files
         env:
