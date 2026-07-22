@@ -21,9 +21,7 @@ jobs:
     timeout-minutes: 15
     env:
       CARGO_INCREMENTAL: "0"
-      RUSTC_WRAPPER: sccache
-      CARGO_BUILD_RUSTC_WRAPPER: sccache
-      SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+      SOLDR_CACHE_DIR: ${{ github.workspace }}/../.soldr-cache
       GH_TOKEN: ${{ github.token }}
       MCP_SCHEMA_PATH: schema/2025-11-25/schema.ts
       MCP_SCHEMA_RAW_URL: https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/2025-11-25/schema.ts
@@ -39,8 +37,8 @@ jobs:
           install_args: gh
           cache: true
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Fetch rmcp crate metadata
         run: |
