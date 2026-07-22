@@ -15,9 +15,7 @@ concurrency:
 
 env:
   CARGO_INCREMENTAL: "0"
-  RUSTC_WRAPPER: sccache
-  CARGO_BUILD_RUSTC_WRAPPER: sccache
-  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+  SOLDR_CACHE_DIR: ${{ github.workspace }}/../.soldr-cache
 
 jobs:
   changes:
@@ -30,12 +28,12 @@ jobs:
       native: ${{ steps.classify.outputs.native }}
       toml: ${{ steps.classify.outputs.toml }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Classify changed paths
         id: classify
@@ -61,15 +59,15 @@ jobs:
     runs-on: [self-hosted, unraid]
     # Was 20; the workspace now includes a Tauri desktop app (GTK/webkit2gtk/
     # wasmtime), which is a lot to compile from scratch under the 1.96
-    # toolchain's own sccache namespace the first time it builds post-refactor.
+    # toolchain's own compile-cache namespace the first time it builds post-refactor.
     # Subsequent runs reuse that cache and should be much faster; raise
     # again if 40 stops being enough headroom.
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust 1.96.0 and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust 1.96.0 and soldr
+        uses: ./.github/actions/setup-rust-soldr
         with:
           toolchain: 1.96.0
 

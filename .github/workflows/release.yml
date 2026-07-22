@@ -36,12 +36,10 @@ env:
   # CUSTOMIZE: Replace "soma" with your binary name.
   BINARY_NAME: soma
   CARGO_INCREMENTAL: "0"
-  # Release builds use sccache, while still overriding the repo's dev-only
-  # scripts/cargo-rustc-wrapper so it cannot auto-sync binaries into ./bin before
-  # the release packaging step.
-  RUSTC_WRAPPER: sccache
-  CARGO_BUILD_RUSTC_WRAPPER: sccache
-  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+  # Release builds route through soldr (cargo tool shims); soldr's own
+  # RUSTC_WRAPPER keeps the dev-only scripts/cargo-rustc-wrapper overridden so
+  # it cannot auto-sync binaries into ./bin before the release packaging step.
+  SOLDR_CACHE_DIR: ${{ github.workspace }}/../.soldr-cache
   RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
 
 jobs:
@@ -54,7 +52,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.validate.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -98,16 +96,18 @@ jobs:
     needs: validate-release-tag
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node pnpm
           cache: true
@@ -131,6 +131,8 @@ jobs:
     runs-on: [self-hosted, unraid]
     needs: [validate-release-tag, frontend-assets]
     timeout-minutes: 60
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +147,7 @@ jobs:
             ext: ".exe"
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
@@ -155,8 +157,8 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust target and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust target and soldr
+        uses: ./.github/actions/setup-rust-soldr
         with:
           targets: ${{ matrix.target }}
 
@@ -225,7 +227,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -289,7 +291,7 @@ jobs:
         working-directory: packages/soma-rmcp
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
           persist-credentials: false
@@ -342,7 +344,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 

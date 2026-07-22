@@ -33,12 +33,13 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Force CI through sccache on both Linux and Windows. This also overrides the
-  # repo's dev-only scripts/cargo-rustc-wrapper, whose local binary-sync side
-  # effects are not wanted in CI and whose bash wrapper cannot run on Windows.
-  RUSTC_WRAPPER: sccache
-  CARGO_BUILD_RUSTC_WRAPPER: sccache
-  SCCACHE_DIR: ${{ github.workspace }}/../.sccache
+  # Builds route through the soldr front door (cargo tool shims installed by
+  # ./.github/actions/setup-rust-soldr). soldr sets RUSTC_WRAPPER for its cargo
+  # child, which also keeps the dev-only scripts/cargo-rustc-wrapper (used by
+  # sibling repos / user-level config) overridden in CI. The artifact store
+  # lives on the persistent self-hosted runner disk, same pattern as the old
+  # SCCACHE_DIR; the native Windows job runs without any compile wrapper.
+  SOLDR_CACHE_DIR: ${{ github.workspace }}/../.soldr-cache
   # Keep Windows artifacts portable even on self-hosted runners whose user-level
   # Cargo config may contain target-cpu=native or machine-specific SIMD flags.
   WINDOWS_PORTABLE_RUSTFLAGS: >-
@@ -65,12 +66,12 @@ jobs:
       secrets: ${{ steps.classify.outputs.secrets }}
       release: ${{ steps.classify.outputs.release }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Classify changed paths
         id: classify
@@ -97,10 +98,10 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: stable
 
@@ -115,10 +116,10 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
         with:
           components: rustfmt
 
@@ -133,10 +134,10 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Check architecture boundaries
         run: cargo xtask check-architecture
@@ -152,10 +153,10 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
         with:
           components: clippy
 
@@ -186,10 +187,10 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       # CUSTOMIZE: Change cache key prefix from "soma" to your repo name.
       - name: Cache Cargo
@@ -235,10 +236,10 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node pnpm
           cache: true
@@ -303,7 +304,7 @@ jobs:
     if: ${{ always() && needs.changes.outputs.native == 'true' && needs.frontend-assets.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download web export
         uses: actions/download-artifact@v8
@@ -311,8 +312,8 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Cache Cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -342,7 +343,7 @@ jobs:
     if: ${{ always() && needs.changes.outputs.native == 'true' && needs.frontend-assets.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download web export
         uses: actions/download-artifact@v8
@@ -350,10 +351,16 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      # Native Windows cargo historically misbehaved under compile wrappers,
+      # so this job installs soldr without cargo shims and pins the wrapper
+      # env empty (an empty RUSTC_WRAPPER also keeps any user-level
+      # rustc-wrapper config on the runner overridden).
+      - name: Install Rust and soldr (no cargo shims)
+        uses: ./.github/actions/setup-rust-soldr
+        with:
+          enable-shims: "false"
 
-      - name: Disable sccache for native Windows cargo
+      - name: Run native Windows cargo without a compile wrapper
         shell: pwsh
         run: |
           "RUSTC_WRAPPER=" >> $env:GITHUB_ENV
@@ -372,7 +379,7 @@ jobs:
         run: cargo test -p soma-self-update --locked -- --test-threads=1
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"
 
@@ -383,10 +390,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           rustc -vV
-          sccache --version
+          soldr --version
           "RUSTC_WRAPPER=$env:RUSTC_WRAPPER"
           "CARGO_BUILD_RUSTC_WRAPPER=$env:CARGO_BUILD_RUSTC_WRAPPER"
-          "SCCACHE_DIR=$env:SCCACHE_DIR"
+          "SOLDR_CACHE_DIR=$env:SOLDR_CACHE_DIR"
           "RUSTFLAGS=$env:RUSTFLAGS"
           rustc --print cfg | Select-String 'target_feature'
           cargo config get build.rustflags --merged
@@ -497,7 +504,7 @@ jobs:
     if: ${{ always() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.rust == 'true' || needs.changes.outputs.web == 'true') && needs.frontend-assets.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download web export
         uses: actions/download-artifact@v8
@@ -505,11 +512,11 @@ jobs:
           name: web-out
           path: apps/web/out
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node npm:mcporter
           cache: true
@@ -579,7 +586,7 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Docker Compose
         run: |
@@ -625,13 +632,13 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Install taplo
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: cargo:taplo-cli
           cache: true
@@ -647,7 +654,7 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Check pre-commit hook speed policy
         run: python3 scripts/check_lefthook_pre_commit_speed.py
@@ -660,19 +667,19 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       # Only used by "Check TypeScript REST client" below - `cargo xtask
       # check-ts-client` itself skips gracefully (exit 0) if node/pnpm end up
       # missing from PATH for any reason, so this step is not load-bearing
       # for the rest of this job's Rust-only checks.
       - name: Set up mise tools
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: node pnpm
           cache: true
@@ -736,13 +743,13 @@ jobs:
     runs-on: [self-hosted, unraid]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust and sccache
-        uses: ./.github/actions/setup-rust-sccache
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
 
       - name: Install cargo-deny
-        uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4
+        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4
         with:
           install_args: aqua:EmbarkStudios/cargo-deny@0.19.8
           cache: true
