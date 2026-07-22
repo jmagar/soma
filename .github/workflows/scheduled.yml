@@ -80,19 +80,25 @@ jobs:
         run: |
           set -euo pipefail
           CAP_GB=20
+          # Workflow-level env supplies SOLDR_CACHE_DIR (same path every
+          # workflow uses); the fallback covers a future env removal.
           store="${SOLDR_CACHE_DIR:-$HOME/.soldr/cache}"
-          if [ ! -d "$store" ]; then
-            echo "store $store does not exist yet — nothing to do"
+          # Refuse to delete anything that isn't a plausible cache dir —
+          # rm -rf on a path built from env deserves a seatbelt.
+          resolved="$(realpath -m "$store")"
+          case "$resolved" in
+            ""|/|"$HOME") echo "::error::refusing to purge suspicious path '$resolved'"; exit 1 ;;
+            *cache*|*.soldr*) ;;
+            *) echo "::error::refusing to purge non-cache-looking path '$resolved'"; exit 1 ;;
+          esac
+          if [ ! -d "$resolved" ]; then
+            echo "store $resolved does not exist yet — nothing to do"
             exit 0
           fi
-          size_gb=$(du -s --block-size=1G "$store" | cut -f1)
-          echo "soldr store: ${size_gb}G at $store (cap ${CAP_GB}G)"
+          size_gb=$(du -s --block-size=1G "$resolved" | cut -f1)
+          echo "soldr store: ${size_gb}G at $resolved (cap ${CAP_GB}G)"
           if [ "$size_gb" -gt "$CAP_GB" ]; then
-            echo "over cap — purging"
-            if command -v soldr >/dev/null 2>&1 && [ "$store" = "$HOME/.soldr/cache" ]; then
-              soldr purge
-            else
-              rm -rf "$store"
-            fi
+            echo "over cap — purging (soldr is not installed in this job; deleting the store directly is equivalent to soldr purge for the on-disk state)"
+            rm -rf "$resolved"
             echo "purged; next builds start with a cold cache"
           fi

@@ -358,7 +358,7 @@ jobs:
       - name: Install Rust and soldr (no cargo shims)
         uses: ./.github/actions/setup-rust-soldr
         with:
-          tool-shims: "false"
+          enable-shims: "false"
 
       - name: Run native Windows cargo without a compile wrapper
         shell: pwsh

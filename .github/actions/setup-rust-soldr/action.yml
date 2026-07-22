@@ -13,13 +13,14 @@ inputs:
     description: Comma-separated Rust targets to install.
     required: false
     default: ""
-  tool-shims:
+  enable-shims:
     description: >-
-      Tool shims to install via setup-soldr ("cargo" routes plain `cargo ...`
-      steps through soldr; "false" installs soldr without shims so cargo runs
-      bare — used by the native Windows job).
+      "true" (default) installs setup-soldr's PATH shims (cargo, rustc,
+      rustfmt, clippy-driver, rustdoc) so plain `cargo ...` steps route
+      through soldr; "false" installs soldr without shims so cargo runs
+      bare — used by the native Windows job.
     required: false
-    default: "cargo"
+    default: "true"
 runs:
   using: composite
   steps:
@@ -72,17 +73,20 @@ runs:
         targets: ${{ inputs.targets }}
 
     # setup-soldr installs the soldr front door (zccache compilation caching).
-    # cache: false — these are persistent self-hosted runners, so the artifact
-    # store lives on local disk via SOLDR_CACHE_DIR (set in workflow env, same
-    # pattern as the old SCCACHE_DIR); GitHub-cache round-trips would only add
-    # network overhead. With tool-shims: cargo, plain `cargo ...` steps
-    # trampoline into `soldr cargo ...` and the action exports SOLDR_REAL_CARGO
-    # so there is no recursive PATH lookup.
+    # cache-preset: minimal — these are persistent self-hosted runners, so the
+    # zccache store persists on local disk (SOLDR_CACHE_DIR in workflow env,
+    # same pattern as the old SCCACHE_DIR) and the GitHub-cache save/restore
+    # layers would only add network overhead. Compile caching itself stays ON
+    # (do NOT use `cache: false` here — that umbrella switch exports
+    # SOLDR_BUILD_CACHE_MODE=off and disables zccache entirely). With
+    # shims: true, plain `cargo ...` steps trampoline into `soldr cargo ...`.
+    # version pins the soldr binary; bump deliberately, not via tag drift.
     - name: Install soldr
-      uses: zackees/setup-soldr@v0
+      uses: zackees/setup-soldr@c4e66a9114a45193605ff4a27404ef74b9b9a6dc # v0
       with:
-        cache: false
-        tool-shims: ${{ inputs.tool-shims }}
+        version: "0.8.19"
+        cache-preset: minimal
+        shims: ${{ inputs.enable-shims }}
         toolchain: ${{ inputs.toolchain }}
 
     - name: Show Rust cache configuration
@@ -93,5 +97,17 @@ runs:
         cargo -V
         soldr --version
         printf 'SOLDR_CACHE_DIR=%s\n' "${SOLDR_CACHE_DIR:-}"
-        printf 'SOLDR_REAL_CARGO=%s\n' "${SOLDR_REAL_CARGO:-}"
         printf 'RUSTUP_TOOLCHAIN=%s\n' "${RUSTUP_TOOLCHAIN:-}"
+        # Guard against the silent no-op failure mode: if shims were
+        # requested, `cargo` on PATH must resolve into setup-soldr's shims
+        # dir. A bare cargo here means every build silently runs uncached.
+        if [ "${{ inputs.enable-shims }}" = "true" ]; then
+          resolved="$(command -v cargo)"
+          case "$resolved" in
+            *shims*) printf 'cargo shim engaged: %s\n' "$resolved" ;;
+            *)
+              echo "::error::soldr cargo shim NOT engaged (cargo=$resolved); builds would run uncached"
+              exit 1
+              ;;
+          esac
+        fi
