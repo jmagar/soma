@@ -52,7 +52,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.validate.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -102,7 +102,7 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
@@ -147,7 +147,7 @@ jobs:
             ext: ".exe"
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
@@ -227,7 +227,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           fetch-depth: 0
@@ -291,7 +291,7 @@ jobs:
         working-directory: packages/soma-rmcp
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
           persist-credentials: false
@@ -344,7 +344,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.validate-release-tag.outputs.release_tag }}
 
