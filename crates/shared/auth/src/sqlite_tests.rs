@@ -733,6 +733,140 @@ async fn sqlite_store_backfills_provider_column_on_pre_migration_refresh_tokens_
     assert_eq!(row.resource, "https://lab.example.com/mcp");
 }
 
+fn test_enc_key() -> crate::at_rest::TokenEncryptionKey {
+    crate::at_rest::TokenEncryptionKey::from_passphrase("sqlite-at-rest-test-key")
+}
+
+fn sample_refresh_row(refresh_token: &str, provider_rt: &str) -> RefreshTokenRow {
+    let now = now_unix();
+    RefreshTokenRow {
+        refresh_token: refresh_token.to_string(),
+        client_id: "client".to_string(),
+        subject: "google-user".to_string(),
+        resource: "https://lab.example.com/mcp".to_string(),
+        scope: "lab".to_string(),
+        provider: "google".to_string(),
+        provider_refresh_token: Some(provider_rt.to_string()),
+        created_at: now,
+        expires_at: now + 3600,
+    }
+}
+
+fn raw_provider_rt_column(path: &std::path::Path, hash: &str) -> String {
+    let conn = rusqlite::Connection::open(path).unwrap();
+    conn.query_row(
+        "SELECT provider_refresh_token FROM refresh_tokens WHERE refresh_token_hash = ?1",
+        rusqlite::params![hash],
+        |row| row.get(0),
+    )
+    .unwrap()
+}
+
+/// New writes must use the AAD-bound `enc2:` storage format and round-trip
+/// back to plaintext through `find_refresh_token`.
+#[tokio::test]
+async fn sqlite_store_writes_aad_bound_provider_refresh_token() {
+    let path = temp_db_path();
+    let store = SqliteStore::open_with_key(path.clone(), Some(test_enc_key()))
+        .await
+        .unwrap();
+    store
+        .upsert_refresh_token(sample_refresh_row("bound-token", "provider-secret"))
+        .await
+        .unwrap();
+
+    let stored = raw_provider_rt_column(&path, &super::hash_token("bound-token"));
+    assert!(
+        stored.starts_with("enc2:"),
+        "new writes must carry the AAD-bound sentinel, got: {stored}"
+    );
+
+    let row = store
+        .find_refresh_token("bound-token")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        row.provider_refresh_token.as_deref(),
+        Some("provider-secret")
+    );
+}
+
+/// A ciphertext transplanted onto a row with a different refresh-token hash
+/// must fail decryption (the AAD re-derivation no longer matches).
+#[tokio::test]
+async fn sqlite_store_rejects_transplanted_provider_refresh_token() {
+    let path = temp_db_path();
+    let store = SqliteStore::open_with_key(path.clone(), Some(test_enc_key()))
+        .await
+        .unwrap();
+    store
+        .upsert_refresh_token(sample_refresh_row("victim-token", "provider-secret"))
+        .await
+        .unwrap();
+
+    // Simulate an attacker (or corrupted restore) moving the encrypted blob
+    // onto a different row identity by rewriting the primary key.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute(
+            "UPDATE refresh_tokens SET refresh_token_hash = ?1 WHERE refresh_token_hash = ?2",
+            rusqlite::params![
+                super::hash_token("attacker-token"),
+                super::hash_token("victim-token"),
+            ],
+        )
+        .unwrap();
+    }
+
+    let err = store
+        .find_refresh_token("attacker-token")
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("decryption failed"),
+        "transplanted ciphertext must fail closed, got: {err}"
+    );
+}
+
+/// Legacy `enc:` rows (written before AAD binding existed) must continue to
+/// decrypt through the bound read path.
+#[tokio::test]
+async fn sqlite_store_decrypts_legacy_unbound_provider_refresh_token() {
+    let path = temp_db_path();
+    let key = test_enc_key();
+    let store = SqliteStore::open_with_key(path.clone(), Some(key.clone()))
+        .await
+        .unwrap();
+    store
+        .upsert_refresh_token(sample_refresh_row("legacy-token", "placeholder"))
+        .await
+        .unwrap();
+
+    // Rewrite the stored column with a legacy unbound ciphertext, as an
+    // existing pre-upgrade database would contain.
+    let legacy = crate::at_rest::encrypt_provider_token(&key, "legacy-provider-secret").unwrap();
+    assert!(legacy.starts_with("enc:"));
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute(
+            "UPDATE refresh_tokens SET provider_refresh_token = ?1 WHERE refresh_token_hash = ?2",
+            rusqlite::params![legacy, super::hash_token("legacy-token")],
+        )
+        .unwrap();
+    }
+
+    let row = store
+        .find_refresh_token("legacy-token")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        row.provider_refresh_token.as_deref(),
+        Some("legacy-provider-secret")
+    );
+}
+
 // Ensure AllowedUserRow is importable as the right type in tests.
 #[allow(dead_code)]
 fn _assert_allowed_user_row_type() -> AllowedUserRow {

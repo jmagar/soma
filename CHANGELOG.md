@@ -256,6 +256,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   available — at most one per fingerprint per 60s with a bounded tracking
   map, making brute-force attempts operator-visible without log flooding
   (pattern ported from cortex's ingest auth).
+- Add a safety-class authorization layer for dynamic provider dispatch
+  (`soma_domain::authz`): provider kinds are classified (in-process trusted,
+  sandboxed, local-runtime, network-egress) with per-class scope floors, an
+  additional trusted-local requirement for inline local-runtime execution,
+  deny-by-default for unclassified kinds, and structured decisions with stable
+  reason codes surfaced as structured MCP tool errors (`insufficient_scope`,
+  `local_trust_required`, `unclassified_provider_kind`). Enforced at the
+  `ProviderRegistry::dispatch` chokepoint on top of the existing per-tool
+  scope checks; loopback and trusted-gateway callers are unaffected
+  (patterns ported from axon's `axon-authz`).
+
+### Changed
+
+- Migrate local JWT access-token signing from RSA/RS256 to EdDSA/Ed25519. On
+  load, any pre-migration RSA key material is quarantined to
+  `<key>.retired-<ts>` and never reused; a fresh Ed25519 key is generated in
+  its place. `SigningKeys` now verifies against the active key plus an optional
+  previous key and advertises both in the JWKS, and `SigningKeys::rotate`
+  provides a rotation that keeps outstanding tokens valid for one overlap
+  window (bounded by the access-token TTL) — a capability no crate in the
+  family had. Upstream provider (Google/Authelia) RS256 verification is
+  unchanged. The `/jwks` document now publishes OKP/Ed25519 keys
+  (`kty=OKP`, `crv=Ed25519`) instead of RSA `n`/`e`; existing access tokens
+  signed by the old RSA key are invalidated and clients must re-authenticate.
+- OAuth env vars (`SOMA_MCP_AUTHELIA_*`, `SOMA_MCP_GITHUB_*`,
+  `SOMA_MCP_GOOGLE_CALLBACK_PATH`/`_SCOPES`, `SOMA_MCP_AUTH_DEFAULT_PROVIDER`,
+  the auth TTL/rate-limit/token-encryption/path keys) are now loaded through
+  the typed `soma-config` layer and fed to `soma_auth::AuthConfigBuilder` as a
+  synthesized var list — `soma-auth` no longer reads process env in Soma's
+  OAuth path. Var names, defaults, and `[mcp.auth]` config.toml keys are
+  unchanged; provider settings can now also be set in `config.toml` (pattern
+  ported from cortex's synthetic-env config bridge).
+
+### Security
+
+- Consolidate the two at-rest ChaCha20-Poly1305 stacks behind a single shared
+  AEAD core; inbound provider refresh tokens are now AAD-bound to their row
+  identity via a new `enc2:` storage format (legacy `enc:` rows still decrypt;
+  a ciphertext moved to a different row fails closed), and encryption key
+  material is zeroized on drop. No key or config migration required.
 
 - Add `crates/shared/self-update` as a standalone, transport-neutral binary
   update transaction with bounded streaming SHA-256 verification, timed exact-
