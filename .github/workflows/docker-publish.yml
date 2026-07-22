@@ -52,6 +52,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Install Rust and soldr
+        uses: ./.github/actions/setup-rust-soldr
+
       - name: Validate release tag
         id: validate
         shell: bash
