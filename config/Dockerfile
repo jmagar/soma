@@ -118,7 +118,7 @@ LABEL org.opencontainers.image.title="Soma" \
       org.opencontainers.image.authors="dinglebear.ai" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${SOMA_VERSION}" \
-      io.modelcontextprotocol.server.name="dinglebear.ai/soma"
+      io.modelcontextprotocol.server.name="ai.dinglebear/soma"
 
 # CUSTOMIZE: Add other default env vars your binary needs.
 # ENV SOMA_MCP_HOST=0.0.0.0

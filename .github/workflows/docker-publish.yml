@@ -140,7 +140,9 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            io.modelcontextprotocol.server.name=ai.dinglebear/soma
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -187,7 +189,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ needs.validate-release-tag.outputs.release_tag }}
+          # A manual run is the recovery path for an existing tag. Use the
+          # current manifest/workflow fixes while the image build still checks
+          # out the immutable release source above.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || needs.validate-release-tag.outputs.release_tag }}
 
       - name: Install mcp-publisher
         run: |
@@ -209,18 +214,17 @@ jobs:
           image = f"{os.environ['IMAGE_NAME']}:{version}"
           data["version"] = version
           for package in data.get("packages", []):
-              package["version"] = version
               if package.get("registryType") == "oci":
                   package["identifier"] = image
+                  package.pop("version", None)
+                  package.pop("registryBaseUrl", None)
+              else:
+                  package["version"] = version
           publisher = data.get("_meta", {}).get("io.modelcontextprotocol.registry/publisher-provided", {})
           distribution = publisher.get("distribution")
           if isinstance(distribution, dict):
-              package_name = distribution.get("nodePackage") or "soma-rmcp"
-              existing_npm = distribution.get("npm")
-              if isinstance(existing_npm, str) and "@" in existing_npm:
-                  package_name = existing_npm.rsplit("@", 1)[0]
-              distribution["npm"] = f"{package_name}@{version}"
-              distribution.pop("ociImage", None)
+              distribution.clear()
+              distribution["ociImage"] = image
 
           path.write_text(json.dumps(data, indent=2) + "\n")
           PY

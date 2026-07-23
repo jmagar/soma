@@ -710,7 +710,7 @@ fn render_distribution_plugin(snapshot: &Value) -> Value {
         "docs": "docs/generated/provider-surfaces.md",
         "mcp_server": {
             "manifest": "server.json",
-            "name": "dinglebear.ai/soma",
+            "name": "ai.dinglebear/soma",
             "registry_schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
         },
         "provider_files": snapshot["surfaces"]["provider_files"].clone(),
