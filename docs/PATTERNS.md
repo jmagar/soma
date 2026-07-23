@@ -1646,7 +1646,7 @@ Or via GitHub OAuth:
 ```json
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "dinglebear.ai/soma",
+  "name": "ai.dinglebear/soma",
   "title": "Soma",
   "description": "One-line description of what the server does.",
   "repository": {
@@ -1658,11 +1658,12 @@ Or via GitHub OAuth:
     {
       "registryType": "oci",
       "identifier": "ghcr.io/dinglebear-ai/soma:0.1.0",
-      "version": "0.1.0",
       "transport": {
-        "type": "streamable-http",
-        "url": "http://127.0.0.1:40060/mcp"
+        "type": "stdio"
       },
+      "packageArguments": [
+        { "type": "positional", "value": "mcp" }
+      ],
       "environmentVariables": [
         {
           "name": "SOMA_API_URL",
