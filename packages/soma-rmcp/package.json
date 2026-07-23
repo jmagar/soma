@@ -46,7 +46,7 @@
     "soma"
   ],
   "license": "MIT",
-  "mcpName": "ai.dinglebear/soma-rmcp",
+  "mcpName": "ai.dinglebear/soma",
   "name": "soma-rmcp",
   "repository": {
     "directory": "packages/soma-rmcp",

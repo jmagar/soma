@@ -118,7 +118,7 @@ fn codex_plugin_icon_assets_exist() {
 #[test]
 fn mcp_registry_manifest_advertises_rich_product_metadata() {
     let manifest = json("server.json");
-    assert_eq!(manifest["name"], "ai.dinglebear/soma-rmcp");
+    assert_eq!(manifest["name"], "ai.dinglebear/soma");
     assert_eq!(manifest["title"], "Soma");
     assert_eq!(
         manifest["repository"]["url"],
@@ -158,54 +158,47 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
     );
 
     let packages = manifest["packages"].as_array().unwrap();
-    assert!(
-        packages
-            .iter()
-            .all(|package| package["registryType"] != "oci"),
-        "server.json should advertise the npm stdio package, not OCI metadata"
-    );
-
-    let npm = packages
+    let oci = packages
         .iter()
-        .find(|package| package["registryType"] == "npm")
-        .expect("missing npm package metadata");
-    assert_eq!(npm["identifier"], "soma-rmcp");
-    assert_eq!(npm["runtimeHint"], "npx");
-    assert_eq!(npm["transport"]["type"], "stdio");
-    assert!(npm["packageArguments"]
+        .find(|package| package["registryType"] == "oci")
+        .expect("missing OCI package metadata");
+    assert_eq!(oci["identifier"], "ghcr.io/dinglebear-ai/soma:0.5.0");
+    assert_eq!(oci["runtimeHint"], "docker");
+    assert_eq!(oci["transport"]["type"], "stdio");
+    assert!(
+        oci.get("version").is_none(),
+        "OCI packages encode the version in the image tag"
+    );
+    assert!(
+        oci.get("registryBaseUrl").is_none(),
+        "OCI packages encode the registry in the canonical image reference"
+    );
+    assert!(oci["packageArguments"]
         .as_array()
         .unwrap()
         .iter()
         .any(|arg| arg["value"] == "mcp"));
 
-    let npm_envs: Vec<&str> = npm["environmentVariables"]
+    let oci_envs: Vec<&str> = oci["environmentVariables"]
         .as_array()
         .unwrap()
         .iter()
         .filter_map(|env| env["name"].as_str())
         .collect();
     for name in [
-        "SOMA_BIN",
         "SOMA_HOME",
         "SOMA_PROVIDER_DIR",
         "SOMA_API_URL",
         "SOMA_API_KEY",
         "RUST_LOG",
     ] {
-        assert!(npm_envs.contains(&name), "npm metadata missing {name}");
+        assert!(oci_envs.contains(&name), "OCI metadata missing {name}");
     }
 
-    let launcher = json("packages/soma-rmcp/package.json");
-    let expected_npm = format!(
-        "soma-rmcp@{}",
-        launcher["version"]
-            .as_str()
-            .expect("launcher package version")
-    );
     assert_eq!(
         manifest["_meta"]["io.modelcontextprotocol.registry/publisher-provided"]["distribution"]
-            ["npm"],
-        expected_npm.as_str()
+            ["ociImage"],
+        oci["identifier"]
     );
 }
 
@@ -213,7 +206,7 @@ fn mcp_registry_manifest_advertises_rich_product_metadata() {
 fn npm_launcher_package_has_distribution_metadata() {
     let package = json("packages/soma-rmcp/package.json");
     assert_eq!(package["name"], "soma-rmcp");
-    assert_eq!(package["mcpName"], "ai.dinglebear/soma-rmcp");
+    assert_eq!(package["mcpName"], "ai.dinglebear/soma");
     assert_eq!(package["homepage"], "https://soma.dinglebear.ai");
     assert_eq!(package["author"]["name"], "dinglebear.ai");
     assert_eq!(package["repository"]["directory"], "packages/soma-rmcp");
