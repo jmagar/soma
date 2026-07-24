@@ -2,7 +2,7 @@
 //! trust discipline, and structured security decisions.
 //!
 //! Modeled on axon's `axon-authz` execution-affinity layer, adapted to
-//! Soma's provider kinds and its stricter write⊃read scope rule
+//! Soma's provider kinds and its stricter write-satisfies-read scope rule
 //! (`crate::scopes::scopes_satisfy`). This layer governs **dynamic provider
 //! execution only** — built-in actions keep their `ACTION_SPECS` scope
 //! checks in the MCP server layer.
