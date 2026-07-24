@@ -7,7 +7,7 @@ This document prevents accidental one-for-one copying.
 | Donor crate | Target | Disposition |
 |---|---|---|
 | axon-adapters | soma-sources; soma-crawl; Soma knowledge runtime | Split adapter SDK/source implementations from crawling and product orchestration. |
-| axon-api | soma-primitives plus domain-owned types; Soma API façade | Dissolve. Do not recreate a giant shared API crate. |
+| axon-api | soma-primitives plus domain-owned types; Soma API facade | Dissolve. Do not recreate a giant shared API crate. |
 | axon-authz | Existing Soma auth/application policy | Do not migrate surface/product scope vocabulary. |
 | axon-cli | Existing Soma CLI | Do not migrate. |
 | axon-core | soma-sanitize; soma-process; crate-owned types; Soma config/runtime | Dismantle. No `soma-core` dumping ground. |

@@ -5,46 +5,46 @@
 Arrows point from a consumer to the crate it depends on.
 
 ```text
-soma-process       ──► soma-sanitize
-soma-route         ──► soma-primitives
-soma-crawl         ──► soma-process
-soma-crawl         ──► soma-sanitize
+soma-process       ──> soma-sanitize
+soma-route         ──> soma-primitives
+soma-crawl         ──> soma-process
+soma-crawl         ──> soma-sanitize
 
-soma-sources       ──► soma-primitives
-soma-sources       ──► soma-route
-soma-sources       ──► soma-sanitize
-soma-sources       ──► soma-process
-soma-sources       ──► soma-transcript
-soma-sources       ──► soma-crawl          optional web feature
+soma-sources       ──> soma-primitives
+soma-sources       ──> soma-route
+soma-sources       ──> soma-sanitize
+soma-sources       ──> soma-process
+soma-sources       ──> soma-transcript
+soma-sources       ──> soma-crawl          optional web feature
 
-soma-ledger        ──► soma-primitives
-soma-jobs          ──► soma-primitives
-soma-llm           ──► soma-sanitize       optional
+soma-ledger        ──> soma-primitives
+soma-jobs          ──> soma-primitives
+soma-llm           ──> soma-sanitize       optional
 
-soma-rag           ──► soma-primitives
-soma-rag           ──► soma-sanitize
-soma-rag           ──► soma-llm            optional synthesis feature
+soma-rag           ──> soma-primitives
+soma-rag           ──> soma-sanitize
+soma-rag           ──> soma-llm            optional synthesis feature
 
-soma-transcript    ──► soma-primitives
-soma-transcript    ──► soma-sanitize
+soma-transcript    ──> soma-primitives
+soma-transcript    ──> soma-sanitize
 
-soma-observations  ──► soma-primitives
-soma-observations  ──► soma-sanitize
-soma-ingest        ──► soma-observations
-soma-ingest        ──► soma-primitives
+soma-observations  ──> soma-primitives
+soma-observations  ──> soma-sanitize
+soma-ingest        ──> soma-observations
+soma-ingest        ──> soma-primitives
 
-soma-collectors    ──► soma-observations
-soma-collectors    ──► soma-ingest
-soma-collectors    ──► soma-transcript
-soma-collectors    ──► soma-sanitize
-soma-collectors    ──► soma-process         optional process-backed collectors
+soma-collectors    ──> soma-observations
+soma-collectors    ──> soma-ingest
+soma-collectors    ──> soma-transcript
+soma-collectors    ──> soma-sanitize
+soma-collectors    ──> soma-process         optional process-backed collectors
 
-soma-graph         ──► soma-primitives
-soma-graph         ──► soma-sanitize
+soma-graph         ──> soma-primitives
+soma-graph         ──> soma-sanitize
 
-soma-memory        ──► soma-primitives
-soma-memory        ──► soma-rag             narrow retrieval port
-soma-memory        ──► soma-llm             optional extraction feature
+soma-memory        ──> soma-primitives
+soma-memory        ──> soma-rag             narrow retrieval port
+soma-memory        ──> soma-llm             optional extraction feature
 ```
 
 `Soma` product runners may compose `soma-jobs` with `soma-ledger`, `soma-sources`, `soma-rag`, `soma-graph`, or `soma-memory`. The reusable `soma-jobs` crate itself MUST NOT depend on those domain crates.

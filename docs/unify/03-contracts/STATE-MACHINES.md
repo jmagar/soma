@@ -23,8 +23,8 @@ published:
 
 ```text
 pending → claimed → complete
-              ↘ retry → claimed
-              ↘ dead_letter
+              \ retry → claimed
+              \ dead_letter
 pending/claimed/retry → cancelled
 ```
 
