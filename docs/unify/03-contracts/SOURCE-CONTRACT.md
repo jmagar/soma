@@ -79,7 +79,7 @@ A processing-fingerprint change MAY require re-preparing an unchanged source ite
 
 ```text
 discovered → acquiring → preparing → staging → complete → published
-                    ↘ failed     ↘ failed       ↘ failed
+                    \ failed     \ failed       \ failed
 queued/running states may be cancelled before published
 ```
 

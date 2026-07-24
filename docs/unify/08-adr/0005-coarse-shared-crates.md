@@ -5,7 +5,7 @@
 
 ## Context
 
-Axon's recent refactor created useful internal boundaries, but some crates are cycle breakers or product façades rather than ideal public packages.
+Axon's recent refactor created useful internal boundaries, but some crates are cycle breakers or product facades rather than ideal public packages.
 
 ## Decision
 

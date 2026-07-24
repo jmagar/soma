@@ -51,7 +51,7 @@ Each vertical slice uses a predictable train.
 ## Rules
 
 - Every PR has one capability ID.
-- No “miscellaneous convergence” PR.
+- No "miscellaneous convergence" PR.
 - Generated artifacts are updated in the same PR.
 - Architecture exceptions require owner, reason, expiry, and issue.
 - Temporary adapters have removal criteria.

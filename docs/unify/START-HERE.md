@@ -161,7 +161,7 @@ Keep `soma-primitives` microscopic. A type belongs there only when multiple inde
 
 ### Slice 3: Local knowledge walking skeleton
 
-The first product milestone is not “extract the Axon pipeline.” It is this complete, demonstrable behavior:
+The first product milestone is not "extract the Axon pipeline." It is this complete, demonstrable behavior:
 
 ```text
 Local repository
@@ -258,7 +258,7 @@ No shared crate may depend on `crates/soma/*`, `apps/*`, Soma authorization, Som
 
 ### 5. Require citations and evidence at every cross-domain boundary
 
-A vector match, graph edge, memory, diagnosis, or synthesized answer must resolve to canonical source content or SQLite records. “The model inferred it” is not sufficient provenance.
+A vector match, graph edge, memory, diagnosis, or synthesized answer must resolve to canonical source content or SQLite records. "The model inferred it" is not sufficient provenance.
 
 ## How progress is measured
 
