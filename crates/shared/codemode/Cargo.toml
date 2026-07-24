@@ -46,7 +46,7 @@ ulid = "3"
 url = "2"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["process", "signal", "user"] }
+nix = { version = "0.31", features = ["process", "signal", "user"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
