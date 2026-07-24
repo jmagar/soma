@@ -24,11 +24,17 @@ use crate::scopes::{scopes_satisfy, WRITE_SCOPE};
 /// Stable machine-readable decision reasons. These are API: never rename an
 /// existing constant's value, only add new ones.
 pub mod reasons {
+    /// Allowed because the caller is a trusted-local caller (affinity bypassed).
     pub const AUTHORIZED_TRUSTED_LOCAL: &str = "authorized.trusted_local";
+    /// Allowed because the caller holds the required affinity scope.
     pub const AUTHORIZED_SCOPE_SATISFIED: &str = "authorized.scope_satisfied";
+    /// Allowed because the target's safety class requires no affinity scope.
     pub const AUTHORIZED_NO_AFFINITY_REQUIRED: &str = "authorized.no_affinity_required";
+    /// Denied because the caller lacks the required affinity scope.
     pub const DENIED_SCOPE_MISSING: &str = "denied.scope_missing";
+    /// Denied because inline execution of this class additionally requires local trust.
     pub const DENIED_AFFINITY_REQUIRES_LOCAL_TRUST: &str = "denied.affinity_requires_local_trust";
+    /// Denied because the dispatch target could not be classified.
     pub const DENIED_UNCLASSIFIED_TARGET: &str = "denied.unclassified_target";
 }
 
@@ -62,6 +68,7 @@ impl SafetyClass {
         }
     }
 
+    /// Stable kebab-case identifier for this class, for logging and warnings.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::InProcessTrusted => "in-process-trusted",
@@ -157,14 +164,17 @@ impl CallerContext {
         }
     }
 
+    /// The caller's subject identifier.
     pub fn subject(&self) -> &str {
         &self.subject
     }
 
+    /// The scopes this caller presents.
     pub fn scopes(&self) -> &[String] {
         &self.scopes
     }
 
+    /// Whether this caller was granted local trust.
     pub fn is_trusted_local(&self) -> bool {
         self.trusted_local
     }
@@ -174,12 +184,16 @@ impl CallerContext {
 /// `reason` from [`reasons`], plus human-oriented advisory `warnings`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SecurityDecision {
+    /// Whether the dispatch is permitted.
     pub allowed: bool,
+    /// Stable machine-readable reason from [`reasons`].
     pub reason: &'static str,
+    /// Human-oriented advisory messages (non-blocking).
     pub warnings: Vec<String>,
 }
 
 impl SecurityDecision {
+    /// Builds an allowing decision with the given reason and no warnings.
     pub fn allow(reason: &'static str) -> Self {
         Self {
             allowed: true,
@@ -188,6 +202,7 @@ impl SecurityDecision {
         }
     }
 
+    /// Builds a denying decision with the given reason and no warnings.
     pub fn deny(reason: &'static str) -> Self {
         Self {
             allowed: false,
@@ -196,6 +211,7 @@ impl SecurityDecision {
         }
     }
 
+    /// Returns true if this decision denies the dispatch.
     pub fn is_denied(&self) -> bool {
         !self.allowed
     }
